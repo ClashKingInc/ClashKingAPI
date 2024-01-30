@@ -16,7 +16,9 @@ from base64 import b64decode as base64_b64decode
 from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from .config import Config
 
+config = Config()
 
 limiter = Limiter(key_func=get_remote_address, key_style="endpoint")
 
@@ -26,11 +28,10 @@ def dynamic_limit(key: str):
     return "30/second"
 
 load_dotenv()
-client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("LOOPER_DB_LOGIN"))
-other_client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("DB_LOGIN"))
-redis = aioredis.Redis(host='85.10.200.219', port=6379, db=0, password=os.getenv("REDIS_PW"), retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])
-coc_client = coc.Client(key_count=100, key_names="DiscordBot", throttle_limit=500, cache_max_size=0, load_game_data=coc.LoadGameData(always=False), raw_attribute=True, stats_max_size=0)
+client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb)
+other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 
+redis = aioredis.Redis(host=config.redis_ip, port=6379, db=0, password=config.redis_pw, retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])
 
 class DBClient():
     def __init__(self):
@@ -78,34 +79,6 @@ class DBClient():
 
 db_client = DBClient()
 
-
-async def get_players(tags: list, use_cache=True):
-    players = []
-    tag_set = set(tags)
-
-    if use_cache:
-        cache_data = await redis.mget(keys=list(tag_set))
-    else:
-        cache_data = []
-
-    for data in cache_data:
-        if data is None:
-            continue
-        data = ujson.loads(data)
-        tag_set.remove(data.get("tag"))
-        player = coc.Player(data=data, client=coc_client)
-        players.append(player)
-
-    tasks = []
-    for tag in tag_set:
-        task = asyncio.ensure_future(coc_client.get_player(tag))
-        tasks.append(task)
-    if tasks:
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-        for response in responses:
-            if isinstance(response, coc.Player):
-                players.append(response)
-    return players
 
 
 async def download_image(url: str):

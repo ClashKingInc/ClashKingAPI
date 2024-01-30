@@ -2,7 +2,7 @@ import datetime
 import re
 import time
 
-import pytz
+import pendulum as pend
 import ujson
 import coc
 
@@ -243,7 +243,7 @@ async def player_wartimer(player_tag: str, request: Request, response: Response)
         return result
     result["tag"] = result.pop("_id")
     time: datetime.datetime = result["time"]
-    time = time.replace(tzinfo=pytz.utc)
+    time = time.replace(tzinfo=pend.UTC)
     result["unix_time"] = time.timestamp()
     result["time"] = time.isoformat()
     return result

@@ -1,4 +1,3 @@
-import coc
 import pandas as pd
 import io
 from dotenv import load_dotenv
@@ -6,13 +5,13 @@ import os
 import asyncio
 load_dotenv()
 import aiohttp
-from fastapi import  Request, Response
+from fastapi import Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import Dict
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from utils.utils import db_client, download_image
+from utils.utils import db_client, download_image, config
 import matplotlib.pyplot as plt
 from PIL import Image
 from typing import List
@@ -26,7 +25,7 @@ link_client = None
 @router.on_event("startup")
 async def startup_event():
     global link_client
-    link_client = await discordlinks.login(os.getenv("LINK_API_USER"), os.getenv("LINK_API_PW"))
+    link_client = await discordlinks.login(config.link_api_username, config.link_api_password)
 
 #UTILS
 @router.post("/table",

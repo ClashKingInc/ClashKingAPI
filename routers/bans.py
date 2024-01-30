@@ -5,14 +5,13 @@ from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from datetime import datetime
-from utils.utils import fix_tag, db_client, token_verify, get_players, limiter, coc_client
+from utils.utils import fix_tag, db_client, token_verify, limiter
 from models.bans import BannedResponse, BanResponse
 
 
 router = APIRouter(tags=["Ban Endpoints"])
 
 
-#CLAN ENDPOINTS
 @router.post("/ban/{server_id}/add/{player_tag}",
          name="Add a user to the server ban list",
          response_model=BanResponse)

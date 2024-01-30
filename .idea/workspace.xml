@@ -2,6 +2,40 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="501418d0-2761-475b-ac8b-ae52c6b7bd68" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/assets/clouds.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/builder_league.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/buildings.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/hero_equipment.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/heroes.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/pets.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/spells.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/supers.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/townhalls.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/translations.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assets/json/troops.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/bans.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/models.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/settings.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/bans.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/capital.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/clan.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/game_data.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/helper.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/hidden.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/leagues.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/list.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/other.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/player.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/ranking.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/redirect.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/server_info.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/stats.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/utility.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/war.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/xlsx.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/utils/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -28,6 +62,15 @@
     "git-widget-placeholder": "master"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\assets" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\asset" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\game-json" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi" />
+    </key>
+  </component>
   <component name="RunManager">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="ClashKingAPI" />

@@ -23,8 +23,8 @@ async def assets(request: Request, response: Response):
 @limiter.limit("5/second")
 async def json(type: str, request: Request, response: Response):
     if type == "list":
-        return {"files" : ["troops", "heroes", "hero_equipment", "spells", "buildings", "pets", "supers", "townhalls", "translations"]}
-    file_name = f"game-json/{type}.json"
+        return {"types" : ["troops", "heroes", "hero_equipment", "spells", "buildings", "pets", "supers", "townhalls", "translations"]}
+    file_name = f"assets/json/{type}.json"
     file_path = os.getcwd() + "/" + file_name
     with open(file_path) as json_file:
         data = ujson.load(json_file)

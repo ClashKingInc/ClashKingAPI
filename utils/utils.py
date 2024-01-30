@@ -5,9 +5,8 @@ import os
 import re
 from dotenv import load_dotenv
 import coc
-from pytz import utc
+import pendulum as pend
 from datetime import datetime, timedelta
-from expiring_dict import ExpiringDict
 import io
 import asyncio
 import aiohttp
@@ -25,8 +24,6 @@ def dynamic_limit(key: str):
     if key in {"::1", "65.108.77.253", "85.10.200.219"}:
         return "1000/second"
     return "30/second"
-
-IMAGE_CACHE = ExpiringDict()
 
 load_dotenv()
 client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("LOOPER_DB_LOGIN"))
@@ -112,17 +109,13 @@ async def get_players(tags: list, use_cache=True):
 
 
 async def download_image(url: str):
-    cached = IMAGE_CACHE.get(url)
-    if cached is None:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                image_data = await response.read()
-            await session.close()
-        image_bytes: bytes = image_data
-        IMAGE_CACHE.ttl(url, image_bytes, 3600 * 4)
-    else:
-        image_bytes = cached
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            image_data = await response.read()
+        await session.close()
+    image_bytes: bytes = image_data
     return io.BytesIO(image_bytes)
+
 
 def fix_tag(tag:str):
     tag = tag.replace('%23', '')
@@ -130,7 +123,7 @@ def fix_tag(tag:str):
     return tag
 
 def gen_season_date():
-    end = coc.utils.get_season_end().replace(tzinfo=utc).date()
+    end = coc.utils.get_season_end().replace(tzinfo=pend.UTC).date()
     month = end.month
     if end.month <= 9:
         month = f"0{month}"
@@ -144,7 +137,7 @@ def gen_games_season():
     return f"{now.year}-{month}"
 
 def gen_raid_date():
-    now = datetime.utcnow().replace(tzinfo=utc)
+    now = datetime.utcnow().replace(tzinfo=pend.UTC)
     current_dayofweek = now.weekday()
     if (current_dayofweek == 4 and now.hour >= 7) or (current_dayofweek == 5) or (current_dayofweek == 6) or (
             current_dayofweek == 0 and now.hour < 7):

@@ -1,7 +1,7 @@
 import orjson
 import aiohttp
 import re
-
+import snappy
 from collections import defaultdict, deque
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
@@ -33,15 +33,15 @@ async def test_endpoint(url: str, request: Request, response: Response):
         KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
-                item = await response.read()
-                item = orjson.loads(item)
+                item_bytes = await response.read()
+                item = orjson.loads(item_bytes)
                 if response.status == 200:
                     cache_control_header = response.headers.get("Cache-Control", "")
                     max_age_match = re.search(r'max-age=(\d+)', cache_control_header)
                     max_age = int(max_age_match.group(1))
-                    api_cache.ttl(key=url, value=item, ttl=max_age)
+                    api_cache.ttl(key=url, value=snappy.compress(item_bytes), ttl=max_age)
     else:
-        return api_cache.get(url)
+        return orjson.loads(snappy.decompress(api_cache.get(url)))
     return item
 
 

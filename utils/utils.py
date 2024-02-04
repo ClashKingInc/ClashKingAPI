@@ -200,7 +200,11 @@ def create_keys(emails: list, passwords: list):
     global API_KEYS
     while done is False:
         try:
-            loop = asyncio.get_event_loop()
+            if asyncio.get_event_loop().is_running():
+                loop = asyncio.get_event_loop()
+            else:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             keys = loop.run_until_complete(get_keys(emails=emails,
                                      passwords=passwords, key_names="test", key_count=10))
             done = True

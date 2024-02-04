@@ -27,7 +27,7 @@ def dynamic_limit(key: str):
     return "30/second"
 
 load_dotenv()
-client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb)
+client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")
 other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 
 redis = aioredis.Redis(host=config.redis_ip, port=6379, db=0, password=config.redis_pw, retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])

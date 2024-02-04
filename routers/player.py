@@ -3,9 +3,7 @@ import re
 import time
 import asyncio
 import pendulum as pend
-import ujson
 import coc
-import snappy
 import aiohttp
 
 from collections import defaultdict, deque
@@ -147,21 +145,26 @@ async def player_historical(player_tag: str, season:str, request: Request, respo
 
     return dict(result)
 
+
 @router.get("/player/{player_tag}/warhits",
          tags=["Player Endpoints"],
          name="War attacks done/defended by a player")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def player_warhits(player_tag: str, request: Request, response: Response):
+async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513):
     player_tag = fix_tag(player_tag)
+    pend.from_timestamp(timestamp_start, tz=pend.UTC)
+    START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     pipeline = [
         {"$match": {"$or": [{"data.clan.members.tag": player_tag}, {"data.opponent.members.tag": player_tag}]}},
+        {"$match" : {"$and" : [{"data.preparationStartTime" : {"$gte" : START}}, {"data.preparationStartTime" : {"$lte" : END}}]}},
         {"$unset": ["_id"]},
         {"$project": {"data": "$data"}}
     ]
     wars = await db_client.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     found_wars = set()
-    stats = {"attacks" : [], "defenses" : []}
+    stats = {"attacks" : [], "defenses" : [], "missed_attacks" : []}
     for war in wars:
         war = war.get("data")
         war = coc.ClanWar(data=war, client=None)
@@ -170,6 +173,24 @@ async def player_warhits(player_tag: str, request: Request, response: Response):
             continue
         found_wars.add(war_unique_id)
         war_member = war.get_member(player_tag)
+        if len(war_member.attacks) < war.attacks_per_member:
+            stats["missed_attacks"].append({
+                "tag": war_member.tag,
+                "name": war_member.name,
+                "townhall": war_member.town_hall,
+                "war_start": int(war.preparation_start_time.time.timestamp()),
+                "war_end" : int(war.preparation_start_time.time.timestamp()),
+                "war_type": str(war.type),
+                "map_position": war_member.map_position,
+                "war_size": war.team_size,
+                "clan": war_member.clan.tag,
+                "clan_name": war_member.clan.name,
+                "attacks" : {
+                    "missed": war.attacks_per_member - len(war_member.attacks),
+                    "available" : war.attacks_per_member
+                }
+            })
+
         for attack in war_member.attacks:
             stats["attacks"].append({
                 "tag": attack.attacker.tag,

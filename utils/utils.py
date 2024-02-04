@@ -1,7 +1,6 @@
 import motor.motor_asyncio
 from redis import asyncio as aioredis
 import redis
-import os
 import re
 from dotenv import load_dotenv
 import coc
@@ -11,7 +10,6 @@ import io
 import asyncio
 import aiohttp
 from fastapi import HTTPException
-import ujson
 from base64 import b64decode as base64_b64decode
 from json import loads as json_loads
 from slowapi import Limiter
@@ -197,21 +195,10 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
 
 def create_keys(emails: list, passwords: list):
     done = False
-    global API_KEYS
-    while done is False:
-        try:
-            if asyncio.get_event_loop().is_running():
-                loop = asyncio.get_event_loop()
-            else:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            keys = loop.run_until_complete(get_keys(emails=emails,
-                                     passwords=passwords, key_names="test", key_count=10))
-            done = True
 
-            return keys
-        except Exception as e:
-            print(e)
+    loop = asyncio.get_event_loop()
+    keys = loop.run_until_complete(get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10))
+    return keys
 
 
 KEYS = []

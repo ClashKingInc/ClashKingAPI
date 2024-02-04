@@ -139,12 +139,11 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
 
     for count, email in enumerate(emails):
         _keys = []
-        while len(_keys) != key_count:
+        made_it = False
+        while not made_it:
+            session = aiohttp.ClientSession()
             try:
                 password = passwords[count]
-
-                session = aiohttp.ClientSession()
-
                 body = {"email": email, "password": password}
                 resp = await session.post("https://developer.clashofclans.com/api/login", json=body)
                 if resp.status == 403:
@@ -191,8 +190,9 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                 await session.close()
                 for k in _keys:
                     total_keys.append(k)
+                made_it = True
             except Exception:
-                continue
+                session.close()
 
 
     print(len(total_keys))

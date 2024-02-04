@@ -32,11 +32,10 @@ async def startup():
          include_in_schema=False)
 async def ck_proxy(url: str, request: Request, response: Response):
     global KEYS
-    print(len(KEYS))
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
-
+    url = url.replace("#", '%23')
     if api_cache.get(url) is None:
         headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
         KEYS.rotate(1)
@@ -49,20 +48,24 @@ async def ck_proxy(url: str, request: Request, response: Response):
                     max_age_match = re.search(r'max-age=(\d+)', cache_control_header)
                     max_age = int(max_age_match.group(1))
                     api_cache.ttl(key=url, value=snappy.compress(item_bytes), ttl=max_age)
+                else:
+                    raise HTTPException(status_code=response.status, detail=response.reason, headers=item)
+            await session.close()
     else:
         return orjson.loads(snappy.decompress(api_cache.get(url)))
     return item
 
-@router.get("/ck/bulk",
+@router.post("/ck/bulk",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
-    from utils.utils import KEYS
+    global KEYS
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
 
     async def fetch_function(url: str):
+        url = url.replace("#", '%23')
         if api_cache.get(url) is None:
             headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
             KEYS.rotate(1)
@@ -75,7 +78,11 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
                         max_age_match = re.search(r'max-age=(\d+)', cache_control_header)
                         max_age = int(max_age_match.group(1))
                         api_cache.ttl(key=url, value=snappy.compress(item_bytes), ttl=max_age)
-                        return item
+                    else:
+                        item = None
+                await session.close()
+                return item
+
         else:
             return orjson.loads(snappy.decompress(api_cache.get(url)))
 
@@ -84,7 +91,7 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
         tasks.append(asyncio.create_task(fetch_function(url)))
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    return [r for r in results if not isinstance(r, Exception)]
+    return [r for r in results if r is not None and not isinstance(r, Exception)]
 
 '''@router.post("/player/bulk",
           tags=["Player Endpoints"],

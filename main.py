@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
-from routers import leagues, player, capital, other, clan, war, utility, ranking, redirect, game_data, bans, stats, list, server_info
+from routers import leagues, player, capital, other, clan, war, utility, ranking, redirect, game_data, bans, stats, list, internal
 from api_analytics.fastapi import Analytics
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -51,6 +51,7 @@ routers = [
     game_data.router,
     other.router,
     utility.router,
+    internal.router
 ]
 for router in routers:
     app.include_router(router)
@@ -95,7 +96,7 @@ app.openapi = custom_openapi
 if __name__ == '__main__':
     if not config.is_local:
         uvicorn.run("main:app", host='0.0.0.0', port=443, ssl_keyfile="/etc/letsencrypt/live/api.clashking.xyz/privkey.pem",
-                    ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=6)
+                    ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=8)
     else:
         uvicorn.run("main:app", host='localhost', port=80)
 

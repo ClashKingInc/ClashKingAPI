@@ -5,6 +5,9 @@ load_dotenv()
 
 @dataclass(frozen=True, slots=True)
 class Config:
+    coc_email = getenv("COC_EMAIL")
+    coc_password = getenv("COC_PASSWORD")
+
     static_mongodb = getenv("STATIC_MONGODB")
     stats_mongodb = getenv("STATS_MONGODB")
 
@@ -16,5 +19,10 @@ class Config:
 
     link_api_username = getenv("LINK_API_USER")
     link_api_password = getenv("LINK_API_PW")
+
+    internal_api_token = getenv("INTERNAL_API_TOKEN")
+
+    min_coc_email = 1
+    max_coc_email = 50
 
     is_local = (getenv("LOCAL") == "TRUE")

@@ -1,8 +1,10 @@
 aiohttp==3.9.3
 coc.py==3.2.1
+expiring-dict==1.1.0
 fastapi==0.109.0
 fastapi-analytics==1.2.1
 fastapi-cache2==0.2.1
+gunicorn==21.2.0
 matplotlib==3.8.2
 motor==3.3.2
 pandas==2.2.0

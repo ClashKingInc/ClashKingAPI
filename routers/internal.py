@@ -9,7 +9,7 @@ from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-from utils.utils import fix_tag, redis, db_client, config, KEYS
+from utils.utils import fix_tag, redis, db_client, config
 from datetime import timedelta
 from expiring_dict import ExpiringDict
 
@@ -23,6 +23,7 @@ api_cache = ExpiringDict()
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def test_endpoint(url: str, request: Request, response: Response):
+    from utils.utils import KEYS
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")

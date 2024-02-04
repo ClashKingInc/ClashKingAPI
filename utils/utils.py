@@ -15,6 +15,7 @@ from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from .config import Config
+from collections import deque
 
 config = Config()
 
@@ -201,7 +202,7 @@ def create_keys(emails: list, passwords: list):
     return keys
 
 
-KEYS = []
+KEYS = deque()
 
 leagues = ["Legend League", "Titan League I" , "Titan League II" , "Titan League III" ,"Champion League I", "Champion League II", "Champion League III",
                    "Master League I", "Master League II", "Master League III",

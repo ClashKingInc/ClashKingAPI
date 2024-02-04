@@ -4,11 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="501418d0-2761-475b-ac8b-ae52c6b7bd68" name="Changes" comment="initial">
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/internal.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/internal.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/utils.py" afterDir="false" />
-    </list>
+    <list default="true" id="501418d0-2761-475b-ac8b-ae52c6b7bd68" name="Changes" comment="initial" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -230,7 +226,23 @@
       <option name="project" value="LOCAL" />
       <updated>1707020414665</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="initial">
+      <option name="closed" value="true" />
+      <created>1707020834043</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1707020834043</updated>
+    </task>
+    <task id="LOCAL-00017" summary="initial">
+      <option name="closed" value="true" />
+      <created>1707021123389</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1707021123389</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

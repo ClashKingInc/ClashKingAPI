@@ -97,9 +97,10 @@ app.openapi = custom_openapi
 
 if __name__ == '__main__':
     custom_event_loop = asyncio.new_event_loop()
-    KEYS = create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
-    custom_event_loop.close()
-
+    k = create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
+    for _ in k:
+        KEYS.append(_)
+    print(len(KEYS), "keys")
     if not config.is_local:
         uvicorn.run("main:app", host='0.0.0.0', port=443, ssl_keyfile="/etc/letsencrypt/live/api.clashking.xyz/privkey.pem",
                     ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=8)

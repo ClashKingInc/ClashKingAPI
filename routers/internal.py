@@ -17,7 +17,6 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
-keys: deque = deque(KEYS)
 
 
 @router.get("/ck/{url:path}",
@@ -29,8 +28,8 @@ async def test_endpoint(url: str, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     if api_cache.get(url) is None:
-        headers = {"Accept": "application/json", "authorization": f"Bearer {keys[0]}"}
-        keys.rotate(1)
+        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+        KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
                 item = await response.read()

@@ -1,3 +1,5 @@
+import asyncio
+
 import orjson
 import aiohttp
 import re
@@ -22,8 +24,9 @@ api_cache = ExpiringDict()
 @router.get("/ck/{url:path}",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
-async def test_endpoint(url: str, request: Request, response: Response):
+async def ck_proxy(url: str, request: Request, response: Response):
     from utils.utils import KEYS
+    print(len(KEYS))
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -44,6 +47,38 @@ async def test_endpoint(url: str, request: Request, response: Response):
         return orjson.loads(snappy.decompress(api_cache.get(url)))
     return item
 
+@router.get("/ck/bulk",
+         name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
+         include_in_schema=False)
+async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
+    from utils.utils import KEYS
+    token = request.headers.get("authorization")
+    if token != f"Bearer {config.internal_api_token}":
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    async def fetch_function(url: str):
+        if api_cache.get(url) is None:
+            headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+            KEYS.rotate(1)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
+                    item_bytes = await response.read()
+                    item = orjson.loads(item_bytes)
+                    if response.status == 200:
+                        cache_control_header = response.headers.get("Cache-Control", "")
+                        max_age_match = re.search(r'max-age=(\d+)', cache_control_header)
+                        max_age = int(max_age_match.group(1))
+                        api_cache.ttl(key=url, value=snappy.compress(item_bytes), ttl=max_age)
+                        return item
+        else:
+            return orjson.loads(snappy.decompress(api_cache.get(url)))
+
+    tasks = []
+    for url in urls:
+        tasks.append(asyncio.create_task(fetch_function(url)))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    return [r for r in results if not isinstance(r, Exception)]
 
 '''@router.post("/player/bulk",
           tags=["Player Endpoints"],

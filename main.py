@@ -96,6 +96,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == '__main__':
+    global KEYS
     custom_event_loop = asyncio.new_event_loop()
     k = create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
     for _ in k:

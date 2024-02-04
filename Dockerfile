@@ -1,6 +1,4 @@
-FROM python:3.11-slim
-
-RUN pip install --upgrade setuptools wheel
+FROM python:3.11-alpine
 
 RUN apt-get update && apt-get install -y libsnappy-dev
 

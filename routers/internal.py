@@ -22,6 +22,7 @@ KEYS = deque()
 
 @router.on_event("startup")
 async def startup():
+    global KEYS
     k = await create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
     KEYS = deque(k)
 
@@ -30,6 +31,7 @@ async def startup():
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_proxy(url: str, request: Request, response: Response):
+    global KEYS
     print(len(KEYS))
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":

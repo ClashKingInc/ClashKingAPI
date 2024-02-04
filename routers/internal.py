@@ -7,7 +7,6 @@ import snappy
 from collections import defaultdict, deque
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
-from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -20,7 +19,14 @@ router = APIRouter(tags=["Internal Endpoints"])
 api_cache = ExpiringDict()
 KEYS = deque()
 
-@router.on_event("startup")
+
+@router.post("/ck/generate-api-keys")
+async def generate_api_keys(emails: List[str], passwords: List[str], ip: str, request: Request, response: Response):
+    keys = await create_keys(emails=emails, passwords=passwords)
+    return {"keys" : keys}
+
+
+'''@router.on_event("startup")
 async def startup():
     global KEYS
     #k = await create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
@@ -91,7 +97,7 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
         tasks.append(asyncio.create_task(fetch_function(url)))
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    return [r for r in results if r is not None and not isinstance(r, Exception)]
+    return [r for r in results if r is not None and not isinstance(r, Exception)]'''
 
 '''@router.post("/player/bulk",
           tags=["Player Endpoints"],

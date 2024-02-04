@@ -134,20 +134,17 @@ async def token_verify(server_id: int, api_token: str, only_admin: bool = False)
     if api_token not in tokens:
         raise HTTPException(status_code=403, detail="Invalid API token or cannot access this resource")
 
-async def get_keys(emails: list, passwords: list, key_names: str, key_count: int):
+async def get_keys(emails: list, passwords: list, key_names: str, key_count: int, ip:str):
     total_keys = []
-    await asyncio.sleep(10)
     for count, email in enumerate(emails):
-        await asyncio.sleep(3)
+        await asyncio.sleep(1.5)
         _keys = []
         async with aiohttp.ClientSession() as session:
             password = passwords[count]
             body = {"email": email, "password": password}
             resp = await session.post("https://developer.clashofclans.com/api/login", json=body)
-
             resp_paylaod = await resp.json()
-            ip = json_loads(base64_b64decode(resp_paylaod["temporaryAPIToken"].split(".")[1] + "====").decode("utf-8"))[
-                "limits"][1]["cidrs"][0].split("/")[0]
+
             resp = await session.post("https://developer.clashofclans.com/api/apikey/list")
             keys = (await resp.json()).get("keys", [])
             _keys.extend(key["key"] for key in keys if key["name"] == key_names and ip in key["cidrRanges"])
@@ -190,8 +187,8 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
     return (total_keys)
 
 
-async def create_keys(emails: list, passwords: list):
-    keys = await get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10)
+async def create_keys(emails: list, passwords: list, ip: str):
+    keys = await get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10, ip=ip)
     return keys
 
 

@@ -23,6 +23,6 @@ class Config:
     internal_api_token = getenv("INTERNAL_API_TOKEN")
 
     min_coc_email = 1
-    max_coc_email = 50
+    max_coc_email = 10
 
     is_local = (getenv("LOCAL") == "TRUE")

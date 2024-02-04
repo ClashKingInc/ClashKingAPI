@@ -192,7 +192,7 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                     total_keys.append(k)
                 made_it = True
             except Exception:
-                session.close()
+                await session.close()
 
 
     print(len(total_keys))

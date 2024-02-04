@@ -1,4 +1,4 @@
-FROM ubuntu:22.04.3
+FROM ubuntu:22.04
 
 WORKDIR /app
 

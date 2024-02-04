@@ -138,6 +138,7 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
     total_keys = []
     await asyncio.sleep(10)
     for count, email in enumerate(emails):
+        await asyncio.sleep(3)
         _keys = []
         async with aiohttp.ClientSession() as session:
             password = passwords[count]

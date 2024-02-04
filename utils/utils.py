@@ -194,11 +194,8 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
     return (total_keys)
 
 
-def create_keys(emails: list, passwords: list):
-    done = False
-
-    loop = asyncio.get_event_loop()
-    keys = loop.run_until_complete(get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10))
+async def create_keys(emails: list, passwords: list):
+    keys = await get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10)
     return keys
 
 

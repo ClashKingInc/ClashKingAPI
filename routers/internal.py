@@ -11,21 +11,25 @@ from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-from utils.utils import fix_tag, redis, db_client, config
-from datetime import timedelta
+from utils.utils import fix_tag, redis, db_client, config, create_keys
 from expiring_dict import ExpiringDict
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
+KEYS = deque()
+
+@router.on_event("startup")
+async def startup():
+    k = await create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
+    KEYS = deque(k)
 
 
 @router.get("/ck/{url:path}",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_proxy(url: str, request: Request, response: Response):
-    from utils.utils import KEYS
     print(len(KEYS))
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":

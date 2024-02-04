@@ -164,15 +164,16 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                     "scopes": ["clash"],
                 }
                 hold = True
-                tries = 0
+                tries = 1
                 while hold:
                     resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
                     key = await resp.json()
                     if key.get("key") is not None:
                         hold = False
+                        await asyncio.sleep(tries * 0.5)
                     tries += 1
-                    if tries >= 2:
-                        print(tries, "tries")
+                    if tries > 2:
+                        print(tries - 1, "tries")
 
                 _keys.append(key["key"]["key"])
 

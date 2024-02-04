@@ -98,7 +98,7 @@ app.openapi = custom_openapi
 if __name__ == '__main__':
     if not config.is_local:
         uvicorn.run("main:app", host='0.0.0.0', port=443, ssl_keyfile="/etc/letsencrypt/live/api.clashking.xyz/privkey.pem",
-                    ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=8)
+                    ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=3)
     else:
         uvicorn.run("main:app", host='localhost', port=80)
 

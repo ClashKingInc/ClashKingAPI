@@ -1,3 +1,5 @@
+import asyncio
+
 import uvicorn
 
 from fastapi.middleware.gzip import GZipMiddleware
@@ -13,7 +15,7 @@ from routers import leagues, player, capital, other, clan, war, utility, ranking
 from api_analytics.fastapi import Analytics
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-from utils.utils import redis, config
+from utils.utils import redis, config, KEYS, create_keys
 
 limiter = Limiter(key_func=get_remote_address)
 middleware = [
@@ -94,6 +96,10 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == '__main__':
+    custom_event_loop = asyncio.new_event_loop()
+    KEYS = create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
+    custom_event_loop.close()
+
     if not config.is_local:
         uvicorn.run("main:app", host='0.0.0.0', port=443, ssl_keyfile="/etc/letsencrypt/live/api.clashking.xyz/privkey.pem",
                     ssl_certfile="/etc/letsencrypt/live/api.clashking.xyz/fullchain.pem", workers=8)

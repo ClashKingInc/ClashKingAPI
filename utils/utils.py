@@ -214,7 +214,7 @@ def create_keys(emails: list, passwords: list):
             print(e)
 
 
-
+KEYS = []
 
 leagues = ["Legend League", "Titan League I" , "Titan League II" , "Titan League III" ,"Champion League I", "Champion League II", "Champion League III",
                    "Master League I", "Master League II", "Master League III",

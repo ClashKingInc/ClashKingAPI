@@ -9,7 +9,7 @@ from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-from utils.utils import fix_tag, redis, db_client, config, create_keys
+from utils.utils import fix_tag, redis, db_client, config, KEYS
 from datetime import timedelta
 from expiring_dict import ExpiringDict
 
@@ -17,12 +17,7 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
-keys: deque = None
-
-@router.on_event("startup")
-async def startup_event():
-    keys = create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
-    keys = deque(keys)
+keys: deque = deque(KEYS)
 
 
 @router.get("/ck/{url:path}",

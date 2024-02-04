@@ -165,8 +165,11 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                 hold = True
                 tries = 1
                 while hold:
-                    resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
-                    key = await resp.json()
+                    try:
+                        resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
+                        key = await resp.json()
+                    except Exception:
+                        key = {}
                     if key.get("key") is None:
                         await asyncio.sleep(tries * 0.5)
                         tries += 1

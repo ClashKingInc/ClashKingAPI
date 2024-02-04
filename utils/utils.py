@@ -147,7 +147,7 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
             resp_paylaod = await resp.json()
             ip = json_loads(base64_b64decode(resp_paylaod["temporaryAPIToken"].split(".")[1] + "====").decode("utf-8"))[
                 "limits"][1]["cidrs"][0].split("/")[0]
-
+            print(ip)
             resp = await session.post("https://developer.clashofclans.com/api/apikey/list")
             keys = (await resp.json()).get("keys", [])
             _keys.extend(key["key"] for key in keys if key["name"] == key_names and ip in key["cidrRanges"])
@@ -165,6 +165,7 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                 }
                 resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
                 key = await resp.json()
+                print(key)
                 _keys.append(key["key"]["key"])
 
             if len(keys) == 10 and len(_keys) < key_count:

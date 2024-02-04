@@ -48,7 +48,8 @@ routers = [
     redirect.router,
     game_data.router,
     other.router,
-    utility.router
+    utility.router,
+    internal.router
 ]
 for router in routers:
     app.include_router(router)

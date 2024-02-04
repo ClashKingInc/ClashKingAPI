@@ -41,7 +41,7 @@ async def table_render(info: Dict, request: Request, response: Response):
     title = info.get("title")
 
     fig = plt.figure(figsize=(8, 10), dpi=300)
-    img = plt.imread("API/clouds.jpg")
+    img = plt.imread("assets/clouds.jpg")
     ax = plt.subplot()
 
     df_final = pd.DataFrame(data, columns=columns)

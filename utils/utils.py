@@ -163,23 +163,18 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                     "cidrRanges": [ip],
                     "scopes": ["clash"],
                 }
-                resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
-                key = await resp.json()
-                print(key)
+                hold = True
+                tries = 0
+                while hold:
+                    resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
+                    key = await resp.json()
+                    if key.get("key") is not None:
+                        hold = False
+                    tries += 1
+                    if tries >= 2:
+                        print(tries, "tries")
+
                 _keys.append(key["key"]["key"])
-
-            if len(keys) == 10 and len(_keys) < key_count:
-                print("%s keys were requested to be used, but a maximum of %s could be "
-                      "found/made on the developer site, as it has a maximum of 10 keys per account. "
-                      "Please delete some keys or lower your `key_count` level."
-                      "I will use %s keys for the life of this client.", )
-
-            if len(_keys) == 0:
-                raise RuntimeError(
-                    "There are {} API keys already created and none match a key_name of '{}'."
-                    "Please specify a key_name kwarg, or go to 'https://developer.clashofclans.com' to delete "
-                    "unused keys.".format(len(keys), key_names)
-                )
 
             await session.close()
             for k in _keys:

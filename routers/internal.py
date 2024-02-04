@@ -22,7 +22,7 @@ KEYS = deque()
 
 @router.post("/ck/generate-api-keys")
 async def generate_api_keys(emails: List[str], passwords: List[str], ip: str, request: Request, response: Response):
-    keys = await create_keys(emails=emails, passwords=passwords)
+    keys = await create_keys(emails=emails, passwords=passwords, ip=ip)
     return {"keys" : keys}
 
 

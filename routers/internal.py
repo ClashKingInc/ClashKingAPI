@@ -23,8 +23,8 @@ KEYS = deque()
 @router.on_event("startup")
 async def startup():
     global KEYS
-    k = await create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
-    KEYS = deque(k)
+    #k = await create_keys(emails=[config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)], passwords=[config.coc_password] * config.max_coc_email)
+    #KEYS = deque(k)
 
 
 @router.get("/ck/{url:path}",

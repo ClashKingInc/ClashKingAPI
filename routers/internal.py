@@ -15,8 +15,9 @@ api_cache = ExpiringDict()
 KEYS = deque()
 
 
-@router.post("/ck/generate-api-keys")
-async def generate_api_keys(emails: List[str], passwords: List[str], ip: str, request: Request, response: Response):
+@router.post("/ck/generate-api-keys", include_in_schema=False)
+async def generate_api_keys(emails: List[str], passwords: List[str], request: Request, response: Response):
+    ip = request.client.host
     keys = await create_keys(emails=emails, passwords=passwords, ip=ip)
     return {"keys" : keys}
 

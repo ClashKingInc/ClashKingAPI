@@ -8,5 +8,7 @@ WORKDIR /app
 RUN pip install -r requirements.txt
 COPY . .
 
-CMD ["python3", "main.py"]
+EXPOSE 443
+
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:443"]
 

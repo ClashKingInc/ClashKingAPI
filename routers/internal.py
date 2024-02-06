@@ -32,6 +32,24 @@ async def startup():
     global KEYS
     KEYS = deque((await db_client.new_looper.api_tokens.distinct("token")))
 
+@router.get("/v1/{url:path}",
+         name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
+         include_in_schema=False)
+@cache(expire=60)
+@limiter.limit("60/minute")
+async def test_endpoint(url: str, request: Request, response: Response):
+    global KEYS
+    url = url.replace("#", '%23')
+    url = url.replace("!", '%23')
+    url = url.split("?")[0]
+    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+    KEYS.rotate(0)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+                f"https://cocproxy.royaleapi.dev/v1/{url}?limit=200", headers=headers) as response:
+            item = await response.json()
+    return item
+
 @router.post("/ck/bulk",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)

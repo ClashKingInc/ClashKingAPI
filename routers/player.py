@@ -5,9 +5,10 @@ import asyncio
 import pendulum as pend
 import coc
 import aiohttp
+import orjson
 
 from collections import defaultdict, deque
-from fastapi import  Request, Response, HTTPException
+from fastapi import Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import List
@@ -236,7 +237,8 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
                 "defending_clan_name": attack.defender.clan.name,
             })
 
-    return stats
+    return Response(orjson.dumps(stats), media_type="application/json")
+
 
 
 @router.get("/player/{player_tag}/legend_rankings",

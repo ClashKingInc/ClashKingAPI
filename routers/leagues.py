@@ -19,8 +19,7 @@ router = APIRouter(tags=["Leagues"])
 @cache(expire=300)
 @limiter.limit("30/second")
 async def builder_base_leagues(request: Request, response: Response):
-    file_name = "builder_league.json"
-    file_path = os.getcwd() + "/" + file_name
+    file_path = "assets/json/builder_league.json"
     with open(file_path) as json_file:
         data = ujson.load(json_file)
         for item in data.get("items"):

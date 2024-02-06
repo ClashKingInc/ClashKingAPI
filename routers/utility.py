@@ -225,21 +225,6 @@ async def discord_link(player_tags: List[str], request: Request, response: Respo
     return dict(result)
 
 
-@router.get("/v1/{url:path}",
-         name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
-         include_in_schema=False)
-@cache(expire=60)
-@limiter.limit("30/minute")
-async def test_endpoint(url: str, request: Request, response: Response):
-    url = url.replace("#", '%23')
-    url = url.replace("!", '%23')
-    url = url.split("?")[0]
-    headers = {"Accept": "application/json", "authorization": f"Bearer {os.getenv('COC_KEY')}"}
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-                f"https://cocproxy.royaleapi.dev/v1/{url}?limit=200", headers=headers) as response:
-            item = await response.json()
-    return item
 
 async def upload_to_cdn(picture, title: str):
     headers = {

@@ -45,7 +45,7 @@ async def test_endpoint(url: str, request: Request, response: Response):
     KEYS.rotate(0)
     async with aiohttp.ClientSession() as session:
         async with session.get(
-                f"https://cocproxy.royaleapi.dev/v1/{url}?limit=200", headers=headers) as response:
+                f"https://api.clashofclans.com/v1/{url}?limit=200", headers=headers) as response:
             item = await response.json()
     return item
 

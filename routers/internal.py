@@ -32,7 +32,7 @@ async def startup():
     global KEYS
     emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
     passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
-    KEYS = await create_keys(emails=emails, passwords=passwords, ip=“65.109.27.116”)
+    KEYS = await create_keys(emails=emails, passwords=passwords, ip="65.109.27.116")
     KEYS = deque(KEYS)
 
 @router.get("/v1/{url:path}",

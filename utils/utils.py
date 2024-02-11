@@ -56,6 +56,7 @@ class DBClient():
         self.war_timer: collection_class = self.looper.war_timer
         self.player_leaderboard_db: collection_class = self.new_looper.leaderboard_db
         self.player_history: collection_class = self.new_looper.get_collection("player_history")
+        self.link_shortner: collection_class = client.clashking.short_links
 
         self.clan_cache_db: collection_class = self.new_looper.clan_cache
         self.clan_wars: collection_class = self.looper.clan_war

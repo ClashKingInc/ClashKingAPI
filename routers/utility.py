@@ -3,8 +3,10 @@ import io
 from dotenv import load_dotenv
 import os
 import asyncio
+import uuid
 load_dotenv()
 import aiohttp
+from fastapi.responses import RedirectResponse
 from fastapi import Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
@@ -198,6 +200,23 @@ async def permalink(clan_tag: str):
         await session.close()
     image_bytes: bytes = responses[0]
     return Response(content=image_bytes, media_type="image/png")
+
+
+@router.get("/shortner",
+         name="Create a short link", include_in_schema=False)
+async def shortner(url: str):
+    id = str(uuid.uuid4())
+    await db_client.link_shortner.insert_one({"_id" : id, "url" : url})
+    return {"url" : f"https://api.clashking.xyz/shortlink?id={id}"}
+
+
+@router.get("/shortlink",
+            response_class=RedirectResponse,
+            name="Create a short link", include_in_schema=False)
+async def shortlink(id: str):
+    result = await db_client.link_shortner.find_one({"_id" : id})
+    return result.get("url")
+
 
 
 @router.get("/renderhtml",

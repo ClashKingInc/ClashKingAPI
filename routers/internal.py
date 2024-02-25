@@ -52,6 +52,8 @@ async def test_endpoint(url: str, request: Request, response: Response):
             item = await response.json()
     return item
 
+
+
 @router.post("/ck/bulk",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)

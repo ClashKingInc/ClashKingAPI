@@ -30,7 +30,7 @@ load_dotenv()
 client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")
 other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 
-redis = aioredis.Redis(host=config.redis_ip, port=6379, db=0, password=config.redis_pw, retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])
+redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])
 
 class DBClient():
     def __init__(self):
@@ -44,11 +44,16 @@ class DBClient():
         self.clans_db: collection_class = self.usafam.get_collection("clans")
         self.banlist: collection_class = self.usafam.banlist
 
+
+
+
         self.player_search: collection_class = other_client.usafam.player_search
 
         self.looper = client.looper
         self.new_looper = client.new_looper
 
+
+        self.legends_stats = self.new_looper.legends_stats
         self.legend_rankings: collection_class = self.new_looper.legend_rankings
         self.war_logs_db: collection_class = self.looper.war_logs
         self.player_stats_db: collection_class = self.new_looper.player_stats

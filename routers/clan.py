@@ -15,19 +15,6 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Clan Endpoints"])
 
 
-#CLAN ENDPOINTS
-@router.get("/clan/{clan_tag}/stats",
-         name="All stats for a clan (activity, donations, etc)")
-@cache(expire=300)
-@limiter.limit("30/second")
-async def clan_historical(clan_tag: str, request: Request, response: Response):
-    clan_tag = fix_tag(clan_tag)
-    result = await db_client.clan_stats.find_one({"tag": clan_tag})
-    if result is not None:
-        del result["_id"]
-    return result
-
-
 
 @router.get("/clan/{clan_tag}/basic",
          name="Basic Clan Object")
@@ -39,6 +26,23 @@ async def clan_basic(clan_tag: str, request: Request, response: Response):
     if result is not None:
         del result["_id"]
     return result
+
+
+
+'''@router.get("/clan/{clan_tag}/legends/{date}", name="Legends Data on a date")
+@cache(expire=300)
+@limiter.limit("30/second")
+async def clan_legends(clan_tag: str, date: str, request: Request, response: Response):
+    clan_tag = fix_tag(clan_tag)
+    result = await db_client.basic_clan.find_one({"tag": clan_tag})
+    if result is None:
+        raise HTTPException(status_code=404, detail="Clan could not be found")
+    pass'''
+
+
+
+
+
 
 
 

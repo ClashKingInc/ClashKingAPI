@@ -11,8 +11,8 @@ class Config:
     static_mongodb = getenv("STATIC_MONGODB")
     stats_mongodb = getenv("STATS_MONGODB")
     
-    min_coc_email = 11
-    max_coc_email = 15
+    min_coc_email = 3
+    max_coc_email = 10
     
     redis_ip = getenv("REDIS_IP")
     redis_pw = getenv("REDIS_PW")

@@ -22,7 +22,7 @@ router = APIRouter(tags=["War Endpoints"])
          name="Previous Wars for a clan")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def war_previous(clan_tag: str, request: Request, response: Response):
+async def war_previous(clan_tag: str, request: Request, response: Response, limit: int= 50):
     clan_tag = fix_tag(clan_tag)
     full_wars = await db_client.clan_wars.find({"$and" : [{"$or" : [{"data.clan.tag" : clan_tag}, {"data.opponent.tag" : clan_tag}]}]}).to_list(length=None)
     found_ids = set()
@@ -47,7 +47,7 @@ async def war_previous(clan_tag: str, request: Request, response: Response):
          name="Previous War at an endtime, for a clan")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def war_previous_time(clan_tag: str, end_time: str, request: Request, response: Response, limit: int= 50):
+async def war_previous_time(clan_tag: str, end_time: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
     war = await db_client.clan_wars.find_one({"$and" : [{"$or" : [{"data.clan.tag" : clan_tag}, {"data.opponent.tag" : clan_tag}]}, {"data.endTime" : end_time}]})
     if war is None:

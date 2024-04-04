@@ -43,12 +43,11 @@ async def test_endpoint(url: str, request: Request, response: Response):
     global KEYS
     url = url.replace("#", '%23')
     url = url.replace("!", '%23')
-    url = url.split("?")[0]
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
     KEYS.rotate(0)
     async with aiohttp.ClientSession() as session:
         async with session.get(
-                f"https://api.clashofclans.com/v1/{url}?limit=200", headers=headers) as response:
+                f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
             item = await response.json()
     return item
 

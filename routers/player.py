@@ -8,10 +8,10 @@ import aiohttp
 import orjson
 
 from collections import defaultdict, deque
-from fastapi import Request, Response, HTTPException
+from fastapi import Request, Response, HTTPException, Query
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from typing import List
+from typing import List, Annotated
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from utils.utils import fix_tag, redis, db_client
@@ -22,7 +22,6 @@ router = APIRouter(tags=["Player Endpoints"])
 
 
 @router.get("/player/{player_tag}/stats",
-         tags=["Player Endpoints"],
          name="All collected Stats for a player (clan games, looted, activity, etc)")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -72,7 +71,6 @@ async def player_stat(player_tag: str, request: Request, response: Response):
 
 
 @router.get("/player/{player_tag}/legends",
-         tags=["Player Endpoints"],
          name="Legend stats for a player")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -124,7 +122,6 @@ async def player_legend(player_tag: str, request: Request, response: Response, s
 
 
 @router.get("/player/{player_tag}/historical/{season}",
-         tags=["Player Endpoints"],
          name="Historical data for player events")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -148,7 +145,6 @@ async def player_historical(player_tag: str, season:str, request: Request, respo
 
 
 @router.get("/player/{player_tag}/warhits",
-         tags=["Player Endpoints"],
          name="War attacks done/defended by a player")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -208,7 +204,6 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
                 "war_status": str(war.status),
                 "attack_order": attack.order,
                 "map_position": attack.attacker.map_position,
-                "defender_map_position": attack.defender.map_position,
                 "war_size": war.team_size,
                 "clan": attack.attacker.clan.tag,
                 "clan_name": attack.attacker.clan.name,
@@ -231,19 +226,27 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
                 "war_status": str(war.status),
                 "attack_order": attack.order,
                 "map_position": attack.attacker.map_position,
-                "defender_map_position": attack.defender.map_position,
                 "war_size": war.team_size,
                 "clan": attack.attacker.clan.tag,
                 "clan_name": attack.attacker.clan.name,
                 "defending_clan": attack.defender.clan.tag,
                 "defending_clan_name": attack.defender.clan.name,
             })
+
     return stats
+
+
+@router.get("/player/to-do",
+             name="To-do list for player(s)")
+@limiter.limit("10/second")
+async def player_to_do(players: Annotated[List[str], Query(min_length=1, max_length=50)]):
+    pass
+
+
 
 
 
 @router.get("/player/{player_tag}/legend_rankings",
-         tags=["Player Endpoints"],
          name="Previous player legend rankings")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -258,7 +261,6 @@ async def player_legend_rankings(player_tag: str, request: Request, response: Re
 
 
 @router.get("/player/{player_tag}/wartimer",
-         tags=["Player Endpoints"],
          name="Get the war timer for a player")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -276,7 +278,6 @@ async def player_wartimer(player_tag: str, request: Request, response: Response)
 
 
 @router.get("/player/search/{name}",
-         tags=["Player Endpoints"],
          name="Search for players by name")
 @cache(expire=300)
 @limiter.limit("30/second")
@@ -300,7 +301,6 @@ async def search_players(name: str, request: Request, response: Response):
 
 
 @router.post("/player/bulk",
-          tags=["Player Endpoints"],
           name="Cached endpoint response (bulk fetch)",
           include_in_schema=False)
 @limiter.limit("15/second")

@@ -1,7 +1,7 @@
 
 import coc
 import operator
-
+import pendulum as pend
 from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
@@ -10,7 +10,7 @@ from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from utils.utils import fix_tag, db_client, gen_season_date
-from datetime import datetime
+from datetime import datetime, timedelta
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["War Endpoints"])
@@ -48,8 +48,14 @@ async def war_previous(clan_tag: str, request: Request, response: Response, limi
 @cache(expire=300)
 @limiter.limit("30/second")
 async def war_previous_time(clan_tag: str, end_time: str, request: Request, response: Response):
+    end_time = coc.Timestamp(data=end_time).time.replace(tzinfo=pend.UTC)
+    lower_end_time = end_time - timedelta(minutes=2)
+    higher_end_time = end_time + timedelta(minutes=2)
+
     clan_tag = fix_tag(clan_tag)
-    war = await db_client.clan_wars.find_one({"$and" : [{"$or" : [{"data.clan.tag" : clan_tag}, {"data.opponent.tag" : clan_tag}]}, {"data.endTime" : end_time}]})
+    war = await db_client.clan_wars.find_one({"$and" : [{"$or" : [{"data.clan.tag" : clan_tag}, {"data.opponent.tag" : clan_tag}]},
+                                                        {"data.endTime" : {"$gte" : lower_end_time.strftime('%Y%m%dT%H%M%S.000Z')}},
+                                                        {"data.endTime" : {"$lte" : higher_end_time.strftime('%Y%m%dT%H%M%S.000Z')}}]})
     if war is None:
         raise HTTPException(status_code=404, detail="War Not Found")
     return war.get("data", {})
@@ -63,12 +69,11 @@ async def war_previous_time(clan_tag: str, end_time: str, request: Request, resp
 @limiter.limit("30/second")
 async def basic_war_info(clan_tag: str, request: Request, response: Response):
     now = datetime.utcnow().timestamp() - 183600
-    result = await db_client.clan_wars.find_one({"$and" : [{"clan" : fix_tag(clan_tag)}, {"custom_id": None}, {"endTime" : {"$gte" : now}}]})
-    if result is None:
-        result = await db_client.clan_wars.find_one({"$and" : [{"opponent" : fix_tag(clan_tag)}, {"custom_id" : None}, {"endTime" : {"$gte" : now}}]})
+    result = await db_client.clan_wars.find_one({"$and" : [{"clans" : fix_tag(clan_tag)}, {"custom_id": None}, {"endTime" : {"$gte" : now}}]})
     if result is not None:
         del result["_id"]
     return result
+
 
 @router.get("/cwl/{clan_tag}/group",
          tags=["War Endpoints"],

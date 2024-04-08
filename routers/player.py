@@ -238,8 +238,7 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
                 "defending_clan": attack.defender.clan.tag,
                 "defending_clan_name": attack.defender.clan.name,
             })
-
-    return Response(orjson.dumps(stats), media_type="application/json")
+    return stats
 
 
 

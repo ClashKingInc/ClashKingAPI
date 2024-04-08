@@ -236,11 +236,11 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
     return stats
 
 
-@router.get("/player/to-do",
+'''@router.get("/player/to-do",
              name="To-do list for player(s)")
 @limiter.limit("10/second")
 async def player_to_do(players: Annotated[List[str], Query(min_length=1, max_length=50)]):
-    pass
+    pass'''
 
 
 

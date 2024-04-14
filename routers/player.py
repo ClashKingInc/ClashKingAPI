@@ -5,7 +5,6 @@ import asyncio
 import pendulum as pend
 import coc
 import aiohttp
-import orjson
 
 from collections import defaultdict, deque
 from fastapi import Request, Response, HTTPException, Query
@@ -148,7 +147,7 @@ async def player_historical(player_tag: str, season:str, request: Request, respo
          name="War attacks done/defended by a player")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513):
+async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513, limit: int = 50):
     client = coc.Client(raw_attribute=True)
     player_tag = fix_tag(player_tag)
     pend.from_timestamp(timestamp_start, tz=pend.UTC)
@@ -158,11 +157,13 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         {"$match": {"$or": [{"data.clan.members.tag": player_tag}, {"data.opponent.members.tag": player_tag}]}},
         {"$match" : {"$and" : [{"data.preparationStartTime" : {"$gte" : START}}, {"data.preparationStartTime" : {"$lte" : END}}]}},
         {"$unset": ["_id"]},
-        {"$project": {"data": "$data"}}
+        {"$project": {"data": "$data"}},
+        {"$sort" : {"data.preparationStartTime" : -1}}
     ]
     wars = await db_client.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     found_wars = set()
     stats = {"done" : [], "missed" : []}
+    local_limit = 0
     for war in wars:
         war = war.get("data")
         war = coc.ClanWar(data=war, client=client)
@@ -170,6 +171,9 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         if war_unique_id in found_wars:
             continue
         found_wars.add(war_unique_id)
+        if limit == local_limit:
+            break
+        local_limit += 1
 
         war_member = war.get_member(player_tag)
 
@@ -183,7 +187,6 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         war_data["type"] = war.type
 
         if len(war_member.attacks) < war.attacks_per_member:
-            war_data = war._raw_data
             stats["missed"].append({
                 "war_data" : war_data,
                 "attacks" : {
@@ -194,6 +197,8 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
 
         member_raw_data = war_member._raw_data
         member_raw_data.pop("bestOpponentAttack", None)
+        member_raw_data.pop("attacks", None)
+
         done_holder = {
             "war_data": war_data,
             "member_data" : member_raw_data,
@@ -203,18 +208,23 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         for attack in war_member.attacks:
             raw_attack: dict = attack._raw_data
             raw_attack["fresh"] = attack.is_fresh_attack
-            raw_attack["defender"] = attack.defender._raw_data
+            defender_raw_data = attack.defender._raw_data
+            defender_raw_data.pop("attacks", None)
+            raw_attack["defender"] = defender_raw_data
             raw_attack["attack_order"] = attack.order
             done_holder["attacks"].append(raw_attack)
 
         for defense in war_member.defenses:
             raw_defense: dict = defense._raw_data
             raw_defense["fresh"] = defense.is_fresh_attack
-            raw_defense["defender"] = defense.defender._raw_data
+            defender_raw_data = defense.defender._raw_data
+            defender_raw_data.pop("attacks", None)
+            raw_defense["defender"] = defender_raw_data
             raw_defense["attack_order"] = defense.order
             done_holder["defenses"].append(raw_defense)
 
         stats["done"].append(done_holder)
+    print(stats)
     return stats
 
 

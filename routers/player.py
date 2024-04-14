@@ -186,15 +186,6 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         del war_data["opponent"]["members"]
         war_data["type"] = war.type
 
-        if len(war_member.attacks) < war.attacks_per_member:
-            stats["missed"].append({
-                "war_data" : war_data,
-                "attacks" : {
-                    "missed": war.attacks_per_member - len(war_member.attacks),
-                    "available" : war.attacks_per_member
-                }
-            })
-
         member_raw_data = war_member._raw_data
         member_raw_data.pop("bestOpponentAttack", None)
         member_raw_data.pop("attacks", None)

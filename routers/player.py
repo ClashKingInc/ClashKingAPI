@@ -162,7 +162,7 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
     ]
     wars = await db_client.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     found_wars = set()
-    stats = {"done" : [], "missed" : []}
+    stats = {"items" : []}
     local_limit = 0
     for war in wars:
         war = war.get("data")
@@ -218,7 +218,7 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
             raw_defense["attack_order"] = defense.order
             done_holder["defenses"].append(raw_defense)
 
-        stats["done"].append(done_holder)
+        stats["items"].append(done_holder)
     print(stats)
     return stats
 

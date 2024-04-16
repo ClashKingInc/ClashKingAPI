@@ -150,7 +150,6 @@ async def player_historical(player_tag: str, season:str, request: Request, respo
 async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513, limit: int = 50):
     client = coc.Client(raw_attribute=True)
     player_tag = fix_tag(player_tag)
-    pend.from_timestamp(timestamp_start, tz=pend.UTC)
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     pipeline = [
@@ -219,7 +218,6 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
             done_holder["defenses"].append(raw_defense)
 
         stats["items"].append(done_holder)
-    print(stats)
     return stats
 
 

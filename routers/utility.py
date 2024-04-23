@@ -177,29 +177,7 @@ async def guild_links(guild_id: int, request: Request, response: Response):
 
 
 
-@router.get("/permalink/{clan_tag}",
-         name="Permanent Link to Clan Badge URL")
-async def permalink(clan_tag: str):
-    headers = {"Accept": "application/json", "authorization": f"Bearer {os.getenv('COC_KEY')}"}
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-                f"https://cocproxy.royaleapi.dev/v1/clans/{clan_tag.replace('#', '%23')}",
-                headers=headers) as response:
-            items = await response.json()
-    image_link = items["badgeUrls"]["large"]
 
-    async def fetch(url, session):
-        async with session.get(url) as response:
-            image_data = await response.read()
-            return image_data
-
-    tasks = []
-    async with aiohttp.ClientSession() as session:
-        tasks.append(fetch(image_link, session))
-        responses = await asyncio.gather(*tasks)
-        await session.close()
-    image_bytes: bytes = responses[0]
-    return Response(content=image_bytes, media_type="image/png")
 
 
 @router.get("/shortner",

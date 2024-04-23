@@ -52,6 +52,32 @@ async def test_endpoint(url: str, request: Request, response: Response):
     return item
 
 
+@router.get("/permalink/{clan_tag}",
+         name="Permanent Link to Clan Badge URL")
+async def permalink(clan_tag: str):
+    global KEYS
+    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+    KEYS.rotate(1)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+                f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
+                headers=headers) as response:
+            items = await response.json()
+    image_link = items["badgeUrls"]["large"]
+
+    async def fetch(url, session):
+        async with session.get(url) as response:
+            image_data = await response.read()
+            return image_data
+
+    tasks = []
+    async with aiohttp.ClientSession() as session:
+        tasks.append(fetch(image_link, session))
+        responses = await asyncio.gather(*tasks)
+        await session.close()
+    image_bytes: bytes = responses[0]
+    return Response(content=image_bytes, media_type="image/png")
+
 
 @router.post("/ck/bulk",
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",

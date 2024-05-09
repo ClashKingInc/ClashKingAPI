@@ -17,11 +17,11 @@ load_dotenv()
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Stat Endpoints"])
 
-coc_client= coc.Client(key_names="keys for my windows pc", key_count=5, raw_attribute=True)
+coc_client = coc.Client(key_names="keys for my windows pc", key_count=5, raw_attribute=True)
 
 
 @router.get("/donations",
-         name="Donation Stats")
+         name="Donation Stats", include_in_schema=False)
 @cache(expire=300)
 @limiter.limit("30/second")
 async def donations(request: Request, response: Response,
@@ -149,7 +149,7 @@ async def donations(request: Request, response: Response,
 
 
 @router.get("/activity",
-         name="Activity Stats")
+         name="Activity Stats", include_in_schema=False)
 @cache(expire=300)
 @limiter.limit("30/second")
 async def activity(request: Request, response: Response,
@@ -247,7 +247,7 @@ async def activity(request: Request, response: Response,
 
 
 @router.get("/clan-games",
-         name="Clan Game Stats")
+         name="Clan Game Stats", include_in_schema=False)
 @cache(expire=300)
 @limiter.limit("30/second")
 async def clan_games(request: Request, response: Response,
@@ -405,7 +405,7 @@ async def clan_games(request: Request, response: Response,
 
 
 @router.get("/war-stats",
-         name="War Stats")
+         name="War Stats", include_in_schema=False)
 @cache(expire=300)
 @limiter.limit("10/second")
 async def war_stats(request: Request, response: Response,
@@ -688,7 +688,7 @@ async def war_stats(request: Request, response: Response,
 
 
 @router.get("/capital",
-         name="Capital Stats")
+         name="Capital Stats", include_in_schema=False)
 @cache(expire=300)
 @limiter.limit("10/second")
 async def capital_stats(request: Request, response: Response,

@@ -1,15 +1,14 @@
-
 import coc
+import pendulum as pend
 
-from collections import defaultdict
+from bson.objectid import ObjectId
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from typing import List
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from models.clan import JoinLeaveList
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from utils.utils import fix_tag, leagues, db_client
-from bson.objectid import ObjectId
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Clan Endpoints"])
@@ -29,41 +28,23 @@ async def clan_basic(clan_tag: str, request: Request, response: Response):
 
 
 
-'''@router.get("/clan/{clan_tag}/legends/{date}", name="Legends Data on a date")
-@cache(expire=300)
-@limiter.limit("30/second")
-async def clan_legends(clan_tag: str, date: str, request: Request, response: Response):
-    clan_tag = fix_tag(clan_tag)
-    result = await db_client.basic_clan.find_one({"tag": clan_tag})
-    if result is None:
-        raise HTTPException(status_code=404, detail="Clan could not be found")
-    pass'''
 
-
-
-
-
-
-
-
-@router.get("/clan/{clan_tag}/join-leave/{season}",
-         name="Join Leaves in a season")
+@router.get(
+        path="/clan/{clan_tag}/join-leave",
+        name="Join Leaves in a season",
+        response_model=JoinLeaveList)
 @cache(expire=300)
 @limiter.limit("5/second")
-async def clan_join_leave(clan_tag: str, season: str, request: Request, response: Response):
+async def clan_join_leave(clan_tag: str, request: Request, response: Response, timestamp_start: int = 0, time_stamp_end: int = 9999999999, limit: int = 250):
     clan_tag = fix_tag(clan_tag)
-    year = season[:4]
-    month = season[-2:]
-    season_start = coc.utils.get_season_start(month=int(month) - 1, year=int(year))
-    season_end = coc.utils.get_season_end(month=int(month) - 1, year=int(year))
-    result = await db_client.clan_join_leave.find({"$and": [{"tag": clan_tag},
-                                                          {"time": {"$gte": season_start.timestamp()}},
-                                                          {"time": {"$lte": season_end.timestamp()}}]}).sort("time", 1).to_list(length=None)
-    if result:
-        for r in result:
-            del r["_id"]
-    return dict(result)
-
+    result = await db_client.join_leave_history.find(
+        {"$and" : [
+            {"clan" : clan_tag},
+            {"time" : {"$gte" : pend.from_timestamp(timestamp=timestamp_start, tz=pend.UTC)}},
+            {"time": {"$lte": pend.from_timestamp(timestamp=time_stamp_end, tz=pend.UTC)}}
+        ]
+    }, {"_id" : 0}).sort({"time" : -1}).limit(limit=limit).to_list(length=None)
+    return {"items" : result}
 
 
 
@@ -74,8 +55,8 @@ async def clan_join_leave(clan_tag: str, season: str, request: Request, response
 @limiter.limit("1/second")
 async def clan_filter(request: Request, response: Response,  limit: int= 100, location_id: int = None, minMembers: int = None, maxMembers: int = None,
                       minLevel: int = None, maxLevel: int = None, openType: str = None,
-                          minWarWinStreak: int = None, minWarWins: int = None, minClanTrophies: int = None, maxClanTrophies: int = None, capitalLeague: str= None,
-                          warLeague: str= None, memberList: bool = True, before:str =None, after: str=None):
+                      minWarWinStreak: int = None, minWarWins: int = None, minClanTrophies: int = None, maxClanTrophies: int = None, capitalLeague: str= None,
+                      warLeague: str= None, memberList: bool = True, before:str =None, after: str=None):
     queries = {}
     queries['$and'] = []
     if location_id:

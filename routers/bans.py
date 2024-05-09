@@ -12,6 +12,7 @@ from models.bans import BannedResponse, BanResponse
 router = APIRouter(tags=["Ban Endpoints"])
 
 
+
 @router.post("/ban/{server_id}/add/{player_tag}",
          name="Add a user to the server ban list",
          response_model=BanResponse)

@@ -6,8 +6,7 @@ from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from typing import List
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from utils.utils import fix_tag, db_client, gen_season_date
 from datetime import datetime, timedelta
@@ -22,7 +21,7 @@ router = APIRouter(tags=["War Endpoints"])
          name="Previous Wars for a clan")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def war_previous(clan_tag: str, request: Request, response: Response,  timestamp_start: int = 0, timestamp_end: int = 2527625513, limit: int= 50):
+async def war_previous(clan_tag: str, request: Request, response: Response,  timestamp_start: int = 0, timestamp_end: int = 9999999999, limit: int= 50):
     clan_tag = fix_tag(clan_tag)
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
@@ -82,6 +81,7 @@ async def basic_war_info(clan_tag: str, request: Request, response: Response):
     return result
 
 
+
 @router.get("/cwl/{clan_tag}/group",
          tags=["War Endpoints"],
          name="Cwl group info for a clan for current season")
@@ -93,6 +93,8 @@ async def cwl_group(clan_tag: str, request: Request, response: Response):
     cwl_result = await db_client.cwl_groups.find_one({"$and" : [{"data.clans.tag" : clan_tag}, {"data.season" : season}]}, {"_id":0})
     return cwl_result
 
+
+
 @router.get("/cwl/{clan_tag}/{season}",
          tags=["War Endpoints"],
          name="Cwl Info for a clan in a season (yyyy-mm)")
@@ -102,6 +104,8 @@ async def cwl(clan_tag: str, season: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
     cwl_result = await db_client.cwl_groups.find_one({"$and" : [{"data.clans.tag" : clan_tag}, {"data.season" : season}]})
 
+    if cwl_result is None:
+        raise HTTPException(status_code=404, detail="No CWL Data Found")
     rounds = cwl_result.get("data").get("rounds")
     war_tags = []
     for round in rounds:

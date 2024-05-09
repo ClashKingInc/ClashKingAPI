@@ -8,7 +8,7 @@ from utils.utils import db_client, fix_tag
 
 
 limiter = Limiter(key_func=get_remote_address)
-router = APIRouter(tags=["Leaderboard History"])
+router = APIRouter(tags=["Rankings"])
 
 @router.get("/ranking/live/legends")
 @cache(expire=300)

@@ -1,6 +1,7 @@
 import re
 import ujson
 import coc
+import pendulum as pend
 
 from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
@@ -12,11 +13,12 @@ from slowapi.util import get_remote_address
 from utils.utils import fix_tag, db_client
 
 limiter = Limiter(key_func=get_remote_address)
-router = APIRouter(tags=["Other"])
+router = APIRouter(tags=["Global Data"])
 
 
-@router.get("/boost-rate",
-         name="Super Troop Boost Rate, for a season (YYYY-MM)")
+@router.get(
+        path="/boost-rate",
+        name="Super Troop Boost Rate, for a season (YYYY-MM)")
 @cache(expire=300)
 @limiter.limit("5/second")
 async def super_troop_boost_rate(start_season: str, end_season: str, request: Request, response: Response):
@@ -71,6 +73,25 @@ async def super_troop_boost_rate(start_season: str, end_season: str, request: Re
     results = await db_client.player_history.aggregate(pipeline=pipeline).to_list(length=None)
     return results
 
+
+@router.get(
+        path="/global/counts",
+        name="Number of clans in war, players in war, player in legends etc")
+@limiter.limit("1/minute")
+async def global_counts(request: Request, response: Response):
+    timer_counts = await db_client.war_timer.estimated_document_count()
+    now = int(pend.now(tz=pend.UTC).timestamp())
+    war_counts = await db_client.clan_wars.count_documents({"endTime" : {"$gte" : now}})
+    hours_ago = pend.now(tz=pend.UTC).subtract(hours=24)
+    join_leaves_24_hours = await db_client.join_leave_history.count_documents({"time" : {"$gte" : hours_ago}})
+    legend_count = await db_client.legend_rankings.estimated_document_count({})
+
+    return {
+        "players_in_war" : timer_counts,
+        "clans_in_war" : war_counts,
+        "join_leaves_last_day" : join_leaves_24_hours,
+        "players_in_legends" : legend_count
+    }
 
 
 

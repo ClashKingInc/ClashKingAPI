@@ -45,8 +45,6 @@ class DBClient():
         self.banlist: collection_class = self.usafam.banlist
 
 
-
-
         self.player_search: collection_class = other_client.usafam.player_search
 
         self.looper = client.looper
@@ -59,6 +57,7 @@ class DBClient():
         self.player_stats_db: collection_class = self.new_looper.player_stats
         self.attack_db: collection_class = self.looper.warhits
         self.war_timer: collection_class = self.looper.war_timer
+        self.join_leave_history: collection_class = self.looper.join_leave_history
         self.player_leaderboard_db: collection_class = self.new_looper.leaderboard_db
         self.player_history: collection_class = self.new_looper.get_collection("player_history")
         self.link_shortner: collection_class = client.clashking.short_links
@@ -73,7 +72,6 @@ class DBClient():
         self.cwl_groups: collection_class = self.looper.cwl_group
 
         self.clan_history: collection_class = self.new_looper.clan_history
-        self.clan_join_leave: collection_class = self.new_looper.clan_join_leave
         self.ranking_history: collection_class = client.ranking_history
         self.player_trophies: collection_class = self.ranking_history.player_trophies
         self.player_versus_trophies: collection_class = self.ranking_history.player_versus_trophies

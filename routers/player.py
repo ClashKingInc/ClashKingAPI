@@ -221,6 +221,17 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
     return stats
 
 
+@router.get(
+    path="/player/{player_tag}/raids",
+    name="Raids participated in by a player"
+)
+@cache(expire=300)
+@limiter.limit("30/second")
+async def player_raids(player_tag: str, request: Request, response: Response, limit: int = 1):
+    results = await db_client.capital.find({"data.members.tag" : player_tag}).sort({"data.endTime" : -1}).limit(limit=limit).to_list(length=None)
+    results = [r.get("data") for r in results]
+    return {"items" : results}
+
 
 '''@router.get("/player/to-do",
              name="To-do list for player(s)")
@@ -286,37 +297,3 @@ async def search_players(name: str, request: Request, response: Response):
     return {"items" : results}
 
 
-@router.post("/player/bulk",
-          name="Cached endpoint response (bulk fetch)",
-          include_in_schema=False)
-@limiter.limit("15/second")
-async def player_bulk(player_tags: List[str], api_keys: List[str], request: Request, response: Response):
-    async def get_player_responses(keys: deque, tags: list[str]):
-        tasks = []
-        connector = aiohttp.TCPConnector(limit=2000, ttl_dns_cache=300)
-        timeout = aiohttp.ClientTimeout(total=1800)
-        cached_responses = await redis.mget(keys=player_tags)
-        tag_map = {tag: r for tag, r in zip(tags, cached_responses)}
-
-        missing_tags = [t for t, r in tag_map.items() if r is None]
-        results = []
-        if missing_tags:
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                for tag in missing_tags:
-                    keys.rotate(1)
-                    async def fetch(url, session: aiohttp.ClientSession, headers: dict, tag: str):
-                        async with session.get(url, headers=headers) as new_response:
-                            if new_response.status != 200:
-                                return (tag, None)
-                            new_response = await new_response.read()
-                            return (tag, new_response)
-                    tasks.append(fetch(url=f'https://api.clashofclans.com/v1/players/{tag.replace("#", "%23")}', session=session, headers={"Authorization": f"Bearer {keys[0]}"}, tag=tag))
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                await session.close()
-
-        for tag, result in results:
-            tag_map[tag] = result
-        return tag_map
-
-    tag_map = await get_player_responses(keys=deque(api_keys), tags=player_tags)
-    return tag_map

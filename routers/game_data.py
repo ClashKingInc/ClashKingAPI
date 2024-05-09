@@ -11,7 +11,7 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Game Data"])
 
 @router.get("/assets",
-         name="Link to download a zip with all assets")
+         name="Link to download a zip with all assets", include_in_schema=False)
 @limiter.limit("5/second")
 async def assets(request: Request, response: Response):
     return {"download-link" : "https://cdn.clashking.xyz/Out-Sprites.zip"}

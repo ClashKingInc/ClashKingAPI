@@ -12,10 +12,27 @@ router = APIRouter(tags=["Legends"])
             name="Legend stats for a members in a clan on a date")
 @cache(expire=300)
 async def legends_clan(clan_tag: str, date: str, request: Request, response: Response):
-    basic_clan = await db_client.basic_clan.find_one({"tag" : fix_tag(clan_tag)})
+    basic_clan = await db_client.basic_clan.find_one({"tag" : fix_tag(clan_tag)}, {"_id" : 0, "tag" : 1, "name" : 1, "members" : 1, "memberList" : 1, "level" : 1, "location" : 1})
     members = basic_clan.get("memberList")
-    legend_stats = await db_client.player_stats_db.find_one({"tag": {"$in" : [m.get("tag") for m in members]}}, projection={"name": 1, "townhall": 1, "legends": 1, "tag": 1}).to_list(length=None)
+    legend_stats = await db_client.player_stats_db.find({"tag": {"$in" : [m.get("tag") for m in members]}}, projection={"name": 1, "townhall": 1, "legends": 1, "tag": 1, "_id" : 0}).to_list(length=None)
 
+    legend_stats_map = {l.get("tag") : l for l in legend_stats}
+    new_member_list = []
+    for member in members:
+        if member.get("league") == "Legend League":
+            legend_data = legend_stats_map.get(member.get("tag"), {}).get("legends", {}).get(date, {})
+            legend_data.pop("attacks", None)
+            legend_data.pop("defenses", None)
+            new_member_list.append({
+                "name" : member.get("name"),
+                "tag" : member.get("tag"),
+                "league" : member.get("league"),
+                "townhall" : member.get("townhall"),
+                "legends" : legend_data
+            })
+
+    basic_clan["memberList"] = new_member_list
+    return basic_clan
 
 
 @router.get(path="/legends/streaks",

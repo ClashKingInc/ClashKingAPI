@@ -209,11 +209,11 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
             raw_defense: dict = defense._raw_data
             raw_defense["fresh"] = defense.is_fresh_attack
 
-            defender_raw_data = defense.defender._raw_data
+            defender_raw_data = defense.attacker._raw_data
             defender_raw_data.pop("attacks", None)
             defender_raw_data.pop("bestOpponentAttack", None)
 
-            raw_defense["defender"] = defender_raw_data
+            raw_defense["attacker"] = defender_raw_data
             raw_defense["attack_order"] = defense.order
             done_holder["defenses"].append(raw_defense)
 

@@ -1,18 +1,16 @@
-import asyncio
-
 import uvicorn
 
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
-from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards
-from api_analytics.fastapi import Analytics
+from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from utils.utils import redis, config
@@ -43,6 +41,7 @@ routers = [
     capital.router,
     leaderboards.router,
     leagues.router,
+    legends.router,
     ranking.router,
     stats.router,
     list.router,

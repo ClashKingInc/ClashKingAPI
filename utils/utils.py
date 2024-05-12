@@ -49,6 +49,7 @@ class DBClient():
 
         self.looper = client.looper
         self.new_looper = client.new_looper
+        self.leaderboards = client.get_database("leaderboards")
 
 
         self.legends_stats = self.new_looper.legends_stats
@@ -79,6 +80,12 @@ class DBClient():
         self.clan_versus_trophies: collection_class = self.ranking_history.clan_versus_trophies
         self.capital_trophies: collection_class = self.ranking_history.capital
         self.basic_clan: collection_class = self.looper.clan_tags
+
+
+        self.player_capital_lb: collection_class = self.leaderboards.capital_player
+        self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
+
+
 
 db_client = DBClient()
 

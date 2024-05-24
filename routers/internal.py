@@ -29,12 +29,11 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
 
 @router.on_event("startup")
 async def startup():
-    '''global KEYS
+    global KEYS
     emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
     passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
     KEYS = await create_keys(emails=emails, passwords=passwords, ip="65.109.27.116")
-    KEYS = deque(KEYS)'''
-    pass
+    KEYS = deque(KEYS)
 
 @router.get("/v1/{url}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",

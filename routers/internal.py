@@ -36,7 +36,7 @@ async def startup():
     KEYS = deque(KEYS)
 
 
-@router.get("/v1/{url}",
+@router.get("/v1/{url:path}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
 @limiter.limit("60/minute")

@@ -29,26 +29,41 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
 
 @router.on_event("startup")
 async def startup():
-    global KEYS
+    '''global KEYS
     emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
     passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
     KEYS = await create_keys(emails=emails, passwords=passwords, ip="65.109.27.116")
-    KEYS = deque(KEYS)
+    KEYS = deque(KEYS)'''
+    pass
 
-@router.get("/v1/{url:path}",
+@router.get("/v1/{url}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
 @limiter.limit("60/minute")
 async def test_endpoint(url: str, request: Request, response: Response):
     global KEYS
-    url = url.replace("#", '%23')
-    url = url.replace("!", '%23')
+
+    url = url.replace("#", '%23').replace("!", '%21')
+
+    # Extract query parameters
+    query_params = request.query_params
+    query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
+
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
     KEYS.rotate(0)
+
+    # Construct the full URL with query parameters if any
+    full_url = f"https://api.clashofclans.com/v1/{url}"
+    if query_string:
+        full_url = f"{full_url}?{query_string}"
+
     async with aiohttp.ClientSession() as session:
-        async with session.get(
-                f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
-            item = await response.json()
+        async with session.get(full_url, headers=headers) as api_response:
+            if api_response.status != 200:
+                content = await api_response.text()
+                raise HTTPException(status_code=api_response.status, detail=content)
+            item = await api_response.json()
+
     return item
 
 

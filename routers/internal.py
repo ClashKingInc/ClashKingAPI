@@ -3,9 +3,13 @@ import orjson
 import re
 import snappy
 import asyncio
+import tempfile
 
+from aiocache import Cache, cached
+from aiocache.serializers import PickleSerializer
 from collections import defaultdict, deque
 from fastapi import  Request, Response, HTTPException
+from fastapi.responses import FileResponse
 from fastapi import APIRouter
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -19,6 +23,17 @@ router = APIRouter(tags=["Internal Endpoints"])
 api_cache = ExpiringDict()
 KEYS = deque()
 
+request_queue = asyncio.Queue(maxsize=10)
+processing_lock = asyncio.Lock()
+
+# Define cache with aiocache
+cache = Cache(Cache.MEMORY, serializer=PickleSerializer(), ttl=24*60*60)
+
+async def fetch_image(url: str) -> bytes:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            return await response.read()
 
 @router.post("/ck/generate-api-keys", include_in_schema=False)
 async def generate_api_keys(emails: List[str], passwords: List[str], request: Request, response: Response):
@@ -65,6 +80,52 @@ async def test_endpoint(url: str, request: Request, response: Response):
             item = await api_response.json()
 
     return item
+
+
+@router.get("/ss/{tag}")
+async def screenshot(tag: str, request: Request, response: Response):
+    tag = fix_tag(tag).replace("#", "")
+    #url = f"http://47.189.101.107:5000/ss/{tag}"
+
+    cached_response = await cache.get(tag)
+    if cached_response:
+        # Write the cached image to a temporary file and return it
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(cached_response)
+            tmp_path = tmp.name
+        return FileResponse(tmp_path, media_type="image/png", filename=f"{tag}.png")
+
+    # Check if the queue is full
+    if request_queue.full():
+        raise HTTPException(status_code=429, detail="Queue is full. Please try again later.")
+
+    # Add the request to the queue
+    await request_queue.put(tag)
+
+    # Process the queue
+    while True:
+        # Wait until it's this request's turn
+        current_tag = await request_queue.get()
+        if current_tag == tag:
+            break
+        else:
+            # Put the item back if it's not the current one
+            await request_queue.put(current_tag)
+            await asyncio.sleep(1)
+
+    # Process the request
+    async with processing_lock:
+        image_content = await fetch_image(f"http://{config.ss_ip}:5000/ss/{tag}")
+        await cache.set(tag, image_content)
+        request_queue.task_done()
+
+    # Write the processed image to a temporary file and return it
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(image_content)
+        tmp_path = tmp.name
+
+    return FileResponse(tmp_path, media_type="image/png", filename=f"{tag}.png")
+
 
 
 @router.get("/permalink/{clan_tag}",

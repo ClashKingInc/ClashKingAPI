@@ -1,4 +1,5 @@
 aiohttp==3.9.3
+aiocache==0.12.2
 coc.py==3.2.1
 expiring-dict==1.1.0
 fastapi==0.109.0

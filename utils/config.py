@@ -26,3 +26,5 @@ class Config:
     internal_api_token = getenv("INTERNAL_API_TOKEN")
 
     is_local = (getenv("LOCAL") == "TRUE")
+
+    ss_ip = getenv("SS_IP")

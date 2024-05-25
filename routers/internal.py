@@ -82,18 +82,17 @@ async def test_endpoint(url: str, request: Request, response: Response):
     return item
 
 
-@router.get("/ss/{tag}", include_in_schema=False)
-async def screenshot(tag: str, request: Request, response: Response):
+@router.get("/ss/{tag}/{token}", include_in_schema=False)
+async def screenshot(tag: str, token: str, request: Request, response: Response):
     tag = fix_tag(tag).replace("#", "")
     #url = f"http://47.189.101.107:5000/ss/{tag}"
 
+    if token != config.ss_token:
+        raise HTTPException(status_code=404, detail="Unauthorized")
+
     cached_response = await cache.get(tag)
     if cached_response:
-        # Write the cached image to a temporary file and return it
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(cached_response)
-            tmp_path = tmp.name
-        return FileResponse(tmp_path, media_type="image/png", filename=f"{tag}.png")
+        return Response(content=cached_response, media_type="image/png")
 
     # Check if the queue is full
     if request_queue.full():

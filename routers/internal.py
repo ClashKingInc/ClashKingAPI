@@ -82,7 +82,7 @@ async def test_endpoint(url: str, request: Request, response: Response):
     return item
 
 
-@router.get("/ss/{tag}")
+@router.get("/ss/{tag}", include_in_schema=False)
 async def screenshot(tag: str, request: Request, response: Response):
     tag = fix_tag(tag).replace("#", "")
     #url = f"http://47.189.101.107:5000/ss/{tag}"
@@ -119,12 +119,7 @@ async def screenshot(tag: str, request: Request, response: Response):
         await cache.set(tag, image_content)
         request_queue.task_done()
 
-    # Write the processed image to a temporary file and return it
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(image_content)
-        tmp_path = tmp.name
-
-    return FileResponse(tmp_path, media_type="image/png", filename=f"{tag}.png")
+    return Response(content=image_content, media_type="image/png")
 
 
 

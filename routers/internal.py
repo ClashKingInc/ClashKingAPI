@@ -175,7 +175,7 @@ async def add_user(request: Request):
             access_token = token_json['access_token']
 
         # Add the user to the specified servers
-        for server_id in [1029631182196977766]:
+        for server_id in [1247000773804560384]:
             async with session.put(
                     f"https://discord.com/api/v9/guilds/{server_id}/members/@me",
                     headers={

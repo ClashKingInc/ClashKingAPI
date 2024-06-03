@@ -38,9 +38,9 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
 async def startup():
     global KEYS
     emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
-    passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
+    '''passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
     KEYS = await create_keys(emails=emails, passwords=passwords, ip="65.109.27.116")
-    KEYS = deque(KEYS)
+    KEYS = deque(KEYS)'''
 
 
 @router.get("/v1/{url:path}",
@@ -147,6 +147,7 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
     return [r for r in results if r is not None and not isinstance(r, Exception)]
 
 
+
 @router.get("/add", include_in_schema=False)
 async def add_user(request: Request):
     code = request.query_params.get('code')
@@ -174,12 +175,34 @@ async def add_user(request: Request):
             token_json = await token_response.json()
             access_token = token_json['access_token']
 
+        async with session.get(
+                "https://discord.com/api/users/@me",
+                headers={
+                    "Authorization": f"Bearer {access_token}"
+                }
+        ) as user_response:
+            if user_response.status != 200:
+                error_text = await user_response.text()
+                return HTMLResponse(f"Error: Failed to retrieve user info. {error_text}", status_code=user_response.status)
+
+            user_json = await user_response.json()
+            user_id = user_json['id']
+
         # Add the user to the specified servers
-        for server_id in [1247000773804560384]:
+        for server_id in [1247000773804560384,
+                          1247007440382459934,
+                          1247007568308600882,
+                          1247008006042947655,
+                          1247008148414402693,
+                          1247008365725487174,
+                          1247008453029789726,
+                          1247008490850091048,
+                          1042301195240357958,
+                          1042635608088125491]:
             async with session.put(
-                    f"https://discord.com/api/v9/guilds/{server_id}/members/@me",
+                    f"https://discord.com/api/v10/guilds/{server_id}/members/{user_id}",
                     headers={
-                        "Authorization": f"Bearer {access_token}",
+                        "Authorization": f"Bot {config.bot_token}",
                         "Content-Type": "application/json"
                     },
                     json={"access_token": access_token}
@@ -187,5 +210,5 @@ async def add_user(request: Request):
                 if response.status != 204:
                     return HTMLResponse(f"Error: Failed to add to server {server_id}", status_code=response.status)
 
-    return HTMLResponse("Adding you to custom bot servers!")
+    return HTMLResponse("Added you to ClashKing Emoji Servers!")
 

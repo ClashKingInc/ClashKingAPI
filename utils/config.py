@@ -28,4 +28,5 @@ class Config:
     is_local = (getenv("LOCAL") == "TRUE")
 
     client_secret = getenv("CLIENT_SECRET")
+    bot_token = getenv("BOT_TOKEN")
 

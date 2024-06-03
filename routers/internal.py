@@ -207,8 +207,21 @@ async def add_user(request: Request):
                     },
                     json={"access_token": access_token}
             ) as response:
-                if response.status != 204:
-                    return HTMLResponse(f"Error: Failed to add to server {server_id}", status_code=response.status)
+                if response.status == 204:
+                    await asyncio.sleep(1)  # Add a short delay to avoid hitting rate limits
+                    continue
+                elif response.status == 400:
+                    error_json = await response.json()
+                    if error_json.get('code') == 50035:
+                        return HTMLResponse(f"Error: Invalid JSON for server {server_id}", status_code=response.status)
+                elif response.status == 403:
+                    return HTMLResponse(f"Error: Forbidden to add to server {server_id}", status_code=response.status)
+                elif response.status == 401:
+                    error_text = await response.text()
+                    return HTMLResponse(f"Error: Unauthorized. {error_text}", status_code=response.status)
+                else:
+                    error_text = await response.text()
+                    return HTMLResponse(f"Error: Failed to add to server {server_id} with status {response.status}. {error_text}", status_code=response.status)
 
     return HTMLResponse("Added you to ClashKing Emoji Servers!")
 

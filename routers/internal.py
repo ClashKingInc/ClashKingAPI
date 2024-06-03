@@ -38,9 +38,9 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
 async def startup():
     global KEYS
     emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
-    '''passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
+    passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
     KEYS = await create_keys(emails=emails, passwords=passwords, ip="65.109.27.116")
-    KEYS = deque(KEYS)'''
+    KEYS = deque(KEYS)
 
 
 @router.get("/v1/{url:path}",
@@ -207,7 +207,7 @@ async def add_user(request: Request):
                     },
                     json={"access_token": access_token}
             ) as response:
-                if response.status == 204:
+                if response.status == (204, 201):
                     await asyncio.sleep(1)  # Add a short delay to avoid hitting rate limits
                     continue
                 elif response.status == 400:

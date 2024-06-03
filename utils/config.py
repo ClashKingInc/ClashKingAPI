@@ -27,5 +27,5 @@ class Config:
 
     is_local = (getenv("LOCAL") == "TRUE")
 
-    ss_ip = getenv("SS_IP")
-    ss_token = getenv("SS_TOKEN")
+    client_secret = getenv("CLIENT_SECRET")
+

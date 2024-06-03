@@ -3,13 +3,10 @@ import orjson
 import re
 import snappy
 import asyncio
-import tempfile
 
-from aiocache import Cache, cached
-from aiocache.serializers import PickleSerializer
 from collections import defaultdict, deque
 from fastapi import  Request, Response, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi import APIRouter
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -23,11 +20,6 @@ router = APIRouter(tags=["Internal Endpoints"])
 api_cache = ExpiringDict()
 KEYS = deque()
 
-request_queue = asyncio.Queue(maxsize=10)
-processing_lock = asyncio.Lock()
-
-# Define cache with aiocache
-cache = Cache(Cache.MEMORY, serializer=PickleSerializer(), ttl=24*60*60)
 
 async def fetch_image(url: str) -> bytes:
     async with aiohttp.ClientSession() as session:
@@ -82,58 +74,25 @@ async def test_endpoint(url: str, request: Request, response: Response):
     return item
 
 
-@router.get("/ss/{tag}/{token}", include_in_schema=False)
-async def screenshot(tag: str, token: str, request: Request, response: Response):
-    tag = fix_tag(tag).replace("#", "")
-    #url = f"http://47.189.101.107:5000/ss/{tag}"
-
-    if token != config.ss_token:
-        raise HTTPException(status_code=404, detail="Unauthorized")
-
-    cached_response = await cache.get(tag)
-    if cached_response:
-        return Response(content=cached_response, media_type="image/png")
-
-    # Check if the queue is full
-    if request_queue.full():
-        raise HTTPException(status_code=429, detail="Queue is full. Please try again later.")
-
-    # Add the request to the queue
-    await request_queue.put(tag)
-
-    # Process the queue
-    while True:
-        # Wait until it's this request's turn
-        current_tag = await request_queue.get()
-        if current_tag == tag:
-            break
-        else:
-            # Put the item back if it's not the current one
-            await request_queue.put(current_tag)
-            await asyncio.sleep(1)
-
-    # Process the request
-    async with processing_lock:
-        image_content = await fetch_image(f"http://{config.ss_ip}:5000/ss/{tag}")
-        await cache.set(tag, image_content)
-        request_queue.task_done()
-
-    return Response(content=image_content, media_type="image/png")
-
-
 
 @router.get("/permalink/{clan_tag}",
          name="Permanent Link to Clan Badge URL")
 async def permalink(clan_tag: str):
-    global KEYS
-    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(1)
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-                f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
-                headers=headers) as response:
-            items = await response.json()
-    image_link = items["badgeUrls"]["large"]
+
+    clan_tag = fix_tag(clan_tag)
+    db_clan_result = await db_client.global_clans.find_one({"_id" : clan_tag}, {"data."})
+    if not db_clan_result:
+        global KEYS
+        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+        KEYS.rotate(1)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
+                    headers=headers) as response:
+                items = await response.json()
+        image_link = items["badgeUrls"]["large"]
+    else:
+        image_link = None
 
     async def fetch(url, session):
         async with session.get(url) as response:
@@ -186,4 +145,47 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
+
+
+@router.get("/add", include_in_schema=False)
+async def add_user(request: Request):
+    code = request.query_params.get('code')
+
+    if not code:
+        return HTMLResponse("Error: No code provided", status_code=400)
+
+    async with aiohttp.ClientSession() as session:
+        # Exchange code for an access token
+        token_data = {
+            "client_id": 824653933347209227,
+            "client_secret": config.client_secret,
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "https://api.clashking.xyz/add"
+        }
+        async with session.post(
+                "https://discord.com/api/oauth2/token",
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+        ) as token_response:
+            if token_response.status != 200:
+                return HTMLResponse("Error: Failed to retrieve access token", status_code=token_response.status)
+
+            token_json = await token_response.json()
+            access_token = token_json['access_token']
+
+        # Add the user to the specified servers
+        for server_id in [1029631182196977766]:
+            async with session.put(
+                    f"https://discord.com/api/v9/guilds/{server_id}/members/@me",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"access_token": access_token}
+            ) as response:
+                if response.status != 204:
+                    return HTMLResponse(f"Error: Failed to add to server {server_id}", status_code=response.status)
+
+    return HTMLResponse("Adding you to custom bot servers!")
 

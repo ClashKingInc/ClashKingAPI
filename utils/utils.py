@@ -80,6 +80,7 @@ class DBClient():
         self.clan_versus_trophies: collection_class = self.ranking_history.clan_versus_trophies
         self.capital_trophies: collection_class = self.ranking_history.capital
         self.basic_clan: collection_class = self.looper.clan_tags
+        self.global_clans: collection_class = self.looper.global_clans
 
 
         self.player_capital_lb: collection_class = self.leaderboards.capital_player
@@ -112,12 +113,14 @@ def gen_season_date():
         month = f"0{month}"
     return f"{end.year}-{month}"
 
+
 def gen_games_season():
     now = datetime.utcnow()
     month = now.month
     if month <= 9:
         month = f"0{month}"
     return f"{now.year}-{month}"
+
 
 def gen_raid_date():
     now = datetime.utcnow().replace(tzinfo=pend.UTC)
@@ -133,6 +136,16 @@ def gen_raid_date():
         forward = 4 - current_dayofweek
         raidDate = (now + timedelta(forward)).date()
         return str(raidDate)
+
+
+def gen_legend_date():
+    now = datetime.utcnow()
+    hour = now.hour
+    if hour < 5:
+        date = (now - timedelta(1)).date()
+    else:
+        date = now.date()
+    return str(date)
 
 async def token_verify(server_id: int, api_token: str, only_admin: bool = False):
     if api_token is None:

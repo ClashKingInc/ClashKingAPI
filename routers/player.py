@@ -1,24 +1,22 @@
+import aiohttp
+import coc
 import datetime
+import pendulum as pend
 import re
 import time
-import asyncio
-import pendulum as pend
-import coc
-import aiohttp
 
-from collections import defaultdict, deque
-from fastapi import Request, Response, HTTPException, Query
-from fastapi import APIRouter
-from fastapi_cache.decorator import cache
-from typing import List, Annotated
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from utils.utils import fix_tag, redis, db_client
+from collections import defaultdict
 from datetime import timedelta
+from fastapi import Request, Response, HTTPException, Query, APIRouter
+from fastapi_cache.decorator import cache
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from typing import List, Annotated
+from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season
+
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Player Endpoints"])
-
 
 @router.get("/player/{player_tag}/stats",
          name="All collected Stats for a player (clan games, looted, activity, etc)")
@@ -233,11 +231,94 @@ async def player_raids(player_tag: str, request: Request, response: Response, li
     return {"items" : results}
 
 
-'''@router.get("/player/to-do",
-             name="To-do list for player(s)")
-@limiter.limit("10/second")
-async def player_to_do(players: Annotated[List[str], Query(min_length=1, max_length=50)]):
-    pass'''
+@router.get("/player/to-do",
+         name="List of in-game items to complete (legends, war, raids, etc)")
+@limiter.limit("30/second")
+async def player_to_do(request: Request, response: Response, player_tags: Annotated[List[str], Query(min_length=1, max_length=50)]):
+    return_data = {"items" : []}
+    for player_tag in player_tags:
+        player_tag = fix_tag(player_tag)
+
+        player_data = await db_client.player_stats_db.find_one({"tag" : player_tag},
+                                                               {"legends" : 1, "clan_games" : 1, "season_pass" : 1, "last_online" : 1})
+        player_data = player_data or {}
+
+        legends_data = player_data.get("legends", {}).get(gen_legend_date(), {})
+        games_data = player_data.get("clan_games", {}).get(gen_games_season(), {})
+        pass_data = player_data.get("season_pass", {}).get(gen_games_season(), {})
+        last_active_data = player_data.get("last_online")
+
+        player_clan_tag = None
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.clashking.xyz/v1/players/{player_tag.replace('#', '%23')}") as response:
+                if response.status == 200:
+                    player_json = await response.json()
+                    player_clan_tag = player_json.get("clan", {}).get("tag")
+
+        raid_data = {}
+        if player_clan_tag:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("items"):
+                            raid_weekend_entry = coc.RaidLogEntry(data=data.get("items")[0], client=None, clan_tag=player_clan_tag)
+                            if raid_weekend_entry.end_time.seconds_until >= 0:
+                                raid_member = raid_weekend_entry.get_member(tag=player_tag)
+                                if raid_member:
+                                    raid_data = {
+                                        "attacks_done" : raid_member.attack_count,
+                                        "attack_limit" : raid_member.attack_limit + raid_member.bonus_attack_limit,
+                                    }
+
+
+        war_data = await db_client.war_timer.find_one({"_id" : player_tag}, {"_id" : 0})
+        war_data = war_data or {}
+
+        cwl_data = {}
+
+        if player_clan_tag:
+            group_data = None
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/currentwar/leaguegroup") as response:
+                    if response.status == 200:
+                        group_data = await response.json()
+
+            if group_data and group_data.get("season") == gen_games_season():
+                cwl_group = coc.ClanWarLeagueGroup(data=group_data, client=None)
+                last_round = cwl_group.rounds[-1]
+
+                our_war = None
+                for war_tag in last_round:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"https://api.clashking.xyz/v1/clanwarleagues/wars/{war_tag.replace('#', '%23')}") as response:
+                            if response.status == 200:
+                                war_json = await response.json()
+                                war = coc.ClanWar(data=war_json, client=None)
+                                if player_clan_tag in [war.clan.tag, war.opponent.tag]:
+                                    our_war = war
+                                    break
+
+                war_member = our_war.get_member(tag=player_tag)
+                if war_member:
+                    cwl_data = {
+                        "attack_limit" : war.attacks_per_member,
+                        "attacks_done" : len(war_member.attacks)
+                    }
+
+        return_data["items"].append({
+            "player_tag" : player_tag,
+            "current_clan" : player_clan_tag,
+            "legends" : legends_data,
+            "clan_games" : games_data,
+            "season_pass" : pass_data,
+            "last_active" : last_active_data,
+            "raids" : raid_data,
+            "war" : war_data,
+            "cwl" : cwl_data
+        })
+
+    return return_data
 
 
 

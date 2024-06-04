@@ -122,7 +122,7 @@ async def player_legend(player_tag: str, request: Request, response: Response, s
          name="Historical data for player events")
 @cache(expire=300)
 @limiter.limit("30/second")
-async def player_historical(player_tag: str, season:str, request: Request, response: Response):
+async def player_historical(player_tag: str, season: str, request: Request, response: Response):
     player_tag = player_tag and "#" + re.sub(r"[^A-Z0-9]+", "", player_tag.upper()).replace("O", "0")
     year = season[:4]
     month = season[-2:]
@@ -233,7 +233,8 @@ async def player_raids(player_tag: str, request: Request, response: Response, li
 
 @router.get("/player/to-do",
          name="List of in-game items to complete (legends, war, raids, etc)")
-@limiter.limit("30/second")
+@cache(expire=300)
+@limiter.limit("10/second")
 async def player_to_do(request: Request, response: Response, player_tags: Annotated[List[str], Query(min_length=1, max_length=50)]):
     return_data = {"items" : []}
     for player_tag in player_tags:
@@ -319,8 +320,6 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
         })
 
     return return_data
-
-
 
 
 

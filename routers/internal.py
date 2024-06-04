@@ -47,7 +47,6 @@ async def startup():
 @router.get("/v1/{url:path}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
-@limiter.limit("60/minute")
 async def test_endpoint(url: str, request: Request, response: Response):
     global KEYS
 

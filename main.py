@@ -94,7 +94,10 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-'''if __name__ == '__main__':
+if __name__ == '__main__':
     if config.is_local:
-        uvicorn.run("main:app", host='localhost', port=80)'''
+        uvicorn.run("main:app", host='localhost', port=80)
+    else:
+        uvicorn.run("main:app", host='0.0.0.0', port=80)
+
 

@@ -1,7 +1,8 @@
 import uvicorn
+import logging
 
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -14,6 +15,9 @@ from routers import leagues, player, capital, global_data, clan, war, utility, r
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from utils.utils import redis, config
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
 middleware = [
@@ -33,6 +37,18 @@ app = FastAPI(middleware=middleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Get the real IP address from the headers
+    client_ip = request.headers.get('X-Forwarded-For', request.client.host)
+
+    # Log the client IP
+    logger.info(f"Client IP: {client_ip}")
+
+    # Continue processing the request
+    response = await call_next(request)
+    return response
 
 routers = [
     player.router,

@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
-from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -57,7 +57,7 @@ for router in routers:
 
 @app.on_event("startup")
 async def startup_event():
-    FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
+    FastAPICache.init(InMemoryBackend())
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)

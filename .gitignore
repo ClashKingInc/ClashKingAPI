@@ -1,2 +1,4 @@
 # created by virtualenv automatically
 .env
+*.xml
+*.idea

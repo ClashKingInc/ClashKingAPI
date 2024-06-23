@@ -40,7 +40,7 @@ async def startup():
     if not config.is_local:
         emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
         passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
-        KEYS = await create_keys(emails=emails, passwords=passwords, ip="45.79.218.79")
+        KEYS = await create_keys(emails=emails, passwords=passwords, ip="5.161.113.222")
         KEYS = deque(KEYS)
 
 
@@ -60,7 +60,7 @@ async def test_endpoint(url: str, request: Request, response: Response):
     KEYS.rotate(0)
 
     # Construct the full URL with query parameters if any
-    full_url = f"https://cocproxy.royaleapi.dev/v1/{url}"
+    full_url = f"https://api.clashofclans.com/v1/{url}"
     if query_string:
         full_url = f"{full_url}?{query_string}"
 
@@ -87,7 +87,7 @@ async def permalink(clan_tag: str):
         KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                    f"https://cocproxy.royaleapi.dev/v1/clans/{clan_tag.replace('#', '%23')}",
+                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
                     headers=headers) as response:
                 items = await response.json()
         image_link = items["badgeUrls"]["large"]
@@ -123,7 +123,7 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
             headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
             KEYS.rotate(1)
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://cocproxy.royaleapi.dev/v1/{url}", headers=headers) as response:
+                async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
                     item_bytes = await response.read()
                     item = orjson.loads(item_bytes)
                     if response.status == 200:

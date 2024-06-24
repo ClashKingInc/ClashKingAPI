@@ -38,18 +38,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    # Get the real IP address from the headers
-    client_ip = request.headers.get('X-Forwarded-For', request.client.host)
-
-    # Log the client IP
-    logger.info(f"Client IP: {client_ip}")
-
-    # Continue processing the request
-    response = await call_next(request)
-    return response
-
 routers = [
     player.router,
     clan.router,

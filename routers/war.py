@@ -55,8 +55,8 @@ async def war_previous(clan_tag: str, request: Request, response: Response,  tim
 @limiter.limit("30/second")
 async def war_previous_time(clan_tag: str, end_time: str, request: Request, response: Response):
     end_time = coc.Timestamp(data=end_time).time.replace(tzinfo=pend.UTC)
-    lower_end_time = end_time - timedelta(minutes=2)
-    higher_end_time = end_time + timedelta(minutes=2)
+    lower_end_time = end_time - timedelta(minutes=5)
+    higher_end_time = end_time + timedelta(minutes=5)
 
     clan_tag = fix_tag(clan_tag)
     war = await db_client.clan_wars.find_one({"$and" : [{"$or" : [{"data.clan.tag" : clan_tag}, {"data.opponent.tag" : clan_tag}]},

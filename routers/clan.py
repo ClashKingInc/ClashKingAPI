@@ -117,3 +117,23 @@ async def clan_filter(request: Request, response: Response,  limit: int= 100, lo
                 del data["memberList"]
         return_data["items"] = results
     return return_data
+
+
+
+
+@router.get("/clan/{clan_tag}/historical",
+         name="Historical data for a clan of player events")
+@cache(expire=300)
+@limiter.limit("10/second")
+async def clan_historical(clan_tag: str, request: Request, response: Response, timestamp_start: int = 0, time_stamp_end: int = 9999999999, limit: int = 100):
+    clan_tag = fix_tag(clan_tag)
+
+    historical_data = await db_client.player_history.find(
+        {"$and": [
+            {"clan": clan_tag},
+            {"time": {"$gte": pend.from_timestamp(timestamp=timestamp_start, tz=pend.UTC)}},
+            {"time": {"$lte": pend.from_timestamp(timestamp=time_stamp_end, tz=pend.UTC)}}
+        ]
+        }, {"_id": 0}).sort({"time": -1}).limit(limit=limit).to_list(length=25000)
+
+    return {"items" : historical_data}

@@ -131,8 +131,8 @@ async def clan_historical(clan_tag: str, request: Request, response: Response, t
     historical_data = await db_client.player_history.find(
         {"$and": [
             {"clan": clan_tag},
-            {"time": {"$gte": pend.from_timestamp(timestamp=timestamp_start, tz=pend.UTC)}},
-            {"time": {"$lte": pend.from_timestamp(timestamp=time_stamp_end, tz=pend.UTC)}}
+            {"time": {"$gte": int(pend.from_timestamp(timestamp=timestamp_start, tz=pend.UTC).timestamp())}},
+            {"time": {"$lte": int(pend.from_timestamp(timestamp=time_stamp_end, tz=pend.UTC).timestamp())}}
         ]
         }, {"_id": 0}).sort({"time": -1}).limit(limit=limit).to_list(length=25000)
 

@@ -50,7 +50,6 @@ async def startup():
 async def test_endpoint(url: str, request: Request, response: Response):
     global KEYS
 
-    url = url.replace("#", '%23').replace("!", '%23')
 
     # Extract query parameters
     query_params = request.query_params
@@ -58,7 +57,6 @@ async def test_endpoint(url: str, request: Request, response: Response):
 
     # Remove the "fields" parameter from the query parameters
     query_params = {key: value for key, value in query_params.items() if key != "fields"}
-
     query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
 
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
@@ -68,6 +66,8 @@ async def test_endpoint(url: str, request: Request, response: Response):
     full_url = f"https://api.clashofclans.com/v1/{url}"
     if query_string:
         full_url = f"{full_url}?{query_string}"
+
+    full_url = url.replace("#", '%23').replace("!", '%23')
 
     async with aiohttp.ClientSession() as session:
         async with session.get(full_url, headers=headers) as api_response:

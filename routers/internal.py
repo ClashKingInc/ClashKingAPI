@@ -54,6 +54,11 @@ async def test_endpoint(url: str, request: Request, response: Response):
 
     # Extract query parameters
     query_params = request.query_params
+    fields = query_params.get("fields")
+
+    # Remove the "fields" parameter from the query parameters
+    query_params = {key: value for key, value in query_params.items() if key != "fields"}
+
     query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
 
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
@@ -70,6 +75,17 @@ async def test_endpoint(url: str, request: Request, response: Response):
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
             item = await api_response.json()
+
+    # If fields are specified, filter the response to include only those fields
+    if fields:
+        fields = fields.split(",")
+        if "items" in item and isinstance(item["items"], list):
+            item["items"] = [
+                {key: sub_item[key] for key in fields if key in sub_item}
+                for sub_item in item["items"]
+            ]
+        else:
+            item = {key: item[key] for key in fields if key in item}
 
     return item
 

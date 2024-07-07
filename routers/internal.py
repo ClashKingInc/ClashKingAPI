@@ -67,7 +67,7 @@ async def test_endpoint(url: str, request: Request, response: Response):
     if query_string:
         full_url = f"{full_url}?{query_string}"
 
-    full_url = url.replace("#", '%23').replace("!", '%23')
+    full_url = full_url.replace("#", '%23').replace("!", '%23')
 
     async with aiohttp.ClientSession() as session:
         async with session.get(full_url, headers=headers) as api_response:

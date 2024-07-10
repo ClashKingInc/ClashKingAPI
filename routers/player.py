@@ -390,7 +390,7 @@ async def full_search_players(name: str, request: Request, response: Response,
                         donations:str =Query(default=None, description='A comma seperated value of low, high values like: 0,90000'),
                         limit: int = 25):
     conditions = [
-        {"$eq": ["$$member.name", name]},
+        {"$regexMatch": {"input": "$$member.name", "regex": name, "options": "i"}},
     ]
 
     if role is not None:

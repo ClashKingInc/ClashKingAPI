@@ -12,7 +12,7 @@ from fastapi_cache.decorator import cache
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from typing import List, Annotated
-from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season
+from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season, leagues
 
 
 limiter = Limiter(key_func=get_remote_address)
@@ -375,5 +375,82 @@ async def search_players(name: str, request: Request, response: Response):
     for result in results:
         del result["_id"]
     return {"items" : results}
+
+
+@router.get("/player/full-search/{name}",
+         name="Search for players by name")
+@cache(expire=300)
+@limiter.limit("30/second")
+async def full_search_players(name: str, request: Request, response: Response,
+                        role:str =Query(default=None, description='An in-game player role, uses API values like admin however'),
+                        league:str =Query(default=None, description='An in-game player league'),
+                        townhall: str = Query(default=None, description='A comma seperated value of low, high values like: 1,16'),
+                        exp:str =Query(default=None, description='A comma seperated value of low, high values like: 0,500'),
+                        trophies:str =Query(default=None, description='A comma seperated value of low, high values like: 0,6000'),
+                        donations:str =Query(default=None, description='A comma seperated value of low, high values like: 0,90000'),
+                        limit: int = 25):
+    conditions = [
+        {"$eq": ["$$member.name", name]},
+    ]
+
+    if role is not None:
+        conditions.append({"$eq": ["$$member.role", role]})
+
+    if exp is not None:
+        exp = exp.split(',')
+        conditions.extend([
+            {"$gte": ["$$member.expLevel", int(exp[0])]},
+            {"$lte": ["$$member.expLevel", int(exp[1])]}
+        ])
+    if townhall is not None:
+        townhall = townhall.split(',')
+        conditions.extend([
+            {"$gte": ["$$member.townhall", int(townhall[0])]},
+            {"$lte": ["$$member.townhall", int(townhall[1])]}
+        ])
+    if trophies is not None:
+        trophies = trophies.split(',')
+        conditions.extend([
+            {"$gte": ["$$member.trophies", int(trophies[0])]},
+            {"$lte": ["$$member.trophies", int(trophies[1])]}
+        ])
+    if league is not None:
+        conditions.append({"$eq": ["$$member.league", league]})
+    if donations is not None:
+        donations = donations.split(',')
+        conditions.extend([
+            {"$gte": ["$$member.donations", int(donations[0])]},
+            {"$lte": ["$$member.donations", int(donations[1])]}
+        ])
+
+    pipeline =[
+        {
+            "$match": {"$text": {"$search": name}}
+        },
+        {
+            "$project": {
+                '_id' : 0,
+                'clan_name' : '$name',
+                'clan_tag' : '$tag',
+                "memberList": {
+                    "$filter": {
+                        "input": "$memberList",
+                        "as": "member",
+                        "cond": {
+                            "$and": conditions
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "$match": {"memberList.0": {"$exists": True}}
+        },
+        {"$limit" : min(limit, 1000)}
+    ]
+
+    results = await db_client.basic_clan.aggregate(pipeline=pipeline).to_list(length=None)
+    return {"items" : [member | {'clan_name' : doc['clan_name'], 'clan_tag' : doc['clan_tag']} for doc in results for member in doc['memberList']]}
+
 
 

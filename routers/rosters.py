@@ -42,7 +42,7 @@ async def get_form(request: Request, token: str):
         "name" : roster.get("alias")
     }
     if initial_values["time"]:
-        initial_values["time"] = datetime.datetime.fromtimestamp(initial_values["time"]).replace(tzinfo=pend.UTC).isoformat()
+        initial_values["time"] = pend.from_timestamp(timestamp=initial_values["time"], tz=pend.UTC).isoformat()
 
     return templates.TemplateResponse("index.html", {
         "request": request,

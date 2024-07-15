@@ -152,8 +152,13 @@
         var timeInput = document.getElementById('time');
         var utcTime = timeInput.getAttribute('data-utc-time');
         if (utcTime) {
+            console.log('Original UTC time:', utcTime);
             var date = new Date(utcTime);
-            var localTime = date.toISOString().slice(0, 16); // Format to YYYY-MM-DDTHH:MM
+            console.log('Parsed Date:', date);
+
+            // Format the date to YYYY-MM-DDTHH:MM for datetime-local input
+            var localTime = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+            console.log('Local time for input:', localTime);
             timeInput.value = localTime;
         }
 
@@ -177,11 +182,16 @@
             }
 
             var timeValue = formElement.time.value;
+            console.log('Time value from input:', timeValue);
             var timeUnix = null;
             if (timeValue) {
-                // Convert local time to UTC by adjusting for the timezone offset
-                var date = new Date(timeValue);
-                timeUnix = Math.floor((date.getTime() - (date.getTimezoneOffset() * 60000)) / 1000);
+                // Parse the local time input as a Date object in local time
+                var localDate = new Date(timeValue);
+                console.log('Local Date:', localDate);
+
+                // Convert the local time directly to Unix timestamp
+                timeUnix = Math.floor(localDate.getTime() / 1000);
+                console.log('Unix Timestamp in seconds:', timeUnix);
             }
 
             var formJSON = {

@@ -4,6 +4,7 @@ import json
 import re
 import uuid
 import base64
+import pendulum as pend
 from fastapi import APIRouter, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -41,7 +42,7 @@ async def get_form(request: Request, token: str):
         "name" : roster.get("alias")
     }
     if initial_values["time"]:
-        initial_values["time"] = datetime.datetime.utcfromtimestamp(initial_values["time"]).isoformat()
+        initial_values["time"] = pend.from_timestamp(timestamp=initial_values["time"], tz=pend.UTC).isoformat()
 
     return templates.TemplateResponse("index.html", {
         "request": request,

@@ -65,38 +65,41 @@
             <div class="mb-4">
                 <label for="sort" class="block text-sm font-medium">Sort:</label>
                 <select id="sort" name="sort" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
-                    <option value="Name" {% if "Name" in initial_values.sort %}selected{% endif %}>Name</option>
-                    <option value="Player Tag" {% if "Player Tag" in initial_values.sort %}selected{% endif %}>Player Tag</option>
-                    <option value="Heroes" {% if "Heroes" in initial_values.sort %}selected{% endif %}>Heroes</option>
-                    <option value="Townhall Level" {% if "Townhall Level" in initial_values.sort %}selected{% endif %}>Townhall Level</option>
-                    <option value="Discord" {% if "Discord" in initial_values.sort %}selected{% endif %}>Discord</option>
-                    <option value="30 Day Hitrate" {% if "30 Day Hitrate" in initial_values.sort %}selected{% endif %}>30 Day Hitrate</option>
-                    <option value="Current Clan" {% if "Current Clan" in initial_values.sort %}selected{% endif %}>Current Clan</option>
-                    <option value="Clan Tag" {% if "Clan Tag" in initial_values.sort %}selected{% endif %}>Clan Tag</option>
-                    <option value="War Opt Status" {% if "War Opt Status" in initial_values.sort %}selected{% endif %}>War Opt Status</option>
-                    <option value="Trophies" {% if "Trophies" in initial_values.sort %}selected{% endif %}>Trophies</option>
+                    {% for option in initial_values.sort %}
+                    <option value="{{ option }}" selected>{{ column }}</option>
+                    {% endfor %}
+                    {% for option in ['Name', 'Player Tag', 'Heroes', 'Townhall Level', 'Discord', '30 Day Hitrate',
+                    'Current Clan', 'Clan Tag', 'War Opt Status', 'Trophies'] %}
+                    {% if option not in initial_values.sort %}
+                    <option value="{{ option }}">{{ option }}</option>
+                    {% endif %}
+                    {% endfor %}
                 </select>
             </div>
             <div class="mb-4">
                 <label for="columns" class="block text-sm font-medium">Columns:</label>
-                <select id="columns" name="columns" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
-                    <option value="Name" {% if "Name" in initial_values.columns %}selected{% endif %}>Name</option>
-                    <option value="Player Tag" {% if "Player Tag" in initial_values.columns %}selected{% endif %}>Player Tag</option>
-                    <option value="Heroes" {% if "Heroes" in initial_values.columns %}selected{% endif %}>Heroes</option>
-                    <option value="Townhall Level" {% if "Townhall Level" in initial_values.columns %}selected{% endif %}>Townhall Level</option>
-                    <option value="Discord" {% if "Discord" in initial_values.columns %}selected{% endif %}>Discord</option>
-                    <option value="30 Day Hitrate" {% if "30 Day Hitrate" in initial_values.columns %}selected{% endif %}>30 Day Hitrate</option>
-                    <option value="Current Clan" {% if "Current Clan" in initial_values.columns %}selected{% endif %}>Current Clan</option>
-                    <option value="Clan Tag" {% if "Clan Tag" in initial_values.columns %}selected{% endif %}>Clan Tag</option>
-                    <option value="War Opt Status" {% if "War Opt Status" in initial_values.columns %}selected{% endif %}>War Opt Status</option>
-                    <option value="Trophies" {% if "Trophies" in initial_values.columns %}selected{% endif %}>Trophies</option>
+                 <select id="columns" name="columns" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
+                    {% for column in initial_values.columns %}
+                    <option value="{{ column }}" selected>{{ column }}</option>
+                    {% endfor %}
+                    {% for option in ['Name', 'Player Tag', 'Heroes', 'Townhall Level', 'Discord', '30 Day Hitrate',
+                    'Current Clan', 'Clan Tag', 'War Opt Status', 'Trophies'] %}
+                    {% if option not in initial_values.columns %}
+                    <option value="{{ option }}">{{ option }}</option>
+                    {% endif %}
+                    {% endfor %}
                 </select>
             </div>
             <div class="mb-4">
                 <label for="buttons" class="block text-sm font-medium">Buttons:</label>
                 <select id="buttons" name="buttons" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
-                    {% for button in possible_buttons %}
-                        <option value="{{ button }}" {% if button in initial_values.buttons %}selected{% endif %}>{{ button }}</option>
+                    {% for button in initial_values.buttons %}
+                    <option value="{{ button }}" selected>{{ button }}</option>
+                    {% endfor %}
+                    {% for option in possible_buttons %}
+                    {% if option not in initial_values.buttons %}
+                    <option value="{{ option }}">{{ option }}</option>
+                    {% endif %}
                     {% endfor %}
                 </select>
             </div>
@@ -166,7 +169,12 @@
             }
 
             var timeValue = formElement.time.value;
-            var timeUnix = timeValue ? Math.floor(new Date(timeValue).getTime() / 1000) : null; // Convert to Unix timestamp
+            var timeUnix = null;
+            if (timeValue) {
+                // Convert local time to UTC
+                var date = new Date(timeValue);
+                timeUnix = Math.floor(date.getTime() / 1000);
+            }
 
             var formJSON = {
                 token: formElement.dataset.token, // Add the token

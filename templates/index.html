@@ -52,7 +52,7 @@
             </div>
             <div class="mb-4">
                 <label for="time" class="block text-sm font-medium">Time:</label>
-                <input type="datetime-local" id="time" name="time" value="{{ initial_values.time }}" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                <input type="datetime-local" id="time" name="time" data-utc-time="{{ initial_values.time }}" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
             </div>
             <div class="mb-4">
                 <label for="linked_clan" class="block text-sm font-medium">Linked Clan:</label>
@@ -148,6 +148,14 @@
                 imagePreview.classList.add('hidden');
             }
         });
+
+        var timeInput = document.getElementById('time');
+        var utcTime = timeInput.getAttribute('data-utc-time');
+        if (utcTime) {
+            var date = new Date(utcTime);
+            var localTime = date.toISOString().slice(0, 16); // Format to YYYY-MM-DDTHH:MM
+            timeInput.value = localTime;
+        }
 
         document.getElementById('rosterForm').addEventListener('submit', function(event) {
             event.preventDefault(); // Prevent the default form submission

@@ -2,11 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> <!-- Disable user scaling -->
     <title>Roster Settings</title>
     <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
     <link href="/static/output.css" rel="stylesheet">
     <link href="/static/custom.css" rel="stylesheet"> <!-- Add custom CSS here -->
+    <style>
+        /* Ensure input fields have a minimum font size of 16px to prevent zooming on mobile devices */
+        input, select, textarea {
+            font-size: 16px;
+        }
+    </style>
 </head>
 <body class="bg-black text-white font-sans">
     <div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
@@ -110,12 +116,19 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var elements = document.querySelectorAll('.choices-multiple');
-            elements.forEach(function (element) {
-                new Choices(element, { removeItemButton: true, searchEnabled: false });
+       document.addEventListener('DOMContentLoaded', function () {
+        // Initialize Choices.js for elements with the class 'choices-multiple'
+        var elements = document.querySelectorAll('.choices-multiple');
+        elements.forEach(function (element) {
+            new Choices(element, {
+                removeItemButton: true,
+                searchEnabled: true, // Ensure search is disabled
+                searchChoices: true, // Disable search functionality
+                shouldSort: false, // Prevent automatic sorting if not needed
+                editItems: false,
             });
         });
+    });
 
         document.getElementById('image').addEventListener('change', function(event) {
             var imagePreview = document.getElementById('imagePreview');

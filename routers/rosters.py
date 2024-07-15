@@ -37,7 +37,8 @@ async def get_form(request: Request, token: str):
         "linked_clan": linked_clan,
         "sort": roster.get('sort', ['Townhall Level', 'Name', 'Heroes', 'Player Tag'])[:4],
         "columns": roster.get('columns', ['Townhall Level', 'Name', 'Player Tag', 'Heroes'])[:4],
-        "buttons": roster.get('buttons')
+        "buttons": roster.get('buttons', []),
+        "name" : roster.get("alias")
     }
     if initial_values["time"]:
         initial_values["time"] = datetime.datetime.utcfromtimestamp(initial_values["time"]).isoformat()
@@ -86,6 +87,7 @@ async def submit_form(
     previous_roster = await db_client.rosters.find_one({"token" : settings_dict.get('token')})
     await db_client.rosters.update_one({"token" : settings_dict.get('token')},
         {"$set" : {
+        'alias' : settings_dict.get('name')[:100],
         'image' : image_url or previous_roster.get('image'),
         'th_restriction' : th_restriction,
         'columns' : settings_dict.get('columns')[:4],

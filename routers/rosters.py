@@ -42,8 +42,6 @@ async def get_form(request: Request, token: str):
         "name" : roster.get("alias")
     }
     if initial_values["time"]:
-        print(pend.from_timestamp(timestamp=initial_values["time"], tz=pend.UTC).isoformat())
-        print(pend.from_timestamp(timestamp=initial_values["time"]).naive().isoformat())
         initial_values["time"] = pend.from_timestamp(timestamp=initial_values["time"], tz=pend.UTC).isoformat()
 
     return templates.TemplateResponse("index.html", {
@@ -86,9 +84,6 @@ async def submit_form(
         async with session.get(f"https://api.clashking.xyz/v1/clans/{clan_tag.replace('#', '%23')}") as response:
             if response.status == 200:
                 clan_data = await response.json()
-
-    print(settings_dict.get('time'))
-    print(pend.from_timestamp(timestamp=settings_dict.get('time'), tz=pend.UTC).isoformat())
 
     previous_roster = await db_client.rosters.find_one({"token" : settings_dict.get('token')})
     await db_client.rosters.update_one({"token" : settings_dict.get('token')},

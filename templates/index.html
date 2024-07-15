@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roster Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
+    <link href="/static/output.css" rel="stylesheet">
+    <link href="/static/custom.css" rel="stylesheet"> <!-- Add custom CSS here -->
+</head>
+<body class="bg-black text-white font-sans">
+    <div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
+        <h1 class="text-2xl font-bold mb-6 text-center">Roster Settings</h1>
+        <form id="rosterForm" action="/roster/submit" method="post" enctype="multipart/form-data" data-token="{{ token }}">
+            <div class="mb-4">
+                <label for="townhall_min" class="block text-sm font-medium">Townhall Min:</label>
+                <select id="townhall_min" name="townhall_min" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                    {% for i in range(1, 17) %}
+                        <option value="{{ i }}" {% if i == initial_values.townhall_min %}selected{% endif %}>{{ i }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="townhall_max" class="block text-sm font-medium">Townhall Max:</label>
+                <select id="townhall_max" name="townhall_max" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                    {% for i in range(1, 17) %}
+                        <option value="{{ i }}" {% if i == initial_values.townhall_max %}selected{% endif %}>{{ i }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="max_roster_size" class="block text-sm font-medium">Max Roster Size:</label>
+                <select id="max_roster_size" name="max_roster_size" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                    {% for i in range(1, 61) %}
+                        <option value="{{ i }}" {% if i == initial_values.max_roster_size %}selected{% endif %}>{{ i }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="description" class="block text-sm font-medium">Description:</label>
+                <textarea id="description" name="description" maxlength="100" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">{{ initial_values.description }}</textarea>
+            </div>
+            <div class="mb-4">
+                <label for="time" class="block text-sm font-medium">Time:</label>
+                <input type="datetime-local" id="time" name="time" value="{{ initial_values.time }}" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+            </div>
+            <div class="mb-4">
+                <label for="linked_clan" class="block text-sm font-medium">Linked Clan:</label>
+                <select id="linked_clan" name="linked_clan" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                    {% for clan in clans %}
+                        <option value="{{ clan }}" {% if clan == initial_values.linked_clan %}selected{% endif %}>{{ clan }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="sort" class="block text-sm font-medium">Sort:</label>
+                <select id="sort" name="sort" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
+                    <option value="Name" {% if "Name" in initial_values.sort %}selected{% endif %}>Name</option>
+                    <option value="Player Tag" {% if "Player Tag" in initial_values.sort %}selected{% endif %}>Player Tag</option>
+                    <option value="Heroes" {% if "Heroes" in initial_values.sort %}selected{% endif %}>Heroes</option>
+                    <option value="Townhall Level" {% if "Townhall Level" in initial_values.sort %}selected{% endif %}>Townhall Level</option>
+                    <option value="Discord" {% if "Discord" in initial_values.sort %}selected{% endif %}>Discord</option>
+                    <option value="30 Day Hitrate" {% if "30 Day Hitrate" in initial_values.sort %}selected{% endif %}>30 Day Hitrate</option>
+                    <option value="Current Clan" {% if "Current Clan" in initial_values.sort %}selected{% endif %}>Current Clan</option>
+                    <option value="Clan Tag" {% if "Clan Tag" in initial_values.sort %}selected{% endif %}>Clan Tag</option>
+                    <option value="War Opt Status" {% if "War Opt Status" in initial_values.sort %}selected{% endif %}>War Opt Status</option>
+                    <option value="Trophies" {% if "Trophies" in initial_values.sort %}selected{% endif %}>Trophies</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="columns" class="block text-sm font-medium">Columns:</label>
+                <select id="columns" name="columns" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
+                    <option value="Name" {% if "Name" in initial_values.columns %}selected{% endif %}>Name</option>
+                    <option value="Player Tag" {% if "Player Tag" in initial_values.columns %}selected{% endif %}>Player Tag</option>
+                    <option value="Heroes" {% if "Heroes" in initial_values.columns %}selected{% endif %}>Heroes</option>
+                    <option value="Townhall Level" {% if "Townhall Level" in initial_values.columns %}selected{% endif %}>Townhall Level</option>
+                    <option value="Discord" {% if "Discord" in initial_values.columns %}selected{% endif %}>Discord</option>
+                    <option value="30 Day Hitrate" {% if "30 Day Hitrate" in initial_values.columns %}selected{% endif %}>30 Day Hitrate</option>
+                    <option value="Current Clan" {% if "Current Clan" in initial_values.columns %}selected{% endif %}>Current Clan</option>
+                    <option value="Clan Tag" {% if "Clan Tag" in initial_values.columns %}selected{% endif %}>Clan Tag</option>
+                    <option value="War Opt Status" {% if "War Opt Status" in initial_values.columns %}selected{% endif %}>War Opt Status</option>
+                    <option value="Trophies" {% if "Trophies" in initial_values.columns %}selected{% endif %}>Trophies</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="buttons" class="block text-sm font-medium">Buttons:</label>
+                <select id="buttons" name="buttons" class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white" multiple>
+                    {% for button in possible_buttons %}
+                        <option value="{{ button }}" {% if button in initial_values.buttons %}selected{% endif %}>{{ button }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="image" class="block text-sm font-medium mb-2">Image:</label>
+                <div class="file-input-container">
+                    <label class="file-input">
+                        Choose File
+                        <input type="file" id="image" name="image" accept="image/*">
+                    </label>
+                </div>
+                <img id="imagePreview" src="#" alt="Image Preview" class="hidden mt-4 rounded-md shadow-md" style="max-width: 100%; height: auto;">
+            </div>
+            <button type="submit" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">Submit</button>
+        </form>
+        <div id="confirmationMessage" class="hidden mt-4 text-center text-lg text-green-500 font-semibold"></div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var elements = document.querySelectorAll('.choices-multiple');
+            elements.forEach(function (element) {
+                new Choices(element, { removeItemButton: true, searchEnabled: true });
+            });
+        });
+
+        document.getElementById('image').addEventListener('change', function(event) {
+            var imagePreview = document.getElementById('imagePreview');
+            var file = event.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.src = '#';
+                imagePreview.classList.add('hidden');
+            }
+        });
+
+
+    document.getElementById('rosterForm').addEventListener('submit', function(event) {
+        event.preventDefault(); // Prevent the default form submission
+
+        var formData = new FormData();
+
+        // Gather form data
+        var formElement = document.getElementById('rosterForm');
+        var timeValue = formElement.time.value;
+        var timeUnix = timeValue ? Math.floor(new Date(timeValue).getTime() / 1000) : null; // Convert to Unix timestamp
+
+        var formJSON = {
+            token: formElement.dataset.token, // Add the token
+            townhall_min: formElement.townhall_min.value,
+            townhall_max: formElement.townhall_max.value,
+            max_roster_size: formElement.max_roster_size.value,
+            description: formElement.description.value,
+            time: timeUnix, // Use the Unix timestamp
+            linked_clan: formElement.linked_clan.value,
+            sort: Array.from(formElement.sort.selectedOptions).map(option => option.value),
+            columns: Array.from(formElement.columns.selectedOptions).map(option => option.value),
+            buttons: Array.from(formElement.buttons.selectedOptions).map(option => option.value)
+        };
+
+        // Append the JSON data to FormData
+        formData.append('settings', JSON.stringify(formJSON));
+
+        // Check if an image is selected and append it to FormData
+        var imageFile = formElement.image.files[0];
+        if (imageFile) {
+            formData.append('image', imageFile);
+        }
+
+        // Send the form data using fetch
+        fetch(formElement.action, {
+            method: formElement.method,
+            body: formData
+        }).then(response => response.json())
+          .then(data => {
+              console.log(data);
+              // Handle the response from the server
+              if (data.status === "Form submitted successfully") {
+                  document.getElementById('confirmationMessage').innerText = "Settings have been saved successfully.";
+                  document.getElementById('confirmationMessage').classList.remove('hidden');
+              }
+          })
+          .catch(error => {
+              console.error('Error:', error);
+              document.getElementById('confirmationMessage').innerText = "An error occurred while saving settings.";
+              document.getElementById('confirmationMessage').classList.remove('hidden');
+          });
+    });
+    </script>
+</body>
+</html>

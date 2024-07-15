@@ -4,6 +4,8 @@ import redis
 import re
 from dotenv import load_dotenv
 import coc
+import os
+
 import pendulum as pend
 from datetime import datetime, timedelta
 import io
@@ -43,7 +45,7 @@ class DBClient():
         self.server_db: collection_class = self.usafam.server
         self.clans_db: collection_class = self.usafam.get_collection("clans")
         self.banlist: collection_class = self.usafam.banlist
-
+        self.rosters: collection_class = self.usafam.rosters
 
         self.player_search: collection_class = other_client.usafam.player_search
 
@@ -222,3 +224,18 @@ leagues = ["Legend League", "Titan League I" , "Titan League II" , "Titan League
                    "Gold League I","Gold League II", "Gold League III",
                    "Silver League I","Silver League II","Silver League III",
                    "Bronze League I", "Bronze League II", "Bronze League III", "Unranked"]
+
+async def upload_to_cdn(title: str, picture=None, image = None):
+    headers = {
+        "content-type": "application/octet-stream",
+        "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
+    }
+    if image is None:
+        payload = picture.read()
+    else:
+        payload = await image.read()
+    title = title.replace(" ", "_").lower()
+    async with aiohttp.ClientSession() as session:
+        async with session.put(url=f"https://ny.storage.bunnycdn.com/clashking/{title}.png", headers=headers, data=payload) as response:
+            await session.close()
+    return f"https://cdn.clashking.xyz/{title}.png"

@@ -1,0 +1,11 @@
+{
+  "name": "myapp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./static/tailwind.css -o ./static/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^2.2.19"
+  }
+}

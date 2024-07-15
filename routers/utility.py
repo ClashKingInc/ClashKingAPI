@@ -13,7 +13,7 @@ from fastapi_cache.decorator import cache
 from typing import Dict
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from utils.utils import db_client, download_image, config
+from utils.utils import db_client, download_image, config, upload_to_cdn
 import matplotlib.pyplot as plt
 from PIL import Image
 from typing import List
@@ -223,13 +223,3 @@ async def discord_link(player_tags: List[str], request: Request, response: Respo
 
 
 
-async def upload_to_cdn(picture, title: str):
-    headers = {
-        "content-type": "application/octet-stream",
-        "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
-    }
-    payload = picture.read()
-    title = title.replace(" ", "_").lower()
-    async with aiohttp.ClientSession() as session:
-        async with session.put(url=f"https://ny.storage.bunnycdn.com/clashking/{title}.png", headers=headers, data=payload) as response:
-            await session.close()

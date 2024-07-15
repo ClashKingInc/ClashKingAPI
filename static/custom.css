@@ -1,0 +1,79 @@
+/* Custom styles for Choices.js */
+.choices {
+  background-color: #2d2d2d; /* Dark background */
+  color: #ffffff; /* White text */
+  border-radius: 0.375rem; /* Rounded corners */
+  border: 1px solid #4a4a4a; /* Darker border */
+}
+
+.choices__inner {
+  background-color: #374151; /* Dark background */
+  color: #ffffff; /* White text */
+  border-radius: 0.375rem; /* Rounded corners */
+  border: 1px solid #4a4a4a; /* Darker border */
+}
+
+.choices__list--multiple .choices__item {
+  background-color: #4a4a4a; /* Darker item background */
+  border: 1px solid #6a6a6a; /* Border around items */
+  border-radius: 0.375rem; /* Rounded corners for items */
+  color: #ffffff; /* White text */
+  padding: 5px 10px;
+}
+
+.choices__list--multiple .choices__item[data-deletable] {
+  padding-right: 24px; /* Space for delete button */
+}
+
+.choices__list--multiple .choices__item[data-deletable]::after {
+  content: '×';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #374151; /* White delete button */
+}
+
+.choices__list--dropdown .choices__item--selectable {
+  background-color: #374151; /* Dark background */
+  color: #ffffff; /* White text */
+}
+
+.choices__list--dropdown .choices__item--selectable.is-highlighted {
+  background-color: #4a4a4a; /* Highlight background */
+  color: #1f2937; /* White text */
+}
+
+.choices__input {
+  background-color: #374151; /* Dark background */
+  color: #ffffff; /* White text */
+}
+
+.file-input-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.file-input {
+  display: inline-block;
+  padding: 10px;
+  background-color: #2d2d2d;
+  color: #ffffff;
+  border: 1px solid #4a4a4a;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+  text-align: center;
+}
+
+.file-input input[type="file"] {
+  display: none;
+}
+
+.hidden {
+  display: none;
+}
+

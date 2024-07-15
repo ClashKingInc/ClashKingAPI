@@ -4,6 +4,7 @@ import logging
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -11,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends
+from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends, rosters
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from utils.utils import redis, config
@@ -36,6 +37,7 @@ middleware = [
 app = FastAPI(middleware=middleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 routers = [
@@ -53,7 +55,8 @@ routers = [
     game_data.router,
     global_data.router,
     utility.router,
-    internal.router
+    internal.router,
+    rosters.router
 ]
 for router in routers:
     app.include_router(router)
@@ -98,8 +101,9 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-if config.is_local:
-    uvicorn.run("main:app", host='localhost', port=80)
+if __name__ == "__main__":
+    if config.is_local:
+        uvicorn.run("main:app", host='localhost', port=80, reload=True, reload_dirs="/routers")
 
 
 

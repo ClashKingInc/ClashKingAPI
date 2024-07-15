@@ -31,7 +31,7 @@ async def get_form(request: Request, token: str):
     initial_values = {
         "townhall_min": int(min),
         "townhall_max": int(max),
-        "max_roster_size": roster.get('roster_size'),
+        "max_roster_size": roster.get('roster_size', 50),
         "description": roster.get('description', ''),
         "time": roster.get('time'),
         "linked_clan": linked_clan,

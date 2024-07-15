@@ -171,7 +171,7 @@
             var timeValue = formElement.time.value;
             var timeUnix = null;
             if (timeValue) {
-                // Convert local time to UTC
+                // Convert the time to a Unix timestamp without adding the offset again
                 var date = new Date(timeValue);
                 timeUnix = Math.floor(date.getTime() / 1000);
             }

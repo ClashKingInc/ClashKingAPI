@@ -151,7 +151,8 @@
 
         var timeInput = document.getElementById('time');
         var utcTime = timeInput.getAttribute('data-utc-time');
-        if (utcTime) {
+        console.log(utcTime)
+        if (utcTime && utcTime != "None") {
             console.log('Original UTC time:', utcTime);
             var date = new Date(utcTime);
             console.log('Parsed Date:', date);

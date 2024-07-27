@@ -75,8 +75,10 @@ async def war_previous_time(clan_tag: str, end_time: str, request: Request, resp
 @limiter.limit("30/second")
 async def basic_war_info(clan_tag: str, request: Request, response: Response):
     now = datetime.utcnow().timestamp() - 183600
-    result = await db_client.clan_wars.find_one({"$and" : [{"clans" : fix_tag(clan_tag)}, {"custom_id": None}, {"endTime" : {"$gte" : now}}]})
-    if result is not None:
+    result = await db_client.clan_wars.find({"$and" : [{"clans" : fix_tag(clan_tag)}, {"custom_id": None}, {"endTime" : {"$gte" : now}}]}).sort({"endTime" : -1}).to_list(length=None)
+    result = result or None
+    if result:
+        result = result[0]
         del result["_id"]
     return result
 

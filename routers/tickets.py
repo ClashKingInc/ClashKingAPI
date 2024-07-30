@@ -101,7 +101,10 @@ async def read_settings(request: Request, token: str):
     for component in components:
         button_id = component.get("custom_id")
         mid_settings = ticket_settings[f"{button_id}_settings"]
-        mid_settings["questions"] = mid_settings["questions"] or ["" for x in range (0, 5)]
+        questions = mid_settings.get("questions") or []
+        for x in range(0, 5 - len(questions)):
+            questions.append("")
+        mid_settings["questions"] = questions
         mid_settings["mod_role"] = mid_settings["mod_role"] or []
         settings[f"{button_id}_settings"] = mid_settings
 

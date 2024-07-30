@@ -76,7 +76,7 @@ async def read_settings(request: Request, token: str):
     ticket_settings = await db_client.ticketing.find_one({"token" : token})
 
     embed_name = ticket_settings.get('embed_name')
-    open_category = ticket_settings.get("open_category")
+    open_category = ticket_settings.get("open-category")
 
     server_id = ticket_settings.get("server_id")
 
@@ -167,15 +167,15 @@ async def read_settings(request: Request, token: str):
         # Add other settings as necessary
     }'''
     print(settings)
-
+    print(logs)
     return templates.TemplateResponse("tickets.html", {
         "request": request,
         "name" : "recruit panel",
         "embed_name": embed_name,
-        "open_category": open_category,
-        "log_channel_click": "log1",
-        "log_channel_close": "log2",
-        "log_channel_status": "log3",
+        "open_category": str(open_category),
+        "log_channel_click": str(ticket_settings.get("ticket_button_click_log")),
+        "log_channel_close": str(ticket_settings.get("ticket_close_log")),
+        "log_channel_status": str(ticket_settings.get("status_change_log")),
         "embeds": embeds,
         "categories": categories,
         "logs": logs,

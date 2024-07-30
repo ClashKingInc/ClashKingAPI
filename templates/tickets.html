@@ -427,10 +427,10 @@
                         emoji: emoji,
                         account_apply: button.find('input[type="checkbox"]').eq(0).prop('checked'),
                         private_thread: button.find('input[type="checkbox"]').eq(1).prop('checked'),
-                        th_min: button.find('select').eq(1).val(),
-                        num_apply: button.find('select').eq(2).val(),
-                        mod_role: button.find('select').eq(3).val(),
-                        no_ping_mod_role: button.find('select').eq(4).val(),
+                        th_min: button.find('select').eq(2).val(),
+                        num_apply: button.find('select').eq(3).val(),
+                        mod_role: button.find('select').eq(4).val(),
+                        no_ping_mod_role: button.find('select').eq(5).val(),
                         questions: button.find('.questionnaire-fields input').map(function() { return $(this).val(); }).get(),
                         naming: button.find('.naming-convention-input').val()
                     });

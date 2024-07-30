@@ -166,8 +166,7 @@ async def read_settings(request: Request, token: str):
         },
         # Add other settings as necessary
     }'''
-    print(settings)
-    print(logs)
+
     return templates.TemplateResponse("tickets.html", {
         "request": request,
         "name" : "recruit panel",

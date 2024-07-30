@@ -54,6 +54,61 @@ async def get_form(request: Request, token: str):
     })
 
 
+@router.get("/edit")
+async def get_index(request: Request):
+    clan1 = {
+        "clan_name": "Assassins",
+        "clan_tag": "#92G9J8CG",
+        "clan_badge": "https://api-assets.clashofclans.com/badges/512/pZVNGnp17w0_ErJ7tZX_82AmtnBzA2zKCeihWO1q8k0.png",
+        "members": [
+            {
+                "name": "MEGA DOC",
+                "tag": "#8CYRJ08Y",
+                "hero_lvs": 265,
+                "townhall": 15,
+                "discord": "MEGA_DOC#1234",
+                "hitrate": 0,
+                "current_clan": "MEGA EMPIRE",
+                "current_clan_tag": "#2JGYRJVL",
+                "war_pref": True,
+                "trophies": 5175,
+                "sub": False,
+                "group": "No Group"
+            },
+            # Add more members as needed
+        ]
+    }
+
+    clan2 = {
+        "clan_name": "Defenders",
+        "clan_tag": "#92G9J8CG",
+        "clan_badge": "https://api-assets.clashofclans.com/badges/512/pZVNGnp17w0_ErJ7tZX_82AmtnBzA2zKCeihWO1q8k0.png",
+        "members": [
+            {
+                "name": "Guardian",
+                "tag": "#8CYRJ08Y",
+                "hero_lvs": 265,
+                "townhall": 15,
+                "discord": "Guardian#5678",
+                "hitrate": 0,
+                "current_clan": "MEGA EMPIRE",
+                "current_clan_tag": "#2JGYRJVL",
+                "war_pref": True,
+                "trophies": 5175,
+                "sub": False,
+                "group": "No Group"
+            },
+            # Add more members as needed
+        ]
+    }
+    return templates.TemplateResponse("roster.html", {"request": request, "clan1": clan1, "clan2": clan2})
+
+@router.get("/search")
+async def search_players(query: str):
+    # Implement your search logic here
+    results = []  # Replace with actual search results
+    return {"results": results}
+
 @router.post("/submit")
 async def submit_form(
         settings: str = Form(...),  # JSON string

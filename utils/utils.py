@@ -46,8 +46,9 @@ class DBClient():
         self.clans_db: collection_class = self.usafam.get_collection("clans")
         self.banlist: collection_class = self.usafam.banlist
         self.rosters: collection_class = self.usafam.rosters
-
-        self.player_search: collection_class = other_client.usafam.player_search
+        self.ticketing: collection_class = self.usafam.tickets
+        self.player_search: collection_class = self.usafam.player_search
+        self.embeds: collection_class = self.usafam.custom_embeds
 
         self.looper = client.looper
         self.new_looper = client.new_looper

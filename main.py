@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends, rosters
+from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends, rosters, tickets
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from utils.utils import redis, config
@@ -56,7 +56,8 @@ routers = [
     global_data.router,
     utility.router,
     internal.router,
-    rosters.router
+    rosters.router,
+    tickets.router
 ]
 for router in routers:
     app.include_router(router)
@@ -103,7 +104,7 @@ app.openapi = custom_openapi
 
 if __name__ == "__main__":
     if config.is_local:
-        uvicorn.run("main:app", host='0.0.0.0', port=8000, reload=True, reload_dirs="/routers")
+        uvicorn.run("main:app", host='localhost', port=80, reload=True, reload_dirs="/routers")
 
 
 

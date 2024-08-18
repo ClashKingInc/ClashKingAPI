@@ -5,7 +5,7 @@ import snappy
 import asyncio
 
 from collections import defaultdict, deque
-from fastapi import  Request, Response, HTTPException
+from fastapi import  Request, Response, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from fastapi import APIRouter
 from typing import List
@@ -89,6 +89,30 @@ async def test_endpoint(url: str, request: Request, response: Response):
 
     return item
 
+
+@router.get("/bot/config")
+async def bot_config(bot_token: str = Header(...)):
+    bot_config = await db_client.bot_settings.find_one({"type" : "bot"})
+    custom_bot_tokens = await db_client.custom_bots.distinct("token")
+
+    is_main = False
+    is_beta = False
+    is_custom = False
+
+    if bot_token == bot_config.get("prod_token"):
+        is_main = True
+    elif bot_token == bot_config.get("beta_token"):
+        is_beta = True
+    elif bot_token in custom_bot_tokens:
+        is_custom = True
+    else:
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
+
+    extra_config = {
+        "is_main": is_main,
+        "is_beta": is_beta,
+        "is_custom": is_custom
+    }
 
 
 @router.get("/permalink/{clan_tag}",

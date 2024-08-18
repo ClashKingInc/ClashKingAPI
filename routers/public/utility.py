@@ -20,6 +20,12 @@ from typing import List
 from fastapi.responses import HTMLResponse
 from coc.ext import discordlinks
 
+from PIL import Image, ImageDraw, ImageFont
+import pandas as pd
+import io
+from fastapi import Request, Response
+import numpy as np
+
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Utility"])
 
@@ -34,7 +40,7 @@ async def startup_event():
          name="Custom Table",
          include_in_schema=False)
 @limiter.limit("5/second")
-async def table_render(info: Dict, request: Request, response: Response):
+async def table_renderer(info: Dict, request: Request, response: Response):
     columns = info.get("columns")
     positions = info.get("positions")
     data = info.get("data")
@@ -165,6 +171,7 @@ async def table_render(info: Dict, request: Request, response: Response):
     await upload_to_cdn(picture=temp, title=title)
     title = title.replace(" ", "_").lower()
     return {"link" : f"https://cdn.clashking.xyz/{title}.png"}
+
 
 
 @router.get("/guild_links/{guild_id}",

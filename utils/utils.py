@@ -39,6 +39,7 @@ class DBClient():
         self.usafam = other_client.get_database("usafam")
         self.clans_db = self.usafam.get_collection("clans")
         self.server_db = self.usafam.server
+        self.bot_db = other_client.get_database("bot")
 
         collection_class = self.clans_db.__class__
 
@@ -49,6 +50,8 @@ class DBClient():
         self.ticketing: collection_class = self.usafam.tickets
         self.player_search: collection_class = self.usafam.player_search
         self.embeds: collection_class = self.usafam.custom_embeds
+        self.bot_settings: collection_class = self.bot_db.settings
+        self.custom_bots: collection_class = self.usafam.custom_bots
 
         self.looper = client.looper
         self.new_looper = client.new_looper
@@ -240,3 +243,14 @@ async def upload_to_cdn(title: str, picture=None, image = None):
         async with session.put(url=f"https://ny.storage.bunnycdn.com/clashking/{title}.png", headers=headers, data=payload) as response:
             await session.close()
     return f"https://cdn.clashking.xyz/{title}.png"
+
+
+def remove_id_fields(data):
+    if isinstance(data, list):
+        for item in data:
+            remove_id_fields(item)
+    elif isinstance(data, dict):
+        data.pop('_id', None)
+        for key, value in data.items():
+            remove_id_fields(value)
+    return data

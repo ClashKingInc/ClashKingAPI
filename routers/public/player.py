@@ -287,7 +287,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
 
             if group_data and group_data.get("season") == gen_games_season():
                 cwl_group = coc.ClanWarLeagueGroup(data=group_data, client=None)
-                last_round = cwl_group.rounds[-1]
+                last_round = cwl_group.rounds[-1] if len(cwl_group.rounds) == 1 or len(cwl_group.rounds) == cwl_group.number_of_rounds else cwl_group.rounds[-2]
 
                 our_war = None
                 for war_tag in last_round:

@@ -1,21 +1,24 @@
-import uvicorn
+import os
 import logging
+import uvicorn
+import importlib.util
 
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi.openapi.utils import get_openapi
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from routers import leagues, player, capital, global_data, clan, war, utility, ranking, redirect, game_data, stats, list, internal, leaderboards, legends, rosters, tickets
-from starlette.middleware import Middleware
-from starlette.middleware.cors import CORSMiddleware
-from utils.utils import redis, config
+
+from utils.utils import config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,28 +42,23 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+def include_routers(app, directory):
+    for filename in os.listdir(directory):
+        if filename.endswith(".py") and not filename.startswith("__"):
+            module_name = filename[:-3]
+            file_path = os.path.join(directory, filename)
 
-routers = [
-    player.router,
-    clan.router,
-    war.router,
-    capital.router,
-    leaderboards.router,
-    leagues.router,
-    legends.router,
-    ranking.router,
-    stats.router,
-    list.router,
-    redirect.router,
-    game_data.router,
-    global_data.router,
-    utility.router,
-    internal.router,
-    rosters.router,
-    tickets.router
-]
-for router in routers:
-    app.include_router(router)
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            router = getattr(module, "router", None)
+            if router:
+                app.include_router(router)
+
+# Include routers from public and private directories
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "private"))
 
 
 @app.on_event("startup")
@@ -70,8 +68,28 @@ async def startup_event():
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)
 async def docs():
-    return f"https://api.clashking.xyz/docs"
+    if config.is_local:
+        return RedirectResponse(f"http://localhost/docs")
+    return RedirectResponse(f"https://api.clashking.xyz/docs")
 
+@app.get("/openapi/private", include_in_schema=False)
+async def get_private_openapi():
+    from fastapi.openapi.utils import get_openapi
+    routes = [route for route in app.routes if not route.__dict__.get('include_in_schema')]
+    for route in routes:
+        route.__dict__['include_in_schema'] = True
+    schema = get_openapi(
+        title="Private Endpoints",
+        version="1.0.0",
+        routes=routes,
+    )
+    for route in routes:
+        route.__dict__['include_in_schema'] = False
+    return schema
+
+@app.get("/docs/private", include_in_schema=False)
+async def get_private_docs():
+    return get_swagger_ui_html(openapi_url="/openapi/private", title="Private API Docs")
 
 
 description = """
@@ -99,12 +117,11 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
-
 app.openapi = custom_openapi
 
 if __name__ == "__main__":
     if config.is_local:
-        uvicorn.run("main:app", host='localhost', port=80, reload=True, reload_dirs="/routers")
+        uvicorn.run("main:app", host='localhost', port=80)
 
 
 

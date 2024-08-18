@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from utils.utils import fix_tag, db_client, upload_to_cdn, config
 
-router = APIRouter(prefix="/ticketing")
+router = APIRouter(prefix="/ticketing", include_in_schema=False)
 
 templates = Jinja2Templates(directory="templates")
 

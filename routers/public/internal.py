@@ -90,9 +90,9 @@ async def test_endpoint(url: str, request: Request, response: Response):
     return item
 
 
-@router.get("/bot/config")
+@router.get("/bot/config", include_in_schema=False)
 async def bot_config(bot_token: str = Header(...)):
-    bot_config = await db_client.bot_settings.find_one({"type" : "bot"})
+    bot_config = await db_client.bot_settings.find_one({"type" : "bot"}, {"_id" : 0})
     custom_bot_tokens = await db_client.custom_bots.distinct("token")
 
     is_main = False
@@ -113,6 +113,8 @@ async def bot_config(bot_token: str = Header(...)):
         "is_beta": is_beta,
         "is_custom": is_custom
     }
+
+    return bot_token | extra_config
 
 
 @router.get("/permalink/{clan_tag}",
@@ -185,6 +187,4 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
-
-
 

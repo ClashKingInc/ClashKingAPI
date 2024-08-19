@@ -5,35 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="501418d0-2761-475b-ac8b-ae52c6b7bd68" name="Changes" comment="initial">
-      <change afterPath="$PROJECT_DIR$/routers/private/legends.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/ClashKingAPI.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/ClashKingAPI.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/bans.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/capital.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/capital.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/clan.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/clan.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/game_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/game_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/global_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/global_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/helper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/hidden.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/hidden.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/internal.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/internal.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/leaderboards.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/leaderboards.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/leagues.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/leagues.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/legends.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/legends.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/list.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/list.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/player.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/player.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/ranking.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/ranking.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/redirect.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/redirect.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/rosters.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/rosters.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/server_info.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/server_info.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/stats.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/stats.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/tickets.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/tickets.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/utility.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/utility.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/war.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/war.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/xlsx.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/xlsx.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/routers/public/internal.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/internal.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/routers/public/leagues.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/leagues.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -187,15 +160,7 @@
       <workItem from="1723320952006" duration="629000" />
       <workItem from="1723692475540" duration="31000" />
       <workItem from="1723692516339" duration="8350000" />
-      <workItem from="1723761755402" duration="1236000" />
-    </task>
-    <task id="LOCAL-00082" summary="initial">
-      <option name="closed" value="true" />
-      <created>1716595569382</created>
-      <option name="number" value="00082" />
-      <option name="presentableId" value="LOCAL-00082" />
-      <option name="project" value="LOCAL" />
-      <updated>1716595569382</updated>
+      <workItem from="1723761755402" duration="8000000" />
     </task>
     <task id="LOCAL-00083" summary="initial">
       <option name="closed" value="true" />
@@ -581,7 +546,15 @@
       <option name="project" value="LOCAL" />
       <updated>1723701663116</updated>
     </task>
-    <option name="localTasksCounter" value="131" />
+    <task id="LOCAL-00131" summary="initial">
+      <option name="closed" value="true" />
+      <created>1723991999512</created>
+      <option name="number" value="00131" />
+      <option name="presentableId" value="LOCAL-00131" />
+      <option name="project" value="LOCAL" />
+      <updated>1723991999512</updated>
+    </task>
+    <option name="localTasksCounter" value="132" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -607,5 +580,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/ClashKingAPI$main__1_.coverage" NAME="main (1) Coverage Results" MODIFIED="1723701622850" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../clashking_assets" />
+    <SUITE FILE_PATH="coverage/ClashKingAPI$main.coverage" NAME="main Coverage Results" MODIFIED="1723991887154" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

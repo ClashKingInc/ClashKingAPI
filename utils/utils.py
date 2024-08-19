@@ -240,7 +240,7 @@ async def upload_to_cdn(title: str, picture=None, image = None):
         payload = await image.read()
     title = title.replace(" ", "_").lower()
     async with aiohttp.ClientSession() as session:
-        async with session.put(url=f"https://ny.storage.bunnycdn.com/clashking/{title}.png", headers=headers, data=payload) as response:
+        async with session.put(url=f"https://storage.bunnycdn.com/clashking/{title}.png", headers=headers, data=payload) as response:
             await session.close()
     return f"https://cdn.clashking.xyz/{title}.png"
 

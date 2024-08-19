@@ -114,11 +114,11 @@ async def bot_config(bot_token: str = Header(...)):
         "is_custom": is_custom
     }
 
-    return bot_token | extra_config
+    return bot_config | extra_config
 
 
 @router.get("/permalink/{clan_tag}",
-         name="Permanent Link to Clan Badge URL")
+         name="Permanent Link to Clan Badge URL", include_in_schema=False)
 async def permalink(clan_tag: str):
 
     clan_tag = fix_tag(clan_tag)

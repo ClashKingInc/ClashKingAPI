@@ -5,7 +5,7 @@ from utils.utils import  db_client, token_verify, limiter
 
 from bson import json_util
 
-router = APIRouter(tags=["Server Settings"])
+router = APIRouter(tags=["Server Settings"], include_in_schema=False)
 
 
 @router.get("/server-settings/{server_id}",

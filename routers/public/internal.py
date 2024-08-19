@@ -80,7 +80,7 @@ async def test_endpoint(url: str, request: Request, response: Response):
             if api_response.status != 200:
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
-            cache_control = int(api_response.headers.get('Cache-Control', 0))
+            cache_control = int(api_response.headers.get('Cache-Control', 'max-age=0').split("=")[-1])
             item = await api_response.json()
 
     # If fields are specified, filter the response to include only those fields

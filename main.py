@@ -42,6 +42,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 def include_routers(app, directory):
     for filename in os.listdir(directory):
         if filename.endswith(".py") and not filename.startswith("__"):

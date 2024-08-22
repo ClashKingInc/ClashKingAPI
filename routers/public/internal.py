@@ -19,9 +19,6 @@ router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
 KEYS = deque()
-from diskcache import Cache
-
-cache = Cache("/cache")
 
 
 async def fetch_image(url: str) -> bytes:
@@ -51,10 +48,6 @@ async def startup():
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
 async def test_endpoint(url: str, request: Request, response: Response):
-    cached_value = cache.get(url)
-    if cached_value:
-        return cached_value
-
     global KEYS
 
     # Extract query parameters
@@ -94,7 +87,6 @@ async def test_endpoint(url: str, request: Request, response: Response):
         else:
             item = {key: item[key] for key in fields if key in item}
 
-    cache.set(key=url, value=item, expire=cache_control, retry=True)
     return item
 
 

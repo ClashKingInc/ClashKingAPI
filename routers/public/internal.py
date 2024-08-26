@@ -104,7 +104,7 @@ async def test_post_endpoint(url: str, request: Request, response: Response):
     query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
 
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(0)
+    KEYS.rotate(1)
 
     # Construct the full URL with query parameters if any
     full_url = f"https://api.clashofclans.com/v1/{url}"

@@ -5,8 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="501418d0-2761-475b-ac8b-ae52c6b7bd68" name="Changes" comment="initial">
-      <change beforePath="$PROJECT_DIR$/routers/public/internal.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/internal.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routers/public/leagues.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/public/leagues.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routers/v1/player.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/bans.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/clan.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/clan.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/models.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/settings.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/routers/private/legends.py" beforeDir="false" afterPath="$PROJECT_DIR$/routers/v1/legends.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,12 +42,12 @@
     &quot;assignee&quot;: &quot;MagicTheDev&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/MagicTheDev/ClashKingAPI.git",
-    "accountId": "9a54d11f-4b75-4cfb-8332-0f6f285b5199"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/MagicTheDev/ClashKingAPI.git&quot;,
+    &quot;accountId&quot;: &quot;9a54d11f-4b75-4cfb-8332-0f6f285b5199&quot;
   }
-}]]></component>
+}</component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
@@ -52,7 +58,9 @@
   &quot;associatedIndex&quot;: 6
 }</component>
   <component name="ProjectId" id="2bec5ufuhBqyEQD5y1cnMkIHZOT" />
-  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -66,7 +74,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/matth/PycharmProjects/clashking_assets&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/matth/PycharmProjects/clashkingapi/routers&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
@@ -78,14 +86,18 @@
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
-      <recent name="C:\Users\matth\PycharmProjects\clashking_assets" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\graphql" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\public" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\private" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\graphql\routers" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\models" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\graphql" />
+      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\graphql\routers" />
       <recent name="C:\Users\matth\PycharmProjects\clashking_assets\assets" />
       <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\schema" />
-      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\public" />
-      <recent name="C:\Users\matth\PycharmProjects\clashkingapi\routers\bot" />
-      <recent name="C:\Users\matth\PycharmProjects\clashkingapi" />
     </key>
   </component>
   <component name="RunManager" selected="Python.main">
@@ -160,79 +172,12 @@
       <workItem from="1723320952006" duration="629000" />
       <workItem from="1723692475540" duration="31000" />
       <workItem from="1723692516339" duration="8350000" />
-      <workItem from="1723761755402" duration="8000000" />
-    </task>
-    <task id="LOCAL-00083" summary="initial">
-      <option name="closed" value="true" />
-      <created>1716600962401</created>
-      <option name="number" value="00083" />
-      <option name="presentableId" value="LOCAL-00083" />
-      <option name="project" value="LOCAL" />
-      <updated>1716600962401</updated>
-    </task>
-    <task id="LOCAL-00084" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717378693110</created>
-      <option name="number" value="00084" />
-      <option name="presentableId" value="LOCAL-00084" />
-      <option name="project" value="LOCAL" />
-      <updated>1717378693110</updated>
-    </task>
-    <task id="LOCAL-00085" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717379070565</created>
-      <option name="number" value="00085" />
-      <option name="presentableId" value="LOCAL-00085" />
-      <option name="project" value="LOCAL" />
-      <updated>1717379070565</updated>
-    </task>
-    <task id="LOCAL-00086" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717380530944</created>
-      <option name="number" value="00086" />
-      <option name="presentableId" value="LOCAL-00086" />
-      <option name="project" value="LOCAL" />
-      <updated>1717380530944</updated>
-    </task>
-    <task id="LOCAL-00087" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717380935640</created>
-      <option name="number" value="00087" />
-      <option name="presentableId" value="LOCAL-00087" />
-      <option name="project" value="LOCAL" />
-      <updated>1717380935640</updated>
-    </task>
-    <task id="LOCAL-00088" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717381252872</created>
-      <option name="number" value="00088" />
-      <option name="presentableId" value="LOCAL-00088" />
-      <option name="project" value="LOCAL" />
-      <updated>1717381252872</updated>
-    </task>
-    <task id="LOCAL-00089" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717466718925</created>
-      <option name="number" value="00089" />
-      <option name="presentableId" value="LOCAL-00089" />
-      <option name="project" value="LOCAL" />
-      <updated>1717466718926</updated>
-    </task>
-    <task id="LOCAL-00090" summary="initial">
-      <option name="closed" value="true" />
-      <created>1717541151730</created>
-      <option name="number" value="00090" />
-      <option name="presentableId" value="LOCAL-00090" />
-      <option name="project" value="LOCAL" />
-      <updated>1717541151730</updated>
-    </task>
-    <task id="LOCAL-00091" summary="initial">
-      <option name="closed" value="true" />
-      <created>1719097918307</created>
-      <option name="number" value="00091" />
-      <option name="presentableId" value="LOCAL-00091" />
-      <option name="project" value="LOCAL" />
-      <updated>1719097918307</updated>
+      <workItem from="1723761755402" duration="15588000" />
+      <workItem from="1724260043585" duration="9149000" />
+      <workItem from="1724463419631" duration="838000" />
+      <workItem from="1724609898748" duration="171000" />
+      <workItem from="1724610096548" duration="2091000" />
+      <workItem from="1724642548732" duration="3597000" />
     </task>
     <task id="LOCAL-00092" summary="initial">
       <option name="closed" value="true" />
@@ -554,7 +499,79 @@
       <option name="project" value="LOCAL" />
       <updated>1723991999512</updated>
     </task>
-    <option name="localTasksCounter" value="132" />
+    <task id="LOCAL-00132" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724034927895</created>
+      <option name="number" value="00132" />
+      <option name="presentableId" value="LOCAL-00132" />
+      <option name="project" value="LOCAL" />
+      <updated>1724034927895</updated>
+    </task>
+    <task id="LOCAL-00133" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724035624371</created>
+      <option name="number" value="00133" />
+      <option name="presentableId" value="LOCAL-00133" />
+      <option name="project" value="LOCAL" />
+      <updated>1724035624371</updated>
+    </task>
+    <task id="LOCAL-00134" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724036625894</created>
+      <option name="number" value="00134" />
+      <option name="presentableId" value="LOCAL-00134" />
+      <option name="project" value="LOCAL" />
+      <updated>1724036625894</updated>
+    </task>
+    <task id="LOCAL-00135" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724038051686</created>
+      <option name="number" value="00135" />
+      <option name="presentableId" value="LOCAL-00135" />
+      <option name="project" value="LOCAL" />
+      <updated>1724038051686</updated>
+    </task>
+    <task id="LOCAL-00136" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724313837225</created>
+      <option name="number" value="00136" />
+      <option name="presentableId" value="LOCAL-00136" />
+      <option name="project" value="LOCAL" />
+      <updated>1724313837225</updated>
+    </task>
+    <task id="LOCAL-00137" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724463569967</created>
+      <option name="number" value="00137" />
+      <option name="presentableId" value="LOCAL-00137" />
+      <option name="project" value="LOCAL" />
+      <updated>1724463569967</updated>
+    </task>
+    <task id="LOCAL-00138" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724635699432</created>
+      <option name="number" value="00138" />
+      <option name="presentableId" value="LOCAL-00138" />
+      <option name="project" value="LOCAL" />
+      <updated>1724635699432</updated>
+    </task>
+    <task id="LOCAL-00139" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724635823752</created>
+      <option name="number" value="00139" />
+      <option name="presentableId" value="LOCAL-00139" />
+      <option name="project" value="LOCAL" />
+      <updated>1724635823752</updated>
+    </task>
+    <task id="LOCAL-00140" summary="initial">
+      <option name="closed" value="true" />
+      <created>1724635898696</created>
+      <option name="number" value="00140" />
+      <option name="presentableId" value="LOCAL-00140" />
+      <option name="project" value="LOCAL" />
+      <updated>1724635898696</updated>
+    </task>
+    <option name="localTasksCounter" value="141" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -580,6 +597,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/ClashKingAPI$main__1_.coverage" NAME="main (1) Coverage Results" MODIFIED="1723701622850" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../clashking_assets" />
-    <SUITE FILE_PATH="coverage/ClashKingAPI$main.coverage" NAME="main Coverage Results" MODIFIED="1723991887154" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ClashKingAPI$main.coverage" NAME="main Coverage Results" MODIFIED="1724262948182" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

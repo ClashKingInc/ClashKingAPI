@@ -12,7 +12,7 @@ from utils.utils import fix_tag, db_client, token_verify, limiter, remove_id_fie
 
 
 
-router = APIRouter(tags=["Bot Legends Endpoints"], include_in_schema=False)
+router = APIRouter(prefix="/v1",tags=["Bot Legends Endpoints"], include_in_schema=False)
 
 
 @router.get("/legends/players/day/{day}",

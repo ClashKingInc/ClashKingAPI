@@ -59,7 +59,7 @@ def include_routers(app, directory):
 
 # Include routers from public and private directories
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "private"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
 
 
 @app.on_event("startup")
@@ -71,16 +71,17 @@ async def startup_event():
 async def docs():
     if config.is_local:
         return RedirectResponse(f"http://localhost/docs")
-    return RedirectResponse(f"https://api.clashking.xyz/docs")
+    return RedirectResponse(f"https://api.clashking.xyz/v1/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():
     from fastapi.openapi.utils import get_openapi
+    print(app.routes[0].__dict__)
     routes = [route for route in app.routes if not route.__dict__.get('include_in_schema')]
     for route in routes:
         route.__dict__['include_in_schema'] = True
     schema = get_openapi(
-        title="Private Endpoints",
+        title="V0 Endpoints",
         version="1.0.0",
         routes=routes,
     )
@@ -88,7 +89,7 @@ async def get_private_openapi():
         route.__dict__['include_in_schema'] = False
     return schema
 
-@app.get("/docs/private", include_in_schema=False)
+@app.get("/v0/docs", include_in_schema=False)
 async def get_private_docs():
     return get_swagger_ui_html(openapi_url="/openapi/private", title="Private API Docs")
 
@@ -101,6 +102,7 @@ description = """
 - Largely 300 second cache
 - Not perfect, stats are collected by polling the Official API
 - [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
+### If you are looking for the Unversioned endpoints - [look here](https://api.clashking.xyz/v0/docs)
 
 This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it. 
 For more information see [Supercell’s Fan Content Policy](https://supercell.com/fan-content-policy)

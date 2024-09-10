@@ -71,7 +71,7 @@ async def startup_event():
 async def docs():
     if config.is_local:
         return RedirectResponse(f"http://localhost/docs")
-    return RedirectResponse(f"https://api.clashking.xyz/v1/docs")
+    return RedirectResponse(f"https://api.clashking.xyz/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():
@@ -81,7 +81,7 @@ async def get_private_openapi():
     for route in routes:
         route.__dict__['include_in_schema'] = True
     schema = get_openapi(
-        title="V0 Endpoints",
+        title="Private Endpoints",
         version="1.0.0",
         routes=routes,
     )
@@ -89,7 +89,7 @@ async def get_private_openapi():
         route.__dict__['include_in_schema'] = False
     return schema
 
-@app.get("/v0/docs", include_in_schema=False)
+@app.get("/private/docs", include_in_schema=False)
 async def get_private_docs():
     return get_swagger_ui_html(openapi_url="/openapi/private", title="Private API Docs")
 
@@ -102,7 +102,6 @@ description = """
 - Largely 300 second cache
 - Not perfect, stats are collected by polling the Official API
 - [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
-### If you are looking for the Unversioned endpoints - [look here](https://api.clashking.xyz/v0/docs)
 
 This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it. 
 For more information see [Supercell’s Fan Content Policy](https://supercell.com/fan-content-policy)
@@ -113,7 +112,7 @@ def custom_openapi():
         return app.openapi_schema
     openapi_schema = get_openapi(
         title="ClashKingAPI",
-        version="1.0",
+        version="0.1",
         description=description,
         routes=app.routes,
     )

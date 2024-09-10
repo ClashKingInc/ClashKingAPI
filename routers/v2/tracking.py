@@ -17,15 +17,23 @@ router = APIRouter(prefix="/v2",tags=["Tracking Endpoints"], include_in_schema=F
 class PlayerList(BaseModel):
     tags: list[str]
 
+
 @router.post("/tracking/players/add", name="Add players to tracking")
 @check_authentication
 async def add_players(player_list: PlayerList, request: Request, response: Response):
-    insert_docs = []
-    for tag in player_list.tags:
-        tag = fix_tag(tag)
-        insert_docs.append({"tag": tag})
-    await db_client.player_stats_db.insert_many(insert_docs, ordered=False)
-    return {"status": "success", "players_added": player_list.tags}
+    tags = [fix_tag(tag) for tag in player_list.tags]
+    existing_tags = await db_client.player_stats_db.distinct("tag", {"tag": {"$in": tags}})
+    new_tags = [tag for tag in tags if tag not in set(existing_tags)]
+
+    if new_tags:
+        insert_docs = [{"tag": tag} for tag in new_tags]
+        await db_client.player_stats_db.insert_many(insert_docs, ordered=False)
+
+    return {
+        "status": "success",
+        "players_added": new_tags,
+        "players_already_tracked": existing_tags
+    }
 
 
 @router.post("/tracking/players/remove", name="Remove players from tracking")

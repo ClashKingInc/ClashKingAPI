@@ -254,3 +254,28 @@ def remove_id_fields(data):
         for key, value in data.items():
             remove_id_fields(value)
     return data
+
+
+from fastapi import Request, HTTPException
+from functools import wraps
+import os
+
+
+def check_authentication(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        request: Request = kwargs.get("request")
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            raise HTTPException(status_code=403, detail="Authentication token missing")
+
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+        expected_token = os.getenv("AUTH_TOKEN")
+
+        if token != expected_token:
+            raise HTTPException(status_code=403, detail="Invalid authentication token")
+
+        return await func(*args, **kwargs)
+
+    return wrapper

@@ -1,7 +1,6 @@
 import aiohttp
 import orjson
 import re
-import snappy
 import asyncio
 
 from collections import defaultdict, deque
@@ -50,23 +49,15 @@ async def startup():
 async def test_endpoint(url: str, request: Request, response: Response):
     global KEYS
 
-    # Extract query parameters
-    query_params = request.query_params
-    fields = query_params.get("fields")
-
-    # Remove the "fields" parameter from the query parameters
-    query_params = {key: value for key, value in query_params.items() if key != "fields"}
-    query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
+    query_string = "&".join([f"{key}={value}" for key, value in request.query_params.items()])
 
     headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
     KEYS.rotate(1)
 
-    # Construct the full URL with query parameters if any
     full_url = f"https://api.clashofclans.com/v1/{url}"
+    full_url = full_url.replace("#", '%23').replace("!", '%23')
     if query_string:
         full_url = f"{full_url}?{query_string}"
-
-    full_url = full_url.replace("#", '%23').replace("!", '%23')
 
     async with aiohttp.ClientSession() as session:
         async with session.get(full_url, headers=headers) as api_response:
@@ -74,17 +65,6 @@ async def test_endpoint(url: str, request: Request, response: Response):
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
             item = await api_response.json()
-
-    # If fields are specified, filter the response to include only those fields
-    if fields:
-        fields = fields.split(",")
-        if "items" in item and isinstance(item["items"], list):
-            item["items"] = [
-                {key: sub_item[key] for key in fields if key in sub_item}
-                for sub_item in item["items"]
-            ]
-        else:
-            item = {key: item[key] for key in fields if key in item}
 
     return item
 
@@ -196,25 +176,16 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
 
     async def fetch_function(url: str):
         url = url.replace("#", '%23')
-        if api_cache.get(url) is None:
-            headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-            KEYS.rotate(1)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
-                    item_bytes = await response.read()
-                    item = orjson.loads(item_bytes)
-                    if response.status == 200:
-                        cache_control_header = response.headers.get("Cache-Control", "")
-                        max_age_match = re.search(r'max-age=(\d+)', cache_control_header)
-                        max_age = int(max_age_match.group(1))
-                        api_cache.ttl(key=url, value=snappy.compress(item_bytes), ttl=max_age)
-                    else:
-                        item = None
-                await session.close()
-                return item
-
-        else:
-            return orjson.loads(snappy.decompress(api_cache.get(url)))
+        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
+        KEYS.rotate(1)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
+                item_bytes = await response.read()
+                item = orjson.loads(item_bytes)
+                if response.status != 200:
+                    item = None
+            await session.close()
+            return item
 
     tasks = []
     for url in urls:

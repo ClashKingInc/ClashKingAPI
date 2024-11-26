@@ -28,7 +28,7 @@ async def get_form(request: Request, token: str):
     buttons = list(set(server.get('player_groups', [])))
     min, max = roster.get('th_restriction').split('-')
     if max == "max":
-        max = 16
+        max = 17
     initial_values = {
         "townhall_min": int(min),
         "townhall_max": int(max),
@@ -131,7 +131,7 @@ async def submit_form(
         image_url = None
 
     townhall_max = settings_dict.get('townhall_max')
-    if townhall_max == 16:
+    if townhall_max == 17:
         townhall_max = "max"
     th_restriction = f'{settings_dict.get("townhall_min")}-{townhall_max}'
     clan_tag = re.search(r'\(([^)]+)\)', settings_dict.get('linked_clan')).group(1)

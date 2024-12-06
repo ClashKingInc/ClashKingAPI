@@ -11,6 +11,7 @@ matplotlib==3.8.2
 motor==3.3.2
 orjson==3.9.13
 pandas==2.2.0
+passlib==1.7.4
 pendulum==3.0.0
 pillow==10.2.0
 pydantic==2.6.0

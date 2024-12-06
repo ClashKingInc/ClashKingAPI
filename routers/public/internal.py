@@ -108,7 +108,6 @@ async def test_post_endpoint(url: str, request: Request, response: Response):
 @router.get("/bot/config", include_in_schema=False)
 async def bot_config(bot_token: str = Header(...)):
     bot_config = await db_client.bot_settings.find_one({"type" : "bot"}, {"_id" : 0})
-    custom_bot_tokens = await db_client.custom_bots.distinct("token")
 
     is_main = False
     is_beta = False
@@ -116,10 +115,8 @@ async def bot_config(bot_token: str = Header(...)):
 
     if bot_token == bot_config.get("prod_token"):
         is_main = True
-    elif bot_token == bot_config.get("beta_token"):
+    elif bot_token in bot_config.get("beta_tokens", []):
         is_beta = True
-    elif bot_token in custom_bot_tokens:
-        is_custom = True
     else:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 

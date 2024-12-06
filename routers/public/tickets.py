@@ -270,4 +270,10 @@ async def save_settings(request: Request):
 async def open_ticket_json(channel_id: int, request: Request):
 
     open_ticket = await db_client.open_tickets.find_one({"channel" : channel_id}, {"_id" : 0})
+
+    if open_ticket:
+        for key in ["user", "channel", "thread", "server"]:
+            if key in open_ticket:
+                open_ticket[key] = str(open_ticket[key])
+
     return open_ticket

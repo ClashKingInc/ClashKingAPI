@@ -52,6 +52,7 @@ class DBClient():
         self.embeds: collection_class = self.usafam.custom_embeds
         self.bot_settings: collection_class = self.bot_db.settings
         self.custom_bots: collection_class = self.usafam.custom_bots
+        self.open_tickets: collection_class = self.usafam.open_tickets
 
         self.looper = client.looper
         self.new_looper = client.new_looper
@@ -68,6 +69,7 @@ class DBClient():
         self.player_leaderboard_db: collection_class = self.new_looper.leaderboard_db
         self.player_history: collection_class = self.new_looper.get_collection("player_history")
         self.link_shortner: collection_class = client.clashking.short_links
+        self.api_users: collection_class = client.clashking.api_users
 
         self.clan_cache_db: collection_class = self.new_looper.clan_cache
         self.clan_wars: collection_class = self.looper.clan_war

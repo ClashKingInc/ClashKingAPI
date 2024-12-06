@@ -69,6 +69,8 @@ def filter_categories(channels):
 def filter_text_and_threads(channels):
     return [channel for channel in channels if channel['type'] in {0, 11}]
 
+
+
 @router.get("/")
 async def read_settings(request: Request, token: str):
     # Sample data fetched from the database
@@ -262,3 +264,10 @@ async def save_settings(request: Request):
     new_data["components"] = new_components
     await db_client.ticketing.update_one({"token" : data.get("token")}, {"$set": new_data})
     return {"message": "Settings saved successfully"}
+
+
+@router.get("/open/json/{channel_id}")
+async def open_ticket_json(channel_id: int, request: Request):
+
+    open_ticket = await db_client.open_tickets.find_one({"channel" : channel_id}, {"_id" : 0})
+    return open_ticket

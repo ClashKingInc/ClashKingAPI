@@ -23,16 +23,20 @@ config = Config()
 
 limiter = Limiter(key_func=get_remote_address, key_style="endpoint")
 
+
 def dynamic_limit(key: str):
     if key in {"::1", "65.108.77.253", "85.10.200.219"}:
         return "1000/second"
     return "30/second"
 
+
 load_dotenv()
 client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")
 other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 
-redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True, max_connections=25, retry_on_error=[redis.ConnectionError])
+redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True,
+                       max_connections=25, retry_on_error=[redis.ConnectionError])
+
 
 class DBClient():
     def __init__(self):
@@ -58,7 +62,6 @@ class DBClient():
         self.new_looper = client.new_looper
         self.leaderboards = client.get_database("leaderboards")
 
-
         self.legends_stats = self.new_looper.legends_stats
         self.legend_rankings: collection_class = self.new_looper.legend_rankings
         self.war_logs_db: collection_class = self.looper.war_logs
@@ -70,6 +73,8 @@ class DBClient():
         self.player_history: collection_class = self.new_looper.get_collection("player_history")
         self.link_shortner: collection_class = client.clashking.short_links
         self.api_users: collection_class = client.clashking.api_users
+        self.tokens: collection_class = client.clashking.tokens
+        self.giveaways: collection_class = client.clashking.giveaways
 
         self.clan_cache_db: collection_class = self.new_looper.clan_cache
         self.clan_wars: collection_class = self.looper.clan_war
@@ -90,14 +95,11 @@ class DBClient():
         self.basic_clan: collection_class = self.looper.clan_tags
         self.global_clans: collection_class = self.looper.global_clans
 
-
         self.player_capital_lb: collection_class = self.leaderboards.capital_player
         self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
 
 
-
 db_client = DBClient()
-
 
 
 async def download_image(url: str):
@@ -109,10 +111,11 @@ async def download_image(url: str):
     return io.BytesIO(image_bytes)
 
 
-def fix_tag(tag:str):
+def fix_tag(tag: str):
     tag = tag.replace('%23', '')
     tag = "#" + re.sub(r"[^A-Z0-9]+", "", tag.upper()).replace("O", "0")
     return tag
+
 
 def gen_season_date():
     end = coc.utils.get_season_end().replace(tzinfo=pend.UTC).date()
@@ -155,18 +158,20 @@ def gen_legend_date():
         date = now.date()
     return str(date)
 
+
 async def token_verify(server_id: int, api_token: str, only_admin: bool = False):
     if api_token is None:
         raise HTTPException(status_code=403, detail="API Token is required")
     server_lookup = [1103679645439754335]
     if not only_admin:
         server_lookup.append(server_id)
-    results = await db_client.server_db.find({"server" : {"$in" : [server_id, 1103679645439754335]}}).to_list(length=None)
+    results = await db_client.server_db.find({"server": {"$in": [server_id, 1103679645439754335]}}).to_list(length=None)
     tokens = [r.get("ck_api_token") for r in results]
     if api_token not in tokens:
         raise HTTPException(status_code=403, detail="Invalid API token or cannot access this resource")
 
-async def get_keys(emails: list, passwords: list, key_names: str, key_count: int, ip:str):
+
+async def get_keys(emails: list, passwords: list, key_names: str, key_count: int, ip: str):
     total_keys = []
     for count, email in enumerate(emails):
         await asyncio.sleep(1.5)
@@ -208,14 +213,13 @@ async def get_keys(emails: list, passwords: list, key_names: str, key_count: int
                     else:
                         hold = False
 
-
                 _keys.append(key["key"]["key"])
 
             await session.close()
             for k in _keys:
                 total_keys.append(k)
 
-    print(len(total_keys),  "total keys")
+    print(len(total_keys), "total keys")
     return (total_keys)
 
 
@@ -224,14 +228,16 @@ async def create_keys(emails: list, passwords: list, ip: str):
     return keys
 
 
-leagues = ["Legend League", "Titan League I" , "Titan League II" , "Titan League III" ,"Champion League I", "Champion League II", "Champion League III",
-                   "Master League I", "Master League II", "Master League III",
-                   "Crystal League I","Crystal League II", "Crystal League III",
-                   "Gold League I","Gold League II", "Gold League III",
-                   "Silver League I","Silver League II","Silver League III",
-                   "Bronze League I", "Bronze League II", "Bronze League III", "Unranked"]
+leagues = ["Legend League", "Titan League I", "Titan League II", "Titan League III", "Champion League I",
+           "Champion League II", "Champion League III",
+           "Master League I", "Master League II", "Master League III",
+           "Crystal League I", "Crystal League II", "Crystal League III",
+           "Gold League I", "Gold League II", "Gold League III",
+           "Silver League I", "Silver League II", "Silver League III",
+           "Bronze League I", "Bronze League II", "Bronze League III", "Unranked"]
 
-async def upload_to_cdn(title: str, picture=None, image = None):
+
+async def upload_to_cdn(title: str, picture=None, image=None):
     headers = {
         "content-type": "application/octet-stream",
         "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
@@ -242,7 +248,8 @@ async def upload_to_cdn(title: str, picture=None, image = None):
         payload = await image.read()
     title = title.replace(" ", "_").lower()
     async with aiohttp.ClientSession() as session:
-        async with session.put(url=f"https://storage.bunnycdn.com/clashking-files/{title}.png", headers=headers, data=payload) as response:
+        async with session.put(url=f"https://storage.bunnycdn.com/clashking-files/{title}.png", headers=headers,
+                               data=payload) as response:
             await session.close()
     return f"https://cdn.clashking.xyz/{title}.png"
 
@@ -281,3 +288,24 @@ def check_authentication(func):
         return await func(*args, **kwargs)
 
     return wrapper
+
+
+async def validate_token(token, expected_type=None):
+    """
+    Validate a token and return its data if valid.
+    """
+    token_data = await db_client.tokens.find_one({"token": token})
+
+    if not token_data:
+        raise ValueError("Invalid token.")
+
+    # Vérifier si le token a expiré
+    if token_data["expires_at"] < datetime.utcnow():
+        await db_client.tokens.delete_one({"token": token})  # Nettoyer
+        raise ValueError("Token expired.")
+
+    # Vérifier si le type correspond (si applicable)
+    if expected_type and token_data["type"] != expected_type:
+        raise ValueError(f"Expected token of type '{expected_type}', but got '{token_data['type']}'.")
+
+    return token_data

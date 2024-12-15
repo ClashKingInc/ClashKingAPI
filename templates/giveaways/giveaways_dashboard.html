@@ -141,13 +141,13 @@
     {% endif %}
 </div>
 <script>
-    // Fonction pour afficher/masquer la dropdown
+    // Display/Hides the dropdown menu for each giveaway
     function toggleDropdown(button) {
         const dropdown = button.nextElementSibling;
         dropdown.classList.toggle('hidden');
     }
 
-    // Fonction pour supprimer un giveaway
+    // Deletes a giveaway
     async function deleteGiveaway(giveawayId, token, serverId) {
         const confirmation = confirm("Are you sure you want to delete this giveaway?");
         if (!confirmation) return;

@@ -76,7 +76,6 @@ async def submit_giveaway_form(
     """
     Handle form submissions to create or update a giveaway.
     """
-    print(giveaway_id)
     # Convert start_time and end_time to datetime objects
     if now:
         start_time = datetime.utcnow()  # Use the current time in UTC
@@ -112,8 +111,6 @@ async def submit_giveaway_form(
         "text_on_end": text_on_end,
         "image_url": image_url
     }
-
-    print(mentions)
 
     if await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id}):
         # Update existing giveaway
@@ -173,8 +170,6 @@ async def edit_page(request: Request, token: str, giveaway_id: str):
 
     roles = await get_roles(guild_id=server_id)
     channels = await get_channels(guild_id=server_id)
-
-    print(giveaway)
 
     return templates.TemplateResponse("giveaways/giveaway_edit.html", {
         "request": request,

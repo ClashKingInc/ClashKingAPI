@@ -262,6 +262,19 @@
 
         // Attach validations to the form submission
         form.addEventListener('submit', (event) => {
+
+            if (startTimeInput.value) {
+                // Convert local time to UTC for start
+                const localStartDate = new Date(startTimeInput.value);
+                startTimeInput.value = localStartDate.toISOString().slice(0, 16); // ISO format tronqué
+            }
+
+            if (endTimeInput.value) {
+                // Convert local time to UTC for end
+                const localEndDate = new Date(endTimeInput.value);
+                endTimeInput.value = localEndDate.toISOString().slice(0, 16); // ISO format tronqué
+            }
+
             if (
                 !validatePrize() ||
                 !validateWinners() ||

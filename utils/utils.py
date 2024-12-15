@@ -309,3 +309,23 @@ async def validate_token(token, expected_type=None):
         raise ValueError(f"Expected token of type '{expected_type}', but got '{token_data['type']}'.")
 
     return token_data
+
+
+from datetime import datetime
+import pytz
+
+def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
+    """
+    Convert UTC datetime to local datetime string in a specified timezone.
+
+    Args:
+        utc_time (datetime): UTC datetime object.
+        timezone (str): Timezone string (e.g., "Europe/Paris").
+
+    Returns:
+        str: Formatted local time as string "YYYY-MM-DD HH:MM".
+    """
+    local_tz = pytz.timezone(timezone)
+    utc_dt = utc_time.replace(tzinfo=pytz.utc)
+    local_dt = utc_dt.astimezone(local_tz)
+    return local_dt.strftime("%Y-%m-%d %H:%M")  # Format for display

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Create Giveaway</title>
+    <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
+    <link href="/static/output.css" rel="stylesheet">
+    <link href="/static/custom.css" rel="stylesheet">
+</head>
+<body class="bg-black text-white font-sans">
+<div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
+    <h1 class="text-2xl font-bold mb-6 text-center">🎉 Create Giveaway</h1>
+    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data"
+          data-token="{{ token }}">
+        <input type="hidden" name="server_id" value="{{ server_id }}">
+        <input type="hidden" name="token" value="{{ token }}">
+
+        <!-- Prize -->
+        <div class="mb-4">
+            <label for="prize" class="block text-sm font-medium">Prize:</label>
+            <input type="text" id="prize" name="prize" placeholder="Enter the prize"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   required>
+        </div>
+
+        <!-- Start Time -->
+        <div class="mb-4">
+            <label for="start_time" class="block text-sm font-medium">Start Time:</label>
+            <input type="datetime-local" id="start_time" name="start_time"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   min="" required>
+            <div class="flex items-center mt-2">
+                <input type="checkbox" id="now_checkbox" name="now" class="mr-2">
+                <label for="now_checkbox" class="text-sm font-medium">Start Now</label>
+            </div>
+        </div>
+
+        <!-- End Time -->
+        <div class="mb-4">
+            <label for="end_time" class="block text-sm font-medium">End Time:</label>
+            <input type="datetime-local" id="end_time" name="end_time"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   min="" required>
+        </div>
+
+        <!-- Target Channel -->
+        <div class="mb-4">
+            <label for="channel" class="block text-sm font-medium">Target Channel:</label>
+            <select id="channel" name="channel"
+                    class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                    required>
+                <option value="" disabled selected hidden>Select a channel...</option>
+                {% for channel in channels %}
+                    {% if channel.type == 0 %}
+                        <option value="{{ channel.id }}"># {{ channel.name }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+
+
+        <!-- Number of Winners -->
+        <div class="mb-4">
+            <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
+            <input type="number" id="winners" name="winners"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   required>
+        </div>
+
+        <!-- Mentions -->
+        <div class="mb-4">
+            <label for="mentions" class="block text-sm font-medium">Mentions:</label>
+            <select id="mentions" name="mentions" multiple
+                    class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Text Above Embed -->
+        <div class="mb-4">
+            <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed:</label>
+            <textarea id="text_above_embed" name="text_above_embed" placeholder="Optional: Add text above embed"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                      rows="4"></textarea>
+        </div>
+
+        <!-- Image Upload -->
+        <div class="mb-4">
+            <label for="image" class="block text-sm font-medium mb-2">Image:</label>
+            <div class="file-input-container">
+                <label class="file-input">
+                    Upload Image
+                    <input type="file" id="image" name="image" accept="image/*">
+                </label>
+            </div>
+            <img id="imagePreview" src="#" alt="Image Preview" class="hidden mt-4 rounded-md shadow-md"
+                 style="max-width: 100%; height: auto;">
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit"
+                class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
+            Create Giveaway
+        </button>
+    </form>
+    <div id="confirmationMessage" class="hidden mt-4 text-center text-lg text-green-500 font-semibold"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const nowCheckbox = document.getElementById('now_checkbox');
+        const startTimeInput = document.getElementById('start_time');
+        const endTimeInput = document.getElementById('end_time');
+        const prizeInput = document.getElementById('prize');
+        const winnersInput = document.getElementById('winners');
+        const textAboveEmbedInput = document.getElementById('text_above_embed');
+        const form = document.getElementById('giveawayForm');
+
+        // Set current date-time as the minimum for start_time and end_time
+        const setMinDateTime = () => {
+            const now = new Date().toISOString().slice(0, 16); // Get current time in "YYYY-MM-DDTHH:mm" format
+            startTimeInput.min = now;
+            endTimeInput.min = now;
+        };
+        setMinDateTime();
+
+        // "Start Now" Checkbox Logic
+        nowCheckbox.addEventListener('change', () => {
+            if (nowCheckbox.checked) {
+                startTimeInput.disabled = true;
+                startTimeInput.value = "";
+            } else {
+                startTimeInput.disabled = false;
+            }
+        });
+
+        // Ensure end_time is after start_time
+        const validateTimes = () => {
+            if (!nowCheckbox.checked && startTimeInput.value && endTimeInput.value) {
+                const startTime = new Date(startTimeInput.value);
+                const endTime = new Date(endTimeInput.value);
+
+                if (endTime <= startTime) {
+                    alert("End time must be after start time by at least 5 minutes.");
+                    endTimeInput.value = ""; // Reset end time
+                }
+            }
+        };
+
+        startTimeInput.addEventListener('change', validateTimes);
+        endTimeInput.addEventListener('change', validateTimes);
+
+        // Validate Prize Field
+        const validatePrize = () => {
+            if (!prizeInput.value.trim()) {
+                alert("Prize cannot be empty.");
+                return false;
+            }
+            if (prizeInput.value.length > 100) {
+                alert("Prize cannot exceed 100 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Winners Field
+        const validateWinners = () => {
+            const winners = parseInt(winnersInput.value, 10);
+            if (isNaN(winners) || winners <= 0) {
+                alert("Number of winners must be a positive number.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Text Above Embed
+        const validateTextAboveEmbed = () => {
+            if (textAboveEmbedInput.value.length > 500) {
+                alert("Text above embed cannot exceed 500 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        // Initialize Choices.js for dropdowns
+        var elements = document.querySelectorAll('.choices-multiple');
+        elements.forEach(function (element) {
+            new Choices(element, {
+                removeItemButton: true,
+                searchEnabled: true, // Enable search
+                searchChoices: true, // Allow typing to filter
+                shouldSort: false // Do not sort automatically
+            });
+        });
+
+        var channelDropdown = document.getElementById('channel');
+        new Choices(channelDropdown, {
+            removeItemButton: false, // No remove button for single-select
+            searchEnabled: true, // Allow searching in the dropdown
+            itemSelectText: '', // Remove "Press to select" text
+            shouldSort: false, // Maintain original order of options
+        });
+
+        // Preview image on upload
+        document.getElementById('image').addEventListener('change', function (event) {
+            const imagePreview = document.getElementById('imagePreview');
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.src = '#';
+                imagePreview.classList.add('hidden');
+            }
+        });
+    });
+</script>
+</body>
+</html>

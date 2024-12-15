@@ -3,3 +3,5 @@
 *.xml
 *.idea
 .idea/
+*pycache*
+.venv/

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Edit Giveaway</title>
+    <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
+    <link href="/static/output.css" rel="stylesheet">
+    <link href="/static/custom.css" rel="stylesheet">
+</head>
+<body class="bg-black text-white font-sans">
+<div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
+    <h1 class="text-2xl font-bold mb-6 text-center">✏️ Edit Giveaway</h1>
+    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data"
+          data-token="{{ token }}">
+        <input type="hidden" name="server_id" value="{{ server_id }}">
+        <input type="hidden" name="token" value="{{ token }}">
+        <input type="hidden" name="giveaway_id" value="{{ giveaway._id }}">
+
+        <!-- Prize -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Prize</label>
+            <input type="text" id="prize" name="prize" value="{{ giveaway.prize }}"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white"
+                   required>
+        </div>
+
+        <!-- Start Time -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Start Time</label>
+            <input type="datetime-local" id="start_time" name="start_time"
+                   value="{{ giveaway.start_time.strftime('%Y-%m-%dT%H:%M') if giveaway.start_time else '' }}"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+        </div>
+
+        <!-- End Time -->
+        <div>
+            <label class="block text-sm font-medium mb-2">End Time</label>
+            <input type="datetime-local" id="end_time" name="end_time"
+                   value="{{ giveaway.end_time.strftime('%Y-%m-%dT%H:%M') if giveaway.end_time else '' }}"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white" required>
+        </div>
+
+        <!-- Target Channel -->
+        <div>
+            <label for="channel" class="block text-sm font-medium mb-2">Target Channel</label>
+            <select id="channel" name="channel"
+                    class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                {% for channel in channels %}
+                    <option value="{{ channel.id }}"
+                            {% if channel.id|string == giveaway.channel_id|string %}selected{% endif %}>
+                        # {{ channel.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Number of Winners -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Number of Winners</label>
+            <input type="number" id="winners" name="winners" value="{{ giveaway.winners }}"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white" required>
+        </div>
+
+        <!-- Mentions -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Mentions</label>
+            <select id="mentions" name="mentions" multiple
+                    class="choices-multiple w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                {% for role in roles %}
+                    <option value="{{ role.id }}"
+                            {% if role.id in giveaway.mentions %}selected{% endif %}>
+                        {{ role.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+
+        <!-- Text Above Embed -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Text Above Embed</label>
+            <textarea id="text_above_embed" name="text_above_embed"
+                      class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white"
+                      rows="3">{{ giveaway.text_above_embed }}</textarea>
+        </div>
+
+        <!-- Image Upload -->
+        <div>
+            <label class="block text-sm font-medium mb-2">Image</label>
+            <input type="file" name="image" id="imageInput"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+            <!-- Afficher l'image actuelle ou masquer le conteneur -->
+            <img src="{{ giveaway.image_url or '#' }}" alt="Image Preview"
+                 id="imagePreview"
+                 class="mt-4 rounded-md shadow-md {% if not giveaway.image_url %}hidden{% endif %}"
+                 style="max-width: 100%; height: auto;">
+        </div>
+
+        <br/>
+        <!-- Submit Button -->
+        <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
+            Save Changes
+        </button>
+    </form>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const startTimeInput = document.getElementById('start_time');
+        const endTimeInput = document.getElementById('end_time');
+        const channelInput = document.getElementById('channel');
+        const prizeInput = document.getElementById('prize');
+        const winnersInput = document.getElementById('winners');
+        const textAboveEmbedInput = document.getElementById('text_above_embed');
+        const form = document.getElementById('giveawayForm');
+
+        // Fonction pour afficher les valeurs et types
+        function logValuesAndTypes() {
+            const inputs = {
+                "Start Time": startTimeInput,
+                "End Time": endTimeInput,
+                "Channel": channelInput,
+                "Prize": prizeInput,
+                "Winners": winnersInput,
+                "Text Above Embed": textAboveEmbedInput,
+            };
+
+            console.log("Logging input values and their types:");
+            for (const [key, element] of Object.entries(inputs)) {
+                const value = element ? element.value : "Element not found";
+                const type = typeof value; // Type de la valeur
+                console.log(`${key}: Value = ${value}, Type = ${type}`);
+            }
+        }
+
+        // Appeler la fonction pour afficher les informations
+        logValuesAndTypes();
+
+        // Set current date-time as the minimum for start_time and end_time
+        const setMinDateTime = () => {
+            endTimeInput.min = new Date().toISOString().slice(0, 16);
+        };
+        setMinDateTime();
+
+
+        // Ensure end_time is after start_time
+        const validateTimes = () => {
+            if (startTimeInput.value && endTimeInput.value) {
+                const startTime = new Date(startTimeInput.value);
+                const endTime = new Date(endTimeInput.value);
+
+                if (endTime <= startTime) {
+                    alert("End time must be after start time by at least 5 minutes.");
+                    endTimeInput.value = ""; // Reset end time
+                }
+            }
+        };
+
+        startTimeInput.addEventListener('change', validateTimes);
+        endTimeInput.addEventListener('change', validateTimes);
+
+        // Validate Prize Field
+        const validatePrize = () => {
+            if (!prizeInput.value.trim()) {
+                alert("Prize cannot be empty.");
+                return false;
+            }
+            if (prizeInput.value.length > 100) {
+                alert("Prize cannot exceed 100 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Channel Field
+        const validateChannel = () => {
+            if (!channelInput.value) {
+                alert("Please select a channel.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Winners Field
+        const validateWinners = () => {
+            const winners = parseInt(winnersInput.value, 10);
+            if (isNaN(winners) || winners <= 0) {
+                alert("Number of winners must be a positive number.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Text Above Embed
+        const validateTextAboveEmbed = () => {
+            if (textAboveEmbedInput.value.length > 500) {
+                alert("Text above embed cannot exceed 500 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        // Form Submit Validation
+        form.addEventListener('submit', (event) => {
+            const isValidPrize = validatePrize();
+            const isValidWinners = validateWinners();
+            const isValidTextAboveEmbed = validateTextAboveEmbed();
+            const isValidChannel = validateChannel();
+
+            if (!isValidPrize || !isValidWinners || !isValidTextAboveEmbed || !isValidChannel) {
+                event.preventDefault(); // Prevent form submission
+            }
+        });
+
+        // Initialize Choices.js for dropdowns
+        var elements = document.querySelectorAll('.choices-multiple');
+        elements.forEach(function (element) {
+            new Choices(element, {
+                removeItemButton: true,
+                searchEnabled: true,
+                searchChoices: true,
+                shouldSort: false,
+            });
+        });
+
+        const channelDropdown = document.getElementById('channel');
+        if (channelDropdown) {
+            const choicesInstance = new Choices(channelDropdown, {
+                removeItemButton: false,
+                searchEnabled: true,
+                itemSelectText: '',
+                shouldSort: false,
+            });
+
+            // Forcer la valeur sélectionnée si nécessaire
+            const selectedOption = channelDropdown.querySelector('option[selected]');
+            if (selectedOption) {
+                choicesInstance.setChoiceByValue(selectedOption.value);
+            }
+        }
+
+
+        // Preview image on upload
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+
+        imageInput.addEventListener('change', function (event) {
+            const file = event.target.files[0]; // Récupérer le fichier sélectionné
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result; // Mettre à jour l'URL de l'image
+                    imagePreview.classList.remove('hidden'); // Afficher l'aperçu
+                };
+                reader.readAsDataURL(file); // Lire le fichier comme une URL Data URI
+            } else {
+                imagePreview.src = '{{ giveaway.image_url or "#" }}'; // Rétablir l'image existante ou masquer
+                if (!imagePreview.src) {
+                    imagePreview.classList.add('hidden');
+                }
+            }
+        });
+    });
+</script>
+</body>
+</html>

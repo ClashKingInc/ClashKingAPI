@@ -1,79 +1,198 @@
 /* Custom styles for Choices.js */
 .choices {
-  background-color: #2d2d2d; /* Dark background */
-  color: #ffffff; /* White text */
-  border-radius: 0.375rem; /* Rounded corners */
-  border: 1px solid #4a4a4a; /* Darker border */
+    background-color: #2d3748; /* Fond principal (tailwind gray-800) */
+    color: #ffffff;
+    border-radius: 0.375rem;
+    border: 1px solid #4a5568; /* Bordure gris foncé */
 }
 
 .choices__inner {
-  background-color: #374151; /* Dark background */
-  color: #ffffff; /* White text */
-  border-radius: 0.375rem; /* Rounded corners */
-  border: 1px solid #4a4a4a; /* Darker border */
+    background-color: #374151; /* Dark background */
+    color: #ffffff; /* White text */
+    border-radius: 0.375rem; /* Rounded corners */
+    border: 1px solid #4a4a4a; /* Darker border */
 }
 
 .choices__list--multiple .choices__item {
-  background-color: #4a4a4a; /* Darker item background */
-  border: 1px solid #6a6a6a; /* Border around items */
-  border-radius: 0.375rem; /* Rounded corners for items */
-  color: #ffffff; /* White text */
-  padding: 5px 10px;
+    background-color: #4a4a4a; /* Darker item background */
+    border: 1px solid #6a6a6a; /* Border around items */
+    border-radius: 0.375rem; /* Rounded corners for items */
+    color: #ffffff; /* White text */
+    padding: 5px 10px;
 }
 
 .choices__list--multiple .choices__item[data-deletable] {
-  padding-right: 24px; /* Space for delete button */
+    padding-right: 24px; /* Space for delete button */
 }
 
 .choices__list--multiple .choices__item[data-deletable]::after {
-  content: '×';
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  cursor: pointer;
-  color: #374151; /* White delete button */
+    content: '×';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #374151; /* White delete button */
 }
 
 .choices__list--dropdown .choices__item--selectable {
-  background-color: #374151; /* Dark background */
-  color: #ffffff; /* White text */
+    background-color: #4a5568; /* Fond sombre pour sélection */
+    color: #ffffff;
 }
 
 .choices__list--dropdown .choices__item--selectable.is-highlighted {
-  background-color: #4a4a4a; /* Highlight background */
-  color: #1f2937; /* White text */
+    background-color: #4a4a4a; /* Highlight background */
+    color: #1f2937; /* White text */
 }
 
+/* Conteneur de la liste déroulante */
+.choices__list--dropdown {
+    background-color: #2d3748; /* Fond sombre */
+    border-radius: 0.375rem;
+    border: 1px solid #4a5568;
+    padding: 0;
+    margin: 0;
+}
+
+/* Supprimez les espaces inutiles ou non stylisés */
+.choices__list--dropdown .choices__placeholder {
+    display: none; /* Cache tout texte placeholder dans la liste */
+}
+
+/* Chaque élément de la liste */
+.choices__list--dropdown .choices__item {
+    background-color: #374151; /* Fond sombre */
+    color: #ffffff; /* Texte blanc */
+    padding: 10px;
+    border-bottom: 1px solid #4a5568; /* Séparateur */
+    cursor: pointer;
+}
+
+/* Supprimez les marges ou paddings inutiles au-dessus */
+.choices__inner {
+    margin: 0;
+    padding: 0;
+}
+
+/* Zone d'écriture (input) */
 .choices__input {
-  background-color: #374151; /* Dark background */
-  color: #ffffff; /* White text */
+    background-color: #374151 !important; /* Fond sombre */
+    color: #ffffff; /* Texte blanc */
+    border: none; /* Supprime les bordures */
+    outline: none; /* Supprime le contour */
+    font-size: 1rem;
+    padding: 10px;
 }
 
 .file-input-container {
-  position: relative;
-  display: inline-block;
-  width: 100%;
+    position: relative;
+    display: inline-block;
+    width: 100%;
 }
 
 .file-input {
-  display: inline-block;
-  padding: 10px;
-  background-color: #2d2d2d;
-  color: #ffffff;
-  border: 1px solid #4a4a4a;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  text-align: center;
-  width: 100%;
-  text-align: center;
+    display: inline-block;
+    padding: 10px;
+    background-color: #2d2d2d;
+    color: #ffffff;
+    border: 1px solid #4a4a4a;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    text-align: center;
+    width: 100%;
+    text-align: center;
 }
 
 .file-input input[type="file"] {
-  display: none;
+    display: none;
 }
 
 .hidden {
-  display: none;
+    display: none;
 }
 
+.drag-container {
+    border: 2px dashed #4A5568;
+    min-height: 400px;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.player-card {
+    background: #2D3748;
+    color: #F7FAFC;
+    padding: 10px;
+    margin: 5px;
+    border-radius: 8px;
+    cursor: grab;
+}
+
+.trash-bin {
+    border: 2px solid red;
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+}
+
+.add-button {
+    display: none;
+    background-color: green;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 8px;
+    margin-left: 10px;
+}
+
+.search-bar:focus + .add-button {
+    display: inline-block;
+}
+
+.dropdown {
+    z-index: 10;
+}
+.dropdown.hidden {
+    display: none;
+}
+
+.dropdown {
+    z-index: 10;
+    background-color: #1f2937; /* Dark background */
+    border: 1px solid #374151; /* Subtle border */
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Soft shadow */
+    overflow: hidden;
+    min-width: 120px;
+}
+
+.dropdown a,
+.dropdown button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #d1d5db; /* Light text */
+    cursor: pointer;
+    text-decoration: none;
+    background: none;
+    border: none;
+}
+
+.dropdown a:hover,
+.dropdown button:hover {
+    background-color: #374151; /* Slightly darker background on hover */
+    color: white; /* White text on hover */
+}
+
+.dropdown button {
+    width: 100%;
+}
+
+.dropdown .text-red-500 {
+    color: #ef4444; /* Bright red for Delete */
+}
+
+.dropdown .text-red-500:hover {
+    color: #f87171; /* Lighter red on hover */
+}

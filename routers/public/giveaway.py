@@ -106,7 +106,7 @@ async def submit_giveaway_form(
         "start_time": start_time,
         "end_time": end_time,
         "winners": winners,
-        "mentions": mentions.split(",") if mentions else [],
+        "mentions": mentions if mentions else [],
         "text_above_embed": text_above_embed,
         "text_in_embed": text_in_embed,
         "text_on_end": text_on_end,

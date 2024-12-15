@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import List
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -66,9 +67,11 @@ async def submit_giveaway_form(
         end_time: str = Form(...),
         winners: int = Form(...),
         channel: str = Form(...),
-        mentions: str = Form(""),
+        mentions: List[str] = Form([]),
         text_above_embed: str = Form(""),
-        image: UploadFile = File(None)
+        image: UploadFile = File(None),
+        text_in_embed: str = Form(""),
+        text_on_end: str = Form(""),
 ):
     """
     Handle form submissions to create or update a giveaway.
@@ -105,8 +108,12 @@ async def submit_giveaway_form(
         "winners": winners,
         "mentions": mentions.split(",") if mentions else [],
         "text_above_embed": text_above_embed,
+        "text_in_embed": text_in_embed,
+        "text_on_end": text_on_end,
         "image_url": image_url
     }
+
+    print(mentions)
 
     if await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id}):
         # Update existing giveaway

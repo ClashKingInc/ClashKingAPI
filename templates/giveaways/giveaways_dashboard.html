@@ -55,14 +55,9 @@
                     <td class="px-4 py-3">
                         <span class="bg-green-600 text-white text-xs px-2 py-1 rounded">Ongoing</span>
                     </td>
-                    <td class="px-4 py-3">N/A</td> <!-- Pas de date de début pour ongoing -->
+                    <td class="px-4 py-3">{{ giveaway.start_time }}</td>
                     <td class="px-4 py-3">{{ giveaway.end_time }}</td>
-                    <td class="px-4 py-3 text-right">
-                        <button onclick="window.location.href='/giveaway/edit/{{ giveaway._id }}?token={{ token }}&server_id={{ server_id }}'"
-                                class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded">
-                            Edit
-                        </button>
-                    </td>
+                    <td class="px-4 py-3 text-right"></td>
                 </tr>
             {% endfor %}
 
@@ -126,7 +121,7 @@
                     <td class="px-4 py-3">
                         <span class="bg-gray-500 text-white text-xs px-2 py-1 rounded">Ended</span>
                     </td>
-                    <td class="px-4 py-3">N/A</td> <!-- Pas de date de début pour ended -->
+                    <td class="px-4 py-3">{{ giveaway.start_time }}</td>
                     <td class="px-4 py-3">{{ giveaway.end_time }}</td>
                     <td class="px-4 py-3 text-right"></td>
                 </tr>
@@ -141,13 +136,13 @@
     {% endif %}
 </div>
 <script>
-    // Fonction pour afficher/masquer la dropdown
+    // Display/Hides the dropdown menu for each giveaway
     function toggleDropdown(button) {
         const dropdown = button.nextElementSibling;
         dropdown.classList.toggle('hidden');
     }
 
-    // Fonction pour supprimer un giveaway
+    // Deletes a giveaway
     async function deleteGiveaway(giveawayId, token, serverId) {
         const confirmation = confirm("Are you sure you want to delete this giveaway?");
         if (!confirmation) return;

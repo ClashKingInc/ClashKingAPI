@@ -1,6 +1,7 @@
 name: Image Builder
 
-on: [push]
+on:
+  workflow_dispatch:
 
 jobs:
   docker:

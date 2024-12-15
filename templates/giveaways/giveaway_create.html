@@ -87,6 +87,23 @@
                       rows="4"></textarea>
         </div>
 
+        <!-- Field in Embed -->
+        <div class="mb-4">
+            <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
+            <textarea id="text_in_embed" name="text_in_embed" placeholder="Optional: Add text in embed field"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                      rows="2"></textarea>
+        </div>
+
+        <!-- Message to Send on Giveaway End -->
+        <div class="mb-4">
+            <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
+            <textarea id="text_on_end" name="text_on_end"
+                      placeholder="Optional: Add a message to send when the giveaway ends"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                      rows="4"></textarea>
+        </div>
+
         <!-- Image Upload -->
         <div class="mb-4">
             <label for="image" class="block text-sm font-medium mb-2">Image:</label>
@@ -116,7 +133,10 @@
         const endTimeInput = document.getElementById('end_time');
         const prizeInput = document.getElementById('prize');
         const winnersInput = document.getElementById('winners');
+        const channelInput = document.getElementById('channel');
         const textAboveEmbedInput = document.getElementById('text_above_embed');
+        const embedFieldValueInput = document.getElementById('text_in_embed');
+        const messageOnEndInput = document.getElementById('text_on_end');
         const form = document.getElementById('giveawayForm');
 
         // Set current date-time as the minimum for start_time and end_time
@@ -146,8 +166,10 @@
                 if (endTime <= startTime) {
                     alert("End time must be after start time by at least 5 minutes.");
                     endTimeInput.value = ""; // Reset end time
+                    return false;
                 }
             }
+            return true;
         };
 
         startTimeInput.addEventListener('change', validateTimes);
@@ -176,6 +198,15 @@
             return true;
         };
 
+        // Validate Channel Selection
+        const validateChannel = () => {
+            if (!channelInput.value) {
+                alert("Please select a target channel.");
+                return false;
+            }
+            return true;
+        };
+
         // Validate Text Above Embed
         const validateTextAboveEmbed = () => {
             if (textAboveEmbedInput.value.length > 500) {
@@ -184,6 +215,66 @@
             }
             return true;
         };
+
+        // Validate Embed Field
+        const validateEmbedField = () => {
+            if (embedFieldValueInput.value.length > 500) {
+                alert("Embed field text cannot exceed 500 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        // Validate Message on End
+        const validateMessageOnEnd = () => {
+            if (messageOnEndInput.value.length > 500) {
+                alert("Message on giveaway end cannot exceed 500 characters.");
+                return false;
+            }
+            return true;
+        };
+
+        const validateImage = () => {
+            const fileInput = document.getElementById('image');
+            const file = fileInput.files[0];
+            if (file) {
+                // Check file size (e.g., max 2 MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    alert("Image size must not exceed 2 MB.");
+                    return false;
+                }
+                // Check file type
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+                if (!allowedTypes.includes(file.type)) {
+                    alert("Only JPEG, PNG, or GIF files are allowed.");
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        form.addEventListener('submit', (event) => {
+            if (!validateImage()) {
+                event.preventDefault();
+            }
+        });
+
+
+        // Attach validations to the form submission
+        form.addEventListener('submit', (event) => {
+            if (
+                !validatePrize() ||
+                !validateWinners() ||
+                !validateChannel() ||
+                !validateTextAboveEmbed() ||
+                !validateEmbedField() ||
+                !validateMessageOnEnd() ||
+                !validateTimes() ||
+                !validateImage()
+            ) {
+                event.preventDefault(); // Prevent form submission
+            }
+        });
 
         // Initialize Choices.js for dropdowns
         var elements = document.querySelectorAll('.choices-multiple');

@@ -233,12 +233,12 @@ function highlightLastAttack(state) {
 
   if (attackerClan === "clan") {
     attackerSide = "Our Side";
-    defenderSide = "Opponent Side";
+    defenderSide = "Opponent Clan";
     attackerInfo = findMemberInfo(attackerTag, "clan");
     defenderInfo = findMemberInfo(defenderTag, "opponent");
   } else {
     attackerSide = "Opponent Side";
-    defenderSide = "Our Side";
+    defenderSide = "Our Clan";
     attackerInfo = findMemberInfo(attackerTag, "opponent");
     defenderInfo = findMemberInfo(defenderTag, "clan");
   }
@@ -253,9 +253,9 @@ function highlightLastAttack(state) {
 
   currentAttackInfo.innerHTML = `
     <span class="font-bold">Current Attack (Order ${state.order}):</span><br>
-    <span class="text-red-700">${attackerName}</span>
+    <span class="text-red-700">${attackerName}</span> (${attackerSide})
     attacked
-    <span class="text-blue-700">${defenderName}</span><br>
+    <span class="text-blue-700">${defenderName}</span> (${defenderSide})<br>
     Result: <span class="text-yellow-500 font-bold">${stars}★</span> ${perc}% in ${duration}
   `;
 }

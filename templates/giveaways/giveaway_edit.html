@@ -85,6 +85,23 @@
                       rows="3">{{ giveaway.text_above_embed }}</textarea>
         </div>
 
+        <!-- Field in Embed -->
+        <div class="mb-4">
+            <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
+            <textarea id="text_in_embed" name="text_in_embed" placeholder="Optional: Add text in embed field"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                      rows="2">{{ giveaway.text_in_embed }}</textarea>
+        </div>
+
+        <!-- Message to Send on Giveaway End -->
+        <div class="mb-4">
+            <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
+            <textarea id="text_on_end" name="text_on_end"
+                      placeholder="Optional: Add a message to send when the giveaway ends"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                      rows="4">{{ giveaway.text_on_end }}</textarea>
+        </div>
+
         <!-- Image Upload -->
         <div>
             <label class="block text-sm font-medium mb-2">Image</label>

@@ -1,4 +1,5 @@
 import copy
+from typing import Optional
 from fastapi import Request, APIRouter
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -6,7 +7,6 @@ import aiohttp
 
 router = APIRouter(tags=["War Timeline"])
 templates = Jinja2Templates(directory="templates")
-
 
 def extract_attacks(war_data):
     all_attacks = []
@@ -23,7 +23,7 @@ def extract_attacks(war_data):
                 "stars": a["stars"],
                 "destructionPercentage": a["destructionPercentage"],
                 "order": a["order"],
-                "duration": a.get("duration", 0)  # ensure duration is present
+                "duration": a.get("duration", 0)
             })
 
     # Extract opponent attacks
@@ -36,11 +36,10 @@ def extract_attacks(war_data):
                 "stars": a["stars"],
                 "destructionPercentage": a["destructionPercentage"],
                 "order": a["order"],
-                "duration": a.get("duration", 0)  # ensure duration is present
+                "duration": a.get("duration", 0)
             })
 
     return sorted(all_attacks, key=lambda x: x["order"])
-
 
 def initialize_member_stats(members):
     member_stats = {}
@@ -51,7 +50,6 @@ def initialize_member_stats(members):
             "defenses_used": 0
         }
     return member_stats
-
 
 def compute_timeline(war_data):
     clan = war_data["clan"]
@@ -128,60 +126,36 @@ def compute_timeline(war_data):
 
     return war_timeline
 
-
-@router.get("/war/{clan_tag}/{position}", response_class=HTMLResponse)
-async def get_war(request: Request, clan_tag: str, position: int):
-    # Fetch current war
-    current_war_data = None
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.clashking.xyz/v1/clans/{clan_tag.replace('#', '%23')}/currentwar") as response:
-            if response.status == 200:
-                current_war_data = await response.json()
-
-    # Fetch last 10 previous wars
-    previous_wars_data = []
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.clashking.xyz/war/{clan_tag.replace('#', '%23')}/previous?limit=10") as response:
-            if response.status == 200:
-                previous_wars_data = await response.json()  # should be a list of wars
-
-    # Determine war_data based on position
-    # position = 0 -> current war if available
-    # position = 1..10 -> previous war at index position-1
+@router.get("/timeline/{clan_tag}", response_class=HTMLResponse)
+@router.get("/timeline/{clan_tag}/{timestamp}", response_class=HTMLResponse)
+async def get_war(request: Request, clan_tag: str, timestamp: Optional[str] = None):
     war_data = None
-    if position == 0 and current_war_data is not None:
-        war_data = current_war_data
+    if timestamp is None:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.clashking.xyz/v1/clans/{clan_tag.replace('#','%23')}/currentwar") as response:
+                if response.status == 200:
+                    war_data = await response.json()
     else:
-        # previous war
-        idx = position - 1
-        if 0 <= idx < len(previous_wars_data):
-            war_data = previous_wars_data[idx]
+        # Fetch specific war by timestamp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                    f"https://api.clashking.xyz/war/{clan_tag.replace('#', '%23')}/previous/{timestamp}") as response:
+                if response.status == 200:
+                    war_data = await response.json()
 
-    # If no war_data found, fallback logic (optional)
+    # If no war_data found even after all logic
     if war_data is None:
-        # If no current war and no previous war for that position, just pick the first previous war if any
-        if previous_wars_data:
-            war_data = previous_wars_data[0]
-            position = 1  # Adjust position to reflect we are showing a previous war
-        else:
-            # No wars at all - can't render anything meaningful
-            return HTMLResponse("<h1>No war data available</h1>", status_code=404)
+        return HTMLResponse("<h1>No war data available</h1>", status_code=404)
 
-    # Ensure correct clan/opponent orientation
+    # Ensure clan/opponent orientation
     if war_data["clan"]["tag"] != clan_tag:
-        # swap clan and opponent
         tmp = war_data["clan"]
         war_data["clan"] = war_data["opponent"]
         war_data["opponent"] = tmp
 
     war_timeline = compute_timeline(war_data)
 
-    # Build wars_available list for dropdown
     wars_available = []
-    if current_war_data is not None:
-        wars_available.append({"position": 0, "label": "Current War"})
-    for i, w in enumerate(previous_wars_data, start=1):
-        wars_available.append({"position": i, "label": f"Previous War {i}"})
 
     return templates.TemplateResponse(
         "war.html",
@@ -192,7 +166,7 @@ async def get_war(request: Request, clan_tag: str, position: int):
             "opponent": war_data["opponent"],
             "attacks_per_member": war_data.get("attacksPerMember", 1),
             "wars_available": wars_available,
-            "selected_position": position,
-            "clan_tag": clan_tag  # pass clan_tag so we know how to form URLs
+            "selected_timestamp": timestamp,
+            "clan_tag": clan_tag
         }
     )

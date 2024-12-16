@@ -20,25 +20,6 @@
 <body class="bg-gray-100 text-gray-900">
 <div class="max-w-7xl mx-auto py-4 px-4">
 
-  <!-- Dropdown to switch wars -->
-  <div class="mb-4 flex items-center space-x-2">
-    <label for="warSelector" class="font-bold">Select War:</label>
-    <select id="warSelector" class="border border-gray-300 rounded p-1">
-      {% for w in wars_available %}
-        <option value="{{ w.position }}" {% if w.position == selected_position %}selected{% endif %}>{{ w.label }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <script>
-    const warSelector = document.getElementById('warSelector');
-    warSelector.addEventListener('change', () => {
-      const pos = warSelector.value;
-      const clan_tag = "{{ clan_tag }}";
-      window.location.href = `/war/${encodeURIComponent(clan_tag)}/${pos}`;
-    });
-  </script>
-
   {% if war_timeline %}
   <!-- Timeline Slider -->
   <div class="mb-6">

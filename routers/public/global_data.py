@@ -77,7 +77,7 @@ async def super_troop_boost_rate(start_season: str, end_season: str, request: Re
 @router.get(
         path="/global/counts",
         name="Number of clans in war, players in war, player in legends etc")
-@limiter.limit("1/minute")
+@limiter.limit("30/minute")
 async def global_counts(request: Request, response: Response):
     # Measure timer_counts
     timer_counts = await db_client.war_timer.estimated_document_count()

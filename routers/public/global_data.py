@@ -11,7 +11,7 @@ from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from utils.utils import fix_tag, db_client
-
+import time
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Global Data"])
 
@@ -77,20 +77,38 @@ async def super_troop_boost_rate(start_season: str, end_season: str, request: Re
 @router.get(
         path="/global/counts",
         name="Number of clans in war, players in war, player in legends etc")
-@limiter.limit("1/minute")
+@limiter.limit("30/minute")
 async def global_counts(request: Request, response: Response):
+    # Measure timer_counts
     timer_counts = await db_client.war_timer.estimated_document_count()
+
+    # Measure war_counts
     now = int(pend.now(tz=pend.UTC).timestamp())
-    war_counts = await db_client.clan_wars.count_documents({"endTime" : {"$gte" : now}})
-    hours_ago = pend.now(tz=pend.UTC).subtract(hours=24)
-    join_leaves_24_hours = await db_client.join_leave_history.count_documents({"time" : {"$gte" : hours_ago}})
+    war_counts = await db_client.clan_wars.count_documents({"endTime": {"$gte": now}})
+
+    # Measure legend_count
     legend_count = await db_client.legend_rankings.estimated_document_count({})
 
+    # Measure player_count
+    player_count = await db_client.player_stats_db.estimated_document_count({})
+
+    # Measure clan_count
+    clan_count = await db_client.basic_clan.estimated_document_count({})
+
+    # Measure wars_stored
+    wars_stored = await db_client.clan_wars.estimated_document_count({})
+
+    # Measure join_leaves_total
+    join_leaves_total = await db_client.join_leave_history.estimated_document_count({})
+
     return {
-        "players_in_war" : timer_counts,
-        "clans_in_war" : war_counts,
-        "join_leaves_last_day" : join_leaves_24_hours,
-        "players_in_legends" : legend_count
+        "players_in_war": timer_counts,
+        "clans_in_war": war_counts,
+        "total_join_leaves": join_leaves_total,
+        "players_in_legends": legend_count,
+        "player_count": player_count,
+        "clan_count": clan_count,
+        "wars_stored": wars_stored
     }
 
 

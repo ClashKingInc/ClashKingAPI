@@ -1,14 +1,19 @@
 FROM python:3.11-bookworm
 
+LABEL org.opencontainers.image.source=https://github.com/ClashKingInc/ClashKingAPI
+LABEL org.opencontainers.image.description="Image for the ClashKing API"
+LABEL org.opencontainers.image.licenses=MIT
+
 RUN apt-get update && apt-get install -y libsnappy-dev
 
-COPY requirements.txt /app/
 WORKDIR /app
 
-RUN pip install -r requirements.txt
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
 EXPOSE 6000
 
-CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:6000"]
-
+CMD ["python", "main.py"]

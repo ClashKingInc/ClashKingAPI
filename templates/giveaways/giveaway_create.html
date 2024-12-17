@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Create Giveaway</title>
+    <!-- Favicon pour Light Mode -->
+    <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
+    <!-- Favicon pour Dark Mode -->
+    <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
     <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
     <link href="/static/output.css" rel="stylesheet">
     <link href="/static/custom.css" rel="stylesheet">
@@ -15,11 +19,24 @@
           data-token="{{ token }}">
         <input type="hidden" name="server_id" value="{{ server_id }}">
         <input type="hidden" name="token" value="{{ token }}">
+        <input type="hidden" name="boosters_json" id="boosters_json">
+        <input type="hidden" name="roles_json" id="roles_json">
+
+        <h2 class="text-lg font-semibold">Giveaway Details</h2>
+        <br/>
 
         <!-- Prize -->
         <div class="mb-4">
             <label for="prize" class="block text-sm font-medium">Prize:</label>
             <input type="text" id="prize" name="prize" placeholder="Enter the prize"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   required>
+        </div>
+
+        <!-- Number of Winners -->
+        <div class="mb-4">
+            <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
+            <input type="number" id="winners" name="winners"
                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
                    required>
         </div>
@@ -59,15 +76,6 @@
             </select>
         </div>
 
-
-        <!-- Number of Winners -->
-        <div class="mb-4">
-            <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
-            <input type="number" id="winners" name="winners"
-                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                   required>
-        </div>
-
         <!-- Mentions -->
         <div class="mb-4">
             <label for="mentions" class="block text-sm font-medium">Mentions:</label>
@@ -78,6 +86,9 @@
                 {% endfor %}
             </select>
         </div>
+
+        <h2 class="text-lg font-semibold">Embed Details</h2>
+        <br/>
 
         <!-- Text Above Embed -->
         <div class="mb-4">
@@ -117,6 +128,83 @@
                  style="max-width: 100%; height: auto;">
         </div>
 
+        <!-- Giveaway Requirements -->
+        <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
+        <br/>
+
+        <!-- User must have a profile picture -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="profile_picture_required" name="profile_picture_required" class="mr-2">
+            <label for="profile_picture_required" class="text-sm font-medium">
+                User must have a profile picture
+            </label>
+        </div>
+
+        <!-- User must have CoC account linked -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="coc_account_required" name="coc_account_required" class="mr-2">
+            <label for="coc_account_required" class="text-sm font-medium">
+                User must have CoC account linked to his profile
+            </label>
+        </div>
+
+        <!-- Checkbox to enable roles -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2">
+            <label for="enable_roles" class="text-sm font-medium">
+                Configure roles allowed to participate
+            </label>
+        </div>
+
+        <!-- Container for roles -->
+        <div id="rolesContainer" class="hidden">
+            <!-- Radio buttons to allow or deny roles -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
+                <div class="flex items-center mb-2">
+                    <input type="radio" id="allow_roles" name="roles_mode" value="allow" checked
+                           class="mr-2 text-indigo-600 focus:ring-indigo-500">
+                    <label for="allow_roles" class="text-sm font-medium">Allow for all roles except</label>
+                </div>
+                <div class="flex items-center">
+                    <input type="radio" id="deny_roles" name="roles_mode" value="deny"
+                           class="mr-2 text-indigo-600 focus:ring-indigo-500">
+                    <label for="deny_roles" class="text-sm font-medium">Deny for all roles except</label>
+                </div>
+            </div>
+
+            <!-- Select Roles -->
+            <div>
+                <label class="block text-sm font-medium mb-2">Select Roles:</label>
+                <select id="roles_select" name="roles_selected" multiple
+                        class="choices-multiple mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm text-white">
+                    {% for role in roles %}
+                        <option value="{{ role.id }}">{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <br/>
+        </div>
+
+
+        <!-- Adjust Odds by Roles -->
+        <div class="mb-6">
+            <div class="flex items-center mb-4">
+                <input type="checkbox" id="adjust_odds" name="adjust_odds" class="mr-2">
+                <label for="adjust_odds" class="text-sm font-medium">Adjust odds by roles</label>
+            </div>
+
+            <!-- Conteneur pour les Boosters -->
+            <div id="boostersContainer" class="hidden"></div>
+
+            <!-- Bouton Ajouter un Booster -->
+            <button type="button" id="addBooster"
+                    class="hidden mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">
+                Add booster
+            </button>
+        </div>
+
+
         <!-- Submit Button -->
         <button type="submit"
                 class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
@@ -138,6 +226,112 @@
         const embedFieldValueInput = document.getElementById('text_in_embed');
         const messageOnEndInput = document.getElementById('text_on_end');
         const form = document.getElementById('giveawayForm');
+        const adjustOddsCheckbox = document.getElementById('adjust_odds');
+        const boostersContainer = document.getElementById('boostersContainer');
+        const addBoosterButton = document.getElementById('addBooster');
+        const enableRolesCheckbox = document.getElementById('enable_roles');
+        const rolesContainer = document.getElementById('rolesContainer');
+        let initialBoosterAdded = false; // Flag to track if the first booster is added
+
+        const roles = [
+            {% for role in roles %}
+                {id: "{{ role.id }}", name: "{{ role.name }}"},
+            {% endfor %}
+        ];
+
+        // Show/Hide the boosters container and the Add Booster button based on the checkbox state
+        adjustOddsCheckbox.addEventListener('change', () => {
+            if (adjustOddsCheckbox.checked) {
+                boostersContainer.classList.remove('hidden'); // Show boosters container
+                addBoosterButton.classList.remove('hidden'); // Show "Add Booster" button
+
+                // Ajouter le premier booster uniquement si cela n'a pas déjà été fait
+                if (!initialBoosterAdded) {
+                    addInitialBooster();
+                    initialBoosterAdded = true;
+                }
+            } else {
+                boostersContainer.classList.add('hidden'); // Hide boosters container
+                addBoosterButton.classList.add('hidden'); // Hide "Add Booster" button
+
+                // Reset the boosters
+                boostersContainer.innerHTML = '';
+                initialBoosterAdded = false; // Reset pour permettre un ajout propre la prochaine fois
+            }
+        });
+
+        // Function to add the first booster
+        const addInitialBooster = () => {
+            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+            initializeChoicesForLastBooster();
+        };
+
+        // Function to create a new booster template
+        const createBoosterTemplate = () => {
+            return `
+    <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
+        <label class="block text-sm font-medium mb-2">Booster:</label>
+        <input type="range" min="0.25" max="3" step="0.25" value="1" class="slider w-full mb-2">
+        <p class="text-xs text-gray-300">Value: <span class="slider-value">x1</span></p>
+        <select multiple class="roles-select w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white">
+            ${roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('')}
+        </select>
+        <button type="button" class="remove-booster mt-2 bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md">
+            Remove booster
+        </button>
+    </div>`;
+        };
+
+        // Add a new booster when clicking on the Add Booster button
+        addBoosterButton.addEventListener('click', () => {
+            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+            initializeChoicesForLastBooster();
+        });
+
+        // Initialize Choices.js for the last booster added
+        const initializeChoicesForLastBooster = () => {
+            const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
+            new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
+                removeItemButton: true,
+                searchEnabled: true,
+                shouldSort: false
+            });
+
+            const lastSlider = boostersContainer.querySelectorAll('.slider');
+            updateSliderValue(lastSlider[lastSlider.length - 1]);
+        };
+
+        // Function to update the displayed slider value
+        const updateSliderValue = (slider) => {
+            const valueDisplay = slider.parentElement.querySelector('.slider-value');
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = `x${slider.value}`;
+            });
+        };
+
+        // Handle removing a booster
+        boostersContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('remove-booster')) {
+                event.target.parentElement.remove();
+            }
+        });
+
+        // Display roles container if checkbox is checked
+        enableRolesCheckbox.addEventListener('change', () => {
+            if (enableRolesCheckbox.checked) {
+                rolesContainer.classList.remove('hidden');
+            } else {
+                rolesContainer.classList.add('hidden');
+            }
+        });
+
+        // Initialize Choices.js for roles dropdown
+        const rolesSelect = document.getElementById('roles_select');
+        new Choices(rolesSelect, {
+            removeItemButton: true,
+            searchEnabled: true,
+            shouldSort: false
+        });
 
         // Set current date-time as the minimum for start_time and end_time
         const setMinDateTime = () => {
@@ -253,12 +447,6 @@
             return true;
         };
 
-        form.addEventListener('submit', (event) => {
-            if (!validateImage()) {
-                event.preventDefault();
-            }
-        });
-
 
         // Attach validations to the form submission
         form.addEventListener('submit', (event) => {
@@ -274,6 +462,22 @@
                 const localEndDate = new Date(endTimeInput.value);
                 endTimeInput.value = localEndDate.toISOString().slice(0, 16); // ISO format tronqué
             }
+
+            // Serialize boosters
+            const boosters = [];
+            document.querySelectorAll('.booster').forEach((booster) => {
+                const value = booster.querySelector('.slider').value;
+                const roles = Array.from(booster.querySelector('.roles-select').selectedOptions)
+                    .map(option => option.value);
+
+                boosters.push({value, roles});
+            });
+            document.getElementById('boosters_json').value = JSON.stringify(boosters);
+
+            // Serialize selected roles
+            const rolesSelect = document.getElementById('roles_select');
+            const selectedRoles = Array.from(rolesSelect.selectedOptions).map(option => option.value);
+            document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
 
             if (
                 !validatePrize() ||
@@ -307,6 +511,15 @@
             itemSelectText: '', // Remove "Press to select" text
             shouldSort: false, // Maintain original order of options
         });
+
+        document.querySelectorAll('.roles-select').forEach((element) => {
+            new Choices(element, {
+                removeItemButton: true,
+                searchEnabled: true,
+                shouldSort: false
+            });
+        });
+
 
         // Preview image on upload
         document.getElementById('image').addEventListener('change', function (event) {

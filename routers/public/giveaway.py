@@ -1,17 +1,23 @@
+import json
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 
-from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from routers.public.tickets import get_channels, get_roles
 from utils.utils import db_client, validate_token
 
 router = APIRouter(prefix="/giveaway", include_in_schema=False)
 templates = Jinja2Templates(directory="templates")
+
+
+class BoosterModel(BaseModel):
+    boost_value: float
+    boost_roles: List[str]
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -72,10 +78,18 @@ async def submit_giveaway_form(
         image: UploadFile = File(None),
         text_in_embed: str = Form(""),
         text_on_end: str = Form(""),
+        profile_picture_required: bool = Form(False),
+        coc_account_required: bool = Form(False),
+        roles_mode: str = Form("allow"),
+        roles_json: str = Form(...),
+        boosters_json: str = Form(...),
 ):
     """
     Handle form submissions to create or update a giveaway.
     """
+    print("Received roles and boosters:")
+    print("Roles:", roles_json)
+    print("Boosters:", boosters_json)
     # Convert start_time and end_time to datetime objects
     if now:
         start_time = datetime.utcnow()  # Use the current time in UTC
@@ -87,6 +101,23 @@ async def submit_giveaway_form(
 
     end_time = datetime.fromisoformat(end_time)
     server_id = int(server_id)
+
+
+    # Décode boosters & roles
+    try:
+        boosters = json.loads(boosters_json)  # [{value: "2.5", roles: ["role1", "role2"]}]
+        roles = json.loads(roles_json)  # ["role1", "role2"]
+    except json.JSONDecodeError:
+        return JSONResponse({"status": "error", "message": "Invalid JSON data for roles or boosters"},
+                            status_code=400)
+
+    # Validate the boosters data
+    parsed_boosters = []
+    for booster in boosters:
+        value = float(booster.get("value", 1))
+        role_list = booster.get("roles", [])
+        if role_list:
+            parsed_boosters.append({"value": value, "roles": role_list})
 
     # Generate a unique giveaway ID if it's a new giveaway
     if not giveaway_id:
@@ -109,7 +140,12 @@ async def submit_giveaway_form(
         "text_above_embed": text_above_embed,
         "text_in_embed": text_in_embed,
         "text_on_end": text_on_end,
-        "image_url": image_url
+        "image_url": image_url,
+        "profile_picture_required": profile_picture_required,
+        "coc_account_required": coc_account_required,
+        "roles_mode": roles_mode,
+        "roles": roles,
+        "boosters": parsed_boosters
     }
 
     if await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id}):
@@ -179,6 +215,7 @@ async def edit_page(request: Request, token: str, giveaway_id: str):
         "channels": channels,
         "roles": roles
     })
+
 
 @router.delete("/delete/{giveaway_id}")
 async def delete_giveaway(giveaway_id: str, token: str, server_id: str):

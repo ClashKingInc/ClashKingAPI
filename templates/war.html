@@ -1,377 +1,395 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>War Timeline</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  .highlight {
-    border: 4px solid #dc2626; /* Red-600 */
-    background-color: #fee2e2; /* Red-100 */
-  }
-  .attack-highlight {
-    background-color: #fef3c7; /* Amber-100 */
-    border-left: 3px solid #f59e0b; /* Amber-500 */
-    padding-left: 0.5rem;
-  }
-</style>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>War Timeline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .highlight {
+            border: 4px solid #dc2626; /* Red-600 */
+            background-color: #fee2e2; /* Red-100 */
+        }
+
+        .attack-highlight {
+            background-color: #fef3c7; /* Amber-100 */
+            border-left: 3px solid #f59e0b; /* Amber-500 */
+            padding-left: 0.5rem;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 text-gray-900">
 <div class="max-w-7xl mx-auto py-4 px-4">
 
-  <!-- Dropdown to switch wars -->
-  <div class="mb-4 flex items-center space-x-2">
-    <label for="warSelector" class="font-bold">Select War:</label>
-    <select id="warSelector" class="border border-gray-300 rounded p-1">
-      {% for w in wars_available %}
-        <option value="{{ w.position }}" {% if w.position == selected_position %}selected{% endif %}>{{ w.label }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <script>
-    const warSelector = document.getElementById('warSelector');
-    warSelector.addEventListener('change', () => {
-      const pos = warSelector.value;
-      const clan_tag = "{{ clan_tag }}";
-      window.location.href = `/war/${encodeURIComponent(clan_tag)}/${pos}`;
-    });
-  </script>
-
-  {% if war_timeline %}
-  <!-- Timeline Slider -->
-  <div class="mb-6">
-    <div class="flex items-center justify-between mb-2">
-      <h1 class="text-2xl font-bold">War Timeline</h1>
-      <div class="text-sm" id="currentOrderLabel">Order: 0</div>
-    </div>
-    <div class="flex items-center space-x-2 mb-2">
-      <button id="decrementOrder" class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">-1</button>
-      <button id="incrementOrder" class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">+1</button>
-    </div>
-    <input type="range" min="0" max="{{ war_timeline|length - 1 }}" value="0" id="orderSlider" class="w-full accent-blue-600">
-  </div>
-
-  <!-- Scoreboard -->
-  <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow mb-4">
-    <!-- Clan Side -->
-    <div class="flex items-center space-x-4">
-      <img src="{{ clan.badgeUrls.large }}" class="h-16 w-16 rounded-full" alt="Clan Badge">
-      <div>
-        <div class="text-3xl font-extrabold">{{ clan.name }}</div>
-        <div class="text-lg text-gray-600">Level {{ clan.clanLevel }}</div>
-      </div>
+    <!-- Dropdown to switch wars -->
+    <div class="mb-4 flex items-center space-x-2">
+        <label for="warSelector" class="font-bold">Select War:</label>
+        <select id="warSelector" class="border border-gray-300 rounded p-1">
+            {% for w in wars_available %}
+                <option value="{{ w.position }}"
+                        {% if w.position == selected_position %}selected{% endif %}>{{ w.label }}</option>
+            {% endfor %}
+        </select>
     </div>
 
-    <!-- Matchup -->
-    <div class="text-center">
-      <div class="text-4xl font-extrabold space-x-4">
-        <span id="clanStars" class="text-yellow-500"></span><span class="text-yellow-500">★</span>
-        <span class="text-gray-700">vs</span>
-        <span id="opponentStars" class="text-yellow-500"></span><span class="text-yellow-500">★</span>
-      </div>
-      <div class="text-sm mt-2">
-        <span class="font-bold">Destruction:</span>
-        <span id="clanDestruction">0.00</span>% - <span id="opponentDestruction">0.00</span>%
-      </div>
-      <div class="text-sm">
-        <span class="font-bold">Attacks Used:</span>
-        <span id="clanAttacksUsed"></span>/<span>{{ attacks_per_member * clan.members|length }}</span> -
-        <span id="opponentAttacksUsed"></span>/<span>{{ attacks_per_member * opponent.members|length }}</span>
-      </div>
-    </div>
+    <script>
+        const warSelector = document.getElementById('warSelector');
+        warSelector.addEventListener('change', () => {
+            const pos = warSelector.value;
+            const clan_tag = "{{ clan_tag }}";
+            window.location.href = `/war/${encodeURIComponent(clan_tag)}/${pos}`;
+        });
+    </script>
 
-    <!-- Opponent Side -->
-    <div class="flex items-center space-x-4">
-      <div class="text-right">
-        <div class="text-3xl font-extrabold">{{ opponent.name }}</div>
-        <div class="text-lg text-gray-600">Level {{ opponent.clanLevel }}</div>
-      </div>
-      <img src="{{ opponent.badgeUrls.large }}" class="h-16 w-16 rounded-full" alt="Opponent Badge">
-    </div>
-  </div>
-
-  <!-- Current Attack Info -->
-  <div id="currentAttackInfo" class="mb-8 bg-white p-4 rounded-lg shadow text-center text-lg font-semibold text-gray-700">
-    No attack yet
-  </div>
-
-  <!-- Map Layout -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-    <!-- Clan Column -->
-    <div class="flex flex-col space-y-4">
-      <h2 class="text-xl font-semibold">Our Side</h2>
-      {% for member in clan.members|sort(attribute='mapPosition') %}
-      <div class="p-4 bg-white rounded shadow clan-card" data-tag="{{ member.tag|replace('#','') }}">
-        <div class="flex items-center space-x-3">
-          <div class="text-gray-700 font-bold text-xl">#{{ member.mapPosition }}</div>
-          <img src="https://assets.clashk.ing/home-base/town-hall-pics/town-hall-{{ member.townhallLevel }}.png" class="w-8 h-8" alt="TH{{ member.townhallLevel }}">
-          <div class="font-semibold text-lg">{{ member.name }}</div>
+    {% if war_timeline %}
+        <!-- Timeline Slider -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+                <h1 class="text-2xl font-bold">War Timeline</h1>
+                <div class="text-sm" id="currentOrderLabel">Order: 0</div>
+            </div>
+            <div class="flex items-center space-x-2 mb-2">
+                <button id="decrementOrder" class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">-1
+                </button>
+                <button id="incrementOrder" class="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">+1
+                </button>
+            </div>
+            <input type="range" min="0" max="{{ war_timeline|length - 1 }}" value="0" id="orderSlider"
+                   class="w-full accent-blue-600">
         </div>
-        <div class="mt-2 text-sm text-gray-700">
-          Attacks Used: <span class="clanMemberAttacksUsed" data-tag="{{ member.tag|replace('#','') }}"></span> / {{ attacks_per_member }}
-          &nbsp;|&nbsp; Defenses: <span class="clanMemberDefensesUsed" data-tag="{{ member.tag|replace('#','') }}"></span>
+
+        <!-- Scoreboard -->
+        <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow mb-4">
+            <!-- Clan Side -->
+            <div class="flex items-center space-x-4">
+                <img src="{{ clan.badgeUrls.large }}" class="h-16 w-16 rounded-full" alt="Clan Badge">
+                <div>
+                    <div class="text-3xl font-extrabold">{{ clan.name }}</div>
+                    <div class="text-lg text-gray-600">Level {{ clan.clanLevel }}</div>
+                </div>
+            </div>
+
+            <!-- Matchup -->
+            <div class="text-center">
+                <div class="text-4xl font-extrabold space-x-4">
+                    <span id="clanStars" class="text-yellow-500"></span><span class="text-yellow-500">★</span>
+                    <span class="text-gray-700">vs</span>
+                    <span id="opponentStars" class="text-yellow-500"></span><span class="text-yellow-500">★</span>
+                </div>
+                <div class="text-sm mt-2">
+                    <span class="font-bold">Destruction:</span>
+                    <span id="clanDestruction">0.00</span>% - <span id="opponentDestruction">0.00</span>%
+                </div>
+                <div class="text-sm">
+                    <span class="font-bold">Attacks Used:</span>
+                    <span id="clanAttacksUsed"></span>/<span>{{ attacks_per_member * clan.members|length }}</span> -
+                    <span id="opponentAttacksUsed"></span>/<span>{{ attacks_per_member * opponent.members|length }}</span>
+                </div>
+            </div>
+
+            <!-- Opponent Side -->
+            <div class="flex items-center space-x-4">
+                <div class="text-right">
+                    <div class="text-3xl font-extrabold">{{ opponent.name }}</div>
+                    <div class="text-lg text-gray-600">Level {{ opponent.clanLevel }}</div>
+                </div>
+                <img src="{{ opponent.badgeUrls.large }}" class="h-16 w-16 rounded-full" alt="Opponent Badge">
+            </div>
         </div>
-        <div class="mt-3 text-sm space-y-2">
-          <div class="font-bold">Attacks by {{ member.name }}:</div>
-          <div class="clanMemberAttacksContainer" data-membertag="{{ member.tag|replace('#','') }}" data-attacks='{{ member.attacks|default([])|tojson }}'>
-            No attacks yet
-          </div>
+
+        <!-- Current Attack Info -->
+        <div id="currentAttackInfo"
+             class="mb-8 bg-white p-4 rounded-lg shadow text-center text-lg font-semibold text-gray-700">
+            No attack yet
         </div>
-        <div class="mt-3 text-sm space-y-2">
-          <div class="font-bold">Defenses on {{ member.name }}:</div>
-          <div class="clanMemberDefensesContainer" data-membertag="{{ member.tag|replace('#','') }}">
-            No attacks yet
-          </div>
+
+        <!-- Map Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Clan Column -->
+            <div class="flex flex-col space-y-4">
+                <h2 class="text-xl font-semibold">Our Side</h2>
+                {% for member in clan.members|sort(attribute='mapPosition') %}
+                    <div class="p-4 bg-white rounded shadow clan-card" data-tag="{{ member.tag|replace('#','') }}">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-gray-700 font-bold text-xl">#{{ member.mapPosition }}</div>
+                            <img src="https://assets.clashk.ing/home-base/town-hall-pics/town-hall-{{ member.townhallLevel }}.png"
+                                 class="w-8 h-8" alt="TH{{ member.townhallLevel }}">
+                            <div class="font-semibold text-lg">{{ member.name }}</div>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-700">
+                            Attacks Used: <span class="clanMemberAttacksUsed"
+                                                data-tag="{{ member.tag|replace('#','') }}"></span>
+                            / {{ attacks_per_member }}
+                            &nbsp;|&nbsp; Defenses: <span class="clanMemberDefensesUsed"
+                                                          data-tag="{{ member.tag|replace('#','') }}"></span>
+                        </div>
+                        <div class="mt-3 text-sm space-y-2">
+                            <div class="font-bold">Attacks by {{ member.name }}:</div>
+                            <div class="clanMemberAttacksContainer" data-membertag="{{ member.tag|replace('#','') }}"
+                                 data-attacks='{{ member.attacks|default([])|tojson }}'>
+                                No attacks yet
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm space-y-2">
+                            <div class="font-bold">Defenses on {{ member.name }}:</div>
+                            <div class="clanMemberDefensesContainer" data-membertag="{{ member.tag|replace('#','') }}">
+                                No attacks yet
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Opponent Column -->
+            <div class="flex flex-col space-y-4">
+                <h2 class="text-xl font-semibold">Opponent Side</h2>
+                {% for member in opponent.members|sort(attribute='mapPosition') %}
+                    <div class="p-4 bg-white rounded shadow opponent-card" data-tag="{{ member.tag|replace('#','') }}">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-gray-700 font-bold text-xl">#{{ member.mapPosition }}</div>
+                            <img src="https://assets.clashk.ing/home-base/town-hall-pics/town-hall-{{ member.townhallLevel }}.png"
+                                 class="w-8 h-8" alt="TH{{ member.townhallLevel }}">
+                            <div class="font-semibold text-lg">{{ member.name }}</div>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-700">
+                            Attacks Used: <span class="opponentMemberAttacksUsed"
+                                                data-tag="{{ member.tag|replace('#','') }}"></span>
+                            / {{ attacks_per_member }}
+                            &nbsp;|&nbsp; Defenses: <span class="opponentMemberDefensesUsed"
+                                                          data-tag="{{ member.tag|replace('#','') }}"></span>
+                        </div>
+                        <div class="mt-3 text-sm space-y-2">
+                            <div class="font-bold">Attacks by {{ member.name }}:</div>
+                            <div class="opponentMemberAttacksContainer"
+                                 data-membertag="{{ member.tag|replace('#','') }}"
+                                 data-attacks='{{ member.attacks|default([])|tojson }}'>
+                                No attacks yet
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm space-y-2">
+                            <div class="font-bold">Defenses on {{ member.name }}:</div>
+                            <div class="opponentMemberDefensesContainer"
+                                 data-membertag="{{ member.tag|replace('#','') }}">
+                                No attacks yet
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
         </div>
-      </div>
-      {% endfor %}
-    </div>
-
-    <!-- Opponent Column -->
-    <div class="flex flex-col space-y-4">
-      <h2 class="text-xl font-semibold">Opponent Side</h2>
-      {% for member in opponent.members|sort(attribute='mapPosition') %}
-      <div class="p-4 bg-white rounded shadow opponent-card" data-tag="{{ member.tag|replace('#','') }}">
-        <div class="flex items-center space-x-3">
-          <div class="text-gray-700 font-bold text-xl">#{{ member.mapPosition }}</div>
-          <img src="https://assets.clashk.ing/home-base/town-hall-pics/town-hall-{{ member.townhallLevel }}.png" class="w-8 h-8" alt="TH{{ member.townhallLevel }}">
-          <div class="font-semibold text-lg">{{ member.name }}</div>
-        </div>
-        <div class="mt-2 text-sm text-gray-700">
-          Attacks Used: <span class="opponentMemberAttacksUsed" data-tag="{{ member.tag|replace('#','') }}"></span> / {{ attacks_per_member }}
-          &nbsp;|&nbsp; Defenses: <span class="opponentMemberDefensesUsed" data-tag="{{ member.tag|replace('#','') }}"></span>
-        </div>
-        <div class="mt-3 text-sm space-y-2">
-          <div class="font-bold">Attacks by {{ member.name }}:</div>
-          <div class="opponentMemberAttacksContainer" data-membertag="{{ member.tag|replace('#','') }}" data-attacks='{{ member.attacks|default([])|tojson }}'>
-            No attacks yet
-          </div>
-        </div>
-        <div class="mt-3 text-sm space-y-2">
-          <div class="font-bold">Defenses on {{ member.name }}:</div>
-          <div class="opponentMemberDefensesContainer" data-membertag="{{ member.tag|replace('#','') }}">
-            No attacks yet
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
 
 
-<script>
-var warTimeline = {{ war_timeline | tojson | safe }};
-var clanMembersData = {{ clan.members|tojson }};
-var opponentMembersData = {{ opponent.members|tojson }};
+        <script>
+            var warTimeline = {{ war_timeline | tojson | safe }};
+            var clanMembersData = {{ clan.members|tojson }};
+            var opponentMembersData = {{ opponent.members|tojson }};
 
-const orderSlider = document.getElementById('orderSlider');
-const currentOrderLabel = document.getElementById('currentOrderLabel');
-const clanStars = document.getElementById('clanStars');
-const clanDestruction = document.getElementById('clanDestruction');
-const clanAttacksUsed = document.getElementById('clanAttacksUsed');
-const opponentStars = document.getElementById('opponentStars');
-const opponentDestruction = document.getElementById('opponentDestruction');
-const opponentAttacksUsed = document.getElementById('opponentAttacksUsed');
+            const orderSlider = document.getElementById('orderSlider');
+            const currentOrderLabel = document.getElementById('currentOrderLabel');
+            const clanStars = document.getElementById('clanStars');
+            const clanDestruction = document.getElementById('clanDestruction');
+            const clanAttacksUsed = document.getElementById('clanAttacksUsed');
+            const opponentStars = document.getElementById('opponentStars');
+            const opponentDestruction = document.getElementById('opponentDestruction');
+            const opponentAttacksUsed = document.getElementById('opponentAttacksUsed');
 
-const clanMemberAttacksUsedEls = document.querySelectorAll('.clanMemberAttacksUsed');
-const clanMemberDefensesUsedEls = document.querySelectorAll('.clanMemberDefensesUsed');
-const opponentMemberAttacksUsedEls = document.querySelectorAll('.opponentMemberAttacksUsed');
-const opponentMemberDefensesUsedEls = document.querySelectorAll('.opponentMemberDefensesUsed');
+            const clanMemberAttacksUsedEls = document.querySelectorAll('.clanMemberAttacksUsed');
+            const clanMemberDefensesUsedEls = document.querySelectorAll('.clanMemberDefensesUsed');
+            const opponentMemberAttacksUsedEls = document.querySelectorAll('.opponentMemberAttacksUsed');
+            const opponentMemberDefensesUsedEls = document.querySelectorAll('.opponentMemberDefensesUsed');
 
-const clanAttacksContainers = document.querySelectorAll('.clanMemberAttacksContainer');
-const clanDefensesContainers = document.querySelectorAll('.clanMemberDefensesContainer');
-const opponentAttacksContainers = document.querySelectorAll('.opponentMemberAttacksContainer');
-const opponentDefensesContainers = document.querySelectorAll('.opponentMemberDefensesContainer');
+            const clanAttacksContainers = document.querySelectorAll('.clanMemberAttacksContainer');
+            const clanDefensesContainers = document.querySelectorAll('.clanMemberDefensesContainer');
+            const opponentAttacksContainers = document.querySelectorAll('.opponentMemberAttacksContainer');
+            const opponentDefensesContainers = document.querySelectorAll('.opponentMemberDefensesContainer');
 
-const currentAttackInfo = document.getElementById('currentAttackInfo');
+            const currentAttackInfo = document.getElementById('currentAttackInfo');
 
-const decrementBtn = document.getElementById('decrementOrder');
-const incrementBtn = document.getElementById('incrementOrder');
+            const decrementBtn = document.getElementById('decrementOrder');
+            const incrementBtn = document.getElementById('incrementOrder');
 
-// Gather all attacks from data for reference
-let allAttacksGlobal = [];
-(function buildAllAttacks() {
-  clanMembersData.forEach(m => {
-    (m.attacks || []).forEach(a => allAttacksGlobal.push(a));
-  });
-  opponentMembersData.forEach(m => {
-    (m.attacks || []).forEach(a => allAttacksGlobal.push(a));
-  });
-  allAttacksGlobal.sort((a,b)=>a.order - b.order);
-})();
+            // Gather all attacks from data for reference
+            let allAttacksGlobal = [];
+            (function buildAllAttacks() {
+                clanMembersData.forEach(m => {
+                    (m.attacks || []).forEach(a => allAttacksGlobal.push(a));
+                });
+                opponentMembersData.forEach(m => {
+                    (m.attacks || []).forEach(a => allAttacksGlobal.push(a));
+                });
+                allAttacksGlobal.sort((a, b) => a.order - b.order);
+            })();
 
-function formatDuration(seconds) {
-  const secNum = Number(seconds);
-  if (isNaN(secNum)) return "N/A";
-  const m = Math.floor(secNum / 60);
-  const s = secNum % 60;
-  return m + "m " + s + "s";
-}
+            function formatDuration(seconds) {
+                const secNum = Number(seconds);
+                if (isNaN(secNum)) return "N/A";
+                const m = Math.floor(secNum / 60);
+                const s = secNum % 60;
+                return m + "m " + s + "s";
+            }
 
-function findMemberInfo(tagWithoutHash, side) {
-  let data = side === "clan" ? clanMembersData : opponentMembersData;
-  return data.find(m => m.tag.replace('#','') === tagWithoutHash);
-}
+            function findMemberInfo(tagWithoutHash, side) {
+                let data = side === "clan" ? clanMembersData : opponentMembersData;
+                return data.find(m => m.tag.replace('#', '') === tagWithoutHash);
+            }
 
-function highlightLastAttack(state) {
-  document.querySelectorAll('.clan-card').forEach(el => el.classList.remove('highlight'));
-  document.querySelectorAll('.opponent-card').forEach(el => el.classList.remove('highlight'));
+            function highlightLastAttack(state) {
+                document.querySelectorAll('.clan-card').forEach(el => el.classList.remove('highlight'));
+                document.querySelectorAll('.opponent-card').forEach(el => el.classList.remove('highlight'));
 
-  if (!state.last_attack) {
-    currentAttackInfo.textContent = "No attack yet";
-    return;
-  }
+                if (!state.last_attack) {
+                    currentAttackInfo.textContent = "No attack yet";
+                    return;
+                }
 
-  let attackerTag = state.last_attack.attackerTag.replace('#','');
-  let defenderTag = state.last_attack.defenderTag.replace('#','');
-  let attackerClan = state.last_attack.attackerClan;
+                let attackerTag = state.last_attack.attackerTag.replace('#', '');
+                let defenderTag = state.last_attack.defenderTag.replace('#', '');
+                let attackerClan = state.last_attack.attackerClan;
 
-  let attackerSide, defenderSide;
-  let attackerInfo, defenderInfo;
+                let attackerSide, defenderSide;
+                let attackerInfo, defenderInfo;
 
-  if (attackerClan === "clan") {
-    attackerSide = "Our Side";
-    defenderSide = "Opponent Clan";
-    attackerInfo = findMemberInfo(attackerTag, "clan");
-    defenderInfo = findMemberInfo(defenderTag, "opponent");
-  } else {
-    attackerSide = "Opponent Side";
-    defenderSide = "Our Clan";
-    attackerInfo = findMemberInfo(attackerTag, "opponent");
-    defenderInfo = findMemberInfo(defenderTag, "clan");
-  }
+                if (attackerClan === "clan") {
+                    attackerSide = "Our Side";
+                    defenderSide = "Opponent Clan";
+                    attackerInfo = findMemberInfo(attackerTag, "clan");
+                    defenderInfo = findMemberInfo(defenderTag, "opponent");
+                } else {
+                    attackerSide = "Opponent Side";
+                    defenderSide = "Our Clan";
+                    attackerInfo = findMemberInfo(attackerTag, "opponent");
+                    defenderInfo = findMemberInfo(defenderTag, "clan");
+                }
 
-  const stars = state.last_attack.stars;
-  const perc = state.last_attack.destructionPercentage;
-  const dur = Number(state.last_attack.duration);
-  const duration = formatDuration(dur);
+                const stars = state.last_attack.stars;
+                const perc = state.last_attack.destructionPercentage;
+                const dur = Number(state.last_attack.duration);
+                const duration = formatDuration(dur);
 
-  const attackerName = attackerInfo ? attackerInfo.name : "Unknown";
-  const defenderName = defenderInfo ? defenderInfo.name : "Unknown";
+                const attackerName = attackerInfo ? attackerInfo.name : "Unknown";
+                const defenderName = defenderInfo ? defenderInfo.name : "Unknown";
 
-  currentAttackInfo.innerHTML = `
+                currentAttackInfo.innerHTML = `
     <span class="font-bold">Current Attack (Order ${state.order}):</span><br>
     <span class="text-red-700">${attackerName}</span> (${attackerSide})
     attacked
     <span class="text-blue-700">${defenderName}</span> (${defenderSide})<br>
     Result: <span class="text-yellow-500 font-bold">${stars}★</span> ${perc}% in ${duration}
   `;
-}
+            }
 
-function renderAttacks(container, attacks, lastAttack) {
-  if (attacks.length === 0) {
-    container.innerHTML = "<div class='text-gray-500'>No attacks yet</div>";
-    return;
-  }
-  container.innerHTML = "";
-  attacks.forEach(a => {
-    const dur = Number(a.duration);
-    const attackDuration = formatDuration(dur);
-    const highlightClass = (lastAttack && a.order === lastAttack.order) ? "attack-highlight" : "";
-    container.innerHTML += `
+            function renderAttacks(container, attacks, lastAttack) {
+                if (attacks.length === 0) {
+                    container.innerHTML = "<div class='text-gray-500'>No attacks yet</div>";
+                    return;
+                }
+                container.innerHTML = "";
+                attacks.forEach(a => {
+                    const dur = Number(a.duration);
+                    const attackDuration = formatDuration(dur);
+                    const highlightClass = (lastAttack && a.order === lastAttack.order) ? "attack-highlight" : "";
+                    container.innerHTML += `
       <div class="flex items-center space-x-2 ${highlightClass}">
         <span class="font-bold text-yellow-500">${a.stars}★</span>
         <span>${a.destructionPercentage}%</span>
         <span class="text-gray-500 text-xs">${attackDuration}</span>
       </div>
     `;
-  });
-}
+                });
+            }
 
-function updateWarState(order) {
-  const state = warTimeline[order];
+            function updateWarState(order) {
+                const state = warTimeline[order];
 
-  currentOrderLabel.textContent = "Order: " + order;
-  clanStars.textContent = state.clan_stars;
-  clanDestruction.textContent = state.clan_destruction.toFixed(2);
-  clanAttacksUsed.textContent = state.clan_attacks_used;
+                currentOrderLabel.textContent = "Order: " + order;
+                clanStars.textContent = state.clan_stars;
+                clanDestruction.textContent = state.clan_destruction.toFixed(2);
+                clanAttacksUsed.textContent = state.clan_attacks_used;
 
-  opponentStars.textContent = state.opponent_stars;
-  opponentDestruction.textContent = state.opponent_destruction.toFixed(2);
-  opponentAttacksUsed.textContent = state.opponent_attacks_used;
+                opponentStars.textContent = state.opponent_stars;
+                opponentDestruction.textContent = state.opponent_destruction.toFixed(2);
+                opponentAttacksUsed.textContent = state.opponent_attacks_used;
 
-  clanMemberAttacksUsedEls.forEach(el => {
-    const tag = el.getAttribute('data-tag');
-    const memberData = state.clan_members.find(m => m.tag.replace('#','') === tag);
-    el.textContent = memberData ? memberData.attacks_used : 0;
-  });
+                clanMemberAttacksUsedEls.forEach(el => {
+                    const tag = el.getAttribute('data-tag');
+                    const memberData = state.clan_members.find(m => m.tag.replace('#', '') === tag);
+                    el.textContent = memberData ? memberData.attacks_used : 0;
+                });
 
-  clanMemberDefensesUsedEls.forEach(el => {
-    const tag = el.getAttribute('data-tag');
-    const memberData = state.clan_members.find(m => m.tag.replace('#','') === tag);
-    el.textContent = memberData ? memberData.defenses_used : 0;
-  });
+                clanMemberDefensesUsedEls.forEach(el => {
+                    const tag = el.getAttribute('data-tag');
+                    const memberData = state.clan_members.find(m => m.tag.replace('#', '') === tag);
+                    el.textContent = memberData ? memberData.defenses_used : 0;
+                });
 
-  opponentMemberAttacksUsedEls.forEach(el => {
-    const tag = el.getAttribute('data-tag');
-    const memberData = state.opponent_members.find(m => m.tag.replace('#','') === tag);
-    el.textContent = memberData ? memberData.attacks_used : 0;
-  });
+                opponentMemberAttacksUsedEls.forEach(el => {
+                    const tag = el.getAttribute('data-tag');
+                    const memberData = state.opponent_members.find(m => m.tag.replace('#', '') === tag);
+                    el.textContent = memberData ? memberData.attacks_used : 0;
+                });
 
-  opponentMemberDefensesUsedEls.forEach(el => {
-    const tag = el.getAttribute('data-tag');
-    const memberData = state.opponent_members.find(m => m.tag.replace('#','') === tag);
-    el.textContent = memberData ? memberData.defenses_used : 0;
-  });
+                opponentMemberDefensesUsedEls.forEach(el => {
+                    const tag = el.getAttribute('data-tag');
+                    const memberData = state.opponent_members.find(m => m.tag.replace('#', '') === tag);
+                    el.textContent = memberData ? memberData.defenses_used : 0;
+                });
 
-  const visibleAttacksAll = allAttacksGlobal.filter(a => a.order <= order);
+                const visibleAttacksAll = allAttacksGlobal.filter(a => a.order <= order);
 
-  clanAttacksContainers.forEach(container => {
-    const tag = container.getAttribute('data-membertag');
-    const memberAttacks = visibleAttacksAll.filter(a => a.attackerTag.replace('#','') === tag);
-    renderAttacks(container, memberAttacks, state.last_attack);
-  });
+                clanAttacksContainers.forEach(container => {
+                    const tag = container.getAttribute('data-membertag');
+                    const memberAttacks = visibleAttacksAll.filter(a => a.attackerTag.replace('#', '') === tag);
+                    renderAttacks(container, memberAttacks, state.last_attack);
+                });
 
-  opponentAttacksContainers.forEach(container => {
-    const tag = container.getAttribute('data-membertag');
-    const memberAttacks = visibleAttacksAll.filter(a => a.attackerTag.replace('#','') === tag);
-    renderAttacks(container, memberAttacks, state.last_attack);
-  });
+                opponentAttacksContainers.forEach(container => {
+                    const tag = container.getAttribute('data-membertag');
+                    const memberAttacks = visibleAttacksAll.filter(a => a.attackerTag.replace('#', '') === tag);
+                    renderAttacks(container, memberAttacks, state.last_attack);
+                });
 
-  clanDefensesContainers.forEach(container => {
-    const tag = container.getAttribute('data-membertag');
-    const memberDefenses = visibleAttacksAll.filter(a => a.defenderTag.replace('#','') === tag);
-    renderAttacks(container, memberDefenses, state.last_attack);
-  });
+                clanDefensesContainers.forEach(container => {
+                    const tag = container.getAttribute('data-membertag');
+                    const memberDefenses = visibleAttacksAll.filter(a => a.defenderTag.replace('#', '') === tag);
+                    renderAttacks(container, memberDefenses, state.last_attack);
+                });
 
-  opponentDefensesContainers.forEach(container => {
-    const tag = container.getAttribute('data-membertag');
-    const memberDefenses = visibleAttacksAll.filter(a => a.defenderTag.replace('#','') === tag);
-    renderAttacks(container, memberDefenses, state.last_attack);
-  });
+                opponentDefensesContainers.forEach(container => {
+                    const tag = container.getAttribute('data-membertag');
+                    const memberDefenses = visibleAttacksAll.filter(a => a.defenderTag.replace('#', '') === tag);
+                    renderAttacks(container, memberDefenses, state.last_attack);
+                });
 
-  highlightLastAttack(state);
-}
+                highlightLastAttack(state);
+            }
 
-orderSlider.addEventListener('input', (e) => {
-  updateWarState(parseInt(e.target.value, 10));
-});
+            orderSlider.addEventListener('input', (e) => {
+                updateWarState(parseInt(e.target.value, 10));
+            });
 
-decrementBtn.addEventListener('click', () => {
-  let currentVal = parseInt(orderSlider.value, 10);
-  if (currentVal > parseInt(orderSlider.min, 10)) {
-    orderSlider.value = currentVal - 1;
-    updateWarState(currentVal - 1);
-  }
-});
+            decrementBtn.addEventListener('click', () => {
+                let currentVal = parseInt(orderSlider.value, 10);
+                if (currentVal > parseInt(orderSlider.min, 10)) {
+                    orderSlider.value = currentVal - 1;
+                    updateWarState(currentVal - 1);
+                }
+            });
 
-incrementBtn.addEventListener('click', () => {
-  let currentVal = parseInt(orderSlider.value, 10);
-  const maxVal = parseInt(orderSlider.max, 10);
-  if (currentVal < maxVal) {
-    orderSlider.value = currentVal + 1;
-    updateWarState(currentVal + 1);
-  }
-});
+            incrementBtn.addEventListener('click', () => {
+                let currentVal = parseInt(orderSlider.value, 10);
+                const maxVal = parseInt(orderSlider.max, 10);
+                if (currentVal < maxVal) {
+                    orderSlider.value = currentVal + 1;
+                    updateWarState(currentVal + 1);
+                }
+            });
 
-updateWarState(0);
-</script>
+            updateWarState(0);
+        </script>
 
-{% else %}
-<div>No war data available</div>
-{% endif %}
+    {% else %}
+        <div>No war data available</div>
+    {% endif %}
 
 </div>
 </body>

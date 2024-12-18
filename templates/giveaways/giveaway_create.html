@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Create Giveaway</title>
-    <!-- Favicon pour Light Mode -->
     <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
-    <!-- Favicon pour Dark Mode -->
     <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
     <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
     <link href="/static/output.css" rel="stylesheet">
@@ -124,8 +122,15 @@
                     <input type="file" id="image" name="image" accept="image/*">
                 </label>
             </div>
-            <img id="imagePreview" src="#" alt="Image Preview" class="hidden mt-4 rounded-md shadow-md"
-                 style="max-width: 100%; height: auto;">
+            <div class="relative mt-4" id="imagePreviewContainer">
+                <img id="imagePreview" src="#" alt="Image Preview" class="hidden rounded-md shadow-md"
+                     style="max-width: 100%; height: auto;">
+                <!-- Croix pour supprimer l'image -->
+                <button type="button" id="removeImage"
+                        class="hidden absolute top-0 right-0 bg-red-600 text-white font-bold rounded-full p-1 shadow-md hover:bg-red-700">
+                    &times;
+                </button>
+            </div>
         </div>
 
         <!-- Giveaway Requirements -->
@@ -232,6 +237,9 @@
         const enableRolesCheckbox = document.getElementById('enable_roles');
         const rolesContainer = document.getElementById('rolesContainer');
         let initialBoosterAdded = false; // Flag to track if the first booster is added
+        const imageInput = document.getElementById('image');
+        const imagePreview = document.getElementById('imagePreview');
+        const removeImageButton = document.getElementById('removeImage');
 
         const roles = [
             {% for role in roles %}
@@ -520,22 +528,24 @@
             });
         });
 
-
-        // Preview image on upload
-        document.getElementById('image').addEventListener('change', function (event) {
-            const imagePreview = document.getElementById('imagePreview');
+        imageInput.addEventListener('change', function (event) {
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function (e) {
                     imagePreview.src = e.target.result;
                     imagePreview.classList.remove('hidden');
+                    removeImageButton.classList.remove('hidden');
                 };
                 reader.readAsDataURL(file);
-            } else {
-                imagePreview.src = '#';
-                imagePreview.classList.add('hidden');
             }
+        });
+
+        removeImageButton.addEventListener('click', function () {
+            imagePreview.src = '#';
+            imagePreview.classList.add('hidden');
+            removeImageButton.classList.add('hidden');
+            imageInput.value = '';
         });
     });
 </script>

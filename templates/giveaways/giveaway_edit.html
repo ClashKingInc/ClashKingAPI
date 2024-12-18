@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <!-- Favicon pour Light Mode -->
     <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
-    <!-- Favicon pour Dark Mode -->
     <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
     <title>Edit Giveaway</title>
     <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
@@ -15,41 +13,57 @@
 <body class="bg-black text-white font-sans">
 <div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
     <h1 class="text-2xl font-bold mb-6 text-center">✏️ Edit Giveaway</h1>
-    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data"
-          data-token="{{ token }}">
+    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data">
         <input type="hidden" name="server_id" value="{{ server_id }}">
         <input type="hidden" name="token" value="{{ token }}">
         <input type="hidden" name="giveaway_id" value="{{ giveaway._id }}">
+        <input type="hidden" name="boosters_json" id="boosters_json">
+        <input type="hidden" name="roles_json" id="roles_json">
+        <input type="hidden" id="remove_image" name="remove_image" value="false">
+
+        <h2 class="text-lg font-semibold">Giveaway Details</h2>
+        <br/>
 
         <!-- Prize -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Prize</label>
+        <div class="mb-4">
+            <label for="prize" class="block text-sm font-medium">Prize:</label>
             <input type="text" id="prize" name="prize" value="{{ giveaway.prize }}"
-                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+                   required>
+        </div>
+
+        <!-- Number of Winners -->
+        <div class="mb-4">
+            <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
+            <input type="number" id="winners" name="winners" value="{{ giveaway.winners }}"
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
                    required>
         </div>
 
         <!-- Start Time -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Start Time</label>
+        <div class="mb-4">
+            <label for="start_time" class="block text-sm font-medium">Start Time:</label>
             <input type="datetime-local" id="start_time" name="start_time"
                    data-utc="{{ giveaway.start_time.isoformat() if giveaway.start_time else '' }}"
-                   value="" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                   value=""
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
         </div>
 
         <!-- End Time -->
-        <div>
-            <label class="block text-sm font-medium mb-2">End Time</label>
+        <div class="mb-4">
+            <label for="end_time" class="block text-sm font-medium">End Time:</label>
             <input type="datetime-local" id="end_time" name="end_time"
                    data-utc="{{ giveaway.end_time.isoformat() if giveaway.end_time else '' }}"
-                   value="" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                   value=""
+                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
         </div>
 
         <!-- Target Channel -->
-        <div>
-            <label for="channel" class="block text-sm font-medium mb-2">Target Channel</label>
+        <div class="mb-4">
+            <label for="channel" class="block text-sm font-medium">Target Channel:</label>
             <select id="channel" name="channel"
-                    class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                    class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white"
+                    required>
                 {% for channel in channels %}
                     <option value="{{ channel.id }}"
                             {% if channel.id|string == giveaway.channel_id|string %}selected{% endif %}>
@@ -59,40 +73,34 @@
             </select>
         </div>
 
-        <!-- Number of Winners -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Number of Winners</label>
-            <input type="number" id="winners" name="winners" value="{{ giveaway.winners }}"
-                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white" required>
-        </div>
-
         <!-- Mentions -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Mentions</label>
+        <div class="mb-4">
+            <label for="mentions" class="block text-sm font-medium">Mentions:</label>
             <select id="mentions" name="mentions" multiple
-                    class="choices-multiple w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
+                    class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
                 {% for role in roles %}
-                    <option value="{{ role.id }}"
-                            {% if role.id in giveaway.mentions %}selected{% endif %}>
+                    <option value="{{ role.id }}" {% if role.id in giveaway.mentions %}selected{% endif %}>
                         {{ role.name }}
                     </option>
                 {% endfor %}
             </select>
         </div>
 
+        <h2 class="text-lg font-semibold">Embed Details</h2>
+        <br/>
 
         <!-- Text Above Embed -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Text Above Embed</label>
+        <div class="mb-4">
+            <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed:</label>
             <textarea id="text_above_embed" name="text_above_embed"
-                      class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white"
+                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
                       rows="3">{{ giveaway.text_above_embed }}</textarea>
         </div>
 
         <!-- Field in Embed -->
         <div class="mb-4">
             <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
-            <textarea id="text_in_embed" name="text_in_embed" placeholder="Optional: Add text in embed field"
+            <textarea id="text_in_embed" name="text_in_embed"
                       class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
                       rows="2">{{ giveaway.text_in_embed }}</textarea>
         </div>
@@ -101,27 +109,130 @@
         <div class="mb-4">
             <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
             <textarea id="text_on_end" name="text_on_end"
-                      placeholder="Optional: Add a message to send when the giveaway ends"
                       class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
                       rows="4">{{ giveaway.text_on_end }}</textarea>
         </div>
 
         <!-- Image Upload -->
-        <div>
-            <label class="block text-sm font-medium mb-2">Image</label>
-            <input type="file" name="image" id="image"
-                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm text-white">
-            <!-- Afficher l'image actuelle ou masquer le conteneur -->
-            <img src="{{ giveaway.image_url or '#' }}" alt="Image Preview"
-                 id="imagePreview"
-                 class="mt-4 rounded-md shadow-md {% if not giveaway.image_url %}hidden{% endif %}"
-                 style="max-width: 100%; height: auto;">
+        <div class="mb-4">
+            <label for="image" class="block text-sm font-medium mb-2">Image:</label>
+            <div class="file-input-container">
+                <label class="file-input">
+                    Upload Image
+                    <input type="file" id="image" name="image" accept="image/*">
+                </label>
+            </div>
+            <div class="relative mt-4" id="imagePreviewContainer">
+                <img id="imagePreview"
+                     {% if giveaway.image_url %}src="{{ giveaway.image_url }}"{% endif %}
+                     alt="Image Preview"
+                     class="{% if giveaway.image_url %}block{% else %}hidden{% endif %} rounded-md shadow-md"
+                     style="max-width: 100%; height: auto;">
+                <!-- Remove Image Button -->
+                <button type="button" id="removeImage"
+                        class="{% if giveaway.image_url != None %}block{% else %}hidden{% endif %} absolute top-0 right-0 bg-red-600 text-white font-bold rounded-full p-1 shadow-md hover:bg-red-700">
+                    &times;
+                </button>
+            </div>
         </div>
 
+        <!-- Giveaway Requirements -->
+        <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
         <br/>
+
+        <!-- Profile Picture Required -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="profile_picture_required" name="profile_picture_required"
+                   class="mr-2" {% if giveaway.profile_picture_required %}checked{% endif %}>
+            <label for="profile_picture_required" class="text-sm font-medium">
+                User must have a profile picture
+            </label>
+        </div>
+
+        <!-- CoC Account Required -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="coc_account_required" name="coc_account_required"
+                   class="mr-2" {% if giveaway.coc_account_required %}checked{% endif %}>
+            <label for="coc_account_required" class="text-sm font-medium">
+                User must have CoC account linked to his profile
+            </label>
+        </div>
+
+        <!-- Checkbox to enable roles -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2"
+                   {% if giveaway.roles_mode != "none" %}checked{% endif %}>
+            <label for="enable_roles" class="text-sm font-medium">
+                Configure roles allowed to participate
+            </label>
+        </div>
+
+        <!-- Container for roles -->
+        <div id="rolesContainer" class="mb-4 {% if giveaway.roles_mode == "none" %}hidden{% endif %}">
+            <!-- Radio buttons to allow or deny roles -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
+                <div class="flex items-center mb-2">
+                    <input type="radio" id="allow_roles" name="roles_mode" value="allow"
+                           class="mr-2 text-indigo-600 focus:ring-indigo-500"
+                           {% if giveaway.roles_mode == "allow" %}checked{% endif %}>
+                    <label for="allow_roles" class="text-sm font-medium">Allow for all roles except</label>
+                </div>
+                <div class="flex items-center">
+                    <input type="radio" id="deny_roles" name="roles_mode" value="deny"
+                           class="mr-2 text-indigo-600 focus:ring-indigo-500"
+                           {% if giveaway.roles_mode == "deny" %}checked{% endif %}>
+                    <label for="deny_roles" class="text-sm font-medium">Deny for all roles except</label>
+                </div>
+            </div>
+
+            <!-- Select Roles -->
+            <div>
+                <label class="block text-sm font-medium mb-2">Select Roles:</label>
+                <select id="roles_select" name="roles_selected" multiple
+                        class="choices-multiple w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    {% for role in roles %}
+                        <option value="{{ role.id }}" {% if role.id in giveaway.roles %}selected{% endif %}>
+                            {{ role.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Boosters Section -->
+        <h2 class="text-lg font-semibold">Boosters</h2>
+        <br/>
+        <div id="boostersContainer" class="mb-6">
+            {% for booster in giveaway.boosters %}
+                <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
+                    <label class="block text-sm font-medium mb-2">Booster:</label>
+                    <input type="range" min="0.25" max="3" step="0.25" value="{{ booster.value }}"
+                           class="slider w-full mb-2">
+                    <p class="text-xs text-gray-300">Value: <span class="slider-value">x{{ booster.value }}</span></p>
+                    <select multiple
+                            class="choices-multiple roles-select w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white">
+                        {% for role in roles %}
+                            <option value="{{ role.id }}" {% if role.id in booster.roles %}selected{% endif %}>
+                                {{ role.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <button type="button"
+                            class="remove-booster mt-2 bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md">
+                        Remove booster
+                    </button>
+                </div>
+            {% endfor %}
+        </div>
+        <button type="button" id="addBooster"
+                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">
+            Add booster
+        </button>
+
         <!-- Submit Button -->
         <button type="submit"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
+                class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
             Save Changes
         </button>
     </form>
@@ -136,9 +247,64 @@
         const winnersInput = document.getElementById('winners');
         const textAboveEmbedInput = document.getElementById('text_above_embed');
         const form = document.getElementById('giveawayForm');
+        const addBoosterButton = document.getElementById('addBooster');
+        const boostersContainer = document.getElementById('boostersContainer');
+        const enableRolesCheckbox = document.getElementById('enable_roles'); // Checkbox to toggle roles section
+        const rolesContainer = document.getElementById('rolesContainer'); // Roles section container
+        const imageInput = document.getElementById('image');
+        const imagePreview = document.getElementById('imagePreview');
+        const removeImageButton = document.getElementById('removeImage');
 
-        const imageInput = document.getElementById('image'); // Image input
-        const imagePreview = document.getElementById('imagePreview'); // Image preview container
+        // Show/hide roles section based on the checkbox state
+        enableRolesCheckbox.addEventListener('change', () => {
+            if (enableRolesCheckbox.checked) {
+                rolesContainer.classList.remove('hidden');
+            } else {
+                rolesContainer.classList.add('hidden');
+            }
+        });
+
+        // Set the initial state of the roles section
+        if (!enableRolesCheckbox.checked) {
+            rolesContainer.classList.add('hidden');
+        }
+
+        // Add Booster
+        addBoosterButton.addEventListener('click', () => {
+            const template = `
+                <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
+                    <label class="block text-sm font-medium mb-2">Booster:</label>
+                    <input type="range" min="0.25" max="3" step="0.25" value="1" class="slider w-full mb-2">
+                    <p class="text-xs text-gray-300">Value: <span class="slider-value">x1</span></p>
+                    <select multiple class="roles-select w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white">
+                        {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="remove-booster mt-2 bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md">
+                        Remove booster
+                    </button>
+                </div>`;
+            boostersContainer.insertAdjacentHTML('beforeend', template);
+            initializeChoicesForLastBooster();
+        });
+
+        // Remove Booster
+        boostersContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('remove-booster')) {
+                event.target.parentElement.remove();
+            }
+        });
+
+        // Initialize Choices.js for newly added boosters
+        const initializeChoicesForLastBooster = () => {
+            const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
+            new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
+                removeItemButton: true,
+                searchEnabled: true,
+                shouldSort: false
+            });
+        };
 
         /**
          * Convert a UTC date string to the user's local time.
@@ -179,14 +345,10 @@
         const setInitialValues = () => {
             if (startTimeInput) {
                 const utcStart = startTimeInput.getAttribute('data-utc');
-                console.log(utcStart);
                 startTimeInput.value = convertUTCToLocal(utcStart);
             }
             if (endTimeInput) {
                 const utcEnd = endTimeInput.getAttribute('data-utc');
-                console.log(endTimeInput.getAttribute('data-utc'));
-                console.log(utcEnd);
-                console.log(convertUTCToLocal(utcEnd));
                 endTimeInput.value = convertUTCToLocal(utcEnd);
             }
         };
@@ -209,24 +371,6 @@
         // Add event listeners for validation
         startTimeInput.addEventListener('change', validateTimes);
         endTimeInput.addEventListener('change', validateTimes);
-
-        /**
-         * Replace the existing image preview with the newly uploaded image.
-         */
-        imageInput.addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    imagePreview.src = e.target.result;
-                    imagePreview.classList.remove('hidden'); // Show new image
-                };
-                reader.readAsDataURL(file);
-            } else {
-                imagePreview.src = '';
-                imagePreview.classList.add('hidden');
-            }
-        });
 
         /**
          * Validate the prize field.
@@ -289,6 +433,17 @@
                 endTimeInput.value = convertLocalToUTC(endTimeInput.value).slice(0, 16);
             }
 
+            const boosters = [];
+            document.querySelectorAll('.booster').forEach((booster) => {
+                const value = booster.querySelector('.slider').value;
+                const roles = Array.from(booster.querySelector('.roles-select').selectedOptions).map(option => option.value);
+                boosters.push({value, roles});
+            });
+            document.getElementById('boosters_json').value = JSON.stringify(boosters);
+
+            const selectedRoles = Array.from(document.getElementById('roles_select').selectedOptions).map(option => option.value);
+            document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
+
             // Perform validations
             const isValidPrize = validatePrize();
             const isValidWinners = validateWinners();
@@ -326,6 +481,36 @@
                 choicesInstance.setChoiceByValue(selectedOption.value);
             }
         }
+
+        if (imagePreview.src && imagePreview.src !== '#') {
+            imagePreview.classList.remove('hidden');
+            removeImageButton.classList.remove('hidden');
+        }
+
+        // Show/hide the remove image button and image preview
+        imageInput.addEventListener('change', function (event) {
+            if (imageInput.files.length > 0) {
+                document.getElementById('remove_image').value = 'false';
+            }
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.classList.remove('hidden');
+                    removeImageButton.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        removeImageButton.addEventListener('click', function () {
+            imagePreview.src = '#';
+            imagePreview.classList.add('hidden');
+            removeImageButton.classList.add('hidden');
+            imageInput.value = ''; // Reset the file input
+            document.getElementById('remove_image').value = 'true';
+        });
 
         // Set initial values for datetime-local inputs
         setInitialValues();

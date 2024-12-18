@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from routers.public.tickets import get_channels, get_roles
-from utils.utils import db_client, validate_token
+from utils.utils import db_client, validate_token, delete_from_cdn
 
 router = APIRouter(prefix="/giveaway", include_in_schema=False)
 templates = Jinja2Templates(directory="templates")
@@ -25,7 +25,7 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
     """
     Dashboard to view, create, and manage giveaways.
     """
-    # Valider le token et s'assurer qu'il est lié à un administrateur
+    # Validate the token
     try:
         token_data = await validate_token(token, expected_type="giveaway")
     except ValueError as e:
@@ -35,11 +35,10 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
     channels = await get_channels(guild_id=server_id)
     print(channels)
 
-    # Obtenir tous les giveaways pour ce serveur
+    # Fetch all giveaways for the server
     giveaways = await db_client.giveaways.find({"server_id": server_id}).to_list(length=None)
 
-    # Séparer les giveaways en catégories
-    now = datetime.utcnow()
+    # Sort giveaways by status
     ongoing = [g for g in giveaways if g["status"] == "ongoing"]
     upcoming = [g for g in giveaways if g["status"] == "scheduled"]
     ended = [g for g in giveaways if g["status"] == "ended"]
@@ -83,13 +82,11 @@ async def submit_giveaway_form(
         roles_mode: str = Form("allow"),
         roles_json: str = Form(...),
         boosters_json: str = Form(...),
+        remove_image: bool = Form(False)
 ):
     """
     Handle form submissions to create or update a giveaway.
     """
-    print("Received roles and boosters:")
-    print("Roles:", roles_json)
-    print("Boosters:", boosters_json)
     # Convert start_time and end_time to datetime objects
     if now:
         start_time = datetime.utcnow()  # Use the current time in UTC
@@ -102,8 +99,7 @@ async def submit_giveaway_form(
     end_time = datetime.fromisoformat(end_time)
     server_id = int(server_id)
 
-
-    # Décode boosters & roles
+    # Decode boosters & roles
     try:
         boosters = json.loads(boosters_json)  # [{value: "2.5", roles: ["role1", "role2"]}]
         roles = json.loads(roles_json)  # ["role1", "role2"]
@@ -123,10 +119,19 @@ async def submit_giveaway_form(
     if not giveaway_id:
         giveaway_id = str(uuid.uuid4())
 
-    # Upload image if provided
+    # Image logic
     image_url = None
-    if image:
+    if remove_image:
+        image_url = None
+        await delete_from_cdn(f"giveaway_{giveaway_id}")
+    elif image and image.filename:
         image_url = await upload_to_cdn(image=image, title=f"giveaway_{giveaway_id}")
+
+    # Fetch existing giveaway to preserve its image if not removed
+    if not remove_image and not image_url:
+        existing_giveaway = await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id})
+        if existing_giveaway:
+            image_url = existing_giveaway.get("image_url")
 
     # Update or create a giveaway in the database
     giveaway_data = {
@@ -173,7 +178,7 @@ async def submit_giveaway_form(
 
 @router.get("/create", response_class=HTMLResponse)
 async def create_page(request: Request, token: str):
-    # Vérifiez et récupérez les informations du serveur à partir du token
+    # Verify the token
     token_data = await db_client.tokens.find_one({"token": token, "type": "giveaway"})
     if not token_data:
         return JSONResponse({"detail": "Invalid token."}, status_code=403)
@@ -213,24 +218,24 @@ async def edit_page(request: Request, token: str, giveaway_id: str):
         "giveaway": giveaway,
         "token": token_data["token"],
         "channels": channels,
-        "roles": roles
+        "roles": roles,
     })
 
 
 @router.delete("/delete/{giveaway_id}")
 async def delete_giveaway(giveaway_id: str, token: str, server_id: str):
     """
-    Supprime un giveaway de la base de données.
+    Delete a giveaway from the database.
     """
     print(giveaway_id, token, server_id)
-    # Conversion server_id en int
+    # Convert to the correct types
     server_id = int(server_id)
-    # Vérifiez que le token est valide
+    # Verify the token
     token_data = await db_client.tokens.find_one({"token": token, "server_id": server_id})
     if not token_data:
         return JSONResponse({"message": "Invalid token."}, status_code=403)
 
-    # Supprimez le giveaway
+    # Delete the giveaway
     result = await db_client.giveaways.delete_one({"_id": giveaway_id, "server_id": int(server_id)})
     if result.deleted_count == 1:
         status_message = "Giveaway deleted successfully."

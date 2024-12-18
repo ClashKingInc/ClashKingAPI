@@ -18,6 +18,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from .config import Config
 from collections import deque
+from datetime import datetime
+import pytz
+
 
 config = Config()
 
@@ -254,6 +257,55 @@ async def upload_to_cdn(title: str, picture=None, image=None):
     return f"https://cdn.clashking.xyz/{title}.png"
 
 
+
+async def delete_from_cdn(title: str):
+    """
+    Deletes an existing file from BunnyCDN storage and purges the cache.
+
+    Args:
+        title (str): The file name without the extension.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    headers = {
+        "content-type": "application/octet-stream",
+        "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
+    }
+
+    # Normalize title and URLs
+    title = title.replace(" ", "_").lower()
+    file_url = f"https://storage.bunnycdn.com/clashking-files/{title}.png"
+    purge_url = f"https://bunnycdn.com/api/purge?url=https://cdn.clashking.xyz/{title}.png"
+
+    # Step 1: Delete the file from storage
+    async with aiohttp.ClientSession() as session:
+        async with session.delete(file_url, headers=headers) as response:
+            if response.status == 404:
+                print(f"File not found: {file_url}. Skipping deletion.")
+            elif response.status not in [200, 204]:
+                print(f"Failed to delete file. HTTP status: {response.status}")
+                return False
+            else:
+                print(f"File successfully deleted: {file_url}")
+
+    # Step 2: Purge the file from cache
+    purge_headers = {
+        "AccessKey": os.getenv("BUNNY_ACCESS_KEY"),
+        "Accept": "application/json"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(purge_url, headers=purge_headers) as response:
+            if response.status == 200:
+                print(f"Cache successfully purged for: {purge_url}")
+                return True
+            elif response.status == 404:
+                print(f"Cache not found for: {purge_url}. Likely already purged.")
+                return True
+            else:
+                print(f"Failed to purge cache. HTTP status: {response.status}")
+                return False
+
 def remove_id_fields(data):
     if isinstance(data, list):
         for item in data:
@@ -309,10 +361,6 @@ async def validate_token(token, expected_type=None):
         raise ValueError(f"Expected token of type '{expected_type}', but got '{token_data['type']}'.")
 
     return token_data
-
-
-from datetime import datetime
-import pytz
 
 def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
     """

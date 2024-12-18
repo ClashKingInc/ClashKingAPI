@@ -143,10 +143,9 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
 
     async def fetch_function(url: str):
         url = url.replace("#", '%23')
-        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
         KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://proxy.clashk.ing/v1/{url}", headers=headers) as response:
+            async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
                 item_bytes = await response.read()
                 item = orjson.loads(item_bytes)
                 if response.status != 200:

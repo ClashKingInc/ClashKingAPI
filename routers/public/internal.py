@@ -106,9 +106,7 @@ async def permalink(clan_tag: str):
     clan_tag = fix_tag(clan_tag)
     db_clan_result = await db_client.global_clans.find_one({"_id" : clan_tag}, {"data."})
     if not db_clan_result:
-        global KEYS
-        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-        KEYS.rotate(1)
+
         async with aiohttp.ClientSession() as session:
             async with session.get(
                     f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
@@ -136,14 +134,13 @@ async def permalink(clan_tag: str):
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
-    global KEYS
+    
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
 
     async def fetch_function(url: str):
         url = url.replace("#", '%23')
-        KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
                 item_bytes = await response.read()

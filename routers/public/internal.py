@@ -17,7 +17,6 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
-KEYS = deque()
 
 
 async def fetch_image(url: str) -> bytes:
@@ -33,34 +32,18 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
     return {"keys" : keys}
 
 
-@router.on_event("startup")
-async def startup():
-    global KEYS
-    if not config.is_local:
-        emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
-        passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
-        KEYS = await create_keys(emails=emails, passwords=passwords, ip="5.161.113.222")
-        KEYS = deque(KEYS)
 
 
 @router.get("/v1/{url:path}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
 async def test_endpoint(url: str, request: Request, response: Response):
-    global KEYS
 
-    query_string = "&".join([f"{key}={value}" for key, value in request.query_params.items()])
-
-    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(1)
-
-    full_url = f"https://api.clashofclans.com/v1/{url}"
+    full_url = f"https://proxy.clashk.ing/v1/{url}"
     full_url = full_url.replace("#", '%23').replace("!", '%23')
-    if query_string:
-        full_url = f"{full_url}?{query_string}"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(full_url, headers=headers) as api_response:
+        async with session.get(full_url) as api_response:
             if api_response.status != 200:
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
@@ -73,23 +56,10 @@ async def test_endpoint(url: str, request: Request, response: Response):
              name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
              include_in_schema=False)
 async def test_post_endpoint(url: str, request: Request, response: Response):
-    global KEYS
-
-    # Extract query parameters
-    query_params = request.query_params
-    fields = query_params.get("fields")
-
-    # Remove the "fields" parameter from the query parameters
-    query_params = {key: value for key, value in query_params.items() if key != "fields"}
-    query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
-
-    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(1)
 
     # Construct the full URL with query parameters if any
-    full_url = f"https://api.clashofclans.com/v1/{url}"
-    if query_string:
-        full_url = f"{full_url}?{query_string}"
+    full_url = f"https://proxy.clashk.ing/v1/{url}"
+
 
     full_url = full_url.replace("#", '%23').replace("!", '%23')
 
@@ -97,7 +67,7 @@ async def test_post_endpoint(url: str, request: Request, response: Response):
     body = await request.json()
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(full_url, json=body, headers=headers) as api_response:
+        async with session.post(full_url, json=body) as api_response:
             if api_response.status != 200:
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)

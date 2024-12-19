@@ -2,20 +2,19 @@ import os
 import logging
 import uvicorn
 import importlib.util
+import time
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
-from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_ipaddr
-from slowapi.errors import RateLimitExceeded
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
@@ -35,25 +34,12 @@ middleware = [
     Middleware(
         GZipMiddleware,
         minimum_size=500
-    ),
-    Middleware(SlowAPIMiddleware)
+    )
 ]
 
 app = FastAPI(middleware=middleware)
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Middleware for global rate limiting
-@app.middleware("http")
-async def global_ratelimit_middleware(request: Request, call_next):
-    route_limit = limiter.limit("30/second")
-    try:
-        await route_limit(request)
-    except HTTPException as e:
-        return HTTPException(status_code=429, detail=str(e.detail))
-
-    response = await call_next(request)
-    return response
 
 
 def include_routers(app, directory):

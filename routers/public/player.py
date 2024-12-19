@@ -245,7 +245,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
 
         player_clan_tag = None
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.clashking.xyz/v1/players/{player_tag.replace('#', '%23')}") as response:
+            async with session.get(f"https://proxy.clashk.ing/v1/players/{player_tag.replace('#', '%23')}") as response:
                 if response.status == 200:
                     player_json = await response.json()
                     player_clan_tag = player_json.get("clan", {}).get("tag")
@@ -253,7 +253,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
         raid_data = {}
         if player_clan_tag:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1") as response:
+                async with session.get(f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1") as response:
                     if response.status == 200:
                         data = await response.json()
                         if data.get("items"):
@@ -275,7 +275,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
         if player_clan_tag:
             group_data = None
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/currentwar/leaguegroup") as response:
+                async with session.get(f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/currentwar/leaguegroup") as response:
                     if response.status == 200:
                         group_data = await response.json()
 
@@ -286,7 +286,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
                 our_war = None
                 for war_tag in last_round:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(f"https://api.clashking.xyz/v1/clanwarleagues/wars/{war_tag.replace('#', '%23')}") as response:
+                        async with session.get(f"https://proxy.clashk.ing/v1/clanwarleagues/wars/{war_tag.replace('#', '%23')}") as response:
                             if response.status == 200:
                                 war_json = await response.json()
                                 war = coc.ClanWar(data=war_json, client=None)

@@ -189,7 +189,7 @@ async def guild_links(guild_id: int, request: Request, response: Response):
 async def shortner(url: str):
     id = str(uuid.uuid4())
     await db_client.link_shortner.insert_one({"_id" : id, "url" : url})
-    return {"url" : f"https://api.clashking.xyz/shortlink?id={id}"}
+    return {"url" : f"https://api.clashk.ing/shortlink?id={id}"}
 
 
 @router.get("/shortlink",

@@ -136,7 +136,7 @@ async def submit_form(
     th_restriction = f'{settings_dict.get("townhall_min")}-{townhall_max}'
     clan_tag = re.search(r'\(([^)]+)\)', settings_dict.get('linked_clan')).group(1)
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://api.clashking.xyz/v1/clans/{clan_tag.replace('#', '%23')}") as response:
+        async with session.get(f"https://proxy.clashk.ing/v1/clans/{clan_tag.replace('#', '%23')}") as response:
             if response.status == 200:
                 clan_data = await response.json()
 

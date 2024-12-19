@@ -1,9 +1,9 @@
 from fastapi import  Request, Response, HTTPException, APIRouter, Query
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from fastapi.responses import RedirectResponse
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_ipaddr)
 router = APIRouter(tags=["Redirect"])
 
 

@@ -10,7 +10,6 @@ router = APIRouter(tags=["Server Settings"], include_in_schema=False)
 
 @router.get("/server-settings/{server_id}",
          name="Settings on a server")
-@limiter.limit("10/second")
 async def server_settings(server_id: int, request: Request, response: Response, api_token: str):
     await token_verify(server_id=server_id, api_token=api_token)
     pipeline = [

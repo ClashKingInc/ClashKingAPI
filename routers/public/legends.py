@@ -1,11 +1,11 @@
 from fastapi import Request, Response, HTTPException, APIRouter, Query
 from fastapi_cache.decorator import cache
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import db_client, fix_tag
 
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Legends"])
 
 @router.get(path="/legends/clan/{clan_tag}/{date}",

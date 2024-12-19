@@ -7,10 +7,10 @@ from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from models.clan import JoinLeaveList
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, leagues, db_client
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Clan Endpoints"])
 
 
@@ -18,7 +18,6 @@ router = APIRouter(tags=["Clan Endpoints"])
 @router.get("/clan/{clan_tag}/basic",
          name="Basic Clan Object")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def clan_basic(clan_tag: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
     result = await db_client.basic_clan.find_one({"tag": clan_tag})
@@ -34,7 +33,6 @@ async def clan_basic(clan_tag: str, request: Request, response: Response):
         name="Join Leaves in a season",
         response_model=JoinLeaveList)
 @cache(expire=300)
-@limiter.limit("5/second")
 async def clan_join_leave(clan_tag: str, request: Request, response: Response, timestamp_start: int = 0, time_stamp_end: int = 9999999999, limit: int = 250):
     clan_tag = fix_tag(clan_tag)
     result = await db_client.join_leave_history.find(
@@ -52,7 +50,6 @@ async def clan_join_leave(clan_tag: str, request: Request, response: Response, t
 @router.get("/clan/search",
          name="Search Clans by Filtering")
 @cache(expire=300)
-@limiter.limit("1/second")
 async def clan_filter(request: Request, response: Response,  limit: int= 100, location_id: int = None, minMembers: int = None, maxMembers: int = None,
                       minLevel: int = None, maxLevel: int = None, openType: str = None,
                       minWarWinStreak: int = None, minWarWins: int = None, minClanTrophies: int = None, maxClanTrophies: int = None, capitalLeague: str= None,
@@ -124,7 +121,6 @@ async def clan_filter(request: Request, response: Response,  limit: int= 100, lo
 @router.get("/clan/{clan_tag}/historical",
          name="Historical data for a clan of player events")
 @cache(expire=300)
-@limiter.limit("10/second")
 async def clan_historical(clan_tag: str, request: Request, response: Response, timestamp_start: int = 0, time_stamp_end: int = 9999999999, limit: int = 100):
     clan_tag = fix_tag(clan_tag)
 

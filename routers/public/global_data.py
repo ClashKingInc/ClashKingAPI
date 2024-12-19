@@ -9,10 +9,10 @@ from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client
 import time
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Global Data"])
 
 
@@ -20,7 +20,6 @@ router = APIRouter(tags=["Global Data"])
         path="/boost-rate",
         name="Super Troop Boost Rate, for a season (YYYY-MM)")
 @cache(expire=300)
-@limiter.limit("5/second")
 async def super_troop_boost_rate(start_season: str, end_season: str, request: Request, response: Response):
     start_year = start_season[:4]; start_month = start_season[-2:]
     end_year = end_season[:4]; end_month = end_season[-2:]
@@ -77,7 +76,6 @@ async def super_troop_boost_rate(start_season: str, end_season: str, request: Re
 @router.get(
         path="/global/counts",
         name="Number of clans in war, players in war, player in legends etc")
-@limiter.limit("30/minute")
 async def global_counts(request: Request, response: Response):
     # Measure timer_counts
     timer_counts = await db_client.war_timer.estimated_document_count()

@@ -3,11 +3,11 @@ import pendulum as pend
 from fastapi import  Request, Response, HTTPException, APIRouter, Query
 from fastapi_cache.decorator import cache
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, leagues
 
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Leaderboards"])
 
 
@@ -15,7 +15,6 @@ router = APIRouter(tags=["Leaderboards"])
         path="/leaderboard/players/capital",
         name="Capital Attribute Leaderboard for Players (weekend: YYYY-MM-DD)")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def leaderboard_players_capital(
                             weekend: str = Query(example="2024-05-03"),
                             type: str = Query(enum=["capital_looted"]),
@@ -46,7 +45,6 @@ async def leaderboard_players_capital(
         path="/leaderboard/clans/capital",
         name="Leaderboard of capital loot for clans (weekend: YYYY-MM-DD)")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def leaderboard_clans_capital(
                         weekend: str = Query(example="2024-05-03"),
                         type: str = Query(enum=["capitalTotalLoot", "raidsCompleted", "enemyDistrictsDestroyed", "medals"]),

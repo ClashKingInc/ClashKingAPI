@@ -9,11 +9,11 @@ from fastapi.responses import HTMLResponse
 from fastapi import APIRouter
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, redis, db_client, config, create_keys
 from expiring_dict import ExpiringDict
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
@@ -25,12 +25,12 @@ async def fetch_image(url: str) -> bytes:
             response.raise_for_status()
             return await response.read()
 
+
 @router.post("/ck/generate-api-keys", include_in_schema=False)
 async def generate_api_keys(emails: List[str], passwords: List[str], request: Request, response: Response):
     ip = request.client.host
     keys = await create_keys(emails=emails, passwords=passwords, ip=ip)
     return {"keys" : keys}
-
 
 
 
@@ -99,6 +99,7 @@ async def bot_config(bot_token: str = Header(...)):
     return bot_config | extra_config
 
 
+#fix one day + connect to db
 @router.get("/permalink/{clan_tag}",
          name="Permanent Link to Clan Badge URL", include_in_schema=False)
 async def permalink(clan_tag: str):
@@ -109,8 +110,7 @@ async def permalink(clan_tag: str):
 
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
-                    headers=headers) as response:
+                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}") as response:
                 items = await response.json()
         image_link = items["badgeUrls"]["large"]
     else:

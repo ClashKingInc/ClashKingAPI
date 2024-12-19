@@ -70,7 +70,7 @@ async def startup_event():
 async def docs():
     if config.is_local:
         return RedirectResponse(f"http://localhost/docs")
-    return RedirectResponse(f"https://api.clashking.xyz/docs")
+    return RedirectResponse(f"https://api.clashk.ing/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():

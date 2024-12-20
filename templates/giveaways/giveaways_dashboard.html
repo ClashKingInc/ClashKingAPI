@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
     <title>Giveaway Dashboard</title>
     <link href="/static/output.css" rel="stylesheet">
     <link href="/static/custom.css" rel="stylesheet">
@@ -55,9 +57,27 @@
                     <td class="px-4 py-3">
                         <span class="bg-green-600 text-white text-xs px-2 py-1 rounded">Ongoing</span>
                     </td>
-                    <td class="px-4 py-3">{{ giveaway.start_time }}</td>
-                    <td class="px-4 py-3">{{ giveaway.end_time }}</td>
-                    <td class="px-4 py-3 text-right"></td>
+                    <td class="px-4 py-3" data-start-time="{{ giveaway.start_time }}">{{ giveaway.start_time }}</td>
+                    <td class="px-4 py-3" data-end-time="{{ giveaway.end_time }}">{{ giveaway.end_time }}</td>
+                    <td class="px-4 py-3 text-right relative">
+                        <button onclick="toggleDropdown(this)" class="text-gray-400 hover:text-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                 stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M12 6v.01M12 12v.01M12 18v.01"></path>
+                            </svg>
+                        </button>
+                        <div class="dropdown hidden absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-600 rounded-lg shadow-md">
+                            <a href="/giveaway/edit/{{ giveaway._id }}?token={{ token }}&server_id={{ server_id }}"
+                               class="block px-4 py-2 text-sm text-white hover:bg-gray-700">
+                                Edit
+                            </a>
+                            <button onclick="deleteGiveaway('{{ giveaway._id }}', '{{ token }}', '{{ server_id }}')"
+                                    class="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-700">
+                                Delete
+                            </button>
+                        </div>
+                    </td>
                 </tr>
             {% endfor %}
 
@@ -79,8 +99,8 @@
                     <td class="px-4 py-3">
                         <span class="bg-blue-600 text-white text-xs px-2 py-1 rounded">Upcoming</span>
                     </td>
-                    <td class="px-4 py-3">{{ giveaway.start_time }}</td> <!-- Date de début -->
-                    <td class="px-4 py-3">{{ giveaway.end_time }}</td>
+                    <td class="px-4 py-3" data-start-time="{{ giveaway.start_time }}">{{ giveaway.start_time }}</td>
+                    <td class="px-4 py-3" data-end-time="{{ giveaway.end_time }}">{{ giveaway.end_time }}</td>
                     <td class="px-4 py-3 text-right relative">
                         <button onclick="toggleDropdown(this)" class="text-gray-400 hover:text-gray-200">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
@@ -121,8 +141,8 @@
                     <td class="px-4 py-3">
                         <span class="bg-gray-500 text-white text-xs px-2 py-1 rounded">Ended</span>
                     </td>
-                    <td class="px-4 py-3">{{ giveaway.start_time }}</td>
-                    <td class="px-4 py-3">{{ giveaway.end_time }}</td>
+                    <td class="px-4 py-3" data-start-time="{{ giveaway.start_time }}">{{ giveaway.start_time }}</td>
+                    <td class="px-4 py-3" data-end-time="{{ giveaway.end_time }}">{{ giveaway.end_time }}</td>
                     <td class="px-4 py-3 text-right"></td>
                 </tr>
             {% endfor %}
@@ -136,6 +156,49 @@
     {% endif %}
 </div>
 <script>
+    /**
+     * Convert a UTC date string to the user's local time in 'YYYY-MM-DD HH:mm' format.
+     * @param {string} utcDateStr - UTC date string in ISO format.
+     * @returns {string} - Local time string.
+     */
+    const convertUTCToLocal = (utcDateStr) => {
+        if (!utcDateStr) return '';
+
+        // S'assurer que la chaîne a un indicateur de fuseau horaire
+        if (!utcDateStr.endsWith('Z') && !utcDateStr.includes('+')) {
+            utcDateStr += 'Z';
+        }
+
+        const utcDate = new Date(utcDateStr); // UTC interprété correctement
+        const localYear = utcDate.getFullYear();
+        const localMonth = String(utcDate.getMonth() + 1).padStart(2, '0'); // Les mois commencent à 0
+        const localDay = String(utcDate.getDate()).padStart(2, '0');
+        const localHours = String(utcDate.getHours()).padStart(2, '0');
+        const localMinutes = String(utcDate.getMinutes()).padStart(2, '0');
+        return `${localYear}-${localMonth}-${localDay} ${localHours}:${localMinutes}`;
+    };
+
+    /**
+     * Update all UTC date fields in the table to display local time.
+     */
+    const updateTableDates = () => {
+        const startTimes = document.querySelectorAll('td[data-start-time]');
+        const endTimes = document.querySelectorAll('td[data-end-time]');
+
+        startTimes.forEach((td) => {
+            const utcDate = td.getAttribute('data-start-time');
+            td.textContent = convertUTCToLocal(utcDate);
+        });
+
+        endTimes.forEach((td) => {
+            const utcDate = td.getAttribute('data-end-time');
+            td.textContent = convertUTCToLocal(utcDate);
+        });
+    };
+
+    // Appeler la fonction après que la page est chargée
+    document.addEventListener('DOMContentLoaded', updateTableDates);
+
     // Display/Hides the dropdown menu for each giveaway
     function toggleDropdown(button) {
         const dropdown = button.nextElementSibling;

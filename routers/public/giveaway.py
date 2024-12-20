@@ -1,17 +1,23 @@
+import json
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 
-from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from routers.public.tickets import get_channels, get_roles
-from utils.utils import db_client, validate_token
+from utils.utils import db_client, validate_token, delete_from_cdn
 
 router = APIRouter(prefix="/giveaway", include_in_schema=False)
 templates = Jinja2Templates(directory="templates")
+
+
+class BoosterModel(BaseModel):
+    boost_value: float
+    boost_roles: List[str]
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -19,7 +25,7 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
     """
     Dashboard to view, create, and manage giveaways.
     """
-    # Valider le token et s'assurer qu'il est lié à un administrateur
+    # Validate the token
     try:
         token_data = await validate_token(token, expected_type="giveaway")
     except ValueError as e:
@@ -29,11 +35,10 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
     channels = await get_channels(guild_id=server_id)
     print(channels)
 
-    # Obtenir tous les giveaways pour ce serveur
+    # Fetch all giveaways for the server
     giveaways = await db_client.giveaways.find({"server_id": server_id}).to_list(length=None)
 
-    # Séparer les giveaways en catégories
-    now = datetime.utcnow()
+    # Sort giveaways by status
     ongoing = [g for g in giveaways if g["status"] == "ongoing"]
     upcoming = [g for g in giveaways if g["status"] == "scheduled"]
     ended = [g for g in giveaways if g["status"] == "ended"]
@@ -72,11 +77,16 @@ async def submit_giveaway_form(
         image: UploadFile = File(None),
         text_in_embed: str = Form(""),
         text_on_end: str = Form(""),
+        profile_picture_required: bool = Form(False),
+        coc_account_required: bool = Form(False),
+        roles_mode: str = Form("allow"),
+        roles_json: str = Form(...),
+        boosters_json: str = Form(...),
+        remove_image: bool = Form(False)
 ):
     """
     Handle form submissions to create or update a giveaway.
     """
-    print(giveaway_id)
     # Convert start_time and end_time to datetime objects
     if now:
         start_time = datetime.utcnow()  # Use the current time in UTC
@@ -89,14 +99,44 @@ async def submit_giveaway_form(
     end_time = datetime.fromisoformat(end_time)
     server_id = int(server_id)
 
+    # Decode boosters & roles
+    try:
+        boosters = json.loads(boosters_json)  # [{value: "2.5", roles: ["role1", "role2"]}]
+        roles = json.loads(roles_json)  # ["role1", "role2"]
+    except json.JSONDecodeError:
+        return JSONResponse({"status": "error", "message": "Invalid JSON data for roles or boosters"},
+                            status_code=400)
+
+    # Validate the boosters data
+    parsed_boosters = []
+    for booster in boosters:
+        value = float(booster.get("value", 1))
+        role_list = booster.get("roles", [])
+        if role_list:
+            parsed_boosters.append({"value": value, "roles": role_list})
+
     # Generate a unique giveaway ID if it's a new giveaway
     if not giveaway_id:
         giveaway_id = str(uuid.uuid4())
 
-    # Upload image if provided
+    # Image logic
     image_url = None
-    if image:
-        image_url = await upload_to_cdn(image=image, title=f"giveaway_{giveaway_id}")
+    if remove_image:
+        # Retrieve the current image URL from the database
+        existing_giveaway = await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id})
+        if existing_giveaway and "image_url" in existing_giveaway:
+            await delete_from_cdn(existing_giveaway["image_url"])
+    elif image and image.filename:
+        # Add a timestamp to the title before uploading to avoid cache issues
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        title_with_timestamp = f"giveaway_{giveaway_id}_{timestamp}"
+        image_url = await upload_to_cdn(image=image, title=title_with_timestamp)
+
+    # Fetch existing giveaway to preserve its image if not removed
+    if not remove_image and not image_url:
+        existing_giveaway = await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id})
+        if existing_giveaway:
+            image_url = existing_giveaway.get("image_url")
 
     # Update or create a giveaway in the database
     giveaway_data = {
@@ -110,10 +150,13 @@ async def submit_giveaway_form(
         "text_above_embed": text_above_embed,
         "text_in_embed": text_in_embed,
         "text_on_end": text_on_end,
-        "image_url": image_url
+        "image_url": image_url,
+        "profile_picture_required": profile_picture_required,
+        "coc_account_required": coc_account_required,
+        "roles_mode": roles_mode,
+        "roles": roles,
+        "boosters": parsed_boosters
     }
-
-    print(mentions)
 
     if await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id}):
         # Update existing giveaway
@@ -140,7 +183,7 @@ async def submit_giveaway_form(
 
 @router.get("/create", response_class=HTMLResponse)
 async def create_page(request: Request, token: str):
-    # Vérifiez et récupérez les informations du serveur à partir du token
+    # Verify the token
     token_data = await db_client.tokens.find_one({"token": token, "type": "giveaway"})
     if not token_data:
         return JSONResponse({"detail": "Invalid token."}, status_code=403)
@@ -174,31 +217,30 @@ async def edit_page(request: Request, token: str, giveaway_id: str):
     roles = await get_roles(guild_id=server_id)
     channels = await get_channels(guild_id=server_id)
 
-    print(giveaway)
-
     return templates.TemplateResponse("giveaways/giveaway_edit.html", {
         "request": request,
         "server_id": server_id,
         "giveaway": giveaway,
         "token": token_data["token"],
         "channels": channels,
-        "roles": roles
+        "roles": roles,
     })
+
 
 @router.delete("/delete/{giveaway_id}")
 async def delete_giveaway(giveaway_id: str, token: str, server_id: str):
     """
-    Supprime un giveaway de la base de données.
+    Delete a giveaway from the database.
     """
     print(giveaway_id, token, server_id)
-    # Conversion server_id en int
+    # Convert to the correct types
     server_id = int(server_id)
-    # Vérifiez que le token est valide
+    # Verify the token
     token_data = await db_client.tokens.find_one({"token": token, "server_id": server_id})
     if not token_data:
         return JSONResponse({"message": "Invalid token."}, status_code=403)
 
-    # Supprimez le giveaway
+    # Delete the giveaway
     result = await db_client.giveaways.delete_one({"_id": giveaway_id, "server_id": int(server_id)})
     if result.deleted_count == 1:
         status_message = "Giveaway deleted successfully."
@@ -206,3 +248,44 @@ async def delete_giveaway(giveaway_id: str, token: str, server_id: str):
         status_message = "Giveaway not found."
     redirect_url = f"/giveaway/dashboard?token={token}&message={status_message}"
     return RedirectResponse(url=redirect_url, status_code=303)
+
+@router.post("/preview")
+async def preview_giveaway_form(
+    prize: str = Form(...),
+    text_in_embed: str = Form(""),
+    text_above_embed: str = Form(""),
+    end_time: str = Form(None),
+    winners: int = Form(...),
+    image: UploadFile = File(None),
+):
+    """
+    Generate a preview of the giveaway message.
+    """
+    # Placeholder for image URL (if an image is provided)
+    image_url = None
+    if image and image.filename:
+        # Mock an image URL for preview purposes
+        image_url = f"https://via.placeholder.com/400?text=Preview+Image"
+
+    # Format the end time
+    footer_text = ""
+    if end_time:
+        end_datetime = datetime.fromisoformat(end_time)
+        formatted_end_time = end_datetime.strftime("%a %d %b %Y at %H:%M UTC")
+        footer_text = f"Ends on {formatted_end_time}"
+
+    # Build the embed preview structure
+    embed_preview = {
+        "title": f"🎉 {prize} - {winners} Winner{'s' if winners > 1 else ''} 🎉",
+        "description": f"{text_in_embed}",
+        "image": {"url": image_url} if image_url else None,
+        "footer": {"text": footer_text} if footer_text else None,
+        "color": 0x5865F2  # Typical Discord embed color (blueish)
+    }
+
+    return JSONResponse(
+        content={
+            "text_above_embed": text_above_embed,
+            "embed": embed_preview
+        }
+    )

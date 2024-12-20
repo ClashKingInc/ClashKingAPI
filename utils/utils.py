@@ -18,6 +18,9 @@ from slowapi import Limiter
 from slowapi.util import get_ipaddr
 from .config import Config
 from collections import deque
+from datetime import datetime
+import pytz
+
 
 config = Config()
 
@@ -254,6 +257,32 @@ async def upload_to_cdn(title: str, picture=None, image=None):
     return f"https://cdn.clashking.xyz/{title}.png"
 
 
+async def delete_from_cdn(image_url: str):
+    """
+    Delete a file from the BunnyCDN storage.
+    :param image_url: Full URL of the image to delete.
+    """
+    # Extract the file path from the URL (e.g., "giveaway_xxx.png")
+    if not image_url.startswith("https://cdn.clashking.xyz/"):
+        return {"status": "error", "message": "Invalid URL format"}
+
+    file_path = image_url.replace("https://cdn.clashking.xyz/", "")
+
+    headers = {
+        "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
+    }
+
+    # Delete the file from BunnyCDN storage
+    delete_url = f"https://storage.bunnycdn.com/clashking-files/{file_path}"
+    async with aiohttp.ClientSession() as session:
+        async with session.delete(delete_url, headers=headers) as response:
+            if response.status == 200:
+                return {"status": "success", "message": f"File {file_path} deleted.", "purge_response": purge_response}
+            else:
+                return {"status": "error",
+                        "message": f"Failed to delete file {file_path}. HTTP status: {response.status}"}
+
+
 def remove_id_fields(data):
     if isinstance(data, list):
         for item in data:
@@ -309,3 +338,19 @@ async def validate_token(token, expected_type=None):
         raise ValueError(f"Expected token of type '{expected_type}', but got '{token_data['type']}'.")
 
     return token_data
+
+def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
+    """
+    Convert UTC datetime to local datetime string in a specified timezone.
+
+    Args:
+        utc_time (datetime): UTC datetime object.
+        timezone (str): Timezone string (e.g., "Europe/Paris").
+
+    Returns:
+        str: Formatted local time as string "YYYY-MM-DD HH:MM".
+    """
+    local_tz = pytz.timezone(timezone)
+    utc_dt = utc_time.replace(tzinfo=pytz.utc)
+    local_dt = utc_dt.astimezone(local_tz)
+    return local_dt.strftime("%Y-%m-%d %H:%M")  # Format for display

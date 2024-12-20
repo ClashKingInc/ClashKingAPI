@@ -6,10 +6,10 @@ from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from slowapi.errors import RateLimitExceeded
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Leagues"])
 
 
@@ -17,7 +17,6 @@ router = APIRouter(tags=["Leagues"])
          tags=["Leagues"],
          name="Builder Base Leagues w/ Icons")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def builder_base_leagues(request: Request, response: Response):
     file_path = "assets/json/builder_league.json"
     with open(file_path) as json_file:

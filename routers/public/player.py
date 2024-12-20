@@ -10,18 +10,17 @@ from datetime import timedelta
 from fastapi import Request, Response, HTTPException, Query, APIRouter
 from fastapi_cache.decorator import cache
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from typing import List, Annotated
 from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season, leagues
 
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Player Endpoints"])
 
 @router.get("/player/{player_tag}/stats",
          name="All collected Stats for a player (clan games, looted, activity, etc)")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_stat(player_tag: str, request: Request, response: Response):
     player_tag = player_tag and "#" + re.sub(r"[^A-Z0-9]+", "", player_tag.upper()).replace("O", "0")
     result = await db_client.player_stats_db.find_one({"tag": player_tag})
@@ -70,7 +69,6 @@ async def player_stat(player_tag: str, request: Request, response: Response):
 @router.get("/player/{player_tag}/legends",
          name="Legend stats for a player")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_legend(player_tag: str, request: Request, response: Response, season: str = None):
     player_tag = fix_tag(player_tag)
     c_time = time.time()
@@ -121,7 +119,6 @@ async def player_legend(player_tag: str, request: Request, response: Response, s
 @router.get("/player/{player_tag}/historical/{season}",
          name="Historical data for player events")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_historical(player_tag: str, season: str, request: Request, response: Response):
     player_tag = player_tag and "#" + re.sub(r"[^A-Z0-9]+", "", player_tag.upper()).replace("O", "0")
     year = season[:4]
@@ -144,7 +141,6 @@ async def player_historical(player_tag: str, season: str, request: Request, resp
 @router.get("/player/{player_tag}/warhits",
          name="War attacks done/defended by a player")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513, limit: int = 50):
     client = coc.Client(raw_attribute=True)
     player_tag = fix_tag(player_tag)
@@ -224,7 +220,6 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
     name="Raids participated in by a player"
 )
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_raids(player_tag: str, request: Request, response: Response, limit: int = 1):
     results = await db_client.capital.find({"data.members.tag" : player_tag}).sort({"data.endTime" : -1}).limit(limit=limit).to_list(length=None)
     results = [r.get("data") for r in results]
@@ -234,7 +229,6 @@ async def player_raids(player_tag: str, request: Request, response: Response, li
 @router.get("/player/to-do",
          name="List of in-game items to complete (legends, war, raids, etc)")
 @cache(expire=300)
-@limiter.limit("10/second")
 async def player_to_do(request: Request, response: Response, player_tags: Annotated[List[str], Query(min_length=1, max_length=50)]):
     return_data = {"items" : []}
     for player_tag in player_tags:
@@ -251,7 +245,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
 
         player_clan_tag = None
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.clashking.xyz/v1/players/{player_tag.replace('#', '%23')}") as response:
+            async with session.get(f"https://proxy.clashk.ing/v1/players/{player_tag.replace('#', '%23')}") as response:
                 if response.status == 200:
                     player_json = await response.json()
                     player_clan_tag = player_json.get("clan", {}).get("tag")
@@ -259,7 +253,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
         raid_data = {}
         if player_clan_tag:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1") as response:
+                async with session.get(f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1") as response:
                     if response.status == 200:
                         data = await response.json()
                         if data.get("items"):
@@ -281,7 +275,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
         if player_clan_tag:
             group_data = None
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://api.clashking.xyz/v1/clans/{player_clan_tag.replace('#', '%23')}/currentwar/leaguegroup") as response:
+                async with session.get(f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/currentwar/leaguegroup") as response:
                     if response.status == 200:
                         group_data = await response.json()
 
@@ -292,7 +286,7 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
                 our_war = None
                 for war_tag in last_round:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(f"https://api.clashking.xyz/v1/clanwarleagues/wars/{war_tag.replace('#', '%23')}") as response:
+                        async with session.get(f"https://proxy.clashk.ing/v1/clanwarleagues/wars/{war_tag.replace('#', '%23')}") as response:
                             if response.status == 200:
                                 war_json = await response.json()
                                 war = coc.ClanWar(data=war_json, client=None)
@@ -326,7 +320,6 @@ async def player_to_do(request: Request, response: Response, player_tags: Annota
 @router.get("/player/{player_tag}/legend_rankings",
          name="Previous player legend rankings")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_legend_rankings(player_tag: str, request: Request, response: Response, limit:int = 10):
 
     player_tag = fix_tag(player_tag)
@@ -340,7 +333,6 @@ async def player_legend_rankings(player_tag: str, request: Request, response: Re
 @router.get("/player/{player_tag}/wartimer",
          name="Get the war timer for a player")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def player_wartimer(player_tag: str, request: Request, response: Response):
     player_tag = fix_tag(player_tag)
     result = await db_client.war_timer.find_one({"_id" : player_tag})
@@ -357,7 +349,6 @@ async def player_wartimer(player_tag: str, request: Request, response: Response)
 @router.get("/player/search/{name}",
          name="Search for players by name")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def search_players(name: str, request: Request, response: Response):
     pipeline = [
         {
@@ -380,7 +371,6 @@ async def search_players(name: str, request: Request, response: Response):
 @router.get("/player/full-search/{name}",
          name="Search for players by name")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def full_search_players(name: str, request: Request, response: Response,
                         role:str =Query(default=None, description='An in-game player role, uses API values like admin however'),
                         league:str =Query(default=None, description='An in-game player league'),

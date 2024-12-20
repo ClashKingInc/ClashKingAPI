@@ -132,14 +132,14 @@ async def get_war(request: Request, clan_tag: str, timestamp: Optional[str] = No
     war_data = None
     if timestamp is None:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.clashking.xyz/v1/clans/{clan_tag.replace('#','%23')}/currentwar") as response:
+            async with session.get(f"https://proxy.clashk.ing/v1/clans/{clan_tag.replace('#','%23')}/currentwar") as response:
                 if response.status == 200:
                     war_data = await response.json()
     else:
         # Fetch specific war by timestamp
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                    f"https://api.clashking.xyz/war/{clan_tag.replace('#', '%23')}/previous/{timestamp}") as response:
+                    f"https://api.clashk.ing/war/{clan_tag.replace('#', '%23')}/previous/{timestamp}") as response:
                 if response.status == 200:
                     war_data = await response.json()
 

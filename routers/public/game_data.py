@@ -3,16 +3,15 @@ import ujson
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 
 
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Game Data"])
 
 @router.get("/assets",
          name="Link to download a zip with all assets", include_in_schema=False)
-@limiter.limit("5/second")
 async def assets(request: Request, response: Response):
     return {"download-link" : "https://cdn.clashking.xyz/Out-Sprites.zip"}
 
@@ -20,7 +19,6 @@ async def assets(request: Request, response: Response):
 
 @router.get("/json/{type}",
          name="View json game data (/json/list, for list of types)")
-@limiter.limit("5/second")
 async def json(type: str, request: Request, response: Response):
     if type == "list":
         return {"types" : ["troops", "heroes", "hero_equipment", "spells", "buildings", "pets", "supers", "townhalls", "translations"]}

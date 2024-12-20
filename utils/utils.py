@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from base64 import b64decode as base64_b64decode
 from json import loads as json_loads
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from .config import Config
 from collections import deque
 from datetime import datetime
@@ -24,7 +24,7 @@ import pytz
 
 config = Config()
 
-limiter = Limiter(key_func=get_remote_address, key_style="endpoint")
+limiter = Limiter(key_func=get_ipaddr, key_style="endpoint")
 
 
 def dynamic_limit(key: str):

@@ -7,12 +7,12 @@ from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, leagues
 from datetime import datetime
 
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Clan Capital Endpoints"])
 
 
@@ -21,7 +21,6 @@ router = APIRouter(tags=["Clan Capital Endpoints"])
          tags=["Clan Capital Endpoints"],
          name="Stats about districts, (weekend: YYYY-MM-DD)")
 @cache(expire=8000000)
-@limiter.limit("30/second")
 async def capital_stats_district(weekend: str, request: Request, response: Response):
     weekend_to_iso = datetime.strptime(weekend, "%Y-%m-%d")
     if (datetime.now() - weekend_to_iso).total_seconds() <= 273600:
@@ -57,7 +56,6 @@ async def capital_stats_district(weekend: str, request: Request, response: Respo
          tags=["Clan Capital Endpoints"],
          name="Stats about capital leagues, (weekend: YYYY-MM-DD")
 @cache(expire=8000000)
-@limiter.limit("30/second")
 async def capital_stats_leagues(weekend: str, request: Request, response: Response):
     og_weekend = weekend
     weekend_to_iso = datetime.strptime(weekend, "%Y-%m-%d")
@@ -135,7 +133,6 @@ async def capital_stats_leagues(weekend: str, request: Request, response: Respon
          tags=["Clan Capital Endpoints"],
          name="Log of Raid Weekends")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def capital_log(clan_tag: str, request: Request, response: Response, limit: int = 5):
     results = await db_client.capital.find({"clan_tag" : fix_tag(clan_tag)}).limit(limit).sort("data.startTime", -1).to_list(length=None)
     for result in results:
@@ -145,7 +142,6 @@ async def capital_log(clan_tag: str, request: Request, response: Response, limit
 @router.post("/capital/bulk",
          tags=["Clan Capital Endpoints"],
          name="Fetch Raid Weekends in Bulk (max 100 tags)")
-@limiter.limit("5/second")
 async def capital_bulk(clan_tags: List[str], request: Request, response: Response):
     results = await db_client.capital.find({"clan_tag": {"$in" : [fix_tag(tag) for tag in clan_tags[:100]]}}).to_list(length=None)
     fixed_results = defaultdict(list)

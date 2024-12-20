@@ -6,7 +6,7 @@ from fastapi import  Request, Response, HTTPException, APIRouter, Query
 from fastapi_cache.decorator import cache
 from typing import List, Annotated
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, gen_season_date, gen_games_season, gen_raid_date
 from statistics import mean, median
 from datetime import datetime, timedelta
@@ -14,7 +14,7 @@ from pytz import utc
 from dotenv import load_dotenv
 load_dotenv()
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Stat Endpoints"])
 
 coc_client = coc.Client(key_names="keys for my windows pc", key_count=5, raw_attribute=True)
@@ -23,7 +23,6 @@ coc_client = coc.Client(key_names="keys for my windows pc", key_count=5, raw_att
 @router.get("/donations",
          name="Donation Stats", include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("30/second")
 async def donations(request: Request, response: Response,
                            players: Annotated[List[str], Query(max_length=50)]=None,
                            clans: Annotated[List[str], Query(max_length=25)]=None,
@@ -151,7 +150,6 @@ async def donations(request: Request, response: Response,
 @router.get("/activity",
          name="Activity Stats", include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("30/second")
 async def activity(request: Request, response: Response,
                            players: Annotated[List[str], Query(max_length=50)]=None,
                            clans: Annotated[List[str], Query(max_length=25)]=None,
@@ -249,7 +247,6 @@ async def activity(request: Request, response: Response,
 @router.get("/clan-games",
          name="Clan Game Stats", include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("30/second")
 async def clan_games(request: Request, response: Response,
                            players: Annotated[List[str], Query(max_length=50)]=None,
                            clans: Annotated[List[str], Query(max_length=25)]=None,
@@ -407,7 +404,6 @@ async def clan_games(request: Request, response: Response,
 @router.get("/war-stats",
          name="War Stats", include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("10/second")
 async def war_stats(request: Request, response: Response,
                            players: Annotated[List[str], Query(max_length=50)]=None,
                            clans: Annotated[List[str], Query(max_length=25)]=None,
@@ -690,7 +686,6 @@ async def war_stats(request: Request, response: Response,
 @router.get("/capital",
          name="Capital Stats", include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("10/second")
 async def capital_stats(request: Request, response: Response,
                            players: Annotated[List[str], Query(max_length=50)]=None,
                            clans: Annotated[List[str], Query(max_length=25)]=None,

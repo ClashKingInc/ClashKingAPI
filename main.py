@@ -2,8 +2,9 @@ import os
 import logging
 import uvicorn
 import importlib.util
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -12,9 +13,8 @@ from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter
+from slowapi.util import get_ipaddr
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
@@ -23,7 +23,7 @@ from utils.utils import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_ipaddr)
 middleware = [
     Middleware(
         CORSMiddleware,
@@ -38,9 +38,8 @@ middleware = [
 ]
 
 app = FastAPI(middleware=middleware)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 
 def include_routers(app, directory):
@@ -71,7 +70,7 @@ async def startup_event():
 async def docs():
     if config.is_local:
         return RedirectResponse(f"http://localhost/docs")
-    return RedirectResponse(f"https://api.clashking.xyz/docs")
+    return RedirectResponse(f"https://api.clashk.ing/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():
@@ -125,7 +124,7 @@ if __name__ == "__main__":
     if config.is_local:
         uvicorn.run("main:app", host="localhost", port=8000, reload=True)
     else:
-        uvicorn.run("main:app", host="0.0.0.0", port=6000)
+        uvicorn.run("main:app", host="0.0.0.0", port=8010)
 
 
 

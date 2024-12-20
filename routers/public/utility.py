@@ -12,7 +12,7 @@ from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import Dict
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import db_client, download_image, config, upload_to_cdn
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -26,7 +26,6 @@ import io
 from fastapi import Request, Response
 import numpy as np
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["Utility"])
 
 link_client = None
@@ -39,7 +38,6 @@ async def startup_event():
 @router.post("/table",
          name="Custom Table",
          include_in_schema=False)
-@limiter.limit("5/second")
 async def table_renderer(info: Dict, request: Request, response: Response):
     columns = info.get("columns")
     positions = info.get("positions")
@@ -178,7 +176,6 @@ async def table_renderer(info: Dict, request: Request, response: Response):
          name="Get clans that are linked to a discord guild",
          include_in_schema=False)
 @cache(expire=300)
-@limiter.limit("30/second")
 async def guild_links(guild_id: int, request: Request, response: Response):
     return {}
 
@@ -192,7 +189,7 @@ async def guild_links(guild_id: int, request: Request, response: Response):
 async def shortner(url: str):
     id = str(uuid.uuid4())
     await db_client.link_shortner.insert_one({"_id" : id, "url" : url})
-    return {"url" : f"https://api.clashking.xyz/shortlink?id={id}"}
+    return {"url" : f"https://api.clashk.ing/shortlink?id={id}"}
 
 
 @router.get("/shortlink",
@@ -222,7 +219,6 @@ async def render(url: str):
 @router.post("/discord_links",
          name="Get discord links for tags",
          include_in_schema=False)
-@limiter.limit("5/second")
 async def discord_link(player_tags: List[str], request: Request, response: Response):
     global link_client
     result = await link_client.get_links(*player_tags)

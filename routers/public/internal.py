@@ -9,15 +9,14 @@ from fastapi.responses import HTMLResponse
 from fastapi import APIRouter
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, redis, db_client, config, create_keys
 from expiring_dict import ExpiringDict
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["Internal Endpoints"])
 
 api_cache = ExpiringDict()
-KEYS = deque()
 
 
 async def fetch_image(url: str) -> bytes:
@@ -26,6 +25,7 @@ async def fetch_image(url: str) -> bytes:
             response.raise_for_status()
             return await response.read()
 
+
 @router.post("/ck/generate-api-keys", include_in_schema=False)
 async def generate_api_keys(emails: List[str], passwords: List[str], request: Request, response: Response):
     ip = request.client.host
@@ -33,34 +33,17 @@ async def generate_api_keys(emails: List[str], passwords: List[str], request: Re
     return {"keys" : keys}
 
 
-@router.on_event("startup")
-async def startup():
-    global KEYS
-    if not config.is_local:
-        emails = [config.coc_email.format(x=x) for x in range(config.min_coc_email, config.max_coc_email + 1)]
-        passwords = [config.coc_password] * (config.max_coc_email + 1 - config.min_coc_email)
-        KEYS = await create_keys(emails=emails, passwords=passwords, ip="5.161.113.222")
-        KEYS = deque(KEYS)
-
 
 @router.get("/v1/{url:path}",
          name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
          include_in_schema=False)
 async def test_endpoint(url: str, request: Request, response: Response):
-    global KEYS
 
-    query_string = "&".join([f"{key}={value}" for key, value in request.query_params.items()])
-
-    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(1)
-
-    full_url = f"https://api.clashofclans.com/v1/{url}"
+    full_url = f"https://proxy.clashk.ing/v1/{url}"
     full_url = full_url.replace("#", '%23').replace("!", '%23')
-    if query_string:
-        full_url = f"{full_url}?{query_string}"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(full_url, headers=headers) as api_response:
+        async with session.get(full_url) as api_response:
             if api_response.status != 200:
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
@@ -73,23 +56,10 @@ async def test_endpoint(url: str, request: Request, response: Response):
              name="Test a coc api endpoint, very high ratelimit, only for testing without auth",
              include_in_schema=False)
 async def test_post_endpoint(url: str, request: Request, response: Response):
-    global KEYS
-
-    # Extract query parameters
-    query_params = request.query_params
-    fields = query_params.get("fields")
-
-    # Remove the "fields" parameter from the query parameters
-    query_params = {key: value for key, value in query_params.items() if key != "fields"}
-    query_string = "&".join([f"{key}={value}" for key, value in query_params.items()])
-
-    headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-    KEYS.rotate(1)
 
     # Construct the full URL with query parameters if any
-    full_url = f"https://api.clashofclans.com/v1/{url}"
-    if query_string:
-        full_url = f"{full_url}?{query_string}"
+    full_url = f"https://proxy.clashk.ing/v1/{url}"
+
 
     full_url = full_url.replace("#", '%23').replace("!", '%23')
 
@@ -97,7 +67,7 @@ async def test_post_endpoint(url: str, request: Request, response: Response):
     body = await request.json()
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(full_url, json=body, headers=headers) as api_response:
+        async with session.post(full_url, json=body) as api_response:
             if api_response.status != 200:
                 content = await api_response.text()
                 raise HTTPException(status_code=api_response.status, detail=content)
@@ -129,6 +99,7 @@ async def bot_config(bot_token: str = Header(...)):
     return bot_config | extra_config
 
 
+#fix one day + connect to db
 @router.get("/permalink/{clan_tag}",
          name="Permanent Link to Clan Badge URL", include_in_schema=False)
 async def permalink(clan_tag: str):
@@ -136,13 +107,10 @@ async def permalink(clan_tag: str):
     clan_tag = fix_tag(clan_tag)
     db_clan_result = await db_client.global_clans.find_one({"_id" : clan_tag}, {"data."})
     if not db_clan_result:
-        global KEYS
-        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-        KEYS.rotate(1)
+
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}",
-                    headers=headers) as response:
+                    f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}") as response:
                 items = await response.json()
         image_link = items["badgeUrls"]["large"]
     else:
@@ -166,17 +134,15 @@ async def permalink(clan_tag: str):
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
-    global KEYS
+    
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
 
     async def fetch_function(url: str):
         url = url.replace("#", '%23')
-        headers = {"Accept": "application/json", "authorization": f"Bearer {KEYS[0]}"}
-        KEYS.rotate(1)
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.clashofclans.com/v1/{url}", headers=headers) as response:
+            async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
                 item_bytes = await response.read()
                 item = orjson.loads(item_bytes)
                 if response.status != 200:

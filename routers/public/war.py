@@ -7,11 +7,11 @@ from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, gen_season_date
 from datetime import datetime, timedelta
 
-limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(tags=["War Endpoints"])
 
 
@@ -20,7 +20,6 @@ router = APIRouter(tags=["War Endpoints"])
          tags=["War Endpoints"],
          name="Previous Wars for a clan")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def war_previous(clan_tag: str, request: Request, response: Response,  timestamp_start: int = 0, timestamp_end: int = 9999999999, limit: int= 50):
     clan_tag = fix_tag(clan_tag)
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
@@ -52,7 +51,6 @@ async def war_previous(clan_tag: str, request: Request, response: Response,  tim
          tags=["War Endpoints"],
          name="Previous War at an endtime, for a clan")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def war_previous_time(clan_tag: str, end_time: str, request: Request, response: Response):
     end_time = coc.Timestamp(data=end_time).time.replace(tzinfo=pend.UTC)
     lower_end_time = end_time - timedelta(minutes=5)
@@ -72,7 +70,6 @@ async def war_previous_time(clan_tag: str, end_time: str, request: Request, resp
          tags=["War Endpoints"],
          name="Basic War Info, Bypasses Private War Log if Possible")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def basic_war_info(clan_tag: str, request: Request, response: Response):
     now = datetime.utcnow().timestamp() - 183600
     result = await db_client.clan_wars.find({"$and" : [{"clans" : fix_tag(clan_tag)}, {"custom_id": None}, {"endTime" : {"$gte" : now}}]}).sort({"endTime" : -1}).to_list(length=None)
@@ -88,7 +85,6 @@ async def basic_war_info(clan_tag: str, request: Request, response: Response):
          tags=["War Endpoints"],
          name="Cwl group info for a clan for current season")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def cwl_group(clan_tag: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
     season = gen_season_date()
@@ -101,7 +97,6 @@ async def cwl_group(clan_tag: str, request: Request, response: Response):
          tags=["War Endpoints"],
          name="Cwl Info for a clan in a season (yyyy-mm)")
 @cache(expire=300)
-@limiter.limit("30/second")
 async def cwl(clan_tag: str, season: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
     cwl_result = await db_client.cwl_groups.find_one({"$and" : [{"data.clans.tag" : clan_tag}, {"data.season" : season}]})

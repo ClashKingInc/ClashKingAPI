@@ -159,12 +159,14 @@ async def submit_giveaway_form(
     }
 
     if await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id}):
+        # Add modification timestamp
+        giveaway_data["updated"] = "yes"
         # Update existing giveaway
         await db_client.giveaways.update_one(
             {"_id": giveaway_id, "server_id": server_id},
             {"$set": giveaway_data}
         )
-        status_message = "Giveaway updated successfully."
+        status_message = "Giveaway updated successfully. If the giveaway is already live, it will be updated within a minute."
 
     else:
         # Create a new giveaway

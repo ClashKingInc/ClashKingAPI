@@ -122,10 +122,15 @@ async def submit_giveaway_form(
     # Image logic
     image_url = None
     if remove_image:
-        image_url = None
-        await delete_from_cdn(f"giveaway_{giveaway_id}")
+        # Retrieve the current image URL from the database
+        existing_giveaway = await db_client.giveaways.find_one({"_id": giveaway_id, "server_id": server_id})
+        if existing_giveaway and "image_url" in existing_giveaway:
+            await delete_from_cdn(existing_giveaway["image_url"])
     elif image and image.filename:
-        image_url = await upload_to_cdn(image=image, title=f"giveaway_{giveaway_id}")
+        # Add a timestamp to the title before uploading to avoid cache issues
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        title_with_timestamp = f"giveaway_{giveaway_id}_{timestamp}"
+        image_url = await upload_to_cdn(image=image, title=title_with_timestamp)
 
     # Fetch existing giveaway to preserve its image if not removed
     if not remove_image and not image_url:

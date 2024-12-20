@@ -257,54 +257,31 @@ async def upload_to_cdn(title: str, picture=None, image=None):
     return f"https://cdn.clashking.xyz/{title}.png"
 
 
-
-async def delete_from_cdn(title: str):
+async def delete_from_cdn(image_url: str):
     """
-    Deletes an existing file from BunnyCDN storage and purges the cache.
-
-    Args:
-        title (str): The file name without the extension.
-
-    Returns:
-        bool: True if successful, False otherwise.
+    Delete a file from the BunnyCDN storage.
+    :param image_url: Full URL of the image to delete.
     """
+    # Extract the file path from the URL (e.g., "giveaway_xxx.png")
+    if not image_url.startswith("https://cdn.clashking.xyz/"):
+        return {"status": "error", "message": "Invalid URL format"}
+
+    file_path = image_url.replace("https://cdn.clashking.xyz/", "")
+
     headers = {
-        "content-type": "application/octet-stream",
         "AccessKey": os.getenv("BUNNY_ACCESS_KEY")
     }
 
-    # Normalize title and URLs
-    title = title.replace(" ", "_").lower()
-    file_url = f"https://storage.bunnycdn.com/clashking-files/{title}.png"
-    purge_url = f"https://bunnycdn.com/api/purge?url=https://cdn.clashking.xyz/{title}.png"
-
-    # Step 1: Delete the file from storage
+    # Delete the file from BunnyCDN storage
+    delete_url = f"https://storage.bunnycdn.com/clashking-files/{file_path}"
     async with aiohttp.ClientSession() as session:
-        async with session.delete(file_url, headers=headers) as response:
-            if response.status == 404:
-                print(f"File not found: {file_url}. Skipping deletion.")
-            elif response.status not in [200, 204]:
-                print(f"Failed to delete file. HTTP status: {response.status}")
-                return False
-            else:
-                print(f"File successfully deleted: {file_url}")
-
-    # Step 2: Purge the file from cache
-    purge_headers = {
-        "AccessKey": os.getenv("BUNNY_ACCESS_KEY"),
-        "Accept": "application/json"
-    }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(purge_url, headers=purge_headers) as response:
+        async with session.delete(delete_url, headers=headers) as response:
             if response.status == 200:
-                print(f"Cache successfully purged for: {purge_url}")
-                return True
-            elif response.status == 404:
-                print(f"Cache not found for: {purge_url}. Likely already purged.")
-                return True
+                return {"status": "success", "message": f"File {file_path} deleted.", "purge_response": purge_response}
             else:
-                print(f"Failed to purge cache. HTTP status: {response.status}")
-                return False
+                return {"status": "error",
+                        "message": f"Failed to delete file {file_path}. HTTP status: {response.status}"}
+
 
 def remove_id_fields(data):
     if isinstance(data, list):

@@ -196,3 +196,48 @@
 .dropdown .text-red-500:hover {
     color: #f87171; /* Lighter red on hover */
 }
+
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.text-above-embed {
+  font-size: 14px;
+  font-weight: normal;
+  color: #ffffff;
+  margin-bottom: 5px;
+}
+
+.discord-embed {
+  width: 400px;
+  border-left: 4px solid #5ACFF5;
+  background-color: #2c2f33;
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: Arial, sans-serif;
+}
+.embed-header {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+.embed-description {
+  font-size: 14px;
+  margin-top: 8px;
+  color: #b9bbbe;
+}
+.embed-image img {
+  margin-top: 10px;
+  width: 100%;
+  border-radius: 5px;
+}
+.embed-footer {
+  font-size: 12px;
+  color: #72767d;
+  margin-top: 10px;
+  text-align: right;
+}

@@ -59,7 +59,25 @@
                     </td>
                     <td class="px-4 py-3" data-start-time="{{ giveaway.start_time }}">{{ giveaway.start_time }}</td>
                     <td class="px-4 py-3" data-end-time="{{ giveaway.end_time }}">{{ giveaway.end_time }}</td>
-                    <td class="px-4 py-3 text-right"></td>
+                    <td class="px-4 py-3 text-right relative">
+                        <button onclick="toggleDropdown(this)" class="text-gray-400 hover:text-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                 stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M12 6v.01M12 12v.01M12 18v.01"></path>
+                            </svg>
+                        </button>
+                        <div class="dropdown hidden absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-600 rounded-lg shadow-md">
+                            <a href="/giveaway/edit/{{ giveaway._id }}?token={{ token }}&server_id={{ server_id }}"
+                               class="block px-4 py-2 text-sm text-white hover:bg-gray-700">
+                                Edit
+                            </a>
+                            <button onclick="deleteGiveaway('{{ giveaway._id }}', '{{ token }}', '{{ server_id }}')"
+                                    class="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-700">
+                                Delete
+                            </button>
+                        </div>
+                    </td>
                 </tr>
             {% endfor %}
 

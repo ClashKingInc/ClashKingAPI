@@ -101,8 +101,10 @@
             <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
             <textarea id="text_in_embed" name="text_in_embed" placeholder="Optional: Add text in embed field"
                       class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                      rows="2"></textarea>
+                      rows="2">🎟️ **How to Enter**
+Click the Participate button below!</textarea>
         </div>
+
 
         <!-- Message to Send on Giveaway End -->
         <div class="mb-4">
@@ -132,6 +134,22 @@
                 </button>
             </div>
         </div>
+
+        <!-- Buttons Container -->
+        <div class="flex justify-center space-x-4 mt-4">
+            <!-- Preview Giveaway Button -->
+            <button type="button" id="previewGiveaway"
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">
+                Preview Giveaway
+            </button>
+
+            <!-- Preview End Message Button -->
+            <button type="button" id="previewEndMessage"
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">
+                Preview End Message
+            </button>
+        </div>
+        <br/>
 
         <!-- Giveaway Requirements -->
         <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
@@ -215,10 +233,24 @@
                 class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
             Create Giveaway
         </button>
+
+        <!-- Preview Popup -->
+        <div id="previewPopup" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+            <div class="bg-gray-800 text-white p-6 rounded-lg max-w-lg shadow-lg relative">
+                <button id="closePreview" type="button"
+                        class="absolute top-2 right-2 text-red-500 hover:text-red-600 font-bold">✖
+                </button>
+                <h2 class="text-xl font-bold mb-4">Giveaway Preview</h2>
+                <div id="previewContent">
+                    <!-- Content will be dynamically added here -->
+                </div>
+            </div>
+        </div>
     </form>
     <div id="confirmationMessage" class="hidden mt-4 text-center text-lg text-green-500 font-semibold"></div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const nowCheckbox = document.getElementById('now_checkbox');
@@ -240,6 +272,184 @@
         const imageInput = document.getElementById('image');
         const imagePreview = document.getElementById('imagePreview');
         const removeImageButton = document.getElementById('removeImage');
+        const previewButton = document.getElementById('previewGiveaway');
+        const previewPopup = document.getElementById('previewPopup');
+        const closePreviewButton = document.getElementById('closePreview');
+        const previewContent = document.getElementById('previewContent');
+
+
+        previewButton.addEventListener('click', async () => {
+            const formData = new FormData(document.getElementById('giveawayForm'));
+
+            // Collect form data
+            const prize = formData.get('prize');
+            const textAboveEmbed = formData.get('text_above_embed') || '';
+            const textInEmbed = formData.get('text_in_embed') || '';
+            const endTime = formData.get('end_time');
+            const winners = formData.get('winners') || 1;
+
+            // Preprocess textInEmbed to respect newlines
+            const processedTextInEmbed = textInEmbed.replace(/\n/g, '  \n');
+            const processedTextAboveEmbed = textAboveEmbed.replace(/\n/g, '  \n');
+
+            // Mentions
+            const mentionElements = document.querySelectorAll('#mentions option:checked');
+            const mentions = Array.from(mentionElements).map(option => `@${option.textContent}`).join(' ');
+
+            // Clear previous preview content
+            previewContent.innerHTML = "";
+
+            // Add mentions
+            if (mentions) {
+                const mentionText = document.createElement('p');
+                mentionText.className = 'mb-4 text-sm text-gray-300';
+                mentionText.innerText = mentions;
+                previewContent.appendChild(mentionText);
+            }
+
+            // Add text above embed (rendered as Markdown)
+            if (textAboveEmbed) {
+                const aboveText = document.createElement('div');
+                aboveText.className = 'mb-4 text-sm text-gray-300';
+                aboveText.innerHTML = marked.parse(processedTextAboveEmbed);
+                previewContent.appendChild(aboveText);
+            }
+
+            // Add embed container
+            const embedContainer = document.createElement('div');
+            embedContainer.className = 'discord-embed';
+
+            // Embed title
+            const title = document.createElement('div');
+            title.className = 'embed-header';
+            title.innerText = `🎉 ${prize} - ${winners} Winner${winners > 1 ? 's' : ''} 🎉`;
+            embedContainer.appendChild(title);
+
+            // Embed description (rendered as Markdown)
+            const description = document.createElement('div');
+            description.className = 'embed-description';
+            description.innerHTML = marked.parse(processedTextInEmbed);
+            embedContainer.appendChild(description);
+
+            // Add image if available
+            const file = imageInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const image = document.createElement('img');
+                    image.className = 'embed-image';
+                    image.src = e.target.result; // Base64 image data
+                    embedContainer.appendChild(image);
+
+                    // Add footer with end time below the image
+                    if (endTime) {
+                        const endDateTime = new Date(endTime);
+                        const formattedEndTime = endDateTime.toLocaleString('en-US', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: 'numeric',
+                            timeZoneName: 'short'
+                        });
+                        const footer = document.createElement('div');
+                        footer.className = 'embed-footer mt-2';
+                        footer.innerText = `Ends on ${formattedEndTime}`;
+                        embedContainer.appendChild(footer);
+                    }
+                };
+                reader.readAsDataURL(file);
+            } else if (endTime) {
+                // Add footer with end time if no image
+                const endDateTime = new Date(endTime);
+                const formattedEndTime = endDateTime.toLocaleString('en-US', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    timeZoneName: 'short'
+                });
+                const footer = document.createElement('div');
+                footer.className = 'embed-footer mt-2';
+                footer.innerText = `Ends on ${formattedEndTime}`;
+                embedContainer.appendChild(footer);
+            }
+
+            // Add embed container to the preview content
+            previewContent.appendChild(embedContainer);
+
+            // Show the popup
+            previewPopup.classList.remove('hidden');
+        });
+
+        document.getElementById('previewEndMessage').addEventListener('click', () => {
+            const prize = document.getElementById('prize').value || "Giveaway";
+            const textOnEnd = document.getElementById('text_on_end').value || "Thank you for participating!";
+            const totalParticipants = Math.floor(Math.random() * 100) + 1; // Simule un nombre de participants
+            const file = document.getElementById('image').files[0]; // Vérifie si une image est présente
+
+            // Clear previous preview content
+            previewContent.innerHTML = "";
+
+            // Add winner(s) mention(s)
+            const mention = document.createElement('p');
+            mention.className = 'mb-4 text-sm text-gray-300';
+            mention.innerText = '@Winner';
+            previewContent.appendChild(mention);
+
+            // Add text above embed (rendered as Markdown)
+            if (textOnEnd) {
+                const endText = document.createElement('div');
+                endText.className = 'mb-4 text-sm text-gray-300';
+                endText.innerHTML = marked.parse(textOnEnd);
+                previewContent.appendChild(endText);
+            }
+
+            // Create end message container
+            const endMessageContainer = document.createElement('div');
+            endMessageContainer.className = 'discord-embed';
+
+            // Add the title
+            const title = document.createElement('div');
+            title.className = 'embed-header';
+            title.innerText = `🎉 ${prize} - 1 Winner 🎉`;
+            endMessageContainer.appendChild(title);
+
+            // Add the total participants
+            const participants = document.createElement('div');
+            participants.className = 'embed-description';
+            participants.innerHTML = marked.parse(`**Total Participants: ${totalParticipants}**`);
+            endMessageContainer.appendChild(participants);
+
+
+            // Add the image if available
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const image = document.createElement('img');
+                    image.className = 'embed-image';
+                    image.src = e.target.result; // Base64 image data
+                    image.style.marginTop = "10px"; // Ajout d'espacement entre le texte et l'image
+                    endMessageContainer.appendChild(image);
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Add the end message container to the preview content
+            previewContent.appendChild(endMessageContainer);
+
+            // Show the popup
+            previewPopup.classList.remove('hidden');
+        });
+
+
+        // Close the preview popup
+        closePreviewButton.addEventListener('click', () => {
+            previewPopup.classList.add('hidden');
+        });
 
         const roles = [
             {% for role in roles %}

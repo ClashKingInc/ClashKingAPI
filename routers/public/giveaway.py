@@ -248,3 +248,44 @@ async def delete_giveaway(giveaway_id: str, token: str, server_id: str):
         status_message = "Giveaway not found."
     redirect_url = f"/giveaway/dashboard?token={token}&message={status_message}"
     return RedirectResponse(url=redirect_url, status_code=303)
+
+@router.post("/preview")
+async def preview_giveaway_form(
+    prize: str = Form(...),
+    text_in_embed: str = Form(""),
+    text_above_embed: str = Form(""),
+    end_time: str = Form(None),
+    winners: int = Form(...),
+    image: UploadFile = File(None),
+):
+    """
+    Generate a preview of the giveaway message.
+    """
+    # Placeholder for image URL (if an image is provided)
+    image_url = None
+    if image and image.filename:
+        # Mock an image URL for preview purposes
+        image_url = f"https://via.placeholder.com/400?text=Preview+Image"
+
+    # Format the end time
+    footer_text = ""
+    if end_time:
+        end_datetime = datetime.fromisoformat(end_time)
+        formatted_end_time = end_datetime.strftime("%a %d %b %Y at %H:%M UTC")
+        footer_text = f"Ends on {formatted_end_time}"
+
+    # Build the embed preview structure
+    embed_preview = {
+        "title": f"🎉 {prize} - {winners} Winner{'s' if winners > 1 else ''} 🎉",
+        "description": f"{text_in_embed}",
+        "image": {"url": image_url} if image_url else None,
+        "footer": {"text": footer_text} if footer_text else None,
+        "color": 0x5865F2  # Typical Discord embed color (blueish)
+    }
+
+    return JSONResponse(
+        content={
+            "text_above_embed": text_above_embed,
+            "embed": embed_preview
+        }
+    )

@@ -1,7 +1,7 @@
 import json
 import uuid
-from datetime import datetime
 from typing import List, Dict, Any
+import pendulum as pend
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -88,15 +88,16 @@ async def submit_giveaway_form(
     Handle form submissions to create or update a giveaway.
     """
     # Convert start_time and end_time to datetime objects
+    print(start_time)
     if now:
-        start_time = datetime.utcnow()  # Use the current time in UTC
+        start_time = pend.now(tz=pend.UTC)  # Use the current time in UTC
     elif start_time:
-        start_time = datetime.fromisoformat(start_time)  # Convert to datetime object
+        start_time = pend.parse(start_time)  # Convert to datetime object
     else:
         return JSONResponse({"status": "error", "message": "Start time is required unless 'Start Now' is checked"},
                             status_code=400)
 
-    end_time = datetime.fromisoformat(end_time)
+    end_time = pend.parse(end_time)
     server_id = int(server_id)
 
     # Decode boosters & roles
@@ -128,7 +129,7 @@ async def submit_giveaway_form(
             await delete_from_cdn(existing_giveaway["image_url"])
     elif image and image.filename:
         # Add a timestamp to the title before uploading to avoid cache issues
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = pend.now(tz=pend.UTC).format("YYYYMMDDHHmmss")
         title_with_timestamp = f"giveaway_{giveaway_id}_{timestamp}"
         image_url = await upload_to_cdn(image=image, title=title_with_timestamp)
 
@@ -272,8 +273,8 @@ async def preview_giveaway_form(
     # Format the end time
     footer_text = ""
     if end_time:
-        end_datetime = datetime.fromisoformat(end_time)
-        formatted_end_time = end_datetime.strftime("%a %d %b %Y at %H:%M UTC")
+        end_datetime = pend.parse(end_time)
+        formatted_end_time = end_datetime.format("ddd DD MMM YYYY [at] HH:mm [UTC]")
         footer_text = f"Ends on {formatted_end_time}"
 
     # Build the embed preview structure

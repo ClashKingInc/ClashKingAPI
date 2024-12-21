@@ -1,763 +1,653 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Create Giveaway</title>
-    <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
-    <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
-    <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
-    <link href="/static/output.css" rel="stylesheet">
-    <link href="/static/custom.css" rel="stylesheet">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <title>Create Giveaway</title>
+
+  <!-- Favicons / existing CSS -->
+  <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
+  <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
+  <link href="/static/output.css" rel="stylesheet">
+  <link href="/static/custom.css" rel="stylesheet">
+
+  <!-- Flatpickr Dark Theme + minimal overrides -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+  <style>
+    .flatpickr-calendar {
+      border-radius: 0.5rem !important;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35) !important;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.875rem;
+      background-color: #1f1f1f !important;
+      color: #e2e2e2 !important;
+    }
+    .flatpickr-day.selected {
+      background-color: #4f46e5 !important; /* Indigo */
+      color: #fff !important;
+    }
+    /* Minimal embed styling */
+    .discord-embed {
+      border: 1px solid #2f2f2f;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      background-color: #2a2a2a;
+      margin-bottom: 1rem;
+    }
+    .embed-header {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .embed-description {
+      margin-bottom: 0.5rem;
+    }
+    .embed-image {
+      max-width: 100%;
+      margin-top: 0.5rem;
+      border-radius: 0.25rem;
+    }
+    .embed-footer {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: #bbb;
+    }
+  </style>
 </head>
 <body class="bg-black text-white font-sans">
 <div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
-    <h1 class="text-2xl font-bold mb-6 text-center">🎉 Create Giveaway</h1>
-    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data"
-          data-token="{{ token }}">
-        <input type="hidden" name="server_id" value="{{ server_id }}">
-        <input type="hidden" name="token" value="{{ token }}">
-        <input type="hidden" name="boosters_json" id="boosters_json">
-        <input type="hidden" name="roles_json" id="roles_json">
+  <h1 class="text-2xl font-bold mb-6 text-center">🎉 Create Giveaway</h1>
 
-        <h2 class="text-lg font-semibold">Giveaway Details</h2>
-        <br/>
+  <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data">
+    <!-- Hidden fields required by your backend -->
+    <input type="hidden" name="server_id" value="{{ server_id }}">
+    <input type="hidden" name="token" value="{{ token }}">
 
-        <!-- Prize -->
-        <div class="mb-4">
-            <label for="prize" class="block text-sm font-medium">Prize:</label>
-            <input type="text" id="prize" name="prize" placeholder="Enter the prize"
-                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                   required>
-        </div>
+    <!-- Hidden fields for JSON data (roles, boosters) -->
+    <input type="hidden" id="roles_json" name="roles_json" value="">
+    <input type="hidden" id="boosters_json" name="boosters_json" value="">
 
-        <!-- Number of Winners -->
-        <div class="mb-4">
-            <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
-            <input type="number" id="winners" name="winners"
-                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                   required>
-        </div>
+    <!-- Hidden fields for final UTC times -->
+    <input type="hidden" id="start_time" name="start_time">
+    <input type="hidden" id="end_time" name="end_time">
 
-        <!-- Start Time -->
-        <div class="mb-4">
-            <label for="start_time" class="block text-sm font-medium">Start Time:</label>
-            <input type="datetime-local" id="start_time" name="start_time"
-                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                   min="" required>
-            <div class="flex items-center mt-2">
-                <input type="checkbox" id="now_checkbox" name="now" class="mr-2">
-                <label for="now_checkbox" class="text-sm font-medium">Start Now</label>
-            </div>
-        </div>
+    <h2 class="text-lg font-semibold">Giveaway Details</h2>
+    <br/>
 
-        <!-- End Time -->
-        <div class="mb-4">
-            <label for="end_time" class="block text-sm font-medium">End Time:</label>
-            <input type="datetime-local" id="end_time" name="end_time"
-                   class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                   min="" required>
-        </div>
+    <!-- Prize -->
+    <div class="mb-4">
+      <label for="prize" class="block text-sm font-medium">Prize:</label>
+      <input
+        type="text"
+        id="prize"
+        name="prize"
+        placeholder="Enter the prize"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
+               focus:ring-indigo-500 focus:border-indigo-500 text-white"
+        required
+      />
+    </div>
 
-        <!-- Target Channel -->
-        <div class="mb-4">
-            <label for="channel" class="block text-sm font-medium">Target Channel:</label>
-            <select id="channel" name="channel"
-                    class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                    required>
-                <option value="" disabled selected hidden>Select a channel...</option>
-                {% for channel in channels %}
-                    {% if channel.type == 0 %}
-                        <option value="{{ channel.id }}"># {{ channel.name }}</option>
-                    {% endif %}
-                {% endfor %}
-            </select>
-        </div>
+    <!-- Number of Winners -->
+    <div class="mb-4">
+      <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
+      <input
+        type="number"
+        id="winners"
+        name="winners"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
+               focus:ring-indigo-500 focus:border-indigo-500 text-white"
+        required
+      />
+    </div>
 
-        <!-- Mentions -->
-        <div class="mb-4">
-            <label for="mentions" class="block text-sm font-medium">Mentions:</label>
-            <select id="mentions" name="mentions" multiple
-                    class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white">
-                {% for role in roles %}
-                    <option value="{{ role.id }}">{{ role.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
+    <!-- Start Time (Flatpickr) -->
+    <div class="mb-4">
+      <label for="start_time_picker" class="block text-sm font-medium">Start Time (local):</label>
+      <input
+        type="text"
+        id="start_time_picker"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+               shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white flatpickr-input"
+        required
+      />
+      <div class="flex items-center mt-2">
+        <input type="checkbox" id="now_checkbox" name="now" class="mr-2">
+        <label for="now_checkbox" class="text-sm font-medium">Start Now</label>
+      </div>
+    </div>
 
-        <h2 class="text-lg font-semibold">Embed Details</h2>
-        <br/>
+    <!-- End Time (Flatpickr) -->
+    <div class="mb-4">
+      <label for="end_time_picker" class="block text-sm font-medium">End Time (local):</label>
+      <input
+        type="text"
+        id="end_time_picker"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+               shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white flatpickr-input"
+        required
+      />
+    </div>
 
-        <!-- Text Above Embed -->
-        <div class="mb-4">
-            <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed:</label>
-            <textarea id="text_above_embed" name="text_above_embed" placeholder="Optional: Add text above embed"
-                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                      rows="4"></textarea>
-        </div>
+    <!-- Channel -->
+    <div class="mb-4">
+      <label for="channel" class="block text-sm font-medium">Target Channel:</label>
+      <select
+        id="channel"
+        name="channel"
+        class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600
+               rounded-md shadow-sm text-white"
+        required
+      >
+        <option value="" disabled selected hidden>Select a channel...</option>
+        {% for c in channels %}
+          {% if c.type == 0 %}
+            <option value="{{ c.id }}"># {{ c.name }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
 
-        <!-- Field in Embed -->
-        <div class="mb-4">
-            <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
-            <textarea id="text_in_embed" name="text_in_embed" placeholder="Optional: Add text in embed field"
-                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                      rows="2">🎟️ **How to Enter**
+    <!-- Mentions -->
+    <div class="mb-4">
+      <label for="mentions" class="block text-sm font-medium">Mentions:</label>
+      <select
+        id="mentions"
+        name="mentions"
+        multiple
+        class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600
+               rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+      >
+        {% for r in roles %}
+          <option value="{{ r.id }}">{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <h2 class="text-lg font-semibold">Embed Details</h2>
+    <br/>
+
+    <!-- Text Above Embed -->
+    <div class="mb-4">
+      <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed:</label>
+      <textarea
+        id="text_above_embed"
+        name="text_above_embed"
+        rows="4"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+               shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+      ></textarea>
+    </div>
+
+    <!-- Text in Embed -->
+    <div class="mb-4">
+      <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
+      <textarea
+        id="text_in_embed"
+        name="text_in_embed"
+        rows="2"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+               shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+      >🎟️ **How to Enter**
 Click the Participate button below!</textarea>
+    </div>
+
+    <!-- Message on End -->
+    <div class="mb-4">
+      <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
+      <textarea
+        id="text_on_end"
+        name="text_on_end"
+        rows="4"
+        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+               shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
+      ></textarea>
+    </div>
+
+    <!-- Image Upload -->
+    <div class="mb-4">
+      <label for="image" class="block text-sm font-medium mb-2">Image:</label>
+      <div class="file-input-container">
+        <label class="file-input">
+          Upload Image
+          <input type="file" id="image" name="image" accept="image/*">
+        </label>
+      </div>
+      <div class="relative mt-4" id="imagePreviewContainer">
+        <img
+          id="imagePreview"
+          src="#"
+          alt="Image Preview"
+          class="hidden rounded-md shadow-md"
+          style="max-width: 100%; height: auto;"
+        />
+        <button
+          type="button"
+          id="removeImage"
+          class="hidden absolute top-0 right-0 bg-red-600 text-white font-bold
+                 rounded-full p-1 shadow-md hover:bg-red-700"
+        >&times;</button>
+      </div>
+    </div>
+
+    <!-- Preview Buttons -->
+    <div class="flex justify-center space-x-4 mt-4">
+      <button
+        type="button"
+        id="previewGiveaway"
+        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
+      >Preview Giveaway</button>
+      <button
+        type="button"
+        id="previewEndMessage"
+        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
+      >Preview End Message</button>
+    </div>
+    <br/>
+
+    <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
+    <br/>
+
+    <div class="mb-4 flex items-center">
+      <input type="checkbox" id="profile_picture_required" name="profile_picture_required" class="mr-2">
+      <label for="profile_picture_required" class="text-sm font-medium">
+        User must have a profile picture
+      </label>
+    </div>
+
+    <div class="mb-4 flex items-center">
+      <input type="checkbox" id="coc_account_required" name="coc_account_required" class="mr-2">
+      <label for="coc_account_required" class="text-sm font-medium">
+        User must have CoC account linked
+      </label>
+    </div>
+
+    <!-- Checkbox to enable roles -->
+    <div class="mb-4 flex items-center">
+      <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2">
+      <label for="enable_roles" class="text-sm font-medium">
+        Configure roles allowed to participate
+      </label>
+    </div>
+
+    <div id="rolesContainer" class="hidden">
+      <!-- Radio: allow/deny -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
+        <div class="flex items-center mb-2">
+          <input
+            type="radio"
+            id="allow_roles"
+            name="roles_mode"
+            value="allow"
+            checked
+            class="mr-2 text-indigo-600 focus:ring-indigo-500"
+          >
+          <label for="allow_roles" class="text-sm font-medium">
+            Allow for all roles except
+          </label>
         </div>
-
-
-        <!-- Message to Send on Giveaway End -->
-        <div class="mb-4">
-            <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
-            <textarea id="text_on_end" name="text_on_end"
-                      placeholder="Optional: Add a message to send when the giveaway ends"
-                      class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-                      rows="4"></textarea>
+        <div class="flex items-center">
+          <input
+            type="radio"
+            id="deny_roles"
+            name="roles_mode"
+            value="deny"
+            class="mr-2 text-indigo-600 focus:ring-indigo-500"
+          >
+          <label for="deny_roles" class="text-sm font-medium">
+            Deny for all roles except
+          </label>
         </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-2">Select Roles:</label>
+        <select
+          id="roles_select"
+          name="roles_selected"
+          multiple
+          class="choices-multiple mt-1 block w-full bg-gray-800 border border-gray-600
+                 rounded-md shadow-sm text-white"
+        >
+          {% for r in roles %}
+            <option value="{{ r.id }}">{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <br/>
+    </div>
 
-        <!-- Image Upload -->
-        <div class="mb-4">
-            <label for="image" class="block text-sm font-medium mb-2">Image:</label>
-            <div class="file-input-container">
-                <label class="file-input">
-                    Upload Image
-                    <input type="file" id="image" name="image" accept="image/*">
-                </label>
-            </div>
-            <div class="relative mt-4" id="imagePreviewContainer">
-                <img id="imagePreview" src="#" alt="Image Preview" class="hidden rounded-md shadow-md"
-                     style="max-width: 100%; height: auto;">
-                <!-- Croix pour supprimer l'image -->
-                <button type="button" id="removeImage"
-                        class="hidden absolute top-0 right-0 bg-red-600 text-white font-bold rounded-full p-1 shadow-md hover:bg-red-700">
-                    &times;
-                </button>
-            </div>
-        </div>
+    <!-- Adjust Odds -->
+    <div class="mb-6">
+      <div class="flex items-center mb-4">
+        <input type="checkbox" id="adjust_odds" name="adjust_odds" class="mr-2">
+        <label for="adjust_odds" class="text-sm font-medium">Adjust odds by roles</label>
+      </div>
+      <div id="boostersContainer" class="hidden"></div>
+      <button
+        type="button"
+        id="addBooster"
+        class="hidden mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md"
+      >Add booster</button>
+    </div>
 
-        <!-- Buttons Container -->
-        <div class="flex justify-center space-x-4 mt-4">
-            <!-- Preview Giveaway Button -->
-            <button type="button" id="previewGiveaway"
-                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">
-                Preview Giveaway
-            </button>
+    <!-- Submit -->
+    <button
+      type="submit"
+      class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold
+             py-2 px-4 rounded-md shadow-md"
+    >Create Giveaway</button>
 
-            <!-- Preview End Message Button -->
-            <button type="button" id="previewEndMessage"
-                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">
-                Preview End Message
-            </button>
-        </div>
-        <br/>
-
-        <!-- Giveaway Requirements -->
-        <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
-        <br/>
-
-        <!-- User must have a profile picture -->
-        <div class="mb-4 flex items-center">
-            <input type="checkbox" id="profile_picture_required" name="profile_picture_required" class="mr-2">
-            <label for="profile_picture_required" class="text-sm font-medium">
-                User must have a profile picture
-            </label>
-        </div>
-
-        <!-- User must have CoC account linked -->
-        <div class="mb-4 flex items-center">
-            <input type="checkbox" id="coc_account_required" name="coc_account_required" class="mr-2">
-            <label for="coc_account_required" class="text-sm font-medium">
-                User must have CoC account linked to his profile
-            </label>
-        </div>
-
-        <!-- Checkbox to enable roles -->
-        <div class="mb-4 flex items-center">
-            <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2">
-            <label for="enable_roles" class="text-sm font-medium">
-                Configure roles allowed to participate
-            </label>
-        </div>
-
-        <!-- Container for roles -->
-        <div id="rolesContainer" class="hidden">
-            <!-- Radio buttons to allow or deny roles -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
-                <div class="flex items-center mb-2">
-                    <input type="radio" id="allow_roles" name="roles_mode" value="allow" checked
-                           class="mr-2 text-indigo-600 focus:ring-indigo-500">
-                    <label for="allow_roles" class="text-sm font-medium">Allow for all roles except</label>
-                </div>
-                <div class="flex items-center">
-                    <input type="radio" id="deny_roles" name="roles_mode" value="deny"
-                           class="mr-2 text-indigo-600 focus:ring-indigo-500">
-                    <label for="deny_roles" class="text-sm font-medium">Deny for all roles except</label>
-                </div>
-            </div>
-
-            <!-- Select Roles -->
-            <div>
-                <label class="block text-sm font-medium mb-2">Select Roles:</label>
-                <select id="roles_select" name="roles_selected" multiple
-                        class="choices-multiple mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm text-white">
-                    {% for role in roles %}
-                        <option value="{{ role.id }}">{{ role.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <br/>
-        </div>
-
-
-        <!-- Adjust Odds by Roles -->
-        <div class="mb-6">
-            <div class="flex items-center mb-4">
-                <input type="checkbox" id="adjust_odds" name="adjust_odds" class="mr-2">
-                <label for="adjust_odds" class="text-sm font-medium">Adjust odds by roles</label>
-            </div>
-
-            <!-- Conteneur pour les Boosters -->
-            <div id="boostersContainer" class="hidden"></div>
-
-            <!-- Bouton Ajouter un Booster -->
-            <button type="button" id="addBooster"
-                    class="hidden mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">
-                Add booster
-            </button>
-        </div>
-
-
-        <!-- Submit Button -->
-        <button type="submit"
-                class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md">
-            Create Giveaway
-        </button>
-
-        <!-- Preview Popup -->
-        <div id="previewPopup" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-            <div class="bg-gray-800 text-white p-6 rounded-lg max-w-lg shadow-lg relative">
-                <button id="closePreview" type="button"
-                        class="absolute top-2 right-2 text-red-500 hover:text-red-600 font-bold">✖
-                </button>
-                <h2 class="text-xl font-bold mb-4">Giveaway Preview</h2>
-                <div id="previewContent">
-                    <!-- Content will be dynamically added here -->
-                </div>
-            </div>
-        </div>
-    </form>
-    <div id="confirmationMessage" class="hidden mt-4 text-center text-lg text-green-500 font-semibold"></div>
+    <!-- Preview Popup -->
+    <div id="previewPopup" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+      <div class="bg-gray-800 text-white p-6 rounded-lg max-w-lg shadow-lg relative">
+        <button
+          id="closePreview"
+          type="button"
+          class="absolute top-2 right-2 text-red-500 hover:text-red-600 font-bold"
+        >✖</button>
+        <h2 class="text-xl font-bold mb-4">Giveaway Preview</h2>
+        <div id="previewContent"></div>
+      </div>
+    </div>
+  </form>
 </div>
+
+<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const nowCheckbox = document.getElementById('now_checkbox');
-        const startTimeInput = document.getElementById('start_time');
-        const endTimeInput = document.getElementById('end_time');
-        const prizeInput = document.getElementById('prize');
-        const winnersInput = document.getElementById('winners');
-        const channelInput = document.getElementById('channel');
-        const textAboveEmbedInput = document.getElementById('text_above_embed');
-        const embedFieldValueInput = document.getElementById('text_in_embed');
-        const messageOnEndInput = document.getElementById('text_on_end');
-        const form = document.getElementById('giveawayForm');
-        const adjustOddsCheckbox = document.getElementById('adjust_odds');
-        const boostersContainer = document.getElementById('boostersContainer');
-        const addBoosterButton = document.getElementById('addBooster');
-        const enableRolesCheckbox = document.getElementById('enable_roles');
-        const rolesContainer = document.getElementById('rolesContainer');
-        let initialBoosterAdded = false; // Flag to track if the first booster is added
-        const imageInput = document.getElementById('image');
-        const imagePreview = document.getElementById('imagePreview');
-        const removeImageButton = document.getElementById('removeImage');
-        const previewButton = document.getElementById('previewGiveaway');
-        const previewPopup = document.getElementById('previewPopup');
-        const closePreviewButton = document.getElementById('closePreview');
-        const previewContent = document.getElementById('previewContent');
+document.addEventListener('DOMContentLoaded', function() {
+  // 1) Initialize Flatpickr
+  const startPickerEl = document.getElementById('start_time_picker');
+  const endPickerEl   = document.getElementById('end_time_picker');
+  const startPicker = flatpickr(startPickerEl, {
+    enableTime: true,
+    dateFormat: 'Y-m-d H:i',
+    minDate: 'today',
+    defaultDate: new Date(),
+    onChange: function(selectedDates) {
+      if (selectedDates.length > 0) {
+        endPicker.set('minDate', selectedDates[0]);
+      }
+    }
+  });
+  const endPicker = flatpickr(endPickerEl, {
+    enableTime: true,
+    dateFormat: 'Y-m-d H:i',
+    minDate: 'today',
+    defaultDate: new Date()
+  });
 
+  // "Start Now" checkbox
+  const nowCheckbox = document.getElementById('now_checkbox');
+  nowCheckbox.addEventListener('change', () => {
+    if (nowCheckbox.checked) {
+      startPicker.setDate(new Date(), true);
+      startPickerEl.disabled = true;
+    } else {
+      startPickerEl.disabled = false;
+    }
+  });
 
-        previewButton.addEventListener('click', async () => {
-            const formData = new FormData(document.getElementById('giveawayForm'));
+  // 2) Roles & Boosters toggles
+  const enableRolesCheckbox = document.getElementById('enable_roles');
+  const rolesContainer      = document.getElementById('rolesContainer');
+  enableRolesCheckbox.addEventListener('change', () => {
+    if (enableRolesCheckbox.checked) {
+      rolesContainer.classList.remove('hidden');
+    } else {
+      rolesContainer.classList.add('hidden');
+    }
+  });
 
-            // Collect form data
-            const prize = formData.get('prize');
-            const textAboveEmbed = formData.get('text_above_embed') || '';
-            const textInEmbed = formData.get('text_in_embed') || '';
-            const endTime = formData.get('end_time');
-            const winners = formData.get('winners') || 1;
+  const adjustOddsCheckbox = document.getElementById('adjust_odds');
+  const boostersContainer  = document.getElementById('boostersContainer');
+  const addBoosterButton   = document.getElementById('addBooster');
+  let initialBoosterAdded  = false;
 
-            // Preprocess textInEmbed to respect newlines
-            const processedTextInEmbed = textInEmbed.replace(/\n/g, '  \n');
-            const processedTextAboveEmbed = textAboveEmbed.replace(/\n/g, '  \n');
+  adjustOddsCheckbox.addEventListener('change', () => {
+    if (adjustOddsCheckbox.checked) {
+      boostersContainer.classList.remove('hidden');
+      addBoosterButton.classList.remove('hidden');
+      if (!initialBoosterAdded) {
+        addInitialBooster();
+        initialBoosterAdded = true;
+      }
+    } else {
+      boostersContainer.classList.add('hidden');
+      addBoosterButton.classList.add('hidden');
+      boostersContainer.innerHTML = '';
+      initialBoosterAdded = false;
+    }
+  });
 
-            // Mentions
-            const mentionElements = document.querySelectorAll('#mentions option:checked');
-            const mentions = Array.from(mentionElements).map(option => `@${option.textContent}`).join(' ');
+  addBoosterButton.addEventListener('click', () => {
+    boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+    initChoicesForLastBooster();
+  });
 
-            // Clear previous preview content
-            previewContent.innerHTML = "";
+  boostersContainer.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-booster')) {
+      e.target.parentElement.remove();
+    }
+  });
 
-            // Add mentions
-            if (mentions) {
-                const mentionText = document.createElement('p');
-                mentionText.className = 'mb-4 text-sm text-gray-300';
-                mentionText.innerText = mentions;
-                previewContent.appendChild(mentionText);
-            }
+  function addInitialBooster() {
+    boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+    initChoicesForLastBooster();
+  }
 
-            // Add text above embed (rendered as Markdown)
-            if (textAboveEmbed) {
-                const aboveText = document.createElement('div');
-                aboveText.className = 'mb-4 text-sm text-gray-300';
-                aboveText.innerHTML = marked.parse(processedTextAboveEmbed);
-                previewContent.appendChild(aboveText);
-            }
-
-            // Add embed container
-            const embedContainer = document.createElement('div');
-            embedContainer.className = 'discord-embed';
-
-            // Embed title
-            const title = document.createElement('div');
-            title.className = 'embed-header';
-            title.innerText = `🎉 ${prize} - ${winners} Winner${winners > 1 ? 's' : ''} 🎉`;
-            embedContainer.appendChild(title);
-
-            // Embed description (rendered as Markdown)
-            const description = document.createElement('div');
-            description.className = 'embed-description';
-            description.innerHTML = marked.parse(processedTextInEmbed);
-            embedContainer.appendChild(description);
-
-            // Add image if available
-            const file = imageInput.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const image = document.createElement('img');
-                    image.className = 'embed-image';
-                    image.src = e.target.result; // Base64 image data
-                    embedContainer.appendChild(image);
-
-                    // Add footer with end time below the image
-                    if (endTime) {
-                        const endDateTime = new Date(endTime);
-                        const formattedEndTime = endDateTime.toLocaleString('en-US', {
-                            weekday: 'short',
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: 'numeric',
-                            timeZoneName: 'short'
-                        });
-                        const footer = document.createElement('div');
-                        footer.className = 'embed-footer mt-2';
-                        footer.innerText = `Ends on ${formattedEndTime}`;
-                        embedContainer.appendChild(footer);
-                    }
-                };
-                reader.readAsDataURL(file);
-            } else if (endTime) {
-                // Add footer with end time if no image
-                const endDateTime = new Date(endTime);
-                const formattedEndTime = endDateTime.toLocaleString('en-US', {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    timeZoneName: 'short'
-                });
-                const footer = document.createElement('div');
-                footer.className = 'embed-footer mt-2';
-                footer.innerText = `Ends on ${formattedEndTime}`;
-                embedContainer.appendChild(footer);
-            }
-
-            // Add embed container to the preview content
-            previewContent.appendChild(embedContainer);
-
-            // Show the popup
-            previewPopup.classList.remove('hidden');
-        });
-
-        document.getElementById('previewEndMessage').addEventListener('click', () => {
-            const prize = document.getElementById('prize').value || "Giveaway";
-            const textOnEnd = document.getElementById('text_on_end').value || "Thank you for participating!";
-            const totalParticipants = Math.floor(Math.random() * 100) + 1; // Simule un nombre de participants
-            const file = document.getElementById('image').files[0]; // Vérifie si une image est présente
-
-            // Clear previous preview content
-            previewContent.innerHTML = "";
-
-            // Add winner(s) mention(s)
-            const mention = document.createElement('p');
-            mention.className = 'mb-4 text-sm text-gray-300';
-            mention.innerText = '@Winner';
-            previewContent.appendChild(mention);
-
-            // Add text above embed (rendered as Markdown)
-            if (textOnEnd) {
-                const endText = document.createElement('div');
-                endText.className = 'mb-4 text-sm text-gray-300';
-                endText.innerHTML = marked.parse(textOnEnd);
-                previewContent.appendChild(endText);
-            }
-
-            // Create end message container
-            const endMessageContainer = document.createElement('div');
-            endMessageContainer.className = 'discord-embed';
-
-            // Add the title
-            const title = document.createElement('div');
-            title.className = 'embed-header';
-            title.innerText = `🎉 ${prize} - 1 Winner 🎉`;
-            endMessageContainer.appendChild(title);
-
-            // Add the total participants
-            const participants = document.createElement('div');
-            participants.className = 'embed-description';
-            participants.innerHTML = marked.parse(`**Total Participants: ${totalParticipants}**`);
-            endMessageContainer.appendChild(participants);
-
-
-            // Add the image if available
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const image = document.createElement('img');
-                    image.className = 'embed-image';
-                    image.src = e.target.result; // Base64 image data
-                    image.style.marginTop = "10px"; // Ajout d'espacement entre le texte et l'image
-                    endMessageContainer.appendChild(image);
-                };
-                reader.readAsDataURL(file);
-            }
-
-            // Add the end message container to the preview content
-            previewContent.appendChild(endMessageContainer);
-
-            // Show the popup
-            previewPopup.classList.remove('hidden');
-        });
-
-
-        // Close the preview popup
-        closePreviewButton.addEventListener('click', () => {
-            previewPopup.classList.add('hidden');
-        });
-
-        const roles = [
-            {% for role in roles %}
-                {id: "{{ role.id }}", name: "{{ role.name }}"},
-            {% endfor %}
-        ];
-
-        // Show/Hide the boosters container and the Add Booster button based on the checkbox state
-        adjustOddsCheckbox.addEventListener('change', () => {
-            if (adjustOddsCheckbox.checked) {
-                boostersContainer.classList.remove('hidden'); // Show boosters container
-                addBoosterButton.classList.remove('hidden'); // Show "Add Booster" button
-
-                // Ajouter le premier booster uniquement si cela n'a pas déjà été fait
-                if (!initialBoosterAdded) {
-                    addInitialBooster();
-                    initialBoosterAdded = true;
-                }
-            } else {
-                boostersContainer.classList.add('hidden'); // Hide boosters container
-                addBoosterButton.classList.add('hidden'); // Hide "Add Booster" button
-
-                // Reset the boosters
-                boostersContainer.innerHTML = '';
-                initialBoosterAdded = false; // Reset pour permettre un ajout propre la prochaine fois
-            }
-        });
-
-        // Function to add the first booster
-        const addInitialBooster = () => {
-            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
-            initializeChoicesForLastBooster();
-        };
-
-        // Function to create a new booster template
-        const createBoosterTemplate = () => {
-            return `
-    <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
+  function createBoosterTemplate() {
+    return `
+      <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
         <label class="block text-sm font-medium mb-2">Booster:</label>
         <input type="range" min="0.25" max="3" step="0.25" value="1" class="slider w-full mb-2">
         <p class="text-xs text-gray-300">Value: <span class="slider-value">x1</span></p>
         <select multiple class="roles-select w-full p-2 bg-gray-800 border border-gray-600 rounded-md text-white">
-            ${roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('')}
+          {% for role in roles %}
+            <option value="{{ role.id }}">{{ role.name }}</option>
+          {% endfor %}
         </select>
         <button type="button" class="remove-booster mt-2 bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md">
-            Remove booster
+          Remove booster
         </button>
-    </div>`;
-        };
+      </div>
+    `;
+  }
 
-        // Add a new booster when clicking on the Add Booster button
-        addBoosterButton.addEventListener('click', () => {
-            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
-            initializeChoicesForLastBooster();
-        });
-
-        // Initialize Choices.js for the last booster added
-        const initializeChoicesForLastBooster = () => {
-            const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
-            new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
-                removeItemButton: true,
-                searchEnabled: true,
-                shouldSort: false
-            });
-
-            const lastSlider = boostersContainer.querySelectorAll('.slider');
-            updateSliderValue(lastSlider[lastSlider.length - 1]);
-        };
-
-        // Function to update the displayed slider value
-        const updateSliderValue = (slider) => {
-            const valueDisplay = slider.parentElement.querySelector('.slider-value');
-            slider.addEventListener('input', () => {
-                valueDisplay.textContent = `x${slider.value}`;
-            });
-        };
-
-        // Handle removing a booster
-        boostersContainer.addEventListener('click', (event) => {
-            if (event.target.classList.contains('remove-booster')) {
-                event.target.parentElement.remove();
-            }
-        });
-
-        // Display roles container if checkbox is checked
-        enableRolesCheckbox.addEventListener('change', () => {
-            if (enableRolesCheckbox.checked) {
-                rolesContainer.classList.remove('hidden');
-            } else {
-                rolesContainer.classList.add('hidden');
-            }
-        });
-
-        // Initialize Choices.js for roles dropdown
-        const rolesSelect = document.getElementById('roles_select');
-        new Choices(rolesSelect, {
-            removeItemButton: true,
-            searchEnabled: true,
-            shouldSort: false
-        });
-
-        // Set current date-time as the minimum for start_time and end_time
-        const setMinDateTime = () => {
-            const now = new Date().toISOString().slice(0, 16); // Get current time in "YYYY-MM-DDTHH:mm" format
-            startTimeInput.min = now;
-            endTimeInput.min = now;
-        };
-        setMinDateTime();
-
-        // "Start Now" Checkbox Logic
-        nowCheckbox.addEventListener('change', () => {
-            if (nowCheckbox.checked) {
-                startTimeInput.disabled = true;
-                startTimeInput.value = "";
-            } else {
-                startTimeInput.disabled = false;
-            }
-        });
-
-        // Ensure end_time is after start_time
-        const validateTimes = () => {
-            if (!nowCheckbox.checked && startTimeInput.value && endTimeInput.value) {
-                const startTime = new Date(startTimeInput.value);
-                const endTime = new Date(endTimeInput.value);
-
-                if (endTime <= startTime) {
-                    alert("End time must be after start time by at least 5 minutes.");
-                    endTimeInput.value = ""; // Reset end time
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        startTimeInput.addEventListener('change', validateTimes);
-        endTimeInput.addEventListener('change', validateTimes);
-
-        // Validate Prize Field
-        const validatePrize = () => {
-            if (!prizeInput.value.trim()) {
-                alert("Prize cannot be empty.");
-                return false;
-            }
-            if (prizeInput.value.length > 100) {
-                alert("Prize cannot exceed 100 characters.");
-                return false;
-            }
-            return true;
-        };
-
-        // Validate Winners Field
-        const validateWinners = () => {
-            const winners = parseInt(winnersInput.value, 10);
-            if (isNaN(winners) || winners <= 0) {
-                alert("Number of winners must be a positive number.");
-                return false;
-            }
-            return true;
-        };
-
-        // Validate Channel Selection
-        const validateChannel = () => {
-            if (!channelInput.value) {
-                alert("Please select a target channel.");
-                return false;
-            }
-            return true;
-        };
-
-        // Validate Text Above Embed
-        const validateTextAboveEmbed = () => {
-            if (textAboveEmbedInput.value.length > 500) {
-                alert("Text above embed cannot exceed 500 characters.");
-                return false;
-            }
-            return true;
-        };
-
-        // Validate Embed Field
-        const validateEmbedField = () => {
-            if (embedFieldValueInput.value.length > 500) {
-                alert("Embed field text cannot exceed 500 characters.");
-                return false;
-            }
-            return true;
-        };
-
-        // Validate Message on End
-        const validateMessageOnEnd = () => {
-            if (messageOnEndInput.value.length > 500) {
-                alert("Message on giveaway end cannot exceed 500 characters.");
-                return false;
-            }
-            return true;
-        };
-
-        const validateImage = () => {
-            const fileInput = document.getElementById('image');
-            const file = fileInput.files[0];
-            if (file) {
-                // Check file size (e.g., max 2 MB)
-                if (file.size > 2 * 1024 * 1024) {
-                    alert("Image size must not exceed 2 MB.");
-                    return false;
-                }
-                // Check file type
-                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-                if (!allowedTypes.includes(file.type)) {
-                    alert("Only JPEG, PNG, or GIF files are allowed.");
-                    return false;
-                }
-            }
-            return true;
-        };
-
-
-        // Attach validations to the form submission
-        form.addEventListener('submit', (event) => {
-
-            if (startTimeInput.value) {
-                // Convert local time to UTC for start
-                const localStartDate = new Date(startTimeInput.value);
-                startTimeInput.value = localStartDate.toISOString().slice(0, 16); // ISO format tronqué
-            }
-
-            if (endTimeInput.value) {
-                // Convert local time to UTC for end
-                const localEndDate = new Date(endTimeInput.value);
-                endTimeInput.value = localEndDate.toISOString().slice(0, 16); // ISO format tronqué
-            }
-
-            // Serialize boosters
-            const boosters = [];
-            document.querySelectorAll('.booster').forEach((booster) => {
-                const value = booster.querySelector('.slider').value;
-                const roles = Array.from(booster.querySelector('.roles-select').selectedOptions)
-                    .map(option => option.value);
-
-                boosters.push({value, roles});
-            });
-            document.getElementById('boosters_json').value = JSON.stringify(boosters);
-
-            // Serialize selected roles
-            const rolesSelect = document.getElementById('roles_select');
-            const selectedRoles = Array.from(rolesSelect.selectedOptions).map(option => option.value);
-            document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
-
-            if (
-                !validatePrize() ||
-                !validateWinners() ||
-                !validateChannel() ||
-                !validateTextAboveEmbed() ||
-                !validateEmbedField() ||
-                !validateMessageOnEnd() ||
-                !validateTimes() ||
-                !validateImage()
-            ) {
-                event.preventDefault(); // Prevent form submission
-            }
-        });
-
-        // Initialize Choices.js for dropdowns
-        var elements = document.querySelectorAll('.choices-multiple');
-        elements.forEach(function (element) {
-            new Choices(element, {
-                removeItemButton: true,
-                searchEnabled: true, // Enable search
-                searchChoices: true, // Allow typing to filter
-                shouldSort: false // Do not sort automatically
-            });
-        });
-
-        var channelDropdown = document.getElementById('channel');
-        new Choices(channelDropdown, {
-            removeItemButton: false, // No remove button for single-select
-            searchEnabled: true, // Allow searching in the dropdown
-            itemSelectText: '', // Remove "Press to select" text
-            shouldSort: false, // Maintain original order of options
-        });
-
-        document.querySelectorAll('.roles-select').forEach((element) => {
-            new Choices(element, {
-                removeItemButton: true,
-                searchEnabled: true,
-                shouldSort: false
-            });
-        });
-
-        imageInput.addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    imagePreview.src = e.target.result;
-                    imagePreview.classList.remove('hidden');
-                    removeImageButton.classList.remove('hidden');
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        removeImageButton.addEventListener('click', function () {
-            imagePreview.src = '#';
-            imagePreview.classList.add('hidden');
-            removeImageButton.classList.add('hidden');
-            imageInput.value = '';
-        });
+  function initChoicesForLastBooster() {
+    const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
+    new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
+      removeItemButton: true,
+      searchEnabled: true,
+      shouldSort: false
     });
+    const lastSlider = boostersContainer.querySelectorAll('.slider');
+    updateSliderValue(lastSlider[lastSlider.length - 1]);
+  }
+
+  function updateSliderValue(slider) {
+    const valDisplay = slider.parentElement.querySelector('.slider-value');
+    slider.addEventListener('input', () => {
+      valDisplay.textContent = `x${slider.value}`;
+    });
+  }
+
+  // 3) Initialize Choices.js
+  new Choices(document.getElementById('channel'), {
+    removeItemButton: false,
+    searchEnabled: true,
+    itemSelectText: '',
+    shouldSort: false
+  });
+  new Choices(document.getElementById('mentions'), {
+    removeItemButton: true,
+    searchEnabled: true,
+    shouldSort: false
+  });
+  const rolesSelect = document.getElementById('roles_select');
+  new Choices(rolesSelect, {
+    removeItemButton: true,
+    searchEnabled: true,
+    shouldSort: false
+  });
+
+  // 4) Image preview
+  const imageInput   = document.getElementById('image');
+  const imagePreview = document.getElementById('imagePreview');
+  const removeImageBtn = document.getElementById('removeImage');
+
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        imagePreview.src = ev.target.result;
+        imagePreview.classList.remove('hidden');
+        removeImageBtn.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+  removeImageBtn.addEventListener('click', () => {
+    imagePreview.src = '#';
+    imagePreview.classList.add('hidden');
+    removeImageBtn.classList.add('hidden');
+    imageInput.value = '';
+  });
+
+  // 5) Preview logic
+  const previewPopup   = document.getElementById('previewPopup');
+  const previewContent = document.getElementById('previewContent');
+  const closePreviewBtn= document.getElementById('closePreview');
+  const previewGiveawayBtn = document.getElementById('previewGiveaway');
+  const previewEndMsgBtn   = document.getElementById('previewEndMessage');
+
+  previewGiveawayBtn.addEventListener('click', () => {
+    previewContent.innerHTML = buildPreview(false);
+    previewPopup.classList.remove('hidden');
+  });
+
+  previewEndMsgBtn.addEventListener('click', () => {
+    previewContent.innerHTML = buildPreview(true);
+    previewPopup.classList.remove('hidden');
+  });
+
+  closePreviewBtn.addEventListener('click', () => {
+    previewPopup.classList.add('hidden');
+  });
+
+  /**
+   * Build the HTML preview of the giveaway or end message.
+   * @param {boolean} endMessage - true to build end-message preview, false for normal.
+   */
+  function buildPreview(endMessage) {
+    const prize    = document.getElementById('prize').value || "Giveaway";
+    const winners  = document.getElementById('winners').value || 1;
+    const textAbove= document.getElementById('text_above_embed').value || '';
+    const textIn   = document.getElementById('text_in_embed').value || '';
+    const textEnd  = document.getElementById('text_on_end').value || "Thanks for participating!";
+    const endValue = endPicker.selectedDates[0];
+    const file     = imageInput.files[0];
+    const mentionElements = document.querySelectorAll('#mentions option:checked');
+    const mentions = Array.from(mentionElements).map(option => `@${option.textContent}`).join(' ');
+
+    // Use Marked to parse newlines as Markdown
+    const processedTextAbove = textAbove.replace(/\n/g, '  \n');
+    const processedTextIn    = textIn.replace(/\n/g, '  \n');
+    const processedTextEnd   = textEnd.replace(/\n/g, '  \n');
+
+    let html = '';
+
+    // Always show mentions
+    if (mentions) {
+      html += `<p class="mb-4 text-sm text-gray-300">${mentions}</p>`;
+    }
+
+    if (!endMessage) {
+      // Normal "Giveaway" preview
+      if (textAbove) {
+        html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextAbove)}</div>`;
+      }
+      html += `<div class="discord-embed">`;
+      html += `<div class="embed-header">🎉 ${prize} - ${winners} Winner${winners>1?'s':''} 🎉</div>`;
+      html += `<div class="embed-description">${marked.parse(processedTextIn)}</div>`;
+
+      // Add image
+      if (file) {
+        // We'll show a base64
+      } else if (imagePreview.src && imagePreview.src !== '#' && !imagePreview.src.startsWith('blob:')) {
+        // Probably an existing image
+      }
+      // We'll embed the image after reading file or using existing
+      // But let's do it synchronously (for demonstration):
+      const imageUrl = (file) ? null : (imagePreview.src && imagePreview.src !== '#') ? imagePreview.src : null;
+      if (imageUrl) {
+        html += `<img class="embed-image" src="${imageUrl}" />`;
+      }
+
+      // End time footer
+      if (endValue) {
+        const localString = endValue.toLocaleString();
+        html += `<div class="embed-footer mt-2">Ends on ${localString}</div>`;
+      }
+      html += `</div>`; // close embed
+    } else {
+      // "End Message" preview
+      html += `<p class="mb-4 text-sm text-gray-300">@Winner</p>`;
+      if (textEnd) {
+        html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextEnd)}</div>`;
+      }
+      // Let's do the "end" embed
+      html += `<div class="discord-embed">`;
+      html += `<div class="embed-header">🎉 ${prize} - 1 Winner 🎉</div>`;
+      // Just simulate total participants
+      const totalParticipants = Math.floor(Math.random() * 100) + 1;
+      html += `<div class="embed-description">${marked.parse("**Total Participants: " + totalParticipants + "**")}</div>`;
+
+      // Possibly show the same image
+      const imageUrl = (file) ? null : (imagePreview.src && imagePreview.src !== '#') ? imagePreview.src : null;
+      if (imageUrl) {
+        html += `<img class="embed-image" src="${imageUrl}" style="margin-top: 10px"/>`;
+      }
+      html += `</div>`; // close embed
+    }
+    return html;
+  }
+
+  // 6) On form submit: store roles_json, boosters_json, & convert times to UTC
+  const form = document.getElementById('giveawayForm');
+  const startTimeHidden = document.getElementById('start_time');
+  const endTimeHidden   = document.getElementById('end_time');
+
+  form.addEventListener('submit', (event) => {
+    // If "Start Now"
+    if (nowCheckbox.checked) {
+      startTimeHidden.value = "";
+    } else {
+      const startDate = startPicker.selectedDates[0];
+      startTimeHidden.value = startDate ? startDate.toISOString() : "";
+    }
+    const endDate = endPicker.selectedDates[0];
+    endTimeHidden.value = endDate ? endDate.toISOString() : "";
+
+    // Build boosters array
+    const boosters = [];
+    document.querySelectorAll('.booster').forEach((booster) => {
+      const val = booster.querySelector('.slider').value;
+      const roles = Array.from(booster.querySelector('.roles-select').selectedOptions).map(o => o.value);
+      boosters.push({ value: val, roles });
+    });
+    document.getElementById('boosters_json').value = JSON.stringify(boosters);
+
+    // Build roles array
+    const selectedRoles = Array.from(rolesSelect.selectedOptions).map(o => o.value);
+    document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
+  });
+});
 </script>
 </body>
 </html>

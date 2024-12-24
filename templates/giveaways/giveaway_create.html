@@ -76,7 +76,7 @@
 
     <!-- Prize -->
     <div class="mb-4">
-      <label for="prize" class="block text-sm font-medium">Prize:</label>
+      <label for="prize" class="block text-sm font-medium">Prize <span class="red-star">*</span></label>
       <input
         type="text"
         id="prize"
@@ -90,7 +90,7 @@
 
     <!-- Number of Winners -->
     <div class="mb-4">
-      <label for="winners" class="block text-sm font-medium">Number of Winners:</label>
+      <label for="winners" class="block text-sm font-medium">Number of Winners <span class="red-star">*</span></label>
       <input
         type="number"
         id="winners"
@@ -103,7 +103,7 @@
 
     <!-- Start Time (Flatpickr) -->
     <div class="mb-4">
-      <label for="start_time_picker" class="block text-sm font-medium">Start Time (local):</label>
+      <label for="start_time_picker" class="block text-sm font-medium">Start Time (local) <span class="red-star">*</span></label>
       <input
         type="text"
         id="start_time_picker"
@@ -119,7 +119,7 @@
 
     <!-- End Time (Flatpickr) -->
     <div class="mb-4">
-      <label for="end_time_picker" class="block text-sm font-medium">End Time (local):</label>
+      <label for="end_time_picker" class="block text-sm font-medium">End Time (local) <span class="red-star">*</span></label>
       <input
         type="text"
         id="end_time_picker"
@@ -131,7 +131,7 @@
 
     <!-- Channel -->
     <div class="mb-4">
-      <label for="channel" class="block text-sm font-medium">Target Channel:</label>
+      <label for="channel" class="block text-sm font-medium">Target Channel <span class="red-star">*</span></label>
       <select
         id="channel"
         name="channel"
@@ -150,7 +150,7 @@
 
     <!-- Mentions -->
     <div class="mb-4">
-      <label for="mentions" class="block text-sm font-medium">Mentions:</label>
+      <label for="mentions" class="block text-sm font-medium">Mentions</label>
       <select
         id="mentions"
         name="mentions"
@@ -169,10 +169,11 @@
 
     <!-- Text Above Embed -->
     <div class="mb-4">
-      <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed:</label>
+      <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed</label>
       <textarea
         id="text_above_embed"
         name="text_above_embed"
+        placeholder="(Optional) Add text above the embed"
         rows="4"
         class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
@@ -181,10 +182,11 @@
 
     <!-- Text in Embed -->
     <div class="mb-4">
-      <label for="text_in_embed" class="block text-sm font-medium">Text in Embed:</label>
+      <label for="text_in_embed" class="block text-sm font-medium">Text in Embed</label>
       <textarea
         id="text_in_embed"
         name="text_in_embed"
+        placeholder="(Optional) Add text in the embed"
         rows="2"
         class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
@@ -194,19 +196,21 @@ Click the Participate button below!</textarea>
 
     <!-- Message on End -->
     <div class="mb-4">
-      <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End:</label>
+      <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End</label>
       <textarea
         id="text_on_end"
         name="text_on_end"
+        placeholder="(Optional) Add a message to send on giveaway end above the embed"
         rows="4"
         class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-      ></textarea>
+      >🎉 **Congratulations!** You won the giveaway! We will contact you shortly.
+      </textarea>
     </div>
 
     <!-- Image Upload -->
     <div class="mb-4">
-      <label for="image" class="block text-sm font-medium mb-2">Image:</label>
+      <label for="image" class="block text-sm font-medium mb-2">Image</label>
       <div class="file-input-container">
         <label class="file-input">
           Upload Image
@@ -216,7 +220,7 @@ Click the Participate button below!</textarea>
       <div class="relative mt-4" id="imagePreviewContainer">
         <img
           id="imagePreview"
-          src="#"
+          src=""
           alt="Image Preview"
           class="hidden rounded-md shadow-md"
           style="max-width: 100%; height: auto;"
@@ -367,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
     enableTime: true,
     dateFormat: 'Y-m-d H:i',
     minDate: 'today',
-    defaultDate: new Date(),
+    defaultDate: null,
     onChange: function(selectedDates) {
       if (selectedDates.length > 0) {
         endPicker.set('minDate', selectedDates[0]);
@@ -378,7 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
     enableTime: true,
     dateFormat: 'Y-m-d H:i',
     minDate: 'today',
-    defaultDate: new Date()
+    defaultDate: null
   });
 
   // "Start Now" checkbox
@@ -562,12 +566,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let html = '';
 
-    // Always show mentions
-    if (mentions) {
-      html += `<p class="mb-4 text-sm text-gray-300">${mentions}</p>`;
-    }
-
     if (!endMessage) {
+      // Always show mentions
+      if (mentions) {
+        html += `<p class="mb-4 text-sm text-gray-300">${mentions}</p>`;
+      }
       // Normal "Giveaway" preview
       if (textAbove) {
         html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextAbove)}</div>`;
@@ -633,6 +636,40 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     const endDate = endPicker.selectedDates[0];
     endTimeHidden.value = endDate ? endDate.toISOString() : "";
+
+    const prize = document.getElementById('prize').value.trim();
+    const winners = parseInt(document.getElementById('winners').value);
+    const channel = document.getElementById('channel').value;
+
+    // Validate prize
+    if (!prize) {
+      alert('Prize cannot be empty!');
+      event.preventDefault();
+    }
+
+    // Validate number of winners
+    if (isNaN(winners) || winners < 1) {
+      alert('Number of winners must be at least 1.');
+      event.preventDefault();
+    }
+
+    // Validate start time
+    if (!nowCheckbox.checked && !startTimeHidden.value) {
+      alert('Start time must be selected!');
+      event.preventDefault();
+    }
+
+    // Validate end time
+    if (!endTimeHidden.value) {
+      alert('End time must be selected!');
+      event.preventDefault();
+    }
+
+    // Validate channel
+    if (!channel) {
+      alert('You must select a channel!');
+      event.preventDefault();
+    }
 
     // Build boosters array
     const boosters = [];

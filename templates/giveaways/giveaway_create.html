@@ -1,360 +1,331 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-  <title>Create Giveaway</title>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <title>Create Giveaway</title>
 
-  <!-- Favicons / existing CSS -->
-  <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
-  <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
-  <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
-  <link href="/static/output.css" rel="stylesheet">
-  <link href="/static/custom.css" rel="stylesheet">
+    <!-- Favicons / existing CSS -->
+    <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
+    <link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet">
+    <link href="/static/output.css" rel="stylesheet">
+    <link href="/static/custom.css" rel="stylesheet">
 
-  <!-- Flatpickr Dark Theme + minimal overrides -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
-  <style>
-    .flatpickr-calendar {
-      border-radius: 0.5rem !important;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.35) !important;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.875rem;
-      background-color: #1f1f1f !important;
-      color: #e2e2e2 !important;
-    }
-    .flatpickr-day.selected {
-      background-color: #4f46e5 !important; /* Indigo */
-      color: #fff !important;
-    }
-    /* Minimal embed styling */
-    .discord-embed {
-      border: 1px solid #2f2f2f;
-      padding: 1rem;
-      border-radius: 0.5rem;
-      background-color: #2a2a2a;
-      margin-bottom: 1rem;
-    }
-    .embed-header {
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-    .embed-description {
-      margin-bottom: 0.5rem;
-    }
-    .embed-image {
-      max-width: 100%;
-      margin-top: 0.5rem;
-      border-radius: 0.25rem;
-    }
-    .embed-footer {
-      margin-top: 0.5rem;
-      font-size: 0.875rem;
-      color: #bbb;
-    }
-  </style>
+    <!-- Flatpickr Dark Theme + minimal overrides -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
 </head>
 <body class="bg-black text-white font-sans">
 <div class="max-w-lg mx-auto p-6 bg-gray-800 rounded-lg shadow-md mt-10">
-  <h1 class="text-2xl font-bold mb-6 text-center">🎉 Create Giveaway</h1>
+    <h1 class="text-2xl font-bold mb-6 text-center">🎉 Create Giveaway</h1>
 
-  <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data">
-    <!-- Hidden fields required by your backend -->
-    <input type="hidden" name="server_id" value="{{ server_id }}">
-    <input type="hidden" name="token" value="{{ token }}">
+    <form id="giveawayForm" action="/giveaway/submit" method="post" enctype="multipart/form-data">
+        <!-- Hidden fields required by your backend -->
+        <input type="hidden" name="server_id" value="{{ server_id }}">
+        <input type="hidden" name="token" value="{{ token }}">
 
-    <!-- Hidden fields for JSON data (roles, boosters) -->
-    <input type="hidden" id="roles_json" name="roles_json" value="">
-    <input type="hidden" id="boosters_json" name="boosters_json" value="">
+        <!-- Hidden fields for JSON data (roles, boosters) -->
+        <input type="hidden" id="roles_json" name="roles_json" value="">
+        <input type="hidden" id="boosters_json" name="boosters_json" value="">
 
-    <!-- Hidden fields for final UTC times -->
-    <input type="hidden" id="start_time" name="start_time">
-    <input type="hidden" id="end_time" name="end_time">
+        <!-- Hidden fields for final UTC times -->
+        <input type="hidden" id="start_time" name="start_time">
+        <input type="hidden" id="end_time" name="end_time">
 
-    <h2 class="text-lg font-semibold">Giveaway Details</h2>
-    <br/>
+        <h2 class="text-lg font-semibold">Giveaway Details</h2>
+        <br/>
 
-    <!-- Prize -->
-    <div class="mb-4">
-      <label for="prize" class="block text-sm font-medium">Prize <span class="red-star">*</span></label>
-      <input
-        type="text"
-        id="prize"
-        name="prize"
-        placeholder="Enter the prize"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
+        <!-- Prize -->
+        <div class="mb-4">
+            <label for="prize" class="block text-sm font-medium">Prize <span class="red-star">*</span></label>
+            <input
+                    type="text"
+                    id="prize"
+                    name="prize"
+                    placeholder="Enter the prize"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
                focus:ring-indigo-500 focus:border-indigo-500 text-white"
-        required
-      />
-    </div>
+                    required
+            />
+        </div>
 
-    <!-- Number of Winners -->
-    <div class="mb-4">
-      <label for="winners" class="block text-sm font-medium">Number of Winners <span class="red-star">*</span></label>
-      <input
-        type="number"
-        id="winners"
-        name="winners"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
+        <!-- Number of Winners -->
+        <div class="mb-4">
+            <label for="winners" class="block text-sm font-medium">Number of Winners <span
+                    class="red-star">*</span></label>
+            <input
+                    type="number"
+                    id="winners"
+                    name="winners"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm
                focus:ring-indigo-500 focus:border-indigo-500 text-white"
-        required
-      />
-    </div>
+                    required
+            />
+        </div>
 
-    <!-- Start Time (Flatpickr) -->
-    <div class="mb-4">
-      <label for="start_time_picker" class="block text-sm font-medium">Start Time (local) <span class="red-star">*</span></label>
-      <input
-        type="text"
-        id="start_time_picker"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+        <!-- Start Time (Flatpickr) -->
+        <div class="mb-4">
+            <label for="start_time_picker" class="block text-sm font-medium">Start Time (local) <span
+                    class="red-star">*</span></label>
+            <input
+                    type="text"
+                    id="start_time_picker"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white flatpickr-input"
-        required
-      />
-      <div class="flex items-center mt-2">
-        <input type="checkbox" id="now_checkbox" name="now" class="mr-2">
-        <label for="now_checkbox" class="text-sm font-medium">Start Now</label>
-      </div>
-    </div>
+                    required
+            />
+            <div class="flex items-center mt-2">
+                <input type="checkbox" id="now_checkbox" name="now" class="mr-2">
+                <label for="now_checkbox" class="text-sm font-medium">Start Now</label>
+            </div>
+        </div>
 
-    <!-- End Time (Flatpickr) -->
-    <div class="mb-4">
-      <label for="end_time_picker" class="block text-sm font-medium">End Time (local) <span class="red-star">*</span></label>
-      <input
-        type="text"
-        id="end_time_picker"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+        <!-- End Time (Flatpickr) -->
+        <div class="mb-4">
+            <label for="end_time_picker" class="block text-sm font-medium">End Time (local) <span
+                    class="red-star">*</span></label>
+            <input
+                    type="text"
+                    id="end_time_picker"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white flatpickr-input"
-        required
-      />
-    </div>
+                    required
+            />
+        </div>
 
-    <!-- Channel -->
-    <div class="mb-4">
-      <label for="channel" class="block text-sm font-medium">Target Channel <span class="red-star">*</span></label>
-      <select
-        id="channel"
-        name="channel"
-        class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600
+        <!-- Channel -->
+        <div class="mb-4">
+            <label for="channel" class="block text-sm font-medium">Target Channel <span
+                    class="red-star">*</span></label>
+            <select
+                    id="channel"
+                    name="channel"
+                    class="choices-single mt-1 block w-full bg-gray-700 border border-gray-600
                rounded-md shadow-sm text-white"
-        required
-      >
-        <option value="" disabled selected hidden>Select a channel...</option>
-        {% for c in channels %}
-          {% if c.type == 0 %}
-            <option value="{{ c.id }}"># {{ c.name }}</option>
-          {% endif %}
-        {% endfor %}
-      </select>
-    </div>
+                    required
+            >
+                <option value="" disabled selected hidden>Select a channel...</option>
+                {% for c in channels %}
+                    {% if c.type == 0 %}
+                        <option value="{{ c.id }}"># {{ c.name }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
 
-    <!-- Mentions -->
-    <div class="mb-4">
-      <label for="mentions" class="block text-sm font-medium">Mentions</label>
-      <select
-        id="mentions"
-        name="mentions"
-        multiple
-        class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600
+        <!-- Mentions -->
+        <div class="mb-4">
+            <label for="mentions" class="block text-sm font-medium">Mentions</label>
+            <select
+                    id="mentions"
+                    name="mentions"
+                    multiple
+                    class="choices-multiple mt-1 block w-full bg-gray-700 border border-gray-600
                rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-      >
-        {% for r in roles %}
-          <option value="{{ r.id }}">{{ r.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
+            >
+                {% for r in roles %}
+                    <option value="{{ r.id }}">{{ r.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
-    <h2 class="text-lg font-semibold">Embed Details</h2>
-    <br/>
+        <h2 class="text-lg font-semibold">Embed Details</h2>
+        <br/>
 
-    <!-- Text Above Embed -->
-    <div class="mb-4">
-      <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed</label>
-      <textarea
-        id="text_above_embed"
-        name="text_above_embed"
-        placeholder="(Optional) Add text above the embed"
-        rows="4"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+        <!-- Text Above Embed -->
+        <div class="mb-4">
+            <label for="text_above_embed" class="block text-sm font-medium">Text Above Embed</label>
+            <textarea
+                    id="text_above_embed"
+                    name="text_above_embed"
+                    placeholder="(Optional) Add text above the embed"
+                    rows="4"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-      ></textarea>
-    </div>
+            ></textarea>
+        </div>
 
-    <!-- Text in Embed -->
-    <div class="mb-4">
-      <label for="text_in_embed" class="block text-sm font-medium">Text in Embed</label>
-      <textarea
-        id="text_in_embed"
-        name="text_in_embed"
-        placeholder="(Optional) Add text in the embed"
-        rows="2"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+        <!-- Text in Embed -->
+        <div class="mb-4">
+            <label for="text_in_embed" class="block text-sm font-medium">Text in Embed</label>
+            <textarea
+                    id="text_in_embed"
+                    name="text_in_embed"
+                    placeholder="(Optional) Add text in the embed"
+                    rows="2"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-      >🎟️ **How to Enter**
+            >🎟️ **How to Enter**
 Click the Participate button below!</textarea>
-    </div>
+        </div>
 
-    <!-- Message on End -->
-    <div class="mb-4">
-      <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End</label>
-      <textarea
-        id="text_on_end"
-        name="text_on_end"
-        placeholder="(Optional) Add a message to send on giveaway end above the embed"
-        rows="4"
-        class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
+        <!-- Message on End -->
+        <div class="mb-4">
+            <label for="text_on_end" class="block text-sm font-medium">Message to Send on Giveaway End</label>
+            <textarea
+                    id="text_on_end"
+                    name="text_on_end"
+                    placeholder="(Optional) Add a message to send on giveaway end above the embed"
+                    rows="4"
+                    class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md
                shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-      >🎉 **Congratulations!** You won the giveaway! We will contact you shortly.
+            >🎉 **Congratulations!** You won the giveaway! We will contact you shortly.
       </textarea>
-    </div>
+        </div>
 
-    <!-- Image Upload -->
-    <div class="mb-4">
-      <label for="image" class="block text-sm font-medium mb-2">Image</label>
-      <div class="file-input-container">
-        <label class="file-input">
-          Upload Image
-          <input type="file" id="image" name="image" accept="image/*">
-        </label>
-      </div>
-      <div class="relative mt-4" id="imagePreviewContainer">
-        <img
-          id="imagePreview"
-          src=""
-          alt="Image Preview"
-          class="hidden rounded-md shadow-md"
-          style="max-width: 100%; height: auto;"
-        />
-        <button
-          type="button"
-          id="removeImage"
-          class="hidden absolute top-0 right-0 bg-red-600 text-white font-bold
+        <!-- Image Upload -->
+        <div class="mb-4">
+            <label for="image" class="block text-sm font-medium mb-2">Image</label>
+            <div class="file-input-container">
+                <label class="file-input">
+                    Upload Image
+                    <input type="file" id="image" name="image" accept="image/*">
+                </label>
+            </div>
+            <div class="relative mt-4" id="imagePreviewContainer">
+                <img
+                        id="imagePreview"
+                        src=""
+                        alt="Image Preview"
+                        class="hidden rounded-md shadow-md"
+                        style="max-width: 100%; height: auto;"
+                />
+                <button
+                        type="button"
+                        id="removeImage"
+                        class="hidden absolute top-0 right-0 bg-red-600 text-white font-bold
                  rounded-full p-1 shadow-md hover:bg-red-700"
-        >&times;</button>
-      </div>
-    </div>
-
-    <!-- Preview Buttons -->
-    <div class="flex justify-center space-x-4 mt-4">
-      <button
-        type="button"
-        id="previewGiveaway"
-        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
-      >Preview Giveaway</button>
-      <button
-        type="button"
-        id="previewEndMessage"
-        class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
-      >Preview End Message</button>
-    </div>
-    <br/>
-
-    <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
-    <br/>
-
-    <div class="mb-4 flex items-center">
-      <input type="checkbox" id="profile_picture_required" name="profile_picture_required" class="mr-2">
-      <label for="profile_picture_required" class="text-sm font-medium">
-        User must have a profile picture
-      </label>
-    </div>
-
-    <div class="mb-4 flex items-center">
-      <input type="checkbox" id="coc_account_required" name="coc_account_required" class="mr-2">
-      <label for="coc_account_required" class="text-sm font-medium">
-        User must have CoC account linked
-      </label>
-    </div>
-
-    <!-- Checkbox to enable roles -->
-    <div class="mb-4 flex items-center">
-      <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2">
-      <label for="enable_roles" class="text-sm font-medium">
-        Configure roles allowed to participate
-      </label>
-    </div>
-
-    <div id="rolesContainer" class="hidden">
-      <!-- Radio: allow/deny -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
-        <div class="flex items-center mb-2">
-          <input
-            type="radio"
-            id="allow_roles"
-            name="roles_mode"
-            value="allow"
-            checked
-            class="mr-2 text-indigo-600 focus:ring-indigo-500"
-          >
-          <label for="allow_roles" class="text-sm font-medium">
-            Allow for all roles except
-          </label>
+                >&times;
+                </button>
+            </div>
         </div>
-        <div class="flex items-center">
-          <input
-            type="radio"
-            id="deny_roles"
-            name="roles_mode"
-            value="deny"
-            class="mr-2 text-indigo-600 focus:ring-indigo-500"
-          >
-          <label for="deny_roles" class="text-sm font-medium">
-            Deny for all roles except
-          </label>
+
+        <!-- Preview Buttons -->
+        <div class="flex justify-center space-x-4 mt-4">
+            <button
+                    type="button"
+                    id="previewGiveaway"
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
+            >Preview Giveaway
+            </button>
+            <button
+                    type="button"
+                    id="previewEndMessage"
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md"
+            >Preview End Message
+            </button>
         </div>
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-2">Select Roles:</label>
-        <select
-          id="roles_select"
-          name="roles_selected"
-          multiple
-          class="choices-multiple mt-1 block w-full bg-gray-800 border border-gray-600
+        <br/>
+
+        <h2 class="text-lg font-semibold">Giveaway Requirements</h2>
+        <br/>
+
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="profile_picture_required" name="profile_picture_required" class="mr-2">
+            <label for="profile_picture_required" class="text-sm font-medium">
+                User must have a profile picture
+            </label>
+        </div>
+
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="coc_account_required" name="coc_account_required" class="mr-2">
+            <label for="coc_account_required" class="text-sm font-medium">
+                User must have CoC account linked
+            </label>
+        </div>
+
+        <!-- Checkbox to enable roles -->
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" id="enable_roles" name="enable_roles" class="mr-2">
+            <label for="enable_roles" class="text-sm font-medium">
+                Configure roles allowed to participate
+            </label>
+        </div>
+
+        <div id="rolesContainer" class="hidden">
+            <!-- Radio: allow/deny -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">Roles allowed to participate:</label>
+                <div class="flex items-center mb-2">
+                    <input
+                            type="radio"
+                            id="allow_roles"
+                            name="roles_mode"
+                            value="allow"
+                            checked
+                            class="mr-2 text-indigo-600 focus:ring-indigo-500"
+                    >
+                    <label for="allow_roles" class="text-sm font-medium">
+                        Allow for all roles except
+                    </label>
+                </div>
+                <div class="flex items-center">
+                    <input
+                            type="radio"
+                            id="deny_roles"
+                            name="roles_mode"
+                            value="deny"
+                            class="mr-2 text-indigo-600 focus:ring-indigo-500"
+                    >
+                    <label for="deny_roles" class="text-sm font-medium">
+                        Deny for all roles except
+                    </label>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-2">Select Roles:</label>
+                <select
+                        id="roles_select"
+                        name="roles_selected"
+                        multiple
+                        class="choices-multiple mt-1 block w-full bg-gray-800 border border-gray-600
                  rounded-md shadow-sm text-white"
-        >
-          {% for r in roles %}
-            <option value="{{ r.id }}">{{ r.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <br/>
-    </div>
+                >
+                    {% for r in roles %}
+                        <option value="{{ r.id }}">{{ r.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <br/>
+        </div>
 
-    <!-- Adjust Odds -->
-    <div class="mb-6">
-      <div class="flex items-center mb-4">
-        <input type="checkbox" id="adjust_odds" name="adjust_odds" class="mr-2">
-        <label for="adjust_odds" class="text-sm font-medium">Adjust odds by roles</label>
-      </div>
-      <div id="boostersContainer" class="hidden"></div>
-      <button
-        type="button"
-        id="addBooster"
-        class="hidden mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md"
-      >Add booster</button>
-    </div>
+        <!-- Adjust Odds -->
+        <div class="mb-6">
+            <div class="flex items-center mb-4">
+                <input type="checkbox" id="adjust_odds" name="adjust_odds" class="mr-2">
+                <label for="adjust_odds" class="text-sm font-medium">Adjust odds by roles</label>
+            </div>
+            <div id="boostersContainer" class="hidden"></div>
+            <button
+                    type="button"
+                    id="addBooster"
+                    class="hidden mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md"
+            >Add booster
+            </button>
+        </div>
 
-    <!-- Submit -->
-    <button
-      type="submit"
-      class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold
-             py-2 px-4 rounded-md shadow-md"
-    >Create Giveaway</button>
-
-    <!-- Preview Popup -->
-    <div id="previewPopup" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-      <div class="bg-gray-800 text-white p-6 rounded-lg max-w-lg shadow-lg relative">
+        <!-- Submit -->
         <button
-          id="closePreview"
-          type="button"
-          class="absolute top-2 right-2 text-red-500 hover:text-red-600 font-bold"
-        >✖</button>
-        <h2 class="text-xl font-bold mb-4">Giveaway Preview</h2>
-        <div id="previewContent"></div>
-      </div>
-    </div>
-  </form>
+                type="submit"
+                class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold
+             py-2 px-4 rounded-md shadow-md"
+        >Create Giveaway
+        </button>
+
+        <!-- Preview Popup -->
+        <div id="previewPopup" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+            <div class="bg-gray-800 text-white p-6 rounded-lg max-w-lg shadow-lg relative">
+                <button
+                        id="closePreview"
+                        type="button"
+                        class="absolute top-2 right-2 text-red-500 hover:text-red-600 font-bold"
+                >✖
+                </button>
+                <h2 class="text-xl font-bold mb-4">Giveaway Preview</h2>
+                <div id="previewContent"></div>
+            </div>
+        </div>
+    </form>
 </div>
 
 <!-- Scripts -->
@@ -363,89 +334,89 @@ Click the Participate button below!</textarea>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  // 1) Initialize Flatpickr
-  const startPickerEl = document.getElementById('start_time_picker');
-  const endPickerEl   = document.getElementById('end_time_picker');
-  const startPicker = flatpickr(startPickerEl, {
-    enableTime: true,
-    dateFormat: 'Y-m-d H:i',
-    minDate: 'today',
-    defaultDate: null,
-    onChange: function(selectedDates) {
-      if (selectedDates.length > 0) {
-        endPicker.set('minDate', selectedDates[0]);
-      }
-    }
-  });
-  const endPicker = flatpickr(endPickerEl, {
-    enableTime: true,
-    dateFormat: 'Y-m-d H:i',
-    minDate: 'today',
-    defaultDate: null
-  });
+    document.addEventListener('DOMContentLoaded', function () {
+        // 1) Initialize Flatpickr
+        const startPickerEl = document.getElementById('start_time_picker');
+        const endPickerEl = document.getElementById('end_time_picker');
+        const startPicker = flatpickr(startPickerEl, {
+            enableTime: true,
+            dateFormat: 'Y-m-d H:i',
+            minDate: 'today',
+            defaultDate: null,
+            onChange: function (selectedDates) {
+                if (selectedDates.length > 0) {
+                    endPicker.set('minDate', selectedDates[0]);
+                }
+            }
+        });
+        const endPicker = flatpickr(endPickerEl, {
+            enableTime: true,
+            dateFormat: 'Y-m-d H:i',
+            minDate: 'today',
+            defaultDate: null
+        });
 
-  // "Start Now" checkbox
-  const nowCheckbox = document.getElementById('now_checkbox');
-  nowCheckbox.addEventListener('change', () => {
-    if (nowCheckbox.checked) {
-      startPicker.setDate(new Date(), true);
-      startPickerEl.disabled = true;
-    } else {
-      startPickerEl.disabled = false;
-    }
-  });
+        // "Start Now" checkbox
+        const nowCheckbox = document.getElementById('now_checkbox');
+        nowCheckbox.addEventListener('change', () => {
+            if (nowCheckbox.checked) {
+                startPicker.setDate(new Date(), true);
+                startPickerEl.disabled = true;
+            } else {
+                startPickerEl.disabled = false;
+            }
+        });
 
-  // 2) Roles & Boosters toggles
-  const enableRolesCheckbox = document.getElementById('enable_roles');
-  const rolesContainer      = document.getElementById('rolesContainer');
-  enableRolesCheckbox.addEventListener('change', () => {
-    if (enableRolesCheckbox.checked) {
-      rolesContainer.classList.remove('hidden');
-    } else {
-      rolesContainer.classList.add('hidden');
-    }
-  });
+        // 2) Roles & Boosters toggles
+        const enableRolesCheckbox = document.getElementById('enable_roles');
+        const rolesContainer = document.getElementById('rolesContainer');
+        enableRolesCheckbox.addEventListener('change', () => {
+            if (enableRolesCheckbox.checked) {
+                rolesContainer.classList.remove('hidden');
+            } else {
+                rolesContainer.classList.add('hidden');
+            }
+        });
 
-  const adjustOddsCheckbox = document.getElementById('adjust_odds');
-  const boostersContainer  = document.getElementById('boostersContainer');
-  const addBoosterButton   = document.getElementById('addBooster');
-  let initialBoosterAdded  = false;
+        const adjustOddsCheckbox = document.getElementById('adjust_odds');
+        const boostersContainer = document.getElementById('boostersContainer');
+        const addBoosterButton = document.getElementById('addBooster');
+        let initialBoosterAdded = false;
 
-  adjustOddsCheckbox.addEventListener('change', () => {
-    if (adjustOddsCheckbox.checked) {
-      boostersContainer.classList.remove('hidden');
-      addBoosterButton.classList.remove('hidden');
-      if (!initialBoosterAdded) {
-        addInitialBooster();
-        initialBoosterAdded = true;
-      }
-    } else {
-      boostersContainer.classList.add('hidden');
-      addBoosterButton.classList.add('hidden');
-      boostersContainer.innerHTML = '';
-      initialBoosterAdded = false;
-    }
-  });
+        adjustOddsCheckbox.addEventListener('change', () => {
+            if (adjustOddsCheckbox.checked) {
+                boostersContainer.classList.remove('hidden');
+                addBoosterButton.classList.remove('hidden');
+                if (!initialBoosterAdded) {
+                    addInitialBooster();
+                    initialBoosterAdded = true;
+                }
+            } else {
+                boostersContainer.classList.add('hidden');
+                addBoosterButton.classList.add('hidden');
+                boostersContainer.innerHTML = '';
+                initialBoosterAdded = false;
+            }
+        });
 
-  addBoosterButton.addEventListener('click', () => {
-    boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
-    initChoicesForLastBooster();
-  });
+        addBoosterButton.addEventListener('click', () => {
+            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+            initChoicesForLastBooster();
+        });
 
-  boostersContainer.addEventListener('click', (e) => {
-    if (e.target.classList.contains('remove-booster')) {
-      e.target.parentElement.remove();
-    }
-  });
+        boostersContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-booster')) {
+                e.target.parentElement.remove();
+            }
+        });
 
-  function addInitialBooster() {
-    boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
-    initChoicesForLastBooster();
-  }
+        function addInitialBooster() {
+            boostersContainer.insertAdjacentHTML('beforeend', createBoosterTemplate());
+            initChoicesForLastBooster();
+        }
 
-  function createBoosterTemplate() {
-    return `
+        function createBoosterTemplate() {
+            return `
       <div class="booster mb-4 p-4 bg-gray-700 rounded-md shadow">
         <label class="block text-sm font-medium mb-2">Booster:</label>
         <input type="range" min="0.25" max="3" step="0.25" value="1" class="slider w-full mb-2">
@@ -460,231 +431,232 @@ document.addEventListener('DOMContentLoaded', function() {
         </button>
       </div>
     `;
-  }
+        }
 
-  function initChoicesForLastBooster() {
-    const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
-    new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
-      removeItemButton: true,
-      searchEnabled: true,
-      shouldSort: false
+        function initChoicesForLastBooster() {
+            const lastRolesSelect = boostersContainer.querySelectorAll('.roles-select');
+            new Choices(lastRolesSelect[lastRolesSelect.length - 1], {
+                removeItemButton: true,
+                searchEnabled: true,
+                shouldSort: false
+            });
+            const lastSlider = boostersContainer.querySelectorAll('.slider');
+            updateSliderValue(lastSlider[lastSlider.length - 1]);
+        }
+
+        function updateSliderValue(slider) {
+            const valDisplay = slider.parentElement.querySelector('.slider-value');
+            slider.addEventListener('input', () => {
+                valDisplay.textContent = `x${slider.value}`;
+            });
+        }
+
+        // 3) Initialize Choices.js
+        new Choices(document.getElementById('channel'), {
+            removeItemButton: false,
+            searchEnabled: true,
+            itemSelectText: '',
+            shouldSort: false
+        });
+        new Choices(document.getElementById('mentions'), {
+            removeItemButton: true,
+            searchEnabled: true,
+            shouldSort: false
+        });
+        const rolesSelect = document.getElementById('roles_select');
+        new Choices(rolesSelect, {
+            removeItemButton: true,
+            searchEnabled: true,
+            shouldSort: false
+        });
+
+        // 4) Image preview
+        const imageInput = document.getElementById('image');
+        const imagePreview = document.getElementById('imagePreview');
+        const removeImageBtn = document.getElementById('removeImage');
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    imagePreview.src = ev.target.result;
+                    imagePreview.classList.remove('hidden');
+                    removeImageBtn.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        removeImageBtn.addEventListener('click', () => {
+            imagePreview.src = '#';
+            imagePreview.classList.add('hidden');
+            removeImageBtn.classList.add('hidden');
+            imageInput.value = '';
+        });
+
+        // 5) Preview logic
+        const previewPopup = document.getElementById('previewPopup');
+        const previewContent = document.getElementById('previewContent');
+        const closePreviewBtn = document.getElementById('closePreview');
+        const previewGiveawayBtn = document.getElementById('previewGiveaway');
+        const previewEndMsgBtn = document.getElementById('previewEndMessage');
+
+        previewGiveawayBtn.addEventListener('click', async () => {
+            previewContent.innerHTML = await buildPreview(false);
+            previewPopup.classList.remove('hidden');
+        });
+
+        previewEndMsgBtn.addEventListener('click', async () => {
+            previewContent.innerHTML = await buildPreview(true);
+            previewPopup.classList.remove('hidden');
+        });
+
+        closePreviewBtn.addEventListener('click', () => {
+            previewPopup.classList.add('hidden');
+        });
+
+        /**
+         * Build the HTML preview of the giveaway or end message.
+         * @param {boolean} endMessage - true to build end-message preview, false for normal.
+         */
+        async function buildPreview(endMessage) {
+            const prize = document.getElementById('prize').value || "Giveaway";
+            const winners = document.getElementById('winners').value || 1;
+            const textAbove = document.getElementById('text_above_embed').value || '';
+            const textIn = document.getElementById('text_in_embed').value || '';
+            const textEnd = document.getElementById('text_on_end').value || "Thanks for participating!";
+            const endValue = endPicker.selectedDates[0];
+            const file = imageInput.files[0];
+            const mentionElements = document.querySelectorAll('#mentions option:checked');
+            const mentions = Array.from(mentionElements).map(option => `@${option.textContent}`).join(' ');
+
+            const processedTextAbove = textAbove.replace(/\n/g, '  \n');
+            const processedTextIn = textIn.replace(/\n/g, '  \n');
+            const processedTextEnd = textEnd.replace(/\n/g, '  \n');
+
+            let html = '';
+
+            if (!endMessage) {
+                if (mentions) {
+                    html += `<p class="mb-4 text-sm text-gray-300">${mentions}</p>`;
+                }
+                if (textAbove) {
+                    html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextAbove)}</div>`;
+                }
+                html += `<div class="discord-embed">`;
+                html += `<div class="embed-header">🎉 ${prize} - ${winners} Winner${winners > 1 ? 's' : ''} 🎉</div>`;
+                html += `<div class="embed-description">${marked.parse(processedTextIn)}</div>`;
+
+                // Gère l'image
+                const imageUrl = await getImageUrl(file);
+                if (imageUrl) {
+                    html += `<img class="embed-image" src="${imageUrl}" />`;
+                }
+
+                if (endValue) {
+                    const localString = endValue.toLocaleString();
+                    html += `<div class="embed-footer mt-2">Ends on ${localString}</div>`;
+                }
+                html += `</div>`; // close embed
+            } else {
+                html += `<p class="mb-4 text-sm text-gray-300">@Winner</p>`;
+                if (textEnd) {
+                    html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextEnd)}</div>`;
+                }
+                html += `<div class="discord-embed">`;
+                html += `<div class="embed-header">🎉 ${prize} - 1 Winner 🎉</div>`;
+                const totalParticipants = Math.floor(Math.random() * 100) + 1;
+                html += `<div class="embed-description">${marked.parse("**Total Participants: " + totalParticipants + "**")}</div>`;
+
+                // Gère l'image
+                const imageUrl = await getImageUrl(file);
+                if (imageUrl) {
+                    html += `<img class="embed-image" src="${imageUrl}" style="margin-top: 10px"/>`;
+                }
+                html += `</div>`; // close embed
+            }
+            return html;
+        }
+
+        function getImageUrl(file) {
+            return new Promise((resolve) => {
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => resolve(ev.target.result);
+                    reader.readAsDataURL(file);
+                } else if (imagePreview.src && imagePreview.src !== window.location.href && !imagePreview.src.startsWith('blob:')) {
+                    resolve(imagePreview.src);
+                } else {
+                    resolve(null);
+                }
+            });
+        }
+
+
+        // 6) On form submit: store roles_json, boosters_json, & convert times to UTC
+        const form = document.getElementById('giveawayForm');
+        const startTimeHidden = document.getElementById('start_time');
+        const endTimeHidden = document.getElementById('end_time');
+
+        form.addEventListener('submit', (event) => {
+            // If "Start Now"
+            if (nowCheckbox.checked) {
+                startTimeHidden.value = "";
+            } else {
+                const startDate = startPicker.selectedDates[0];
+                startTimeHidden.value = startDate ? startDate.toISOString() : "";
+            }
+            const endDate = endPicker.selectedDates[0];
+            endTimeHidden.value = endDate ? endDate.toISOString() : "";
+
+            const prize = document.getElementById('prize').value.trim();
+            const winners = parseInt(document.getElementById('winners').value);
+            const channel = document.getElementById('channel').value;
+
+            // Validate prize
+            if (!prize) {
+                alert('Prize cannot be empty!');
+                event.preventDefault();
+            }
+
+            // Validate number of winners
+            if (isNaN(winners) || winners < 1) {
+                alert('Number of winners must be at least 1.');
+                event.preventDefault();
+            }
+
+            // Validate start time
+            if (!nowCheckbox.checked && !startTimeHidden.value) {
+                alert('Start time must be selected!');
+                event.preventDefault();
+            }
+
+            // Validate end time
+            if (!endTimeHidden.value) {
+                alert('End time must be selected!');
+                event.preventDefault();
+            }
+
+            // Validate channel
+            if (!channel) {
+                alert('You must select a channel!');
+                event.preventDefault();
+            }
+
+            // Build boosters array
+            const boosters = [];
+            document.querySelectorAll('.booster').forEach((booster) => {
+                const val = booster.querySelector('.slider').value;
+                const roles = Array.from(booster.querySelector('.roles-select').selectedOptions).map(o => o.value);
+                boosters.push({value: val, roles});
+            });
+            document.getElementById('boosters_json').value = JSON.stringify(boosters);
+
+            // Build roles array
+            const selectedRoles = Array.from(rolesSelect.selectedOptions).map(o => o.value);
+            document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
+        });
     });
-    const lastSlider = boostersContainer.querySelectorAll('.slider');
-    updateSliderValue(lastSlider[lastSlider.length - 1]);
-  }
-
-  function updateSliderValue(slider) {
-    const valDisplay = slider.parentElement.querySelector('.slider-value');
-    slider.addEventListener('input', () => {
-      valDisplay.textContent = `x${slider.value}`;
-    });
-  }
-
-  // 3) Initialize Choices.js
-  new Choices(document.getElementById('channel'), {
-    removeItemButton: false,
-    searchEnabled: true,
-    itemSelectText: '',
-    shouldSort: false
-  });
-  new Choices(document.getElementById('mentions'), {
-    removeItemButton: true,
-    searchEnabled: true,
-    shouldSort: false
-  });
-  const rolesSelect = document.getElementById('roles_select');
-  new Choices(rolesSelect, {
-    removeItemButton: true,
-    searchEnabled: true,
-    shouldSort: false
-  });
-
-  // 4) Image preview
-  const imageInput   = document.getElementById('image');
-  const imagePreview = document.getElementById('imagePreview');
-  const removeImageBtn = document.getElementById('removeImage');
-
-  imageInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        imagePreview.src = ev.target.result;
-        imagePreview.classList.remove('hidden');
-        removeImageBtn.classList.remove('hidden');
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-  removeImageBtn.addEventListener('click', () => {
-    imagePreview.src = '#';
-    imagePreview.classList.add('hidden');
-    removeImageBtn.classList.add('hidden');
-    imageInput.value = '';
-  });
-
-  // 5) Preview logic
-  const previewPopup   = document.getElementById('previewPopup');
-  const previewContent = document.getElementById('previewContent');
-  const closePreviewBtn= document.getElementById('closePreview');
-  const previewGiveawayBtn = document.getElementById('previewGiveaway');
-  const previewEndMsgBtn   = document.getElementById('previewEndMessage');
-
-  previewGiveawayBtn.addEventListener('click', () => {
-    previewContent.innerHTML = buildPreview(false);
-    previewPopup.classList.remove('hidden');
-  });
-
-  previewEndMsgBtn.addEventListener('click', () => {
-    previewContent.innerHTML = buildPreview(true);
-    previewPopup.classList.remove('hidden');
-  });
-
-  closePreviewBtn.addEventListener('click', () => {
-    previewPopup.classList.add('hidden');
-  });
-
-  /**
-   * Build the HTML preview of the giveaway or end message.
-   * @param {boolean} endMessage - true to build end-message preview, false for normal.
-   */
-  function buildPreview(endMessage) {
-    const prize    = document.getElementById('prize').value || "Giveaway";
-    const winners  = document.getElementById('winners').value || 1;
-    const textAbove= document.getElementById('text_above_embed').value || '';
-    const textIn   = document.getElementById('text_in_embed').value || '';
-    const textEnd  = document.getElementById('text_on_end').value || "Thanks for participating!";
-    const endValue = endPicker.selectedDates[0];
-    const file     = imageInput.files[0];
-    const mentionElements = document.querySelectorAll('#mentions option:checked');
-    const mentions = Array.from(mentionElements).map(option => `@${option.textContent}`).join(' ');
-
-    // Use Marked to parse newlines as Markdown
-    const processedTextAbove = textAbove.replace(/\n/g, '  \n');
-    const processedTextIn    = textIn.replace(/\n/g, '  \n');
-    const processedTextEnd   = textEnd.replace(/\n/g, '  \n');
-
-    let html = '';
-
-    if (!endMessage) {
-      // Always show mentions
-      if (mentions) {
-        html += `<p class="mb-4 text-sm text-gray-300">${mentions}</p>`;
-      }
-      // Normal "Giveaway" preview
-      if (textAbove) {
-        html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextAbove)}</div>`;
-      }
-      html += `<div class="discord-embed">`;
-      html += `<div class="embed-header">🎉 ${prize} - ${winners} Winner${winners>1?'s':''} 🎉</div>`;
-      html += `<div class="embed-description">${marked.parse(processedTextIn)}</div>`;
-
-      // Add image
-      if (file) {
-        // We'll show a base64
-      } else if (imagePreview.src && imagePreview.src !== '#' && !imagePreview.src.startsWith('blob:')) {
-        // Probably an existing image
-      }
-      // We'll embed the image after reading file or using existing
-      // But let's do it synchronously (for demonstration):
-      const imageUrl = (file) ? null : (imagePreview.src && imagePreview.src !== '#') ? imagePreview.src : null;
-      if (imageUrl) {
-        html += `<img class="embed-image" src="${imageUrl}" />`;
-      }
-
-      // End time footer
-      if (endValue) {
-        const localString = endValue.toLocaleString();
-        html += `<div class="embed-footer mt-2">Ends on ${localString}</div>`;
-      }
-      html += `</div>`; // close embed
-    } else {
-      // "End Message" preview
-      html += `<p class="mb-4 text-sm text-gray-300">@Winner</p>`;
-      if (textEnd) {
-        html += `<div class="mb-4 text-sm text-gray-300">${marked.parse(processedTextEnd)}</div>`;
-      }
-      // Let's do the "end" embed
-      html += `<div class="discord-embed">`;
-      html += `<div class="embed-header">🎉 ${prize} - 1 Winner 🎉</div>`;
-      // Just simulate total participants
-      const totalParticipants = Math.floor(Math.random() * 100) + 1;
-      html += `<div class="embed-description">${marked.parse("**Total Participants: " + totalParticipants + "**")}</div>`;
-
-      // Possibly show the same image
-      const imageUrl = (file) ? null : (imagePreview.src && imagePreview.src !== '#') ? imagePreview.src : null;
-      if (imageUrl) {
-        html += `<img class="embed-image" src="${imageUrl}" style="margin-top: 10px"/>`;
-      }
-      html += `</div>`; // close embed
-    }
-    return html;
-  }
-
-  // 6) On form submit: store roles_json, boosters_json, & convert times to UTC
-  const form = document.getElementById('giveawayForm');
-  const startTimeHidden = document.getElementById('start_time');
-  const endTimeHidden   = document.getElementById('end_time');
-
-  form.addEventListener('submit', (event) => {
-    // If "Start Now"
-    if (nowCheckbox.checked) {
-      startTimeHidden.value = "";
-    } else {
-      const startDate = startPicker.selectedDates[0];
-      startTimeHidden.value = startDate ? startDate.toISOString() : "";
-    }
-    const endDate = endPicker.selectedDates[0];
-    endTimeHidden.value = endDate ? endDate.toISOString() : "";
-
-    const prize = document.getElementById('prize').value.trim();
-    const winners = parseInt(document.getElementById('winners').value);
-    const channel = document.getElementById('channel').value;
-
-    // Validate prize
-    if (!prize) {
-      alert('Prize cannot be empty!');
-      event.preventDefault();
-    }
-
-    // Validate number of winners
-    if (isNaN(winners) || winners < 1) {
-      alert('Number of winners must be at least 1.');
-      event.preventDefault();
-    }
-
-    // Validate start time
-    if (!nowCheckbox.checked && !startTimeHidden.value) {
-      alert('Start time must be selected!');
-      event.preventDefault();
-    }
-
-    // Validate end time
-    if (!endTimeHidden.value) {
-      alert('End time must be selected!');
-      event.preventDefault();
-    }
-
-    // Validate channel
-    if (!channel) {
-      alert('You must select a channel!');
-      event.preventDefault();
-    }
-
-    // Build boosters array
-    const boosters = [];
-    document.querySelectorAll('.booster').forEach((booster) => {
-      const val = booster.querySelector('.slider').value;
-      const roles = Array.from(booster.querySelector('.roles-select').selectedOptions).map(o => o.value);
-      boosters.push({ value: val, roles });
-    });
-    document.getElementById('boosters_json').value = JSON.stringify(boosters);
-
-    // Build roles array
-    const selectedRoles = Array.from(rolesSelect.selectedOptions).map(o => o.value);
-    document.getElementById('roles_json').value = JSON.stringify(selectedRoles);
-  });
-});
 </script>
 </body>
 </html>

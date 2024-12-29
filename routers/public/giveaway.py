@@ -1,6 +1,6 @@
 import json
 import uuid
-from typing import List, Dict, Any
+from typing import List
 import pendulum as pend
 
 from fastapi import APIRouter, HTTPException, Request
@@ -14,6 +14,10 @@ from utils.utils import db_client, validate_token, delete_from_cdn
 router = APIRouter(prefix="/giveaway", include_in_schema=False)
 templates = Jinja2Templates(directory="templates")
 
+from fastapi import Form, UploadFile, File
+from fastapi.responses import JSONResponse
+
+from utils.utils import upload_to_cdn
 
 class BoosterModel(BaseModel):
     boost_value: float
@@ -38,10 +42,10 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
     # Fetch all giveaways for the server
     giveaways = await db_client.giveaways.find({"server_id": server_id}).to_list(length=None)
 
-    # Sort giveaways by status
-    ongoing = [g for g in giveaways if g["status"] == "ongoing"]
-    upcoming = [g for g in giveaways if g["status"] == "scheduled"]
-    ended = [g for g in giveaways if g["status"] == "ended"]
+    # Sort giveaways by status and time
+    ongoing = sorted([g for g in giveaways if g["status"] == "ongoing"], key=lambda g: g["start_time"], reverse=True)
+    upcoming = sorted([g for g in giveaways if g["status"] == "scheduled"], key=lambda g: g["start_time"], reverse=True)
+    ended = sorted([g for g in giveaways if g["status"] == "ended"], key=lambda g: g["start_time"], reverse=True)
 
     return templates.TemplateResponse("giveaways/giveaways_dashboard.html", {
         "request": request,
@@ -53,12 +57,6 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
         "token": token,
         "channels": channels
     })
-
-
-from fastapi import Form, UploadFile, File
-from fastapi.responses import JSONResponse
-
-from utils.utils import upload_to_cdn
 
 
 @router.post("/submit")

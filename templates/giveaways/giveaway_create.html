@@ -360,7 +360,9 @@ Click the Participate button below!</textarea>
         const nowCheckbox = document.getElementById('now_checkbox');
         nowCheckbox.addEventListener('change', () => {
             if (nowCheckbox.checked) {
-                startPicker.setDate(new Date(), true);
+                const now = new Date();
+                now.setSeconds(0, 0);
+                startPicker.setDate(now, true);
                 startPickerEl.disabled = true;
             } else {
                 startPickerEl.disabled = false;

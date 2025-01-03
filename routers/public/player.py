@@ -4,6 +4,7 @@ import datetime
 import pendulum as pend
 import re
 import time
+import copy
 
 from collections import defaultdict
 from datetime import timedelta
@@ -483,14 +484,105 @@ async def player_join_leave(player_tag: str, request: Request, response: Respons
             }
         },
         {
-            "$sort": {"time": -1}
+            "$sort": {"time": 1}
         },
         {
             "$limit": limit
         }
     ]
     result = await db_client.join_leave_history.aggregate(pipeline).to_list(length=None)
-    return {"items": result}
+
+    def process_clan_events(events):
+        """
+        Processes and cleans a list of clan events by:
+        1. Correcting the event sequence to ensure 'leave' events precede 'join' events for the same clan.
+        2. Sorting the events chronologically, prioritizing 'leave' events when times are equal.
+        3. Removing redundant 'leave' events that do not have a preceding 'join' event.
+
+        Args:
+            events (list): A list of event dictionaries. Each event should have at least the following keys:
+                           - 'type': 'join' or 'leave'
+                           - 'clan': Clan identifier
+                           - 'time': ISO 8601 timestamp string
+                           - 'tag': Player's tag
+                           - 'clan_name': Name of the clan
+
+        Returns:
+            list: A cleaned and sorted list of event dictionaries.
+        """
+        # Make a deep copy to avoid mutating the original list
+        events_copy = copy.deepcopy(events)
+        corrected_events = []
+
+        # Step 1: Correct the event sequence
+        while events_copy:
+            event = events_copy.pop(0)
+
+            if event.get("type") == "leave":
+                corrected_events.append(event)
+                continue
+
+            if event.get("type") == "join":
+                corrected_events.append(event)
+                clan_tag = event.get("tag")
+                clan_id = event.get("clan")
+
+                # Find the corresponding 'leave' event
+                leave_index = next(
+                    (i for i, e in enumerate(events_copy)
+                     if e.get("type") == "leave" and e.get("tag") == clan_tag and e.get("clan") == clan_id),
+                    None
+                )
+
+                if leave_index is not None:
+                    leave_event = events_copy.pop(leave_index)
+
+                    # Find the time of the next 'join' event
+                    next_join = next(
+                        (e for e in events_copy if e.get("type") == "join"),
+                        None
+                    )
+                    next_join_time = next_join["time"] if next_join else leave_event["time"]
+
+                    # Adjust the 'leave' event's time to match the next 'join' event's time
+                    leave_event["time"] = next_join_time
+                    corrected_events.append(leave_event)
+
+        # Step 2: Sort the corrected events
+        corrected_events_sorted = sorted(
+            corrected_events,
+            key=lambda e: (
+                e["time"],
+                0 if e["type"] == "leave" else 1  # Prioritize 'leave' over 'join' if times are equal
+            )
+        )
+
+        # Step 3: Remove redundant 'leave' events
+        final_events = []
+        active_clans = set()
+
+        for event in corrected_events_sorted:
+            clan_id = event.get("clan")
+
+            if event.get("type") == "join":
+                active_clans.add(clan_id)
+                final_events.append(event)
+            elif event.get("type") == "leave":
+                if clan_id in active_clans:
+                    active_clans.remove(clan_id)
+                    final_events.append(event)
+                else:
+                    # Redundant leave; optionally log or handle as needed
+                    final_events.append(event)
+
+        return final_events
+
+    final_events = process_clan_events(result)
+    print("\nFinal Cleaned Event Sequence:")
+    for evt in final_events:
+        print(f"{evt['time']} - {evt['type']} - {evt['clan_name']}")
+    final_events.reverse()
+    return {"items": final_events}
 
 
 

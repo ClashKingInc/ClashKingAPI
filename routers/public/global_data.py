@@ -101,7 +101,7 @@ async def global_counts(request: Request, response: Response):
 
     return {
         "players_in_war": timer_counts,
-        "clans_in_war": war_counts,
+        "clans_in_war": war_counts * 2,
         "total_join_leaves": join_leaves_total,
         "players_in_legends": legend_count,
         "player_count": player_count,

@@ -443,4 +443,54 @@ async def full_search_players(name: str, request: Request, response: Response,
     return {"items" : [member | {'clan_name' : doc['clan_name'], 'clan_tag' : doc['clan_tag']} for doc in results for member in doc['memberList']]}
 
 
+@router.get("/player/{player_tag}/join-leave",
+            name="Get join leave history for a player")
+@cache(expire=300)
+async def player_join_leave(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, time_stamp_end: int = 9999999999, limit: int = 250):
+    player_tag = fix_tag(player_tag)
+
+    pipeline = [
+        {
+            "$match": {
+                "$and": [
+                    {"tag": player_tag},
+                    {"time": {"$gte": pend.from_timestamp(timestamp_start, tz='UTC')}},
+                    {"time": {"$lte": pend.from_timestamp(time_stamp_end, tz='UTC')}}
+                ]
+            }
+        },
+        {
+            "$lookup": {
+                "from": "clan_tags",
+                "localField": "clan",
+                "foreignField": "tag",
+                "as": "clan_info"
+            }
+        },
+        {
+            "$unwind": "$clan_info"
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "type": 1,
+                "clan": 1,
+                "clan_name": "$clan_info.name",
+                "time": 1,
+                "tag": 1,
+                "name": 1,
+                "th": 1
+            }
+        },
+        {
+            "$sort": {"time": -1}
+        },
+        {
+            "$limit": limit
+        }
+    ]
+    result = await db_client.join_leave_history.aggregate(pipeline).to_list(length=None)
+    return {"items": result}
+
+
 

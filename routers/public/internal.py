@@ -1,15 +1,15 @@
 import aiohttp
 import orjson
-import re
 import asyncio
+from fastapi import FastAPI, Query
+from fastapi.responses import StreamingResponse
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+import requests
 
-from collections import defaultdict, deque
 from fastapi import  Request, Response, HTTPException, Header
-from fastapi.responses import HTMLResponse
 from fastapi import APIRouter
 from typing import List
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, redis, db_client, config, create_keys
 from expiring_dict import ExpiringDict
 
@@ -156,4 +156,5 @@ async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
+
 

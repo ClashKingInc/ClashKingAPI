@@ -578,9 +578,6 @@ async def player_join_leave(player_tag: str, request: Request, response: Respons
         return final_events
 
     final_events = process_clan_events(result)
-    print("\nFinal Cleaned Event Sequence:")
-    for evt in final_events:
-        print(f"{evt['time']} - {evt['type']} - {evt['clan_name']}")
     final_events.reverse()
     return {"items": final_events}
 

@@ -150,6 +150,7 @@
 .dropdown {
     z-index: 10;
 }
+
 .dropdown.hidden {
     display: none;
 }
@@ -198,46 +199,68 @@
 }
 
 .preview-container {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
 }
 
 .text-above-embed {
-  font-size: 14px;
-  font-weight: normal;
-  color: #ffffff;
-  margin-bottom: 5px;
+    font-size: 14px;
+    font-weight: normal;
+    color: #ffffff;
+    margin-bottom: 5px;
 }
 
 .discord-embed {
-  width: 400px;
-  border-left: 4px solid #5ACFF5;
-  background-color: #2c2f33;
-  color: white;
-  padding: 10px;
-  border-radius: 5px;
-  font-family: Arial, sans-serif;
+    width: 400px;
+    border-left: 4px solid #5ACFF5 !important;
+    background-color: #2c2f33;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: Arial, sans-serif;
 }
+
 .embed-header {
-  font-size: 16px;
-  font-weight: bold;
-  color: #ffffff;
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
 }
+
 .embed-description {
-  font-size: 14px;
-  margin-top: 8px;
-  color: #b9bbbe;
+    font-size: 14px;
+    margin-top: 8px;
+    color: #b9bbbe;
 }
+
 .embed-image img {
-  margin-top: 10px;
-  width: 100%;
-  border-radius: 5px;
+    margin-top: 10px;
+    width: 100%;
+    border-radius: 5px;
 }
+
 .embed-footer {
-  font-size: 12px;
-  color: #72767d;
-  margin-top: 10px;
-  text-align: right;
+    font-size: 12px;
+    color: #72767d;
+    margin-top: 10px;
+    text-align: right;
+}
+
+.red-star {
+    color: #ff0000;
+}
+
+.flatpickr-calendar {
+    border-radius: 0.5rem !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35) !important;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.875rem;
+    background-color: #1f1f1f !important;
+    color: #e2e2e2 !important;
+}
+
+.flatpickr-day.selected {
+    background-color: #4f46e5 !important; /* Indigo */
+    color: #fff !important;
 }

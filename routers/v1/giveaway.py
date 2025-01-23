@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from routers.public.tickets import get_channels, get_roles
+from routers.v1.tickets import get_channels, get_roles
 from utils.utils import db_client, validate_token, delete_from_cdn
 
 router = APIRouter(prefix="/giveaway", include_in_schema=False)

@@ -91,12 +91,14 @@ async def player_legend(player_tag: str, request: Request, response: Response, s
 
     legend_data = result.get('legends', {})
     if season and legend_data != {}:
-        year, month = season.split("-")
-        season_start = coc.utils.get_season_start(month=int(month) - 1, year=int(year))
-        season_end = coc.utils.get_season_end(month=int(month) - 1, year=int(year))
-        delta = season_end - season_start
-        days = [season_start + timedelta(days=i) for i in range(delta.days)]
-        days = [day.strftime("%Y-%m-%d") for day in days]
+        year, month = map(int, season.split("-"))
+        previous_month = pend.date(year, month, 1).subtract(months=1)
+        prev_year, prev_month = previous_month.year, previous_month.month
+
+        season_start = pend.instance(coc.utils.get_season_start(month=prev_month, year=prev_year))
+        season_end = pend.instance(coc.utils.get_season_end(month=prev_month, year=prev_year))
+
+        days = [season_start.add(days=i).to_date_string() for i in range((season_end - season_start).days)]
 
         _holder = {}
         for day in days:

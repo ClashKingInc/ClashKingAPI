@@ -101,6 +101,10 @@ class DBClient():
         self.player_capital_lb: collection_class = self.leaderboards.capital_player
         self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
 
+        self.app = client.get_database("app")
+        self.app_users: collection_class = self.app.users
+        self.app_tokens: collection_class = self.app.tokens
+
 
 db_client = DBClient()
 

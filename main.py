@@ -59,6 +59,7 @@ def include_routers(app, directory):
 # Include routers from public and private directories
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "app"))
 
 
 @app.on_event("startup")

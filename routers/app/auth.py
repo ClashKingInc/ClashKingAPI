@@ -16,7 +16,7 @@ load_dotenv()
 # Initialize FastAPI app
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-router = APIRouter(tags=["Authentication"], include_in_schema=False)
+router = APIRouter(tags=["Authentication"], include_in_schema=True)
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

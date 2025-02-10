@@ -1,3 +1,4 @@
+import os
 from os import getenv
 from dotenv import load_dotenv
 from dataclasses import dataclass
@@ -25,8 +26,16 @@ class Config:
 
     internal_api_token = getenv("INTERNAL_API_TOKEN")
 
-    is_local = (getenv("LOCAL") == "TRUE")
-
     client_secret = getenv("CLIENT_SECRET")
     bot_token = getenv("BOT_TOKEN")
+
+    ENV = os.getenv("APP_ENV", "local")
+    IS_LOCAL = ENV == "local"
+    IS_DEV = ENV == "development"
+    IS_PROD = ENV == "production"
+
+    HOST = "localhost" if IS_LOCAL else "0.0.0.0"
+    PORT = 8000 if IS_LOCAL else (8073 if IS_DEV else 8010)
+    RELOAD = IS_LOCAL or IS_DEV
+
 

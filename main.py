@@ -69,8 +69,8 @@ async def startup_event():
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)
 async def docs():
-    if config.is_local:
-        return RedirectResponse(f"http://localhost/docs")
+    if config.IS_LOCAL:
+        return RedirectResponse(f"http://localhost:8000/docs")
     return RedirectResponse(f"https://api.clashk.ing/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
@@ -122,10 +122,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == "__main__":
-    if config.is_local:
-        uvicorn.run("main:app", host="localhost", port=8000, reload=True)
-    else:
-        uvicorn.run("main:app", host="0.0.0.0", port=8010)
+    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=config.RELOAD)
 
 
 

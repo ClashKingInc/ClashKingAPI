@@ -31,6 +31,10 @@ jobs:
           echo "APP_ENV=production" >> $GITHUB_ENV
           echo "IMAGE_NAME=ghcr.io/clashkinginc/clashkingapi" >> $GITHUB_ENV
 
+      - name: Sanitize branch name
+        id: sanitize
+        run: echo "SANITIZED_BRANCH=$(echo '${{ github.event.pull_request.head.ref }}' | sed 's/[^a-zA-Z0-9_.-]/-/g')" >> $GITHUB_ENV
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:

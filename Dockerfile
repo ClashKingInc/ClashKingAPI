@@ -24,7 +24,7 @@ ARG APP_ENV=development
 ENV APP_ENV=${APP_ENV}
 
 # Expose the ports used by different environments
-EXPOSE 8000 8073 8010
+EXPOSE 6000 8073 8010
 
 # Dynamically set the correct port based on APP_ENV
 CMD ["sh", "-c", "python main.py --port=$( [ \"$APP_ENV\" = \"development\" ] && echo 8073 || ( [ \"$APP_ENV\" = \"local\" ] && echo 8000 || echo 8010 ) )"]

@@ -99,29 +99,31 @@ async def auth_clashking(email: str, password: str, request: Request):
 
 
 @router.post("/auth/discord", response_model=Token)
-async def auth_discord(code: str):
-    """Authenticate user via Discord OAuth2 and return JWT tokens"""
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Discord code")
+async def auth_discord(request: Request):
+    """Authenticate user via Discord OAuth2 and return JWT tokens using PKCE"""
+    form = await request.form()
+    code = form.get("code")
+    code_verifier = form.get("code_verifier")
+
+    if not code or not code_verifier:
+        raise HTTPException(status_code=400, detail="Missing Discord code or code verifier")
 
     token_url = "https://discord.com/api/oauth2/token"
     token_data = {
         "client_id": DISCORD_CLIENT_ID,
-        "client_secret": DISCORD_CLIENT_SECRET,
         "code": code,
         "grant_type": "authorization_code",
         "redirect_uri": DISCORD_REDIRECT_URI,
-        "scope": "identify"
+        "code_verifier": code_verifier
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    token_response = requests.post(token_url, data=token_data, headers=headers)
 
+    token_response = requests.post(token_url, data=token_data, headers=headers)
     if token_response.status_code != 200:
         raise HTTPException(status_code=500, detail=f"Error during Discord authentication: {token_response.json()}")
 
     access_token = token_response.json().get("access_token")
-    user_response = requests.get("https://discord.com/api/users/@me",
-                                 headers={"Authorization": f"Bearer {access_token}"})
+    user_response = requests.get("https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"})
 
     if user_response.status_code != 200:
         raise HTTPException(status_code=500, detail="Error retrieving user info")
@@ -129,16 +131,11 @@ async def auth_discord(code: str):
     user_data = user_response.json()
     user_id = user_data["id"]
 
-    # Store user in database if not exists
     if not await db_client.app_users.find_one({"user_id": user_id}):
-        await db_client.app_users.insert_one(
-            {"user_id": user_id, "username": user_data["username"], "account_type": "discord", "created_at": pend.now()}
-        )
+        await db_client.app_users.insert_one({"user_id": user_id, "username": user_data["username"], "account_type": "discord", "created_at": pend.now()})
 
     refresh_token = generate_refresh_token(user_id, "discord")
-    await db_client.app_tokens.insert_one(
-        {"user_id": user_id, "refresh_token": refresh_token, "expires_at": pend.now().add(days=90)}
-    )
+    await db_client.app_tokens.insert_one({"user_id": user_id, "refresh_token": refresh_token, "expires_at": pend.now().add(days=90)})
 
     return {"access_token": generate_jwt(user_id, "discord"), "refresh_token": refresh_token}
 

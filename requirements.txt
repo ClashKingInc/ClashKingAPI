@@ -1,6 +1,7 @@
 aiohttp==3.9.3
 aiocache==0.12.2
 coc.py==3.2.1
+cryptography==44.0.1
 bcrypt==4.2.1
 diskcache==5.6.3
 expiring-dict==1.1.0

@@ -99,24 +99,56 @@ def is_blacklisted(token: str) -> bool:
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """
     This dependency checks whether the token is blacklisted, decodes the JWT,
-    fetches the user from the database, and returns the user object.
+    fetches the user from the database, and returns a user object or a dict
+    contenant le profil Discord temps réel si le compte est 'discord'.
     """
-    # Check if token is blacklisted
+    # Check if the token is blacklisted
     if is_blacklisted(token):
         raise HTTPException(status_code=401, detail="Token is blacklisted")
+
+    # Decode the JWT token
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        user = await db_client.app_users.find_one({"user_id": user_id})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Token is invalid")
+
+    # Load the user from the database
+    current_user = await db_client.app_users.find_one({"user_id": user_id})
+    if not current_user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User not found: {user_id}"
+        )
+
+    # If it's a Discord account, fetch the real-time profile
+    if current_user.get("account_type") == "discord":
+        try:
+            discord_access = await decrypt_data(current_user["discord_access_token"])
+            response = requests.get(
+                "https://discord.com/api/users/@me",
+                headers={"Authorization": f"Bearer {discord_access}"}
+            )
+            if response.status_code == 200:
+                discord_data = response.json()
+                return {
+                    "user_id": current_user["user_id"],
+                    "discord_username": discord_data["username"],
+                    "avatar_url": f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png",
+                }
+            else:
+                # Invalidate the token if the Discord profile is not accessible
+                raise HTTPException(status_code=500, detail="Error from Discord API")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error retrieving Discord profile: {str(e)}")
+
+    # If it's a ClashKing account, return the user object
+    return current_user
+
 
 ############################
 # Device ID validation

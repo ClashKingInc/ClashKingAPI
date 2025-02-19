@@ -11,7 +11,7 @@ router = APIRouter(prefix="/v2",tags=["Server Settings"], include_in_schema=True
 
 
 
-@router.get("/server/settings/{server_id}",
+@router.get("/server/{server_id}/settings",
              name="Get settings for a server")
 @check_authentication
 async def server_settings(server_id: int, request: Request, clan_settings: bool = False):
@@ -44,6 +44,15 @@ async def server_settings(server_id: int, request: Request, clan_settings: bool 
         raise HTTPException(status_code=404, detail="Server Not Found")
     return remove_id_fields(results)
 
+
+@router.get("/server/{server_id}/clan/{clan_tag}/settings",
+            name="Update server discord embed color")
+@check_authentication
+async def server_clan_settings(server_id: int, clan_tag: str, request: Request):
+    result = await mongo.clan_db.find_one({'$and': [{'tag': clan_tag}, {'server': server_id}]})
+    if not result:
+        raise HTTPException(status_code=404, detail="Server or clan not found")
+    return remove_id_fields(result)
 
 
 @router.put("/server/{server_id}/embed-color/{hex_code}",

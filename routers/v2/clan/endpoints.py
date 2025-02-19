@@ -93,7 +93,7 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
     total_active_48h = len(recent_active)
 
     return {
-        "clan_tag": clan_tag,
+        "tag": clan_tag,
         "tracked_player_count": len(player_stats),
         "clan_games_points": clan_games_points,
         "troops_donated": total_donated,

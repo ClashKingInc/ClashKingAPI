@@ -42,7 +42,7 @@ async def server_settings(server_id: int, request: Request, clan_settings: bool 
     results = await mongo.server_db.aggregate(pipeline).to_list(length=1)
     if not results:
         raise HTTPException(status_code=404, detail="Server Not Found")
-    return remove_id_fields(results)
+    return remove_id_fields(results[0])
 
 
 @router.get("/server/{server_id}/clan/{clan_tag}/settings",

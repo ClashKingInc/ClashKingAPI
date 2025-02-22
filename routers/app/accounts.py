@@ -62,7 +62,7 @@ async def add_coc_account(coc_tag: str, token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload["sub"]
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # Validate Clash of Clans tag format
@@ -108,7 +108,7 @@ async def add_coc_account_with_verification(coc_tag: str, player_token: str, tok
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload["sub"]
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # Validate Clash of Clans tag format
@@ -158,7 +158,7 @@ async def get_coc_accounts(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload["sub"]
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # Fetch the user document
@@ -178,7 +178,7 @@ async def remove_coc_account(coc_tag: str, token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload["sub"]
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
     # Ensure the tag starts with "#"

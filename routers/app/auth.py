@@ -114,7 +114,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             raise HTTPException(status_code=401, detail="Invalid token")
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=401, detail="Token is invalid")
 
     # Load the user from the database
@@ -418,7 +418,7 @@ async def refresh_token(token: str, request: Request):
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=403, detail="Refresh token expired")
-    except jwt.PyJWTError:
+    except jwt.exceptions.PyJWTError:
         raise HTTPException(status_code=403, detail="Invalid token")
 
 # 6) Get current user info

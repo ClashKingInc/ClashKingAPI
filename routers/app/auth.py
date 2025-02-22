@@ -254,6 +254,7 @@ async def auth_discord(request: Request):
     form = await request.form()
     code = form.get("code")
     code_verifier = form.get("code_verifier")
+    device_id = request.headers.get("X-Device-ID", "unknown")
 
     if not code or not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")
@@ -297,12 +298,9 @@ async def auth_discord(request: Request):
     # Step 3: Check if user exists in DB
     existing_user = await db_client.app_users.find_one({"user_id": discord_user_id})
     if not existing_user:
-        # Optionally encrypt the username
-        username_enc = await encrypt_data(user_data["username"])
         new_user = {
             "user_id": discord_user_id,
-            "username": username_enc,
-            "account_type": "discord",
+            "account_type": device_id,
             "created_at": pend.now()
         }
         await db_client.app_users.insert_one(new_user)
@@ -330,7 +328,7 @@ async def auth_discord(request: Request):
 
     # Step 5: Create a ClashKing refresh token for user
     # (the user can now use your own JWT to talk to your app)
-    refresh_token = generate_refresh_token(discord_user_id, "discord")
+    refresh_token = generate_refresh_token(discord_user_id, device_id)
     encrypted_refresh = await encrypt_data(refresh_token)
 
     await db_client.app_tokens.insert_one({
@@ -342,8 +340,8 @@ async def auth_discord(request: Request):
 
     # Step 6: Return your own JWT to the client
     return {
-        "access_token": generate_jwt(discord_user_id, "discord"),
-        "refresh_token": await encrypt_data(refresh_token)
+        "access_token": generate_jwt(discord_user_id, device_id),
+        "refresh_token": encrypted_refresh
     }
 
 # 5) Refresh token: generate a new access token
@@ -394,30 +392,49 @@ async def refresh_token(token: str, request: Request):
 @router.get("/users/me")
 async def read_users_me(current_user=Depends(get_current_user)):
     """
-    This endpoint returns the current user's information, decrypting
-    email and username if available.
+    Returns the current user's information:
+    - For ClashKing users: Returns decrypted email.
+    - For Discord users: Fetches username & avatar from the Discord API.
     """
-    decrypted_email = None
-    if "email" in current_user:
-        try:
-            decrypted_email = await decrypt_data(current_user["email"])
-        except:
-            decrypted_email = "(error decrypting email)"
-
-    decrypted_username = None
-    if "username" in current_user:
-        try:
-            decrypted_username = await decrypt_data(current_user["username"])
-        except:
-            decrypted_username = "(error decrypting username)"
-
-    return {
+    user_data = {
         "user_id": current_user["user_id"],
-        "email": decrypted_email,
-        "username": decrypted_username,
         "account_type": current_user.get("account_type", "unknown"),
-        "created_at": current_user.get("created_at")
+        "created_at": current_user.get("created_at"),
     }
+
+    # If the user is a ClashKing account, return the decrypted email
+    if current_user["account_type"] == "clashking":
+        decrypted_email = None
+        if "email" in current_user:
+            try:
+                decrypted_email = await decrypt_data(current_user["email"])
+            except:
+                decrypted_email = "(error decrypting email)"
+        user_data["email"] = decrypted_email
+
+    # If the user is a Discord account, fetch their username and avatar
+    elif current_user["account_type"] == "discord":
+        try:
+            # Decrypt the stored Discord access token
+            discord_access = await decrypt_data(current_user["discord_access_token"])
+
+            # Call Discord API to get user information
+            response = requests.get(
+                "https://discord.com/api/users/@me",
+                headers={"Authorization": f"Bearer {discord_access}"}
+            )
+
+            if response.status_code == 200:
+                discord_data = response.json()
+                user_data["discord_username"] = discord_data["username"]
+                user_data["avatar_url"] = f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png"
+            else:
+                raise HTTPException(status_code=500, detail="Error from Discord API")
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch Discord profile: {str(e)}")
+
+    return user_data
 
 # 7) Get all user sessions
 @router.get("/users/sessions")

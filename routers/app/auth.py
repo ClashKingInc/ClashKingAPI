@@ -100,7 +100,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     """
     This dependency checks whether the token is blacklisted, decodes the JWT,
     fetches the user from the database, and returns a user object or a dict
-    contenant le profil Discord temps réel si le compte est 'discord'.
+    containing the real-time Discord profile if the account type is 'discord'.
     """
     # Check if the token is blacklisted
     if is_blacklisted(token):
@@ -127,28 +127,61 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
     # If it's a Discord account, fetch the real-time profile
     if current_user.get("account_type") == "discord":
+        discord_access_token = current_user.get("discord_access_token")
+
+        # Check if the user has a stored Discord token
+        if not discord_access_token:
+            raise HTTPException(status_code=401, detail="Missing Discord access token")
+
         try:
-            discord_access = await decrypt_data(current_user["discord_access_token"])
+            # Decrypt the Discord access token
+            discord_access = await decrypt_data(discord_access_token)
+
+            # Request the Discord profile
             response = requests.get(
                 "https://discord.com/api/users/@me",
                 headers={"Authorization": f"Bearer {discord_access}"}
             )
+
+            # If the token is expired, try refreshing it
+            if response.status_code == 401:
+                # Refresh the Discord token and retry
+                new_discord_data = await refresh_discord_access_token(current_user["discord_refresh_token"])
+                discord_access = new_discord_data["access_token"]
+
+                # Save the new access token
+                encrypted_discord_access = await encrypt_data(discord_access)
+                await db_client.app_users.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"discord_access_token": encrypted_discord_access}}
+                )
+
+                # Retry fetching Discord profile with the new token
+                response = requests.get(
+                    "https://discord.com/api/users/@me",
+                    headers={"Authorization": f"Bearer {discord_access}"}
+                )
+
             if response.status_code == 200:
                 discord_data = response.json()
+                avatar_url = (
+                    f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png"
+                    if discord_data.get("avatar") else None
+                )
+
                 return {
                     "user_id": current_user["user_id"],
                     "discord_username": discord_data["username"],
-                    "avatar_url": f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png",
+                    "avatar_url": avatar_url,
                 }
             else:
-                # Invalidate the token if the Discord profile is not accessible
                 raise HTTPException(status_code=500, detail="Error from Discord API")
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error retrieving Discord profile: {str(e)}")
 
     # If it's a ClashKing account, return the user object
     return current_user
-
 
 ############################
 # Device ID validation
@@ -533,20 +566,27 @@ async def get_discord_profile(current_user=Depends(get_current_user)):
 
     return response.json()
 
-def refresh_discord_access_token(encrypted_refresh_token_discord: str) -> dict:
-    # 1) decrypt the refresh token
-    refresh_token_str = decrypt_data(encrypted_refresh_token_discord)
+async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
+    """
+    Refreshes the Discord access token using the stored refresh token.
+    """
+    try:
+        refresh_token = await decrypt_data(encrypted_refresh_token)
+        token_data = {
+            "client_id": DISCORD_CLIENT_ID,
+            "client_secret": DISCORD_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        token_response = requests.post("https://discord.com/api/oauth2/token", data=token_data, headers=headers)
 
-    data = {
-        "client_id": DISCORD_CLIENT_ID,
-        "client_secret": DISCORD_CLIENT_SECRET,
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token_str
-    }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-    token_response = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
-    if token_response.status_code != 200:
-        raise Exception(f"Unable to refresh Discord token: {token_response.json()}")
-
-    return token_response.json()
+        if token_response.status_code == 200:
+            return token_response.json()
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Failed to refresh Discord token: {token_response.json()}"
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error refreshing Discord token: {str(e)}")

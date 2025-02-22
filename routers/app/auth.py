@@ -103,6 +103,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     containing the real-time Discord profile if the account type is 'discord'.
     """
     # Check if the token is blacklisted
+    print(token)
     if is_blacklisted(token):
         raise HTTPException(status_code=401, detail="Token is blacklisted")
 
@@ -110,6 +111,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         user_id = payload.get("sub")
+        print(payload)
+        print(user_id)
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
     except jwt.ExpiredSignatureError:
@@ -384,6 +387,7 @@ async def refresh_token(token: str, request: Request):
     This endpoint receives an existing refresh token (encrypted in the DB),
     validates it, checks device_id, and issues a new access/refresh token pair.
     """
+    print("token", token)
     # Decrypt the user-provided token to compare with the DB
     stored_token = await db_client.app_tokens.find_one({"refresh_token": await encrypt_data(token)})
 
@@ -392,6 +396,7 @@ async def refresh_token(token: str, request: Request):
 
     try:
         payload = jwt.decode(token, REFRESH_SECRET, algorithms=["HS256"])
+        print("payload", payload)
         user_id = payload.get("sub")
         device_id = payload.get("device")
 

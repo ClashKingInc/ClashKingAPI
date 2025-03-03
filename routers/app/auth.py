@@ -5,7 +5,7 @@ import jwt
 import requests
 import pendulum as pend
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, Request, APIRouter
+from fastapi import Header, HTTPException, Request, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from utils.utils import db_client
@@ -45,7 +45,6 @@ router = APIRouter(tags=["Authentication"], include_in_schema=True)
 ############################
 class Token(BaseModel):
     access_token: str
-
 
 ############################
 # Utility functions
@@ -113,10 +112,12 @@ async def get_valid_discord_access_token(user_id: str) -> str:
 # Retrieve current user and validate token
 ############################
 
-@router.get("/auth/me", response_model=Token)
-async def get_current_user(token: str):
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing authentication token")
+@router.get("/auth/me")
+async def get_current_user(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
+
+    token = authorization.split("Bearer ")[1]
 
     current_user = await db_client.app_clashking_tokens.find_one({"access_token": token})
     if not current_user:
@@ -197,7 +198,8 @@ async def auth_discord(request: Request):
             "user_id": discord_user_id,
             "device_id": device_id,
             "discord_access_token": encrypted_discord_access,
-            "discord_refresh_token": encrypted_discord_refresh
+            "discord_refresh_token": encrypted_discord_refresh,
+            "expires_at": pend.now().add(days=180)
         },
         upsert=True  # Insert if not found
     )

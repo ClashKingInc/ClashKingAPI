@@ -168,23 +168,23 @@ async def auth_discord(request: Request):
         token_response = await client.post(token_url, data=token_data,
                                            headers={"Content-Type": "application/x-www-form-urlencoded"})
 
-    if token_response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Error during Discord authentication")
+        if token_response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Error during Discord authentication")
 
-    discord_data = token_response.json()
-    refresh_token_discord = discord_data.get("refresh_token")
+        discord_data = token_response.json()
+        refresh_token_discord = discord_data.get("refresh_token")
 
-    user_response = await client.get(
-        "https://discord.com/api/users/@me",
-        headers={"Authorization": f"Bearer {discord_data['access_token']}"}
-    )
+        user_response = await client.get(
+            "https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {discord_data['access_token']}"}
+        )
 
-    if user_response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Error retrieving user info")
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Error retrieving user info")
 
-    user_data = user_response.json()
+        user_data = user_response.json()
+
     discord_user_id = user_data["id"]
-
     existing_user = await db_client.app_users.find_one({"user_id": discord_user_id})
     if not existing_user:
         await db_client.app_users.insert_one({"user_id": discord_user_id, "created_at": pend.now()})

@@ -45,7 +45,6 @@ router = APIRouter(tags=["Authentication"], include_in_schema=True)
 ############################
 class Token(BaseModel):
     access_token: str
-    refresh_token: str
 
 
 ############################
@@ -189,6 +188,7 @@ async def auth_discord(request: Request):
     if not existing_user:
         await db_client.app_users.insert_one({"user_id": discord_user_id, "created_at": pend.now()})
 
+    encrypted_discord_access = await encrypt_data(discord_data["access_token"])
     encrypted_discord_refresh = await encrypt_data(refresh_token_discord) if refresh_token_discord else None
 
     await db_client.app_discord_tokens.replace_one(
@@ -196,6 +196,7 @@ async def auth_discord(request: Request):
         {
             "user_id": discord_user_id,
             "device_id": device_id,
+            "discord_access_token": encrypted_discord_access,
             "discord_refresh_token": encrypted_discord_refresh
         },
         upsert=True  # Insert if not found

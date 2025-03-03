@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from utils.utils import db_client
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
+import hashlib
 
 ############################
 # Load environment variables
@@ -50,10 +51,14 @@ class Token(BaseModel):
 # Utility functions
 ############################
 
+# Hash the token using SHA-256
+async def hash_token(token: str) -> str:
+    """Hash le token avec SHA-256 pour garantir un stockage sécurisé et déterministe."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
 # Encrypt data (string) using Fernet
 async def encrypt_data(data: str) -> str:
     return cipher.encrypt(data.encode()).decode()
-
 
 # Decrypt data (string) using Fernet
 async def decrypt_data(data: str) -> str:
@@ -119,7 +124,7 @@ async def get_current_user(authorization: str = Header(None)):
 
     token = authorization.split("Bearer ")[1]
 
-    encrypt_token = await encrypt_data(token)
+    encrypt_token = await hash_token(token)
 
     current_user = await db_client.app_clashking_tokens.find_one({"access_token": encrypt_token})
     if not current_user:
@@ -207,7 +212,7 @@ async def auth_discord(request: Request):
     )
 
     access_token = generate_clashking_access_token(discord_user_id, device_id)
-    encrypted_token = await encrypt_data(access_token)
+    encrypted_token = await hash_token(access_token)
 
     await db_client.app_clashking_tokens.insert_one({
         "user_id": discord_user_id,

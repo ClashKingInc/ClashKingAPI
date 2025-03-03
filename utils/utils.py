@@ -103,8 +103,8 @@ class DBClient():
 
         self.app = client.get_database("app")
         self.app_users: collection_class = self.app.users
-        self.app_tokens: collection_class = self.app.tokens
-
+        self.app_discord_tokens: collection_class = self.app.discord_tokens
+        self.app_clashking_tokens: collection_class = self.app.clashking_tokens
 
 db_client = DBClient()
 

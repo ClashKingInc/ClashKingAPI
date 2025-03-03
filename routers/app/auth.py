@@ -12,6 +12,8 @@ from utils.utils import db_client
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import hashlib
+import base64
+
 
 ############################
 # Load environment variables
@@ -58,11 +60,20 @@ async def hash_token(token: str) -> str:
 
 # Encrypt data (string) using Fernet
 async def encrypt_data(data: str) -> str:
-    return cipher.encrypt(data.encode()).decode()
+    """Encrypt data using Fernet."""
+    encrypted = cipher.encrypt(data.encode("utf-8")).decode("utf-8")
+    return encrypted
 
 # Decrypt data (string) using Fernet
 async def decrypt_data(data: str) -> str:
-    return cipher.decrypt(data.encode()).decode()
+    """Decrypt data using Fernet."""
+    try:
+        data_bytes = base64.b64decode(data)
+        decrypted = cipher.decrypt(data_bytes).decode("utf-8")
+        return decrypted
+    except Exception as e:
+        print(f"❌ Error decrypting data: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt data")
 
 # Verify a plaintext password against a hashed one
 def verify_password(plain_password: str, hashed_password: str) -> bool:

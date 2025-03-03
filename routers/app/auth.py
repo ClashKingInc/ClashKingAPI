@@ -119,7 +119,9 @@ async def get_current_user(authorization: str = Header(None)):
 
     token = authorization.split("Bearer ")[1]
 
-    current_user = await db_client.app_clashking_tokens.find_one({"access_token": token})
+    encrypt_token = await encrypt_data(token)
+
+    current_user = await db_client.app_clashking_tokens.find_one({"access_token": encrypt_token})
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found")
 

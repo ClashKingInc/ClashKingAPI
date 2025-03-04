@@ -104,7 +104,7 @@ class DBClient():
         self.app = client.get_database("app")
         self.app_users: collection_class = self.app.users
         self.app_discord_tokens: collection_class = self.app.discord_tokens
-        self.app_clashking_tokens: collection_class = self.app.clashking_tokens
+        self.app_refresh_tokens: collection_class = self.app.refresh_tokens
         self.user_clash_accounts: collection_class = client.clashking.coc_accounts
 
 db_client = DBClient()

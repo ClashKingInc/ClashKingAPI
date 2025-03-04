@@ -1,4 +1,4 @@
-from random import random
+import random
 
 import motor.motor_asyncio
 from redis import asyncio as aioredis
@@ -366,6 +366,6 @@ def generate_custom_id(input_number):
     base_number = (
         input_number
         + int(pend.now(tz=pend.UTC).timestamp())
-        + random.randint(1000000000, 9999999999)  # Use random.randint
+        + random.randint(1000000000, 9999999999)
     )
     return base_number

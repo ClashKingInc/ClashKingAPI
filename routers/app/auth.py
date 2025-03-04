@@ -84,8 +84,7 @@ async def decrypt_data(data: str) -> str:
     """Decrypt data using Fernet."""
     try:
         print(f"🔒 Encrypted data: {data}")
-        data_bytes = base64.b64decode(data)
-        decrypted = cipher.decrypt(data_bytes).decode("utf-8")
+        decrypted = cipher.decrypt(data).decode("utf-8")
         print(f"🔓 Decrypted data: {decrypted}")
         return decrypted
     except Exception as e:
@@ -244,7 +243,7 @@ async def auth_discord(request: Request):
     form = await request.form()
     code = form.get("code")
     code_verifier = form.get("code_verifier")
-    device_id = request.headers.get("X-Device-ID", "unknown")
+    device_id = form.get("device_id")
 
     if not code or not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")

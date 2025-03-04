@@ -16,12 +16,16 @@ router = APIRouter(tags=["Coc Accounts"], include_in_schema=True)
 # Utility functions
 ################
 
-async def is_coc_tag_valid(coc_tag: str) -> bool:
-    """Check if the Clash of Clans account exists using the API."""
+async def fetch_coc_account_data(coc_tag: str) -> dict:
+    """Retrieve Clash of Clans account details using the API."""
     coc_tag = coc_tag.replace("#", "%23")
     url = f"https://proxy.clashk.ing/v1/players/{coc_tag}"
     response = requests.get(url)
-    return response.status_code == 200  # Returns True if the account exists
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=404, detail="Clash of Clans account does not exist")
+
+    return response.json()  # Return the account data
 
 
 async def verify_coc_ownership(coc_tag: str, player_token: str) -> bool:
@@ -56,19 +60,28 @@ async def add_coc_account(coc_tag: str, authorization: str = Header(None)):
     if not coc_tag.startswith("#"):
         coc_tag = f"#{coc_tag}"
 
-    if not await is_coc_tag_valid(coc_tag):
-        raise HTTPException(status_code=404, detail="Clash of Clans account does not exist")
+    # Fetch account details from the API
+    coc_account_data = await fetch_coc_account_data(coc_tag)
 
     if await is_coc_account_linked(coc_tag):
         raise HTTPException(status_code=400, detail="This Clash of Clans account is already linked to another user")
 
+    # Store in the database
     await db_client.coc_accounts.insert_one({
         "user_id": user_id,
-        "coc_tag": coc_tag,
+        "coc_tag": coc_account_data["tag"],
         "added_at": pend.now()
     })
 
-    return {"message": "Clash of Clans account linked successfully"}
+    # Return account details to the front-end
+    return {
+        "message": "Clash of Clans account linked successfully",
+        "account": {
+            "tag": coc_account_data["tag"],
+            "name": coc_account_data["name"],
+            "townHallLevel": coc_account_data["townHallLevel"]
+        }
+    }
 
 
 @router.post("/users/add-coc-account-with-token")
@@ -85,22 +98,31 @@ async def add_coc_account_with_verification(coc_tag: str, player_token: str, aut
     if not coc_tag.startswith("#"):
         coc_tag = f"#{coc_tag}"
 
-    if not await is_coc_tag_valid(coc_tag):
-        raise HTTPException(status_code=404, detail="Clash of Clans account does not exist")
-
     if not await verify_coc_ownership(coc_tag, player_token):
         raise HTTPException(status_code=403, detail="Invalid player token. You do not own this account.")
+
+    # Fetch account details from the API
+    coc_account_data = await fetch_coc_account_data(coc_tag)
 
     if await is_coc_account_linked(coc_tag):
         raise HTTPException(status_code=400, detail="This Clash of Clans account is already linked to another user")
 
+    # Store in the database
     await db_client.coc_accounts.insert_one({
         "user_id": user_id,
-        "coc_tag": coc_tag,
+        "coc_tag": coc_account_data["tag"],
         "added_at": pend.now()
     })
 
-    return {"message": "Clash of Clans account linked successfully with ownership verification"}
+    # Return account details to the front-end
+    return {
+        "message": "Clash of Clans account linked successfully with ownership verification",
+        "account": {
+            "tag": coc_account_data["tag"],
+            "name": coc_account_data["name"],
+            "townHallLevel": coc_account_data["townHallLevel"]
+        }
+    }
 
 
 @router.get("/users/coc-accounts")

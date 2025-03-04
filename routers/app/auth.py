@@ -92,10 +92,21 @@ async def get_current_user(authorization: str = Header(None)):
     if response.status_code == 200:
         discord_data = response.json()
 
+        # Fallback to username if global_name is missing
+        username = discord_data.get("global_name") or discord_data.get("username")
+
+        # Fallback avatar if missing
+        avatar = discord_data.get("avatar")
+        avatar_url = (
+            f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{avatar}.png"
+            if avatar
+            else "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png"
+        )
+
         return {
             "user_id": current_user["user_id"],
-            "discord_username": discord_data["username"],
-            "avatar_url": f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png"
+            "discord_username": username,
+            "avatar_url": avatar_url
         }
 
     raise HTTPException(status_code=500, detail="Error retrieving Discord profile")

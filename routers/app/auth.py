@@ -70,26 +70,21 @@ class RefreshTokenRequest(BaseModel):
 # Utility functions
 ############################
 
-# Encrypt data (string) using Fernet
+# Encrypt data using Fernet
 async def encrypt_data(data: str) -> str:
     """Encrypt data using Fernet."""
-    print(f"🔓 Data: {data}")
-    encrypted = cipher.encrypt(data.encode("utf-8")).decode("utf-8")
-    print(f"🔒 Encrypted data: {encrypted}")
-    return encrypted
+    encrypted = cipher.encrypt(data.encode("utf-8"))  # Returns bytes
+    return base64.urlsafe_b64encode(encrypted).decode("utf-8")  # Convert to str for storage
 
-
-# Decrypt data (string) using Fernet
+# Decrypt data using Fernet
 async def decrypt_data(data: str) -> str:
     """Decrypt data using Fernet."""
     try:
-        print(f"🔒 Encrypted data: {data}")
-        decrypted = cipher.decrypt(data).decode("utf-8")
-        print(f"🔓 Decrypted data: {decrypted}")
+        data_bytes = base64.urlsafe_b64decode(data.encode("utf-8"))  # Convert back to bytes
+        decrypted = cipher.decrypt(data_bytes).decode("utf-8")  # Decrypt and decode
         return decrypted
     except Exception as e:
-        print(f"❌ Error decrypting data: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to decrypt data")
+        raise HTTPException(status_code=500, detail=f"Failed to decrypt data: {str(e)}")
 
 
 def generate_jwt(user_id: str, device_id: str) -> str:

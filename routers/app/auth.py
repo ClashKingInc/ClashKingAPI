@@ -297,7 +297,7 @@ async def auth_discord(request: Request):
             "$set": {
                 "discord_access_token": encrypted_discord_access,
                 "discord_refresh_token": encrypted_discord_refresh,
-                "expires_at": pend.now().add(seconds=expires_in)
+                "expires_at": pend.now().add(seconds=expires_in).int_timestamp
             }
         },
         upsert=True
@@ -314,7 +314,7 @@ async def auth_discord(request: Request):
             "$setOnInsert": {"_id": generate_custom_id(int(discord_user_id))},
             "$set": {
                 "refresh_token": refresh_token,
-                "expires_at": pend.now().add(days=30)
+                "expires_at": pend.now().add(days=30).int_timestamp
             }
         },
         upsert=True

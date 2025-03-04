@@ -11,9 +11,7 @@ from pydantic import BaseModel
 from utils.utils import db_client
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
-import hashlib
 import base64
-
 
 ############################
 # Load environment variables
@@ -29,6 +27,7 @@ DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
 DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
 DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI')
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+ALGORITHM = "HS256"
 
 # Fernet cipher for encryption/decryption
 cipher = Fernet(ENCRYPTION_KEY)
@@ -49,20 +48,35 @@ router = APIRouter(tags=["Authentication"], include_in_schema=True)
 class Token(BaseModel):
     access_token: str
 
+
+class UserInfo(BaseModel):
+    user_id: str
+    username: str
+    avatar_url: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    user: UserInfo
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+    device_id: str
+
 ############################
 # Utility functions
 ############################
 
-# Hash the token using SHA-256
-async def hash_token(token: str) -> str:
-    """Hash le token avec SHA-256 pour garantir un stockage sécurisé et déterministe."""
-    return hashlib.sha256(token.encode()).hexdigest()
-
 # Encrypt data (string) using Fernet
 async def encrypt_data(data: str) -> str:
     """Encrypt data using Fernet."""
+    print(f"🔒 Data: {data}")
     encrypted = cipher.encrypt(data.encode("utf-8")).decode("utf-8")
+    print(f"🔒 Encrypted data: {encrypted}")
     return encrypted
+
 
 # Decrypt data (string) using Fernet
 async def decrypt_data(data: str) -> str:
@@ -75,9 +89,34 @@ async def decrypt_data(data: str) -> str:
         print(f"❌ Error decrypting data: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to decrypt data")
 
+
+def generate_jwt(user_id: str, device_id: str) -> str:
+    """Generate a JWT token for the user."""
+    payload = {
+        "sub": user_id,
+        "device": device_id,
+        "exp": pend.now().add(days=90).int_timestamp
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_jwt(token: str) -> dict:
+    """Decode the JWT token and return the payload."""
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return decoded_token
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Expired token. Please refresh.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token. Please login again.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error decoding token: {str(e)}")
+
+
 # Verify a plaintext password against a hashed one
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
 
 # Generate a long-lived refresh token (90 days)
 def generate_clashking_access_token(user_id: str, device_id: str):
@@ -87,6 +126,7 @@ def generate_clashking_access_token(user_id: str, device_id: str):
         "exp": pend.now().add(days=90).int_timestamp
     }
     return jwt.encode(payload, REFRESH_SECRET, algorithm="HS256")
+
 
 async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
     """
@@ -113,6 +153,7 @@ async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error refreshing Discord token: {str(e)}")
 
+
 async def get_valid_discord_access_token(user_id: str) -> str:
     discord_token = await db_client.app_discord_tokens.find_one({"user_id": user_id})
     if not discord_token:
@@ -123,6 +164,7 @@ async def get_valid_discord_access_token(user_id: str) -> str:
     # Generate a new access token if the current one is expired
     new_token_data = await refresh_discord_access_token(refresh_token)
     return new_token_data["access_token"]
+
 
 ############################
 # Retrieve current user and validate token
@@ -135,9 +177,10 @@ async def get_current_user(authorization: str = Header(None)):
 
     token = authorization.split("Bearer ")[1]
 
-    encrypt_token = await hash_token(token)
+    decoded_token = decode_jwt(token)
 
-    current_user = await db_client.app_clashking_tokens.find_one({"access_token": encrypt_token})
+    user_id = decoded_token["sub"]
+    current_user = await db_client.app_users.find_one({"user_id": user_id})
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -163,7 +206,8 @@ async def get_current_user(authorization: str = Header(None)):
 
     return current_user
 
-@router.post("/auth/discord", response_model=Token)
+
+@router.post("/auth/discord", response_model=AuthResponse)
 async def auth_discord(request: Request):
     form = await request.form()
     code = form.get("code")
@@ -173,6 +217,7 @@ async def auth_discord(request: Request):
     if not code or not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")
 
+    # Get the access token from Discord
     token_url = "https://discord.com/api/oauth2/token"
     token_data = {
         "client_id": DISCORD_CLIENT_ID,
@@ -190,11 +235,12 @@ async def auth_discord(request: Request):
             raise HTTPException(status_code=500, detail="Error during Discord authentication")
 
         discord_data = token_response.json()
-        refresh_token_discord = discord_data.get("refresh_token")
 
+    # Get the user info from Discord
+    async with httpx.AsyncClient() as client:
         user_response = await client.get(
             "https://discord.com/api/users/@me",
-            headers={"Authorization": f"Bearer {discord_data['access_token']}"}
+            headers={"Authorization": f"Bearer {discord_data['access_token']}"},
         )
 
         if user_response.status_code != 200:
@@ -203,34 +249,58 @@ async def auth_discord(request: Request):
         user_data = user_response.json()
 
     discord_user_id = user_data["id"]
+
+    # Verify if the user already exists in the database
     existing_user = await db_client.app_users.find_one({"user_id": discord_user_id})
     if not existing_user:
         await db_client.app_users.insert_one({"user_id": discord_user_id, "created_at": pend.now()})
 
-    encrypted_discord_access = await encrypt_data(discord_data["access_token"])
-    encrypted_discord_refresh = await encrypt_data(refresh_token_discord) if refresh_token_discord else None
+    # Generate a JWT token for the user
+    access_token = generate_jwt(discord_user_id, device_id)
+    refresh_token = generate_refresh_token(discord_user_id)
 
-    await db_client.app_discord_tokens.replace_one(
-        {"user_id": discord_user_id, "device_id": device_id},
-        {
-            "user_id": discord_user_id,
-            "device_id": device_id,
-            "discord_access_token": encrypted_discord_access,
-            "discord_refresh_token": encrypted_discord_refresh,
-            "expires_at": pend.now().add(days=180)
-        },
-        upsert=True  # Insert if not found
+    # Stocker le refresh_token dans la base
+    await db_client.app_refresh_tokens.update_one(
+        {"user_id": discord_user_id},
+        {"$set": {"refresh_token": refresh_token, "expires_at": pend.now().add(days=30)}},
+        upsert=True
     )
 
-    access_token = generate_clashking_access_token(discord_user_id, device_id)
-    encrypted_token = await hash_token(access_token)
+    # Return the access token and user info
+    return AuthResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserInfo(
+            user_id=discord_user_id,
+            username=user_data["username"],
+            avatar_url=f"https://cdn.discordapp.com/avatars/{discord_user_id}/{user_data['avatar']}.png"
+        )
+    )
 
-    await db_client.app_clashking_tokens.insert_one({
-        "user_id": discord_user_id,
-        "account_type": "discord",
-        "access_token": encrypted_token,
-        "device_id": device_id,
-        "expires_at": pend.now().add(days=180)
-    })
 
-    return {"access_token": access_token}
+@router.post("/auth/refresh")
+async def refresh_access_token(request: RefreshTokenRequest) -> dict:
+    """Refresh the access token using the stored refresh token."""
+    stored_refresh_token = await db_client.app_refresh_tokens.find_one({"refresh_token": request.refresh_token})
+
+    if not stored_refresh_token:
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
+    if pend.now().int_timestamp > stored_refresh_token["expires_at"]:
+        raise HTTPException(status_code=401, detail="Expired refresh token. Please login again.")
+
+    user_id = stored_refresh_token["user_id"]
+
+    # Generate a new access token
+    new_access_token = generate_jwt(user_id, request.device_id)
+
+    return {"access_token": new_access_token}
+
+
+def generate_refresh_token(user_id: str) -> str:
+    """Generate a refresh token for the user."""
+    payload = {
+        "sub": user_id,
+        "exp": pend.now().add(days=180).int_timestamp
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

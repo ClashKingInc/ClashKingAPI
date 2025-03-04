@@ -173,6 +173,9 @@ async def get_valid_discord_access_token(user_id: str) -> str:
     access_token = await decrypt_data(encrypted_access_token)
     refresh_token = await decrypt_data(encrypted_refresh_token)
 
+    print(f"🔒 Access Token: {access_token}")
+    print(f"🔒 Refresh Token: {refresh_token}")
+
     # Check if the access token is still valid (add a buffer of 60s to prevent expiration race condition)
     if pend.now().int_timestamp < discord_token["expires_at"] - 60:
         return access_token
@@ -217,27 +220,24 @@ async def get_current_user(authorization: str = Header(None)):
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if current_user.get("account_type") == "discord":
-        discord_access = await get_valid_discord_access_token(current_user["user_id"])
+    discord_access = await get_valid_discord_access_token(current_user["user_id"])
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://discord.com/api/users/@me",
-                headers={"Authorization": f"Bearer {discord_access}"}
-            )
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {discord_access}"}
+        )
 
-        if response.status_code == 200:
-            discord_data = response.json()
+    if response.status_code == 200:
+        discord_data = response.json()
 
-            return {
-                "user_id": current_user["user_id"],
-                "discord_username": discord_data["username"],
-                "avatar_url": f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png"
-            }
+        return {
+            "user_id": current_user["user_id"],
+            "discord_username": discord_data["username"],
+            "avatar_url": f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{discord_data['avatar']}.png"
+        }
 
-        raise HTTPException(status_code=500, detail="Error retrieving Discord profile")
-
-    return current_user
+    raise HTTPException(status_code=500, detail="Error retrieving Discord profile")
 
 
 @router.post("/auth/discord", response_model=AuthResponse)

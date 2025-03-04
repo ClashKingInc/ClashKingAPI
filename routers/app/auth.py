@@ -8,12 +8,10 @@ from dotenv import load_dotenv
 from fastapi import Header, HTTPException, Request, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from utils.utils import db_client
+from utils.utils import db_client, generate_custom_id
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import base64
-import uuid
-from bson import Binary
 
 ############################
 # Load environment variables
@@ -292,7 +290,7 @@ async def auth_discord(request: Request):
     existing_user = await db_client.app_users.find_one({"user_id": discord_user_id})
     if not existing_user:
         await db_client.app_users.insert_one(
-            {"user_id": discord_user_id, "_id": Binary.from_uuid(uuid.uuid4()), "created_at": pend.now()})
+            {"user_id": discord_user_id, "_id": generate_custom_id(int(discord_user_id)), "created_at": pend.now()})
 
     # Encrypt the tokens
     encrypted_discord_access = await encrypt_data(access_token_discord)
@@ -302,7 +300,7 @@ async def auth_discord(request: Request):
     await db_client.app_discord_tokens.update_one(
         {"user_id": discord_user_id, "device_id": device_id},
         {
-            "$setOnInsert": {"_id": Binary.from_uuid(uuid.uuid4())},
+            "$setOnInsert": {"_id": generate_custom_id(int(discord_user_id))},
             "$set": {
                 "discord_access_token": encrypted_discord_access,
                 "discord_refresh_token": encrypted_discord_refresh,
@@ -320,7 +318,7 @@ async def auth_discord(request: Request):
     await db_client.app_refresh_tokens.update_one(
         {"user_id": discord_user_id},
         {
-            "$setOnInsert": {"_id": Binary.from_uuid(uuid.uuid4())},
+            "$setOnInsert": {"_id": generate_custom_id(int(discord_user_id))},
             "$set": {
                 "refresh_token": refresh_token,
                 "expires_at": pend.now().add(days=30)

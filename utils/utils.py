@@ -1,3 +1,5 @@
+from random import random
+
 import motor.motor_asyncio
 from redis import asyncio as aioredis
 import redis
@@ -359,3 +361,11 @@ def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
     utc_dt = utc_time.replace(tzinfo=pytz.utc)
     local_dt = utc_dt.astimezone(local_tz)
     return local_dt.strftime("%Y-%m-%d %H:%M")  # Format for display
+
+def generate_custom_id(input_number):
+    base_number = (
+        input_number
+        + int(pend.now(tz=pend.UTC).timestamp())
+        + random.randint(1000000000, 9999999999)  # Use random.randint
+    )
+    return base_number

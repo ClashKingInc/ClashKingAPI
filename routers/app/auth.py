@@ -73,7 +73,7 @@ class RefreshTokenRequest(BaseModel):
 # Encrypt data (string) using Fernet
 async def encrypt_data(data: str) -> str:
     """Encrypt data using Fernet."""
-    print(f"🔒 Data: {data}")
+    print(f"🔓 Data: {data}")
     encrypted = cipher.encrypt(data.encode("utf-8")).decode("utf-8")
     print(f"🔒 Encrypted data: {encrypted}")
     return encrypted
@@ -83,8 +83,10 @@ async def encrypt_data(data: str) -> str:
 async def decrypt_data(data: str) -> str:
     """Decrypt data using Fernet."""
     try:
+        print(f"🔒 Encrypted data: {data}")
         data_bytes = base64.b64decode(data)
         decrypted = cipher.decrypt(data_bytes).decode("utf-8")
+        print(f"🔓 Decrypted data: {decrypted}")
         return decrypted
     except Exception as e:
         print(f"❌ Error decrypting data: {str(e)}")
@@ -172,9 +174,6 @@ async def get_valid_discord_access_token(user_id: str) -> str:
 
     access_token = await decrypt_data(encrypted_access_token)
     refresh_token = await decrypt_data(encrypted_refresh_token)
-
-    print(f"🔒 Access Token: {access_token}")
-    print(f"🔒 Refresh Token: {refresh_token}")
 
     # Check if the access token is still valid (add a buffer of 60s to prevent expiration race condition)
     if pend.now().int_timestamp < discord_token["expires_at"] - 60:

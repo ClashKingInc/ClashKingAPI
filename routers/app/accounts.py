@@ -3,7 +3,9 @@ import pendulum as pend
 import re
 from dotenv import load_dotenv
 from fastapi import HTTPException, Header, APIRouter
-from utils.utils import db_client
+from pydantic import BaseModel
+
+from utils.utils import db_client, generate_custom_id
 from utils.auth_utils import decode_jwt  # Import JWT decoder
 
 # Load environment variables
@@ -11,6 +13,12 @@ load_dotenv()
 
 router = APIRouter(tags=["Coc Accounts"], include_in_schema=True)
 
+################
+# Data models
+################
+
+class CocAccountRequest(BaseModel):
+    coc_tag: str
 
 ################
 # Utility functions
@@ -20,7 +28,9 @@ async def fetch_coc_account_data(coc_tag: str) -> dict:
     """Retrieve Clash of Clans account details using the API."""
     coc_tag = coc_tag.replace("#", "%23")
     url = f"https://proxy.clashk.ing/v1/players/{coc_tag}"
+    print(url)
     response = requests.get(url)
+    print(response)
 
     if response.status_code != 200:
         raise HTTPException(status_code=404, detail="Clash of Clans account does not exist")
@@ -47,12 +57,12 @@ async def is_coc_account_linked(coc_tag: str) -> bool:
 ################
 
 @router.post("/users/add-coc-account")
-async def add_coc_account(coc_tag: str, authorization: str = Header(None)):
+async def add_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
     """Associate a Clash of Clans account (tag) with a user WITHOUT ownership verification."""
-
     token = authorization.split("Bearer ")[1]
     decoded_token = decode_jwt(token)
     user_id = decoded_token["sub"]
+    coc_tag = request.coc_tag
 
     if not re.match(r"^#?[A-Z0-9]{5,12}$", coc_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
@@ -68,6 +78,7 @@ async def add_coc_account(coc_tag: str, authorization: str = Header(None)):
 
     # Store in the database
     await db_client.coc_accounts.insert_one({
+        "_id": generate_custom_id(int(user_id)),
         "user_id": user_id,
         "coc_tag": coc_account_data["tag"],
         "added_at": pend.now()
@@ -109,6 +120,7 @@ async def add_coc_account_with_verification(coc_tag: str, player_token: str, aut
 
     # Store in the database
     await db_client.coc_accounts.insert_one({
+        "_id": generate_custom_id(int(user_id)),
         "user_id": user_id,
         "coc_tag": coc_account_data["tag"],
         "added_at": pend.now()
@@ -139,12 +151,13 @@ async def get_coc_accounts(authorization: str = Header(None)):
 
 
 @router.delete("/users/remove-coc-account")
-async def remove_coc_account(coc_tag: str, authorization: str = Header(None)):
+async def remove_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
     """Remove a specific Clash of Clans account linked to a user."""
 
     token = authorization.split("Bearer ")[1]
     decoded_token = decode_jwt(token)
     user_id = decoded_token["sub"]
+    coc_tag = request.coc_tag
 
     if not coc_tag.startswith("#"):
         coc_tag = f"#{coc_tag}"

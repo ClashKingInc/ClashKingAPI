@@ -12,6 +12,7 @@ from utils.utils import db_client
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import base64
+import uuid
 
 ############################
 # Load environment variables
@@ -64,6 +65,7 @@ class AuthResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
     device_id: str
+
 
 ############################
 # Utility functions
@@ -155,14 +157,46 @@ async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
 
 
 async def get_valid_discord_access_token(user_id: str) -> str:
+    """
+    Verifies if the Discord access token is still valid and refreshes it if needed.
+    """
     discord_token = await db_client.app_discord_tokens.find_one({"user_id": user_id})
     if not discord_token:
         raise HTTPException(status_code=401, detail="Missing Discord refresh token")
 
-    refresh_token = await decrypt_data(discord_token["discord_refresh_token"])
+    # Decrypt the access and refresh tokens
+    encrypted_access_token = discord_token.get("discord_access_token")
+    encrypted_refresh_token = discord_token.get("discord_refresh_token")
 
-    # Generate a new access token if the current one is expired
+    if not encrypted_access_token or not encrypted_refresh_token:
+        raise HTTPException(status_code=401, detail="Invalid stored tokens")
+
+    access_token = await decrypt_data(encrypted_access_token)
+    refresh_token = await decrypt_data(encrypted_refresh_token)
+
+    # Check if the access token is still valid (add a buffer of 60s to prevent expiration race condition)
+    if pend.now().int_timestamp < discord_token["expires_at"] - 60:
+        return access_token
+
+    print("🔄 Access Token expired, refreshing...")
+
+    # Refresh the access token
     new_token_data = await refresh_discord_access_token(refresh_token)
+
+    # Encrypt and store the new access token with updated expiration time
+    new_encrypted_access = await encrypt_data(new_token_data["access_token"])
+    new_expires_in = new_token_data.get("expires_in", 604800)  # Default: 7 days (7 * 24 * 60 * 60)
+
+    await db_client.app_discord_tokens.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "discord_access_token": new_encrypted_access,
+                "expires_at": pend.now().add(seconds=new_expires_in).int_timestamp
+            }
+        }
+    )
+
     return new_token_data["access_token"]
 
 
@@ -217,7 +251,7 @@ async def auth_discord(request: Request):
     if not code or not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")
 
-    # Get the access token from Discord
+    # Get the access token and refresh token from Discord
     token_url = "https://discord.com/api/oauth2/token"
     token_data = {
         "client_id": DISCORD_CLIENT_ID,
@@ -235,12 +269,15 @@ async def auth_discord(request: Request):
             raise HTTPException(status_code=500, detail="Error during Discord authentication")
 
         discord_data = token_response.json()
+        access_token_discord = discord_data["access_token"]
+        refresh_token_discord = discord_data["refresh_token"]
+        expires_in = discord_data["expires_in"]
 
-    # Get the user info from Discord
+    # Get the user data from Discord
     async with httpx.AsyncClient() as client:
         user_response = await client.get(
             "https://discord.com/api/users/@me",
-            headers={"Authorization": f"Bearer {discord_data['access_token']}"},
+            headers={"Authorization": f"Bearer {access_token_discord}"},
         )
 
         if user_response.status_code != 200:
@@ -253,20 +290,45 @@ async def auth_discord(request: Request):
     # Verify if the user already exists in the database
     existing_user = await db_client.app_users.find_one({"user_id": discord_user_id})
     if not existing_user:
-        await db_client.app_users.insert_one({"user_id": discord_user_id, "created_at": pend.now()})
+        await db_client.app_users.insert_one(
+            {"user_id": discord_user_id, "_id": uuid.uuid4(), "created_at": pend.now()})
+
+    # Encrypt the tokens
+    encrypted_discord_access = await encrypt_data(access_token_discord)
+    encrypted_discord_refresh = await encrypt_data(refresh_token_discord)
+
+    # Store the tokens in the database
+    await db_client.app_discord_tokens.update_one(
+        {"user_id": discord_user_id, "device_id": device_id},
+        {
+            "$setOnInsert": {"_id": uuid.uuid4()},
+            "$set": {
+                "discord_access_token": encrypted_discord_access,
+                "discord_refresh_token": encrypted_discord_refresh,
+                "expires_at": pend.now().add(seconds=expires_in)
+            }
+        },
+        upsert=True
+    )
 
     # Generate a JWT token for the user
     access_token = generate_jwt(discord_user_id, device_id)
     refresh_token = generate_refresh_token(discord_user_id)
 
-    # Stocker le refresh_token dans la base
+    # Store the refresh token in the database
     await db_client.app_refresh_tokens.update_one(
         {"user_id": discord_user_id},
-        {"$set": {"refresh_token": refresh_token, "expires_at": pend.now().add(days=30)}},
+        {
+            "$setOnInsert": {"_id": uuid.uuid4()},
+            "$set": {
+                "refresh_token": refresh_token,
+                "expires_at": pend.now().add(days=30)
+            }
+        },
         upsert=True
     )
 
-    # Return the access token and user info
+    # Return the response
     return AuthResponse(
         access_token=access_token,
         refresh_token=refresh_token,

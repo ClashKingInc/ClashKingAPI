@@ -3,8 +3,8 @@ import pendulum as pend
 import re
 from dotenv import load_dotenv
 from fastapi import HTTPException, Header, APIRouter
-from pydantic import BaseModel
 
+from models.app import CocAccountRequest
 from utils.utils import db_client, generate_custom_id
 from utils.auth_utils import decode_jwt  # Import JWT decoder
 
@@ -12,14 +12,6 @@ from utils.auth_utils import decode_jwt  # Import JWT decoder
 load_dotenv()
 
 router = APIRouter(tags=["Coc Accounts"], include_in_schema=True)
-
-################
-# Data models
-################
-
-class CocAccountRequest(BaseModel):
-    coc_tag: str
-    player_token: str = None
 
 ################
 # Utility functions

@@ -5,9 +5,6 @@ class CocAccountRequest(BaseModel):
     coc_tag: str
     player_token: str = None
 
-class CocAccountsRequest(BaseModel):
-    coc_tags: list[str]
-
 class UserInfo(BaseModel):
     user_id: str
     username: str

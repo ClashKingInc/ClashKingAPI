@@ -59,10 +59,9 @@ def include_routers(app, directory, recursive=False):
                 if router:
                     app.include_router(router)
 
-# Include routers from public and private directories
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "app"))
+# Include routers from public (v1) and private (v2 with subfolders)
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
 
 
 @app.on_event("startup")
@@ -128,6 +127,5 @@ app.openapi = custom_openapi
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=config.RELOAD)
-
 
 

@@ -6,10 +6,10 @@ config = Config()
 
 class MongoClient:
     looper_db = motor.motor_asyncio.AsyncIOMotorClient(
-        config.stats_mongodb, compressors='snappy' if not config.is_local else 'zlib'
+        config.stats_mongodb, compressors='snappy' if not config.IS_LOCAL else 'zlib'
     )
     db_client = motor.motor_asyncio.AsyncIOMotorClient(
-        config.static_mongodb, compressors='snappy' if not config.is_local else 'zlib'
+        config.static_mongodb, compressors='snappy' if not config.IS_LOCAL else 'zlib'
     )
 
     # Databases

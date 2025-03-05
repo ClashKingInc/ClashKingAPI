@@ -1,60 +1,15 @@
-import requests
 import pendulum as pend
 import re
-from dotenv import load_dotenv
 from fastapi import HTTPException, Header, APIRouter
 
-from models.app import CocAccountRequest
+from routers.v2.accounts.utils import fetch_coc_account_data, is_coc_account_linked, verify_coc_ownership
+from routers.v2.auth.models import CocAccountRequest
 from utils.utils import db_client, generate_custom_id
-from utils.auth_utils import decode_jwt  # Import JWT decoder
+from utils.auth_utils import decode_jwt
 
-# Load environment variables
-load_dotenv()
+router = APIRouter(prefix="/v2", tags=["Coc Accounts"], include_in_schema=True)
 
-router = APIRouter(tags=["Coc Accounts"], include_in_schema=True)
-
-################
-# Utility functions
-################
-
-async def fetch_coc_account_data(coc_tag: str) -> dict:
-    """Retrieve Clash of Clans account details using the API."""
-    coc_tag = coc_tag.replace("#", "%23")
-    url = f"https://proxy.clashk.ing/v1/players/{coc_tag}"
-    response = requests.get(url)
-
-    if response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Clash of Clans account does not exist")
-
-    return response.json()  # Return the account data
-
-async def verify_coc_ownership(coc_tag: str, player_token: str) -> bool:
-    """Verify if the provided player token matches the given Clash of Clans account."""
-    coc_tag = coc_tag.replace("#", "%23")
-    url = f"https://proxy.clashk.ing/v1/players/{coc_tag}/verifytoken"
-    response = requests.post(url, json={"token": player_token})
-
-    if response.status_code != 200:
-        return False  # API error, consider it invalid
-
-    try:
-        data = response.json()
-        return data.get("status") == "ok"
-    except ValueError:
-        return False  # If JSON parsing fails, assume invalid
-
-
-async def is_coc_account_linked(coc_tag: str) -> bool:
-    """Check if the Clash of Clans account is already linked to another user."""
-    existing_account = await db_client.coc_accounts.find_one({"coc_tag": coc_tag})
-    return existing_account is not None
-
-
-################
-# Endpoints
-################
-
-@router.post("/users/add-coc-account")
+@router.post("/users/add-coc-account", name="Link a Clash of Clans account to a user")
 async def add_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
     """Associate a Clash of Clans account (tag) with a user WITHOUT ownership verification."""
     token = authorization.split("Bearer ")[1]
@@ -88,18 +43,18 @@ async def add_coc_account(request: CocAccountRequest, authorization: str = Heade
         "account": {
             "tag": coc_account_data["tag"],
             "name": coc_account_data["name"],
-            "townHallLevel": coc_account_data["townHallLevel"]
+            "townHallLevel": coc_account_data["townHallLevel"],
+            "clan_tag": coc_account_data.get("clan", {}).get("tag"),
         }
     }
 
 
-@router.post("/users/add-coc-account-with-token")
+@router.post("/users/add-coc-account-with-token", name="Link a Clash of Clans account to a user with a token verification")
 async def add_coc_account_with_verification(request: CocAccountRequest, authorization: str = Header(None)):
     """Associate a Clash of Clans account with a user WITH ownership verification."""
-    #token = authorization.split("Bearer ")[1]
-    #decoded_token = decode_jwt(token)
-    #user_id = decoded_token["sub"]
-    user_id = "506210109790093342"
+    token = authorization.split("Bearer ")[1]
+    decoded_token = decode_jwt(token)
+    user_id = decoded_token["sub"]
     coc_tag = request.coc_tag
     player_token = request.player_token
 
@@ -137,7 +92,7 @@ async def add_coc_account_with_verification(request: CocAccountRequest, authoriz
     }
 
 
-@router.get("/users/coc-accounts")
+@router.get("/users/coc-accounts", name="Get all Clash of Clans accounts linked to a user")
 async def get_coc_accounts(authorization: str = Header(None)):
     """Retrieve all Clash of Clans accounts linked to a user."""
 
@@ -150,7 +105,7 @@ async def get_coc_accounts(authorization: str = Header(None)):
     return {"coc_accounts": accounts}
 
 
-@router.delete("/users/remove-coc-account")
+@router.delete("/users/remove-coc-account", name="Remove a Clash of Clans account linked to a user")
 async def remove_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
     """Remove a specific Clash of Clans account linked to a user."""
 
@@ -170,7 +125,7 @@ async def remove_coc_account(request: CocAccountRequest, authorization: str = He
     return {"message": "Clash of Clans account unlinked successfully"}
 
 
-@router.get("/users/check-coc-account")
+@router.get("/users/check-coc-account", name="Check if a Clash of Clans account is linked to any user")
 async def check_coc_account(coc_tag: str):
     """Check if a Clash of Clans account is linked to any user."""
 

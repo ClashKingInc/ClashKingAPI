@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
-# Define the environment variable for app mode (default to development)
+# Define the environment variable for auth mode (default to development)
 ARG APP_ENV=development
 ENV APP_ENV=${APP_ENV}
 

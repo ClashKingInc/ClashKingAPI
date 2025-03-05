@@ -104,7 +104,7 @@ class DBClient():
         self.player_capital_lb: collection_class = self.leaderboards.capital_player
         self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
 
-        self.app = client.get_database("app")
+        self.app = client.get_database("auth")
         self.app_users: collection_class = self.app.users
         self.app_discord_tokens: collection_class = self.app.discord_tokens
         self.app_refresh_tokens: collection_class = self.app.refresh_tokens

@@ -1,50 +1,14 @@
-import os
-
 import httpx
 import pendulum as pend
-from dotenv import load_dotenv
 from fastapi import Header, HTTPException, Request, APIRouter
-from fastapi.security import OAuth2PasswordBearer
 from utils.auth_utils import get_valid_discord_access_token, decode_jwt, encrypt_data, generate_jwt, \
     generate_refresh_token
-from utils.utils import db_client, generate_custom_id
-from passlib.context import CryptContext
-from cryptography.fernet import Fernet
-from models.app import AuthResponse, UserInfo, RefreshTokenRequest
+from utils.utils import db_client, generate_custom_id, config
+from routers.v2.auth.models import AuthResponse, UserInfo, RefreshTokenRequest
 
-############################
-# Load environment variables
-############################
-load_dotenv()
+router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
 
-############################
-# Global configuration
-############################
-SECRET_KEY = os.getenv('SECRET_KEY')
-REFRESH_SECRET = os.getenv('REFRESH_SECRET')
-DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
-DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
-DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI')
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
-ALGORITHM = "HS256"
-
-# Fernet cipher for encryption/decryption
-cipher = Fernet(ENCRYPTION_KEY)
-
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# FastAPI router
-router = APIRouter(tags=["App Authentication"], include_in_schema=True)
-
-############################
-# Endpoints
-############################
-
-@router.get("/auth/me")
+@router.get("/auth/me", name="Get current Discord user information")
 async def get_current_user(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
@@ -89,8 +53,9 @@ async def get_current_user(authorization: str = Header(None)):
     raise HTTPException(status_code=500, detail="Error retrieving Discord profile")
 
 
-@router.post("/auth/discord", response_model=AuthResponse)
+@router.post("/auth/discord", response_model=AuthResponse, name="Authenticate with Discord")
 async def auth_discord(request: Request):
+    """Authenticate with Discord"""
     form = await request.form()
     code = form.get("code")
     code_verifier = form.get("code_verifier")
@@ -103,10 +68,10 @@ async def auth_discord(request: Request):
     # Get the access token and refresh token from Discord
     token_url = "https://discord.com/api/oauth2/token"
     token_data = {
-        "client_id": DISCORD_CLIENT_ID,
+        "client_id": config.DISCORD_CLIENT_ID,
         "code": code,
         "grant_type": "authorization_code",
-        "redirect_uri": DISCORD_REDIRECT_URI,
+        "redirect_uri": config.DISCORD_REDIRECT_URI,
         "code_verifier": code_verifier
     }
 
@@ -189,7 +154,7 @@ async def auth_discord(request: Request):
     )
 
 
-@router.post("/auth/refresh")
+@router.post("/auth/refresh", name="Refresh the access token")
 async def refresh_access_token(request: RefreshTokenRequest) -> dict:
     """Refresh the access token using the stored refresh token."""
     stored_refresh_token = await db_client.app_refresh_tokens.find_one({"refresh_token": request.refresh_token})

@@ -3,7 +3,7 @@
 import coc
 
 from fastapi import  Request, Response, HTTPException
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query
 from typing import Annotated, List
 from fastapi_cache.decorator import cache
 from datetime import datetime

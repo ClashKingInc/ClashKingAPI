@@ -22,6 +22,7 @@ from .config import Config
 from collections import deque
 from datetime import datetime
 import pytz
+from bson import json_util
 
 
 config = Config()
@@ -291,6 +292,8 @@ async def delete_from_cdn(image_url: str):
 
 
 def remove_id_fields(data):
+    return json_loads(json_util.dumps(data))
+
     if isinstance(data, list):
         for item in data:
             remove_id_fields(item)

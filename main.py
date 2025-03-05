@@ -42,19 +42,22 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
-def include_routers(app, directory):
-    for filename in os.listdir(directory):
-        if filename.endswith(".py") and not filename.startswith("__"):
-            module_name = filename[:-3]
-            file_path = os.path.join(directory, filename)
 
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+def include_routers(app, directory, recursive=False):
+    """Include routers from a given directory. If recursive is True, search for 'endpoints.py' in subdirectories."""
+    for root, _, files in os.walk(directory) if recursive else [(directory, [], os.listdir(directory))]:
+        for filename in files:
+            if filename == "endpoints.py" if recursive else filename.endswith(".py") and not filename.startswith("__"):
+                module_name = os.path.relpath(os.path.join(root, filename), start=directory).replace(os.sep, ".")[:-3]
+                file_path = os.path.join(root, filename)
 
-            router = getattr(module, "router", None)
-            if router:
-                app.include_router(router)
+                spec = importlib.util.spec_from_file_location(module_name, file_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                router = getattr(module, "router", None)
+                if router:
+                    app.include_router(router)
 
 # Include routers from public and private directories
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))

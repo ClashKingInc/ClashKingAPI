@@ -16,18 +16,18 @@ async def add_coc_account(request: CocAccountRequest, authorization: str = Heade
     token = authorization.split("Bearer ")[1]
     decoded_token = decode_jwt(token)
     user_id = decoded_token["sub"]
-    coc_tag = request.coc_tag
+    player_tag = request.player_tag
 
-    if not re.match(r"^#?[A-Z0-9]{5,12}$", coc_tag):
+    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
 
-    if not coc_tag.startswith("#"):
-        coc_tag = f"#{coc_tag}"
+    if not player_tag.startswith("#"):
+        player_tag = f"#{player_tag}"
 
     # Fetch account details from the API
-    coc_account_data = await fetch_coc_account_data(coc_tag)
+    coc_account_data = await fetch_coc_account_data(player_tag)
 
-    if await is_coc_account_linked(coc_tag):
+    if await is_coc_account_linked(player_tag):
         raise HTTPException(status_code=409, detail="This Clash of Clans account is already linked to another user")
 
     # Get the order index for the new account
@@ -38,7 +38,7 @@ async def add_coc_account(request: CocAccountRequest, authorization: str = Heade
     await db_client.coc_accounts.insert_one({
         "_id": generate_custom_id(int(user_id)),
         "user_id": user_id,
-        "coc_tag": coc_account_data["tag"],
+        "player_tag": coc_account_data["tag"],
         "order_index": order_index,
         "added_at": pend.now()
     })
@@ -50,7 +50,6 @@ async def add_coc_account(request: CocAccountRequest, authorization: str = Heade
             "tag": coc_account_data["tag"],
             "name": coc_account_data["name"],
             "townHallLevel": coc_account_data["townHallLevel"],
-            "clan_tag": coc_account_data.get("clan", {}).get("tag"),
         }
     }
 
@@ -62,29 +61,29 @@ async def add_coc_account_with_verification(request: CocAccountRequest, authoriz
     token = authorization.split("Bearer ")[1]
     decoded_token = decode_jwt(token)
     user_id = decoded_token["sub"]
-    coc_tag = request.coc_tag
+    player_tag = request.player_tag
     player_token = request.player_token
 
-    if not re.match(r"^#?[A-Z0-9]{5,12}$", coc_tag):
+    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
 
-    if not coc_tag.startswith("#"):
-        coc_tag = f"#{coc_tag}"
+    if not player_tag.startswith("#"):
+        player_tag = f"#{player_tag}"
 
-    if not await verify_coc_ownership(coc_tag, player_token):
+    if not await verify_coc_ownership(player_tag, player_token):
         raise HTTPException(status_code=403,
                             detail="Invalid player token. Check your Clash of Clans account settings and try again.")
 
     # Fetch account details from the API
-    coc_account_data = await fetch_coc_account_data(coc_tag)
+    coc_account_data = await fetch_coc_account_data(player_tag)
 
     # Remove the link to the other user if it exists
-    old_account = await db_client.coc_accounts.find_one({"coc_tag": coc_tag})
+    old_account = await db_client.coc_accounts.find_one({"player_tag": player_tag})
     if old_account:
         old_user_id = old_account["user_id"]
 
         # Delete the old account link
-        await db_client.coc_accounts.delete_one({"coc_tag": coc_tag})
+        await db_client.coc_accounts.delete_one({"player_tag": player_tag})
 
         # Update the order index for the remaining accounts
         remaining_accounts = await db_client.coc_accounts.find({"user_id": old_user_id}).sort("order_index", 1).to_list(
@@ -104,7 +103,7 @@ async def add_coc_account_with_verification(request: CocAccountRequest, authoriz
     await db_client.coc_accounts.insert_one({
         "_id": generate_custom_id(int(user_id)),
         "user_id": user_id,
-        "coc_tag": coc_account_data["tag"],
+        "player_tag": coc_account_data["tag"],
         "order_index": order_index,
         "added_at": pend.now()
     })
@@ -115,7 +114,7 @@ async def add_coc_account_with_verification(request: CocAccountRequest, authoriz
         "account": {
             "tag": coc_account_data["tag"],
             "name": coc_account_data["name"],
-            "townHallLevel": coc_account_data["townHallLevel"]
+            "townHallLevel": coc_account_data["townHallLevel"],
         }
     }
 
@@ -140,12 +139,12 @@ async def remove_coc_account(request: CocAccountRequest, authorization: str = He
     token = authorization.split("Bearer ")[1]
     decoded_token = decode_jwt(token)
     user_id = decoded_token["sub"]
-    coc_tag = request.coc_tag
+    player_tag = request.player_tag
 
-    if not coc_tag.startswith("#"):
-        coc_tag = f"#{coc_tag}"
+    if not player_tag.startswith("#"):
+        player_tag = f"#{player_tag}"
 
-    result = await db_client.coc_accounts.delete_one({"user_id": user_id, "coc_tag": coc_tag})
+    result = await db_client.coc_accounts.delete_one({"user_id": user_id, "player_tag": player_tag})
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Clash of Clans account not found or not linked to your profile")
@@ -164,13 +163,13 @@ async def remove_coc_account(request: CocAccountRequest, authorization: str = He
 
 
 @router.get("/users/check-coc-account", name="Check if a Clash of Clans account is linked to any user")
-async def check_coc_account(coc_tag: str):
+async def check_coc_account(player_tag: str):
     """Check if a Clash of Clans account is linked to any user."""
 
-    if not coc_tag.startswith("#"):
-        coc_tag = f"#{coc_tag}"
+    if not player_tag.startswith("#"):
+        player_tag = f"#{player_tag}"
 
-    existing_account = await db_client.coc_accounts.find_one({"coc_tag": coc_tag})
+    existing_account = await db_client.coc_accounts.find_one({"player_tag": player_tag})
 
     if not existing_account:
         return {"linked": False, "message": "This Clash of Clans account is not linked to any user."}
@@ -196,7 +195,7 @@ async def reorder_coc_accounts(request: dict, authorization: str = Header(None))
 
     # Check if all the accounts provided are linked to the user
     user_accounts = await db_client.coc_accounts.find({"user_id": user_id}).to_list(length=None)
-    user_tags = {account["coc_tag"] for account in user_accounts}
+    user_tags = {account["player_tag"] for account in user_accounts}
 
     if not set(new_order).issubset(user_tags):
         raise HTTPException(status_code=400, detail="Invalid account tags provided")
@@ -204,7 +203,7 @@ async def reorder_coc_accounts(request: dict, authorization: str = Header(None))
     # Update the order index for each account
     for index, tag in enumerate(new_order):
         await db_client.coc_accounts.update_one(
-            {"user_id": user_id, "coc_tag": tag},
+            {"user_id": user_id, "player_tag": tag},
             {"$set": {"order_index": index}}
         )
 

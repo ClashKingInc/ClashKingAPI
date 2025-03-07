@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class CocAccountRequest(BaseModel):
-    coc_tag: str
+    player_tag: str
     player_token: str = None
 
 class UserInfo(BaseModel):

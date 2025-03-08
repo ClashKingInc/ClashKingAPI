@@ -1,18 +1,22 @@
+import asyncio
 
+import aiohttp
 import pendulum as pend
 from collections import defaultdict
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
+
+from routers.v2.clan.models import ClanTagsRequest
 from utils.utils import fix_tag, remove_id_fields
 from utils.time import gen_season_date, gen_raid_date
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
 
-router = APIRouter(prefix="/v2",tags=["Clan"], include_in_schema=True)
+router = APIRouter(prefix="/v2", tags=["Clan"], include_in_schema=True)
 
 
 @router.get("/clan/{clan_tag}/ranking",
-             name="Get ranking of a clan")
+            name="Get ranking of a clan")
 async def clan_ranking(clan_tag: str, request: Request):
     clan_ranking = await mongo.clan_leaderboard_db.find_one({'tag': fix_tag(clan_tag)})
 
@@ -29,15 +33,15 @@ async def clan_ranking(clan_tag: str, request: Request):
 
 @router.get("/clan/{clan_tag}/board/totals")
 async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsRequest):
-    if not body.player_tags:
+    if not body.clan_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
 
-    player_tags = [fix_tag(tag) for tag in body.player_tags]
+    player_tags = [fix_tag(tag) for tag in body.clan_tags]
     previous_season, season = gen_season_date(num_seasons=2)
 
     player_stats = await mongo.player_stats.find(
         {'tag': {'$in': player_tags}},
-        {"tag" : 1, "capital_gold" : 1, "last_online_times" : 1}
+        {"tag": 1, "capital_gold": 1, "last_online_times": 1}
     ).to_list(length=None)
 
     clan_stats = await mongo.clan_stats.find_one({'tag': fix_tag(clan_tag)})
@@ -48,11 +52,11 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
     if clan_stats:
         for s in [season, previous_season]:
             for tag, data in clan_stats.get(s, {}).items():
-                #i forget why, but it can be None sometimes, so fallover to zero if that happens
+                # i forget why, but it can be None sometimes, so fallover to zero if that happens
                 clan_games_points += data.get('clan_games', 0) or 0
             if clan_games_points != 0:
-                #if it is zero, likely means CG hasn't happened this season, so check the previous
-                #eventually add a real check
+                # if it is zero, likely means CG hasn't happened this season, so check the previous
+                # eventually add a real check
                 break
         for tag, data in clan_stats.get(season, {}).items():
             total_donated += data.get('donated', 0)
@@ -99,7 +103,7 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
         "troops_donated": total_donated,
         "troops_received": total_received,
         "clan_capital_donated": donated_cc,
-        "activity" : {
+        "activity": {
             "per_day": avg_players,
             "last_48h": total_active_48h,
             "score": total_players
@@ -107,5 +111,24 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
     }
 
 
+@router.post("/clans/full-stats", name="Get full stats for a list of clans")
+async def get_full_clan_stats(request: Request, body: ClanTagsRequest):
+    """Retrieve Clash of Clans account details for a list of clans."""
+
+    if not body.clan_tags:
+        raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
+
+    clan_tags = [fix_tag(tag) for tag in body.clan_tags]
+
+    async def fetch_clan_data(session, tag):
+        url = f"https://proxy.clashk.ing/v1/clans/{tag.replace('#', '%23')}"
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.json()
+            return None
+
+    async with aiohttp.ClientSession() as session:
+        api_responses = await asyncio.gather(*(fetch_clan_data(session, tag) for tag in clan_tags))
 
 
+    return {"items": remove_id_fields(api_responses)}

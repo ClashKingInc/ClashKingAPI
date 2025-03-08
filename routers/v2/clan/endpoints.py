@@ -33,10 +33,10 @@ async def clan_ranking(clan_tag: str, request: Request):
 
 @router.get("/clan/{clan_tag}/board/totals")
 async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsRequest):
-    if not body.clan_tags:
+    if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
 
-    player_tags = [fix_tag(tag) for tag in body.clan_tags]
+    player_tags = [fix_tag(tag) for tag in body.player_tags]
     previous_season, season = gen_season_date(num_seasons=2)
 
     player_stats = await mongo.player_stats.find(
@@ -129,6 +129,5 @@ async def get_full_clan_stats(request: Request, body: ClanTagsRequest):
 
     async with aiohttp.ClientSession() as session:
         api_responses = await asyncio.gather(*(fetch_clan_data(session, tag) for tag in clan_tags))
-
 
     return {"items": remove_id_fields(api_responses)}

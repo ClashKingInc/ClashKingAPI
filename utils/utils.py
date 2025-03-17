@@ -53,7 +53,8 @@ coc_client = coc.Client(
     raw_attribute=True,
     stats_max_size=10_000,
 )
-coc_client.login_with_keys('')
+
+
 
 class DBClient():
     def __init__(self):

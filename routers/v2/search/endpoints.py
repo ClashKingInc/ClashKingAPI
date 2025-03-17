@@ -153,8 +153,8 @@ async def search_clan(
 
 
 @router.post("/search/bookmark/clan/{user_id}/{tag}",
-         name="Search for a clan by name or tag")
-async def search_clan(
+         name="Add a bookmark for a clan for a user")
+async def bookmark_clan(
         user_id: int,
         tag: str,
         request: Request = Request,

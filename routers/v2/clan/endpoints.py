@@ -24,7 +24,7 @@ async def clan_ranking(clan_tag: str, request: Request):
         "local_rank": None
     }
 
-    return clan_ranking or fallback
+    return remove_id_fields(clan_ranking) or fallback
 
 
 @router.get("/clan/{clan_tag}/board/totals")
@@ -105,6 +105,27 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
             "score": total_players
         }
     }
+
+
+@router.get("/clan/{clan_tag}/donations/{season}",
+             name="Get donations for a clan's members in a specific season")
+async def clan_donations(clan_tag: str, season: str, request: Request):
+    clan_stats = await mongo.clan_stats.find_one({'tag': fix_tag(clan_tag)}, projection={'_id': 0, f'{season}': 1})
+    clan_season_donations = clan_stats.get(season, {})
+
+    items = []
+    for tag, data in clan_season_donations.items():
+        items.append({
+            "tag" : tag,
+            "donated" : data.get('donated', 0),
+            "received" : data.get('received', 0)
+        })
+    return {"items": items}
+
+
+
+
+
 
 
 

@@ -11,11 +11,13 @@ from datetime import datetime, timedelta
 import io
 import asyncio
 import aiohttp
+import orjson
 from fastapi import HTTPException
 from base64 import b64decode as base64_b64decode
 from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
+
 from .config import Config
 from collections import deque
 from datetime import datetime
@@ -41,6 +43,17 @@ other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True,
                        max_connections=25, retry_on_error=[redis.ConnectionError])
 
+coc_client = coc.Client(
+    base_url='https://proxy.clashk.ing/v1',
+    key_count=10,
+    key_names='test',
+    throttle_limit=500,
+    cache_max_size=10_000,
+    load_game_data=coc.LoadGameData(default=False),
+    raw_attribute=True,
+    stats_max_size=10_000,
+)
+coc_client.login_with_keys('')
 
 class DBClient():
     def __init__(self):
@@ -175,62 +188,6 @@ async def token_verify(server_id: int, api_token: str, only_admin: bool = False)
         raise HTTPException(status_code=403, detail="Invalid API token or cannot access this resource")
 
 
-async def get_keys(emails: list, passwords: list, key_names: str, key_count: int, ip: str):
-    total_keys = []
-    for count, email in enumerate(emails):
-        await asyncio.sleep(1.5)
-        _keys = []
-        async with aiohttp.ClientSession() as session:
-            password = passwords[count]
-            body = {"email": email, "password": password}
-            resp = await session.post("https://developer.clashofclans.com/api/login", json=body)
-            resp_paylaod = await resp.json()
-
-            resp = await session.post("https://developer.clashofclans.com/api/apikey/list")
-            keys = (await resp.json()).get("keys", [])
-            _keys.extend(key["key"] for key in keys if key["name"] == key_names and ip in key["cidrRanges"])
-
-            for key in (k for k in keys if ip not in k["cidrRanges"]):
-                await session.post("https://developer.clashofclans.com/api/apikey/revoke", json={"id": key["id"]})
-
-            print(len(_keys))
-            while len(_keys) < key_count:
-                data = {
-                    "name": key_names,
-                    "description": "Created on {}".format(datetime.now().strftime("%c")),
-                    "cidrRanges": [ip],
-                    "scopes": ["clash"],
-                }
-                hold = True
-                tries = 1
-                while hold:
-                    try:
-                        resp = await session.post("https://developer.clashofclans.com/api/apikey/create", json=data)
-                        key = await resp.json()
-                    except Exception:
-                        key = {}
-                    if key.get("key") is None:
-                        await asyncio.sleep(tries * 0.5)
-                        tries += 1
-                        if tries > 2:
-                            print(tries - 1, "tries")
-                    else:
-                        hold = False
-
-                _keys.append(key["key"]["key"])
-
-            await session.close()
-            for k in _keys:
-                total_keys.append(k)
-
-    print(len(total_keys), "total keys")
-    return (total_keys)
-
-
-async def create_keys(emails: list, passwords: list, ip: str):
-    keys = await get_keys(emails=emails, passwords=passwords, key_names="test", key_count=10, ip=ip)
-    return keys
-
 
 leagues = ["Legend League", "Titan League I", "Titan League II", "Titan League III", "Champion League I",
            "Champion League II", "Champion League III",
@@ -357,3 +314,22 @@ def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
     utc_dt = utc_time.replace(tzinfo=pytz.utc)
     local_dt = utc_dt.astimezone(local_tz)
     return local_dt.strftime("%Y-%m-%d %H:%M")  # Format for display
+
+
+async def bulk_requests(urls: list[str]):
+
+    async def fetch_function(session: aiohttp.ClientSession, url: str):
+        url = url.replace("#", '%23')
+        async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
+            if response.status != 200:
+                return None
+            item_bytes = await response.read()
+            return orjson.loads(item_bytes)
+
+    tasks = []
+    async with aiohttp.ClientSession() as session:
+        for url in urls:
+            tasks.append(asyncio.create_task(fetch_function(session, url)))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    return [r for r in results if r is not None and not isinstance(r, Exception)]

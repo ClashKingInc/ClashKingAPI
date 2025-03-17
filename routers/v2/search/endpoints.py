@@ -73,12 +73,20 @@ async def search_clan(
 
     final_data = []
     for result in local_search:
+        if result.get("tag") in bookmarked_tags:
+            find_type = "bookmarked"
+        elif result.get("tag") in recent_tags:
+            find_type = "recent_search"
+        else:
+            find_type = "guild_search"
+
         final_data.append({
             "name" : result.get("name") or "Not Stored",
             "tag" : result.get("tag"),
             "memberCount" : result.get("members") or 0,
             "level" : result.get("level") or 0,
-            "warLeague" : result.get("warLeague") or "Unranked"
+            "warLeague" : result.get("warLeague") or "Unranked",
+            "type" : find_type
         })
         all_tags.remove(result.get("tag"))
 
@@ -87,15 +95,29 @@ async def search_clan(
             clan = await coc_client.get_clan(tag=tag)
         except Exception:
             continue
+        if tag in bookmarked_tags:
+            find_type = "bookmarked"
+        elif tag in recent_tags:
+            find_type = "recent_search"
+        else:
+            find_type = "guild_search"
         final_data.append({
             "name" : clan.name,
             "tag" : clan.tag,
             "memberCount" : clan.member_count,
             "level" : clan.level,
-            "warLeague" : clan.war_league.name
+            "warLeague" : clan.war_league.name,
+            "type" : find_type
         })
 
-    if not final_data and len(query) >= 3:
+    final_data = [
+        data for data in final_data
+        if query.lower() in data.get("name").lower() or
+        query.lower() == data.get("tag").lower()
+    ]
+    tags_found = {d.get("tag") for d in final_data}
+
+    if len(final_data) < 25 and len(query) >= 3:
         clan = None
         if coc.utils.is_valid_tag(query):
             try:
@@ -105,12 +127,15 @@ async def search_clan(
         if clan is None:
             results = await coc_client.search_clans(name=query, limit=10)
             for clan in results:
+                if clan.tag in tags_found:
+                    continue
                 final_data.append({
                     "name": clan.name,
                     "tag": clan.tag,
                     "memberCount": clan.member_count,
                     "level": clan.level,
-                    "warLeague": clan.war_league.name
+                    "warLeague": clan.war_league.name,
+                    "type": "search_result"
                 })
                 '''league = str(clan.war_league).replace('League ', '')
                 clan_list.append(f'{clan.name} | {clan.member_count}/50 | LV{clan.level} | {league} | {clan.tag}')'''
@@ -120,8 +145,30 @@ async def search_clan(
                 "tag": clan.tag,
                 "memberCount": clan.member_count,
                 "level": clan.level,
-                "warLeague": clan.war_league.name
+                "warLeague": clan.war_league.name,
+                "type": "search_result"
             })
-    return final_data
+    return {"items" : final_data}
 
 
+
+@router.post("/search/bookmark/clan/{user_id}/{tag}",
+         name="Search for a clan by name or tag")
+async def search_clan(
+        user_id: int,
+        tag: str,
+        request: Request = Request,
+):
+    tag = fix_tag(tag)
+    # First, remove the tag if it exists
+    await mongo.user_settings.update_one(
+        {"discord_user": user_id},
+        {"$pull": {"search.clan.bookmarked": tag}}
+    )
+
+    # Then, push the new tag to the front while keeping only the last 20 items
+    await mongo.user_settings.update_one(
+        {"discord_user": user_id},
+        {"$push": {"search.clan.bookmarked": {"$each": [tag], "$position": 0, "$slice": 20}}}
+    )
+    return {"success": True}

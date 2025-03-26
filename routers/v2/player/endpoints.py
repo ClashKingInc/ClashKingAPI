@@ -3,9 +3,8 @@ import asyncio
 import aiohttp
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
-import pendulum
 
-from routers.v2.player.utils import get_legend_season_range, group_legends_by_season
+from routers.v2.player.utils import group_legends_by_season
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest

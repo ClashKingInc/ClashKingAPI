@@ -3,7 +3,10 @@ import asyncio
 import aiohttp
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
-from utils.utils import fix_tag, remove_id_fields
+import pendulum
+
+from routers.v2.player.utils import get_legend_season_range, group_legends_by_season
+from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
 
@@ -33,7 +36,7 @@ async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
 
     players_info = await mongo.player_stats.find(
         {'tag': {'$in': player_tags}},
-        {'_id': 0, 'tag' : 1, 'donations': 1, 'legends': 1, 'clan_games': 1, 'season_pass': 1, 'activity': 1,
+        {'_id': 0, 'tag': 1, 'donations': 1, 'legends': 1, 'clan_games': 1, 'season_pass': 1, 'activity': 1,
          'last_online': 1, 'last_online_time': 1, 'attack_wins': 1, 'dark_elixir': 1, 'gold': 1,
          'capital_gold': 1, 'season_trophies': 1, 'last_updated': 1}
     ).to_list(length=None)
@@ -55,6 +58,39 @@ async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
         player_data = mongo_data_dict.get(tag, {})
         if api_data:
             player_data.update(api_data)
+
+        # Process each day in the legends data to extract trophy deltas and counts
+        # Transform legends days into seasons
+        raw_legends = player_data.get("legends", {})
+
+        # Enrich each day with start/end trophies and per-day stats before grouping by season
+        for day, data in raw_legends.items():
+            if not isinstance(data, dict):
+                continue
+
+            new_attacks = data.get("new_attacks", [])
+            new_defenses = data.get("new_defenses", [])
+
+            all_events = sorted(new_attacks + new_defenses, key=lambda x: x.get("time", 0))
+            if all_events and "trophies" in all_events[-1]:
+                end_trophies = all_events[-1]["trophies"]
+                trophies_gained = sum(entry.get("change", 0) for entry in new_attacks)
+                trophies_lost = sum(entry.get("change", 0) for entry in new_defenses)
+                trophies_total = trophies_gained + trophies_lost
+                start_trophies = end_trophies - trophies_total
+
+                data["start_trophies"] = start_trophies
+                data["end_trophies"] = end_trophies
+                data["trophies_gained_total"] = trophies_gained
+                data["trophies_lost_total"] = trophies_lost
+                data["trophies_total"] = trophies_total
+                data["total_attacks"] = len(new_attacks)
+                data["total_defenses"] = len(new_defenses)
+
+        grouped_legends = group_legends_by_season(raw_legends)
+        player_data["legends_by_season"] = grouped_legends
+        player_data.pop("legends", None)
+
         combined_results.append(player_data)
 
     return {"items": remove_id_fields(combined_results)}

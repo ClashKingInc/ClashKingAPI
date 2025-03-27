@@ -4,7 +4,7 @@ import aiohttp
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
 
-from routers.v2.player.utils import group_legends_by_season
+from routers.v2.player.utils import group_legends_by_season, count_number_of_attacks_from_list
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
@@ -83,8 +83,7 @@ async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
                 data["trophies_gained_total"] = trophies_gained
                 data["trophies_lost_total"] = trophies_lost
                 data["trophies_total"] = trophies_total
-                data["total_attacks"] = len(new_attacks)
-                data["total_defenses"] = len(new_defenses)
+                data["num_defenses"] = count_number_of_attacks_from_list(data.get("defenses", []))
 
         grouped_legends = group_legends_by_season(raw_legends)
         player_data["legends_by_season"] = grouped_legends

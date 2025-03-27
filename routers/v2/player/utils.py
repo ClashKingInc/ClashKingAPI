@@ -88,14 +88,10 @@ def group_legends_by_season(legends: dict) -> dict:
                 day_data["trophies_gained_total"] = trophies_gained
                 day_data["trophies_lost_total"] = trophies_lost
                 day_data["trophies_total"] = trophies_total
-                day_data["total_attacks"] = len(new_attacks)
-                day_data["total_defenses"] = len(new_defenses)
 
         else:
             attacks = day_data.get("attacks", [])
             defenses = day_data.get("defenses", [])
-            num_attacks = day_data.get("num_attacks", len(attacks))
-            num_defenses = len(defenses)
 
             trophies_gained = sum(attacks)
             trophies_lost = sum(defenses)
@@ -104,8 +100,6 @@ def group_legends_by_season(legends: dict) -> dict:
             day_data["trophies_gained_total"] = trophies_gained
             day_data["trophies_lost_total"] = trophies_lost
             day_data["trophies_total"] = trophies_total
-            day_data["total_attacks"] = num_attacks
-            day_data["total_defenses"] = num_defenses
 
         # Final aggregation for the season
         gained = day_data.get("trophies_gained_total", 0)
@@ -132,14 +126,17 @@ def group_legends_by_season(legends: dict) -> dict:
         if season["season_total_gained_lost_possible"] > 0:
             season["season_trophies_gained_ratio"] = round(
                 season["season_trophies_gained_total"] / season["season_total_gained_lost_possible"], 2)
-            season["season_trophies_lost_ratio"] = round(season["season_trophies_lost_total"] / season["season_total_gained_lost_possible"],
-                                                  2)
+            season["season_trophies_lost_ratio"] = round(
+                season["season_trophies_lost_total"] / season["season_total_gained_lost_possible"],
+                2)
 
         if season["season_total_attacks_defenses_possible"] > 0:
-            season["season_total_attacks_ratio"] = round(season["season_total_attacks"] / season["season_total_attacks_defenses_possible"],
-                                                  2)
-            season["season_total_defenses_ratio"] = round(season["season_total_defenses"] / season["season_total_attacks_defenses_possible"],
-                                                   2)
+            season["season_total_attacks_ratio"] = round(
+                season["season_total_attacks"] / season["season_total_attacks_defenses_possible"],
+                2)
+            season["season_total_defenses_ratio"] = round(
+                season["season_total_defenses"] / season["season_total_attacks_defenses_possible"],
+                2)
 
         # Final averages
     for season in grouped.values():
@@ -151,3 +148,26 @@ def group_legends_by_season(legends: dict) -> dict:
                 season["season_trophies_lost_total"] / season["season_total_defenses"], 2)
 
     return grouped
+
+
+def count_number_of_attacks_from_list(attacks: list[int]) -> int:
+    """Count the number of attacks from a list of attack trophies."""
+    count = 0
+    for value in attacks:
+        if 280 < value <= 320:
+            count += 8
+        elif 240 < value <= 280:
+            count += 7
+        elif 200 < value <= 240:
+            count += 6
+        elif 160 < value <= 200:
+            count += 5
+        elif 120 < value <= 160:
+            count += 4
+        elif 80 < value <= 120:
+            count += 3
+        elif 40 < value <= 80:
+            count += 2
+        else:
+            count += 1
+    return count

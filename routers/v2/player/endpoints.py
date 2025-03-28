@@ -1,14 +1,13 @@
 import asyncio
 
 import aiohttp
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException
 from fastapi import APIRouter, Request, Response
 
 from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
-from fastapi_cache.decorator import cache
 
 router = APIRouter(prefix="/v2", tags=["Player"], include_in_schema=True)
 
@@ -88,8 +87,7 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
 
 
 @router.post("/players/full-stats", name="Get full stats for a list of players")
-@cache(expire=300)
-async def get_full_player_stats(body: PlayerTagsRequest, request: Request = Depends(), response: Response = Depends()):
+async def get_full_player_stats(body: PlayerTagsRequest, request: Request):
     """Retrieve Clash of Clans account details for a list of players."""
 
     if not body.player_tags:
@@ -164,27 +162,23 @@ async def get_full_player_stats(body: PlayerTagsRequest, request: Request = Depe
 
 
 @router.post("/players/legend-days", name="Get legend stats for multiple players")
-@cache(expire=300)
-async def get_legend_stats(body: PlayerTagsRequest, request: Request = Depends(), response: Response = Depends()):
+async def get_legend_stats(body: PlayerTagsRequest, request: Request):
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
     return {"items": await get_legend_stats_common(body.player_tags)}
 
 
 @router.get("/player/{player_tag}/legend-days", name="Get legend stats for one player")
-@cache(expire=300)
-async def get_legend_stats_by_player(player_tag: str, request: Request = Depends(), response: Response = Depends()):
+async def get_legend_stats_by_player(player_tag: str, request: Request):
     return await get_legend_stats_common(player_tag)
 
 
 @router.get("/player/{player_tag}/legend_rankings", name="Get previous player legend rankings")
-@cache(expire=300)
 async def get_player_legend_rankings(player_tag: str, limit: int = 10):
     return await get_legend_rankings_for_tag(player_tag, limit=limit)
 
 
 @router.post("/players/legend_rankings", name="Get legend rankings for multiple players")
-@cache(expire=300)
 async def get_bulk_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")

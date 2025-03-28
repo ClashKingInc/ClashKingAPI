@@ -89,7 +89,7 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
 
 @router.post("/players/full-stats", name="Get full stats for a list of players")
 @cache(expire=300)
-async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
+async def get_full_player_stats(body: PlayerTagsRequest, request: Request, response: Response):
     """Retrieve Clash of Clans account details for a list of players."""
 
     if not body.player_tags:
@@ -152,11 +152,11 @@ async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
 
         # Inject legend history rankings
         legend_rankings = await get_legend_rankings_for_tag(tag)
-        player_data["rankings"] = legend_rankings
+        player_data["legend_eos_ranking"] = legend_rankings
 
         # Inject current season rankings
         legends_current_rankings = await get_current_rankings(tag)
-        player_data["current_season_rankings"] = legends_current_rankings
+        player_data["rankings"] = legends_current_rankings
 
         combined_results.append(player_data)
 
@@ -165,7 +165,7 @@ async def get_full_player_stats(request: Request, body: PlayerTagsRequest):
 
 @router.post("/players/legend-days", name="Get legend stats for multiple players")
 @cache(expire=300)
-async def get_legend_stats(request: Request, body: PlayerTagsRequest):
+async def get_legend_stats(body: PlayerTagsRequest, request: Request, response: Response):
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
     return {"items": await get_legend_stats_common(body.player_tags)}
@@ -173,7 +173,7 @@ async def get_legend_stats(request: Request, body: PlayerTagsRequest):
 
 @router.get("/player/{player_tag}/legend-days", name="Get legend stats for one player")
 @cache(expire=300)
-async def get_legend_stats_by_player(request: Request, player_tag: str):
+async def get_legend_stats_by_player(player_tag: str, request: Request, response: Response):
     return await get_legend_stats_common(player_tag)
 
 

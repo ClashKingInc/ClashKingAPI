@@ -1,7 +1,7 @@
 import asyncio
 
 import aiohttp
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi import APIRouter, Request, Response
 
 from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings
@@ -89,7 +89,7 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
 
 @router.post("/players/full-stats", name="Get full stats for a list of players")
 @cache(expire=300)
-async def get_full_player_stats(body: PlayerTagsRequest, request: Request, response: Response):
+async def get_full_player_stats(body: PlayerTagsRequest, request: Request = Depends(), response: Response = Depends()):
     """Retrieve Clash of Clans account details for a list of players."""
 
     if not body.player_tags:
@@ -165,7 +165,7 @@ async def get_full_player_stats(body: PlayerTagsRequest, request: Request, respo
 
 @router.post("/players/legend-days", name="Get legend stats for multiple players")
 @cache(expire=300)
-async def get_legend_stats(body: PlayerTagsRequest, request: Request, response: Response):
+async def get_legend_stats(body: PlayerTagsRequest, request: Request = Depends(), response: Response = Depends()):
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
     return {"items": await get_legend_stats_common(body.player_tags)}
@@ -173,7 +173,7 @@ async def get_legend_stats(body: PlayerTagsRequest, request: Request, response: 
 
 @router.get("/player/{player_tag}/legend-days", name="Get legend stats for one player")
 @cache(expire=300)
-async def get_legend_stats_by_player(player_tag: str, request: Request, response: Response):
+async def get_legend_stats_by_player(player_tag: str, request: Request = Depends(), response: Response = Depends()):
     return await get_legend_stats_common(player_tag)
 
 

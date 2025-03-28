@@ -87,6 +87,8 @@ def group_legends_by_season(legends: dict) -> dict:
             grouped[season_key] = {
                 "season_start": season_start.to_date_string(),
                 "season_end": season_end.to_date_string(),
+                "season_duration": 0,
+                "season_days_in_legend": 0,
                 "season_end_trophies": 0,
                 "season_trophies_gained_total": 0,
                 "season_trophies_lost_total": 0,
@@ -185,6 +187,14 @@ def group_legends_by_season(legends: dict) -> dict:
             season["season_average_trophies_lost_per_defense"] = round(
                 season["season_trophies_lost_total"] / season["season_total_defenses"], 2)
 
+        season["season_days_in_legend"] = len(season["days"])
+        try:
+            start = pendulum.parse(season["season_start"])
+            end = pendulum.parse(season["season_end"])
+            season["season_duration"] = (end - start).days + 1
+        except Exception:
+            season["season_duration"] = 0
+
     return grouped
 
 
@@ -244,6 +254,7 @@ async def get_legend_rankings_for_tag(tag: str, limit: int = 10) -> list[dict]:
     for result in results:
         result.pop("_id", None)
     return results
+
 
 async def get_current_rankings(tag: str) -> dict:
     ranking_data = await mongo.leaderboard_db.find_one({"tag": tag}, projection={"_id": 0})

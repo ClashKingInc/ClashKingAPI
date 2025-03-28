@@ -78,9 +78,6 @@ def group_legends_by_season(legends: dict) -> dict:
         except Exception:
             continue
 
-        if day.to_date_string() == "2024-08-26":
-            print(season_start, season_end)
-
         season_key = season_start.to_date_string()
 
         if season_key not in grouped:
@@ -95,6 +92,10 @@ def group_legends_by_season(legends: dict) -> dict:
                 "season_trophies_net": 0,
                 "season_total_attacks": 0,
                 "season_total_defenses": 0,
+                "season_stars_distribution_attacks": {0: 0, 1: 0, 2: 0, 3: 0},
+                "season_stars_distribution_defenses": {0: 0, 1: 0, 2: 0, 3: 0},
+                "season_stars_distribution_attacks_percentages": {},
+                "season_stars_distribution_defenses_percentages": {},
                 "season_average_trophies_gained_per_attack": 0,
                 "season_average_trophies_lost_per_defense": 0,
                 "season_total_attacks_defenses_possible": 0,
@@ -108,7 +109,6 @@ def group_legends_by_season(legends: dict) -> dict:
 
         season = grouped[season_key]
 
-        # Detect format type
         is_new_format = "new_attacks" in day_data or "new_defenses" in day_data
 
         if is_new_format:
@@ -141,10 +141,9 @@ def group_legends_by_season(legends: dict) -> dict:
             day_data["trophies_lost_total"] = trophies_lost
             day_data["trophies_total"] = trophies_total
 
-        # Final aggregation for the season
         gained = day_data.get("trophies_gained_total", 0)
         lost = day_data.get("trophies_lost_total", 0)
-        attacks = day_data.get("num_attacks", 0)
+        attacks = count_number_of_attacks_from_list(day_data.get("attacks", []))
         defenses = count_number_of_attacks_from_list(day_data.get("defenses", []))
         end_trophies = day_data.get("end_trophies", 0)
         season["season_end_trophies"] = end_trophies
@@ -157,35 +156,57 @@ def group_legends_by_season(legends: dict) -> dict:
         season["season_total_attacks"] += attacks
         season["season_total_defenses"] += defenses
 
-        # Update theoretical max stats
+        num_attacks = day_data.get("num_attacks", 0)
+        attack_distribution = determine_star_distribution(day_data.get("attacks", []), num_attacks)
+        for star, count in attack_distribution.items():
+            season["season_stars_distribution_attacks"][star] += count
+
+        num_defenses = day_data.get("num_defenses", 0)
+        defense_distribution = determine_star_distribution(day_data.get("defenses", []), num_defenses)
+        for star, count in defense_distribution.items():
+            season["season_stars_distribution_defenses"][star] += count
+
         total_possible = len(season["days"]) * 8
         season["season_total_attacks_defenses_possible"] = total_possible
         season["season_total_gained_lost_possible"] = total_possible * 40
 
-        # Compute ratios (rounded to 2 decimals)
         if season["season_total_gained_lost_possible"] > 0:
             season["season_trophies_gained_ratio"] = round(
                 season["season_trophies_gained_total"] / season["season_total_gained_lost_possible"], 2)
             season["season_trophies_lost_ratio"] = round(
-                season["season_trophies_lost_total"] / season["season_total_gained_lost_possible"],
-                2)
+                season["season_trophies_lost_total"] / season["season_total_gained_lost_possible"], 2)
 
         if season["season_total_attacks_defenses_possible"] > 0:
             season["season_total_attacks_ratio"] = round(
-                season["season_total_attacks"] / season["season_total_attacks_defenses_possible"],
-                2)
+                season["season_total_attacks"] / season["season_total_attacks_defenses_possible"], 2)
             season["season_total_defenses_ratio"] = round(
-                season["season_total_defenses"] / season["season_total_attacks_defenses_possible"],
-                2)
+                season["season_total_defenses"] / season["season_total_attacks_defenses_possible"], 2)
 
-        # Final averages
     for season in grouped.values():
-        if season["season_total_attacks"] > 0:
+        total_attacks = season.get("season_total_attacks", 0)
+        total_defenses = season.get("season_total_defenses", 0)
+
+        if total_attacks > 0:
+            season["season_stars_distribution_attacks_percentages"] = {
+                str(i): round(season["season_stars_distribution_attacks"].get(i, 0) / total_attacks * 100, 1)
+                for i in range(4)
+            }
+
+        if total_defenses > 0:
+            season["season_stars_distribution_defenses_percentages"] = {
+                str(i): round(season["season_stars_distribution_defenses"].get(i, 0) / total_defenses * 100, 1)
+                for i in range(4)
+            }
+
+        if total_attacks > 0:
             season["season_average_trophies_gained_per_attack"] = round(
-                season["season_trophies_gained_total"] / season["season_total_attacks"], 2)
-        if season["season_total_defenses"] > 0:
+                season["season_trophies_gained_total"] / total_attacks, 2
+            )
+
+        if total_defenses > 0:
             season["season_average_trophies_lost_per_defense"] = round(
-                season["season_trophies_lost_total"] / season["season_total_defenses"], 2)
+                season["season_trophies_lost_total"] / total_defenses, 2
+            )
 
         season["season_days_in_legend"] = len(season["days"])
         try:
@@ -196,6 +217,62 @@ def group_legends_by_season(legends: dict) -> dict:
             season["season_duration"] = 0
 
     return grouped
+
+
+def determine_star_distribution(trophies_list: list[int], expected_count: int) -> dict[int, int]:
+    distribution = {0: 0, 1: 0, 2: 0, 3: 0}
+
+    for trophies in trophies_list:
+        if trophies == 320:
+            distribution[3] += 8
+        elif 280 < trophies < 320:
+            distribution[2] += 8
+        elif trophies == 280:
+            distribution[3] += 7
+        elif 240 < trophies < 280:
+            distribution[2] += 7
+        elif trophies == 240:
+            distribution[3] += 6
+        elif 200 < trophies < 240:
+            distribution[2] += 6
+        elif trophies == 200:
+            distribution[3] += 5
+        elif 160 < trophies < 200:
+            distribution[2] += 5
+        elif trophies == 160:
+            distribution[3] += 4
+        elif 120 < trophies < 160:
+            distribution[2] += 4
+        elif trophies == 120:
+            distribution[3] += 3
+        elif 80 < trophies < 120:
+            distribution[2] += 3
+        elif trophies == 80:
+            distribution[3] += 2
+        elif 40 < trophies < 80:
+            distribution[2] += 2
+        elif trophies == 40:
+            distribution[3] += 1
+        elif 5 <= trophies <= 15:
+            distribution[1] += 1
+        elif trophies <= 4:
+            distribution[0] += 1
+        else:
+            distribution[2] += 1  # fallback
+
+    # Normalize the distribution
+    total = sum(distribution.values())
+    if total > expected_count:
+        surplus = total - expected_count
+        # Remove stars from 3 to 0
+        for star in [2, 1, 3, 0]:
+            removed = min(surplus, distribution[star])
+            distribution[star] -= removed
+            surplus -= removed
+            if surplus == 0:
+                break
+
+    return distribution
 
 
 def count_number_of_attacks_from_list(attacks: list[int]) -> int:
@@ -219,6 +296,17 @@ def count_number_of_attacks_from_list(attacks: list[int]) -> int:
         else:
             count += 1
     return count
+
+
+def get_star_distribution(trophies_list: list[int]) -> tuple[dict[int, int], int]:
+    distribution = {0: 0, 1: 0, 2: 0, 3: 0}
+    total_attacks = 0
+    for trophies in trophies_list:
+        stars = trophies_to_stars_stacked(trophies)
+        for star, count in stars.items():
+            distribution[star] += count
+            total_attacks += count
+    return distribution, total_attacks
 
 
 async def process_legend_stats(raw_legends: dict) -> dict:

@@ -1,4 +1,9 @@
+from fastapi import HTTPException
+
 import pendulum
+from utils.database import MongoClient as mongo
+
+from utils.utils import fix_tag
 
 
 def get_legend_season_range(date: pendulum.DateTime) -> tuple[pendulum.DateTime, pendulum.DateTime]:
@@ -24,6 +29,39 @@ def get_legend_season_range(date: pendulum.DateTime) -> tuple[pendulum.DateTime,
     season_end = last_monday_next_month.replace(hour=0, minute=0, second=0, microsecond=0).subtract(seconds=1)
 
     return season_start, season_end
+
+
+from typing import Union, List
+
+
+async def get_legend_stats_common(player_tags: Union[str, List[str]]) -> Union[dict, List[dict]]:
+    """Returns enriched legend stats for a single tag or list of tags."""
+    if isinstance(player_tags, str):
+        fixed_tag = fix_tag(player_tags)
+        player = await mongo.player_stats.find_one(
+            {'tag': fixed_tag},
+            {'_id': 0, 'tag': 1, 'legends': 1}
+        )
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player {fixed_tag} not found")
+        grouped_legends = await process_legend_stats(player.get("legends", {}))
+        return {
+            "tag": fixed_tag,
+            "legends_by_season": grouped_legends
+        }
+
+    fixed_tags = [fix_tag(tag) for tag in player_tags]
+    players_info = await mongo.player_stats.find(
+        {'tag': {'$in': fixed_tags}},
+        {'_id': 0, 'tag': 1, 'legends': 1}
+    ).to_list(length=None)
+
+    return [
+        {
+            "tag": player["tag"],
+            "legends_by_season": await process_legend_stats(player.get("legends", {}))
+        } for player in players_info
+    ]
 
 
 def group_legends_by_season(legends: dict) -> dict:
@@ -104,8 +142,8 @@ def group_legends_by_season(legends: dict) -> dict:
         # Final aggregation for the season
         gained = day_data.get("trophies_gained_total", 0)
         lost = day_data.get("trophies_lost_total", 0)
-        attacks = day_data.get("total_attacks", 0)
-        defenses = day_data.get("total_defenses", 0)
+        attacks = day_data.get("num_attacks", 0)
+        defenses = count_number_of_attacks_from_list(day_data.get("defenses", []))
         end_trophies = day_data.get("end_trophies", 0)
         season["season_end_trophies"] = end_trophies
 
@@ -171,3 +209,53 @@ def count_number_of_attacks_from_list(attacks: list[int]) -> int:
         else:
             count += 1
     return count
+
+
+async def process_legend_stats(raw_legends: dict) -> dict:
+    """Enrich raw legends days and group them by season."""
+    for day, data in raw_legends.items():
+        if not isinstance(data, dict):
+            continue
+
+        new_attacks = data.get("new_attacks", [])
+        new_defenses = data.get("new_defenses", [])
+
+        all_events = sorted(new_attacks + new_defenses, key=lambda x: x.get("time", 0))
+        if all_events and "trophies" in all_events[-1]:
+            end_trophies = all_events[-1]["trophies"]
+            trophies_gained = sum(entry.get("change", 0) for entry in new_attacks)
+            trophies_lost = sum(entry.get("change", 0) for entry in new_defenses)
+            trophies_total = trophies_gained + trophies_lost
+            start_trophies = end_trophies - trophies_total
+
+            data["start_trophies"] = start_trophies
+            data["end_trophies"] = end_trophies
+            data["trophies_gained_total"] = trophies_gained
+            data["trophies_lost_total"] = trophies_lost
+            data["trophies_total"] = trophies_total
+            data["num_defenses"] = count_number_of_attacks_from_list(data.get("defenses", []))
+
+    return group_legends_by_season(raw_legends)
+
+
+async def get_legend_rankings_for_tag(tag: str, limit: int = 10) -> list[dict]:
+    tag = fix_tag(tag)
+    results = await mongo.history_db.find({"tag": tag}).sort("season", -1).limit(limit).to_list(length=None)
+    for result in results:
+        result.pop("_id", None)
+    return results
+
+async def get_current_rankings(tag: str) -> dict:
+    ranking_data = await mongo.leaderboard_db.find_one({"tag": tag}, projection={"_id": 0})
+    if not ranking_data:
+        ranking_data = {
+            "country_code": None,
+            "country_name": None,
+            "local_rank": None,
+            "global_rank": None
+        }
+    if ranking_data.get("global_rank") is None:
+        fallback = await mongo.legend_rankings.find_one({"tag": tag})
+        if fallback:
+            ranking_data["global_rank"] = fallback.get("rank")
+    return ranking_data

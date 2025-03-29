@@ -19,6 +19,9 @@ TOKEN = config.bot_token
 BASE_URL = 'https://discord.com/api/v10'
 
 
+
+
+
 async def get_roles(guild_id):
     url = f'{BASE_URL}/guilds/{guild_id}/roles'
     headers = {

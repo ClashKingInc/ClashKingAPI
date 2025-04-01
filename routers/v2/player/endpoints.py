@@ -4,6 +4,7 @@ import pendulum as pend
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
 
+from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
@@ -93,65 +94,66 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
         {'$and': [{'tag': {'$in': body.player_tags}}]}
     ).to_list(length=None)
 
-    new_data = defaultdict(lambda: defaultdict(dict))
+    new_data = defaultdict(list)
 
     def key_fetcher(d: dict, attr: str):
         keys = attr.split(".")
-        data = None
         for i, key in enumerate(keys):
-            data = d.get(key, {}) if i < len(keys) - 1 else d.get(key, 0)
-        return data
+            d = d.get(key, {}) if i < len(keys) - 1 else d.get(key, 0)
+        return d
 
-    for option in [
+    options = [
         f'gold.{season}', f'elixir.{season}', f'dark_elixir.{season}',
         f'activity.{season}', f'attack_wins.{season}', f'season_trophies.{season}',
-        f'donations.{season}.donated', f'donations.{season}.received',
-    ]:
+        (f'donations.{season}.donated', "donated"), (f'donations.{season}.received', "received"),
+    ]
+
+    for option in options:
+        if isinstance(option, tuple):
+            option, name = option
+        else:
+            option = option
+            name = option.split(".")[0]
         top_results = sorted(results, key=lambda d: key_fetcher(d, attr=option), reverse=True)[:limit]
         for count, result in enumerate(top_results, 1):
             field = key_fetcher(result, attr=option)
-            new_data[result["tag"]][option] = field | {"count" : count}
+            new_data[name].append({"tag" : result["tag"], "value" : field, "count" : count})
 
     season_raid_weeks = get_season_raid_weeks(season=season)
-
     def capital_gold_donated(elem):
         cc_results = []
         for week in season_raid_weeks:
-            week_result = elem.get('capital_gold', {}).get(week)
-            cc_results.append(ClanCapitalWeek(week_result))
-        return sum([sum(cap.donated) for cap in cc_results])
-
+            week_result = elem.get('capital_gold', {}).get(week, {})
+            cc_results.append(sum(week_result.get('donate', [])))
+        return sum(cc_results)
     top_capital_donos = sorted(results, key=capital_gold_donated, reverse=True)[:limit]
-    text += f'**{bot.emoji.capital_gold} CG Donated\n**'
     for count, result in enumerate(top_capital_donos, 1):
         cg_donated = capital_gold_donated(result)
-        text += f"`{count:<2} {'{:,}'.format(cg_donated):7} \u200e{result['name']}`\n"
-    text += '\n'
+        new_data["capital_donated"].append({"tag": result["tag"], "value": cg_donated, "count": count})
 
     def capital_gold_raided(elem):
         cc_results = []
         for week in season_raid_weeks:
-            week_result = elem.get('capital_gold', {}).get(week)
-            cc_results.append(ClanCapitalWeek(week_result))
-        return sum([sum(cap.raided) for cap in cc_results])
-
+            week_result = elem.get('capital_gold', {}).get(week, {})
+            cc_results.append(sum(week_result.get('raid', [])))
+        return sum(cc_results)
     top_capital_raided = sorted(results, key=capital_gold_raided, reverse=True)[:limit]
-    text += f'**{bot.emoji.capital_gold} CG Raided\n**'
     for count, result in enumerate(top_capital_raided, 1):
         cg_raided = capital_gold_raided(result)
-        text += f"`{count:<2} {'{:,}'.format(cg_raided):7} \u200e{result['name']}`\n"
-    text += '\n'
+        new_data["capital_raided"].append({"tag": result["tag"], "value": cg_raided, "count": count})
 
     # ADD HITRATE
-    SEASON_START, SEASON_END = gen_season_start_end_as_iso(season=season)
+    SEASON_START, SEASON_END = season_start_end(season=season)
+    SEASON_START, SEASON_END = SEASON_START.format(CLASH_ISO_FORMAT), SEASON_END.format(CLASH_ISO_FORMAT)
+
     pipeline = [
         {
             '$match': {
                 '$and': [
                     {
                         '$or': [
-                            {'data.clan.members.tag': {'$in': member_tags}},
-                            {'data.opponent.members.tag': {'$in': member_tags}},
+                            {'data.clan.members.tag': {'$in': body.player_tags}},
+                            {'data.opponent.members.tag': {'$in': body.player_tags}},
                         ]
                     },
                     {'data.preparationStartTime': {'$gte': SEASON_START}},
@@ -188,7 +190,7 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
         {'$group': {'_id': '$uniqueKey', 'data': {'$first': '$data'}}},
         {'$project': {'members': {'$concatArrays': ['$data.clan.members', '$data.opponent.members']}}},
         {'$unwind': '$members'},
-        {'$match': {'members.tag': {'$in': member_tags}}},
+        {'$match': {'members.tag': {'$in': body.player_tags}}},
         {
             '$project': {
                 '_id': 0,
@@ -207,11 +209,10 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
         {'$sort': {'totalStars': -1}},
         {'$limit': limit},
     ]
-    war_star_results = await bot.clan_war.aggregate(pipeline=pipeline).to_list(length=None)
+    war_star_results = await mongo.clan_wars.aggregate(pipeline=pipeline).to_list(length=None)
 
-    if war_star_results:
-        text += f'**{bot.emoji.war_star} War Stars\n**'
-        for count, result in enumerate(war_star_results, 1):
-            text += f"`{count:<2} {'{:,}'.format(result.get('totalStars')):3} \u200e{result.get('name')}`\n"
+    new_data["war_stars"] = [{"tag": result["_id"], "value": result["totalStars"], "count": count}
+                             for count, result in enumerate(war_star_results, 1)]
 
+    return {"items" : [{key : value} for key, value in new_data.items()]}
 

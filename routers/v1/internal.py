@@ -71,7 +71,7 @@ async def test_post_endpoint(url: str, request: Request, response: Response):
 
 @router.get("/bot/config", include_in_schema=False)
 async def bot_config(bot_token: str = Header(...)):
-    bot_config = await db_client.bot_settings.find_one({"type" : "bot"}, {"_id" : 0})
+    bot_config: dict = await db_client.bot_settings.find_one({"type" : "bot"}, {"_id" : 0})
 
     is_main = False
     is_beta = False
@@ -81,6 +81,24 @@ async def bot_config(bot_token: str = Header(...)):
         is_main = True
     elif bot_token in bot_config.get("beta_tokens", []):
         is_beta = True
+    elif bot_token in bot_config.get("collab_tokens", []):
+        is_beta = True
+        bot_config["link_api_pw"] = "test"
+        bot_config["portainer_api_token"] = "test"
+        bot_config["reddit_pw"] = "test"
+        bot_config["reddit_secret"] = "test"
+        bot_config["stats_db"] = bot_config.pop("read_only_stats_db")
+        bot_config.pop("prod_token")
+        bot_config["static_db"] = bot_config.pop("read_only_static_db")
+        bot_config.pop("bunny_api_token")
+        bot_config.pop("redis_ip")
+        bot_config.pop("open_ai_key")
+        bot_config.pop("gitbook_token")
+        bot_config.pop("coc_password")
+        bot_config.pop("meili_pw")
+        bot_config.pop("redis_pw")
+        bot_config.pop("webhook_url")
+        bot_config.pop("github_token")
     else:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 

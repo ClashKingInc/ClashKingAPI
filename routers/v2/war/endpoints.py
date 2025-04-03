@@ -251,7 +251,7 @@ async def cwl_league_thresholds(request: Request):
 
 
 @router.get(
-    "/clan/{clan_tag}/war-summary",
+    "/war/{clan_tag}/war-summary",
     name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
 )
 async def get_clan_war_summary(clan_tag: str):
@@ -275,7 +275,7 @@ async def get_clan_war_summary(clan_tag: str):
     })
 
 
-@router.post("/clan/war-summary", name="Get full war and CWL summary for multiple clans")
+@router.post("/war/war-summary", name="Get full war and CWL summary for multiple clans")
 async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request):
     if not body.clan_tags:
         raise HTTPException(status_code=400, detail="clan_tags cannot be empty")

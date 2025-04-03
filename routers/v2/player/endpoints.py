@@ -1,10 +1,12 @@
 import asyncio
+from collections import defaultdict
 
 import aiohttp
 from fastapi import HTTPException
 from fastapi import APIRouter, Request, Response
 
 from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings
+from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
@@ -194,3 +196,134 @@ async def get_bulk_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
         })
 
     return {"items": results}
+
+@router.post("/players/summary/{season}/top",
+             name="Get summary of top stats for a list of players")
+async def players_summary_top(season: str, request: Request, body: PlayerTagsRequest, limit: int = 10):
+
+    results = await mongo.player_stats.find(
+        {'$and': [{'tag': {'$in': body.player_tags}}]}
+    ).to_list(length=None)
+
+    new_data = defaultdict(list)
+
+    def key_fetcher(d: dict, attr: str):
+        keys = attr.split(".")
+        for i, key in enumerate(keys):
+            d = d.get(key, {}) if i < len(keys) - 1 else d.get(key, 0)
+        return d
+
+    options = [
+        f'gold.{season}', f'elixir.{season}', f'dark_elixir.{season}',
+        f'activity.{season}', f'attack_wins.{season}', f'season_trophies.{season}',
+        (f'donations.{season}.donated', "donated"), (f'donations.{season}.received', "received"),
+    ]
+
+    for option in options:
+        if isinstance(option, tuple):
+            option, name = option
+        else:
+            option = option
+            name = option.split(".")[0]
+        top_results = sorted(results, key=lambda d: key_fetcher(d, attr=option), reverse=True)[:limit]
+        for count, result in enumerate(top_results, 1):
+            field = key_fetcher(result, attr=option)
+            new_data[name].append({"tag" : result["tag"], "value" : field, "count" : count})
+
+    season_raid_weeks = get_season_raid_weeks(season=season)
+    def capital_gold_donated(elem):
+        cc_results = []
+        for week in season_raid_weeks:
+            week_result = elem.get('capital_gold', {}).get(week, {})
+            cc_results.append(sum(week_result.get('donate', [])))
+        return sum(cc_results)
+    top_capital_donos = sorted(results, key=capital_gold_donated, reverse=True)[:limit]
+    for count, result in enumerate(top_capital_donos, 1):
+        cg_donated = capital_gold_donated(result)
+        new_data["capital_donated"].append({"tag": result["tag"], "value": cg_donated, "count": count})
+
+    def capital_gold_raided(elem):
+        cc_results = []
+        for week in season_raid_weeks:
+            week_result = elem.get('capital_gold', {}).get(week, {})
+            cc_results.append(sum(week_result.get('raid', [])))
+        return sum(cc_results)
+    top_capital_raided = sorted(results, key=capital_gold_raided, reverse=True)[:limit]
+    for count, result in enumerate(top_capital_raided, 1):
+        cg_raided = capital_gold_raided(result)
+        new_data["capital_raided"].append({"tag": result["tag"], "value": cg_raided, "count": count})
+
+    # ADD HITRATE
+    SEASON_START, SEASON_END = season_start_end(season=season)
+    SEASON_START, SEASON_END = SEASON_START.format(CLASH_ISO_FORMAT), SEASON_END.format(CLASH_ISO_FORMAT)
+
+    pipeline = [
+        {
+            '$match': {
+                '$and': [
+                    {
+                        '$or': [
+                            {'data.clan.members.tag': {'$in': body.player_tags}},
+                            {'data.opponent.members.tag': {'$in': body.player_tags}},
+                        ]
+                    },
+                    {'data.preparationStartTime': {'$gte': SEASON_START}},
+                    {'data.preparationStartTime': {'$lte': SEASON_END}},
+                    {'type': {'$ne': 'friendly'}},
+                ]
+            }
+        },
+        {
+            '$project': {
+                '_id': 0,
+                'uniqueKey': {
+                    '$concat': [
+                        {
+                            '$cond': {
+                                'if': {'$lt': ['$data.clan.tag', '$data.opponent.tag']},
+                                'then': '$data.clan.tag',
+                                'else': '$data.opponent.tag',
+                            }
+                        },
+                        {
+                            '$cond': {
+                                'if': {'$lt': ['$data.opponent.tag', '$data.clan.tag']},
+                                'then': '$data.opponent.tag',
+                                'else': '$data.clan.tag',
+                            }
+                        },
+                        '$data.preparationStartTime',
+                    ]
+                },
+                'data': 1,
+            }
+        },
+        {'$group': {'_id': '$uniqueKey', 'data': {'$first': '$data'}}},
+        {'$project': {'members': {'$concatArrays': ['$data.clan.members', '$data.opponent.members']}}},
+        {'$unwind': '$members'},
+        {'$match': {'members.tag': {'$in': body.player_tags}}},
+        {
+            '$project': {
+                '_id': 0,
+                'tag': '$members.tag',
+                'name': '$members.name',
+                'stars': {'$sum': '$members.attacks.stars'},
+            }
+        },
+        {
+            '$group': {
+                '_id': '$tag',
+                'name': {'$last': '$name'},
+                'totalStars': {'$sum': '$stars'},
+            }
+        },
+        {'$sort': {'totalStars': -1}},
+        {'$limit': limit},
+    ]
+    war_star_results = await mongo.clan_wars.aggregate(pipeline=pipeline).to_list(length=None)
+
+    new_data["war_stars"] = [{"tag": result["_id"], "value": result["totalStars"], "count": count}
+                             for count, result in enumerate(war_star_results, 1)]
+
+    return {"items" : [{key : value} for key, value in new_data.items()]}
+

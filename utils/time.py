@@ -3,6 +3,8 @@ import pendulum as pend
 import coc
 import calendar
 
+CLASH_ISO_FORMAT = 'YYYYMMDDTHHmmss.000[Z]'
+
 class DiscordTimeStamp:
     def __init__(self, date: pend.DateTime):
         self.slash_date = f'<t:{date.int_timestamp}:d>'
@@ -184,3 +186,20 @@ def season_start_end(season: str, gold_pass_season: bool = False):
         season_end = season_start.add(months=1)  # First day of the next month
 
     return season_start, season_end
+
+
+def get_season_raid_weeks(season: str):
+    year = int(season[:4])
+    month = int(season[-2:])
+
+    start = pend.instance(coc.utils.get_season_start(month=month, year=year), tz=pend.UTC)
+    end = pend.instance(coc.utils.get_season_end(month=month, year=year), tz=pend.UTC)
+
+    weeks = []
+    for i in range(7):
+        week = start.add(weeks=i).add(days=4)
+        if week > end:
+            break
+        weeks.append(week.to_date_string())
+
+    return weeks

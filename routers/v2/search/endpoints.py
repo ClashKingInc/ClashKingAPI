@@ -14,10 +14,10 @@ router = APIRouter(prefix="/v2",tags=["Search"], include_in_schema=True)
 
 
 
-@router.get("/search/clan/{query}",
+@router.get("/search/clan",
          name="Search for a clan by name or tag")
 async def search_clan(
-        query: str,
+        query: str = Query(default=""),
         request: Request = Request,
         user_id: int = 0,
         guild_id: int = 0,
@@ -41,7 +41,7 @@ async def search_clan(
 
     guild_clans = []
     if guild_id:
-        if query == '':
+        if len(query) <= 1:
             pipeline = [
                 {'$match': {'server': guild_id}},
                 {'$sort': {'name': 1}},
@@ -148,14 +148,24 @@ async def search_clan(
                 "warLeague": clan.war_league.name,
                 "type": "search_result"
             })
+
+    type_order = {
+        "recent_search": 0,
+        "bookmarked": 1,
+        "guild_search": 2,
+        "search_result": 3
+    }
+    final_data.sort(key=lambda x: type_order.get(x["type"], 99))
+
     return {"items" : final_data}
 
 
 
-@router.post("/search/bookmark/clan/{user_id}/{tag}",
-         name="Add a bookmark for a clan for a user")
-async def bookmark_clan(
+@router.post("/search/bookmark/{user_id}/{type}/{tag}",
+         name="Add a bookmark for a clan or player for a user")
+async def bookmark_search(
         user_id: int,
+        type: int,
         tag: str,
         request: Request = Request,
 ):
@@ -170,5 +180,33 @@ async def bookmark_clan(
     await mongo.user_settings.update_one(
         {"discord_user": user_id},
         {"$push": {"search.clan.bookmarked": {"$each": [tag], "$position": 0, "$slice": 20}}}
+    )
+    return {"success": True}
+
+
+@router.post("/search/recent/{user_id}/{type}/{tag}",
+         name="Add a recent search for a clan or player for a user")
+async def recent_search(
+        user_id: int,
+        type: int,
+        tag: str,
+        request: Request = Request,
+):
+
+    type_field = {
+        0: "player",
+        1: "clan"
+    }
+    tag = fix_tag(tag)
+    # First, remove the tag if it exists
+    await mongo.user_settings.update_one(
+        {"discord_user": user_id},
+        {"$pull": {"search.clan.recent": tag}}
+    )
+
+    # Then, push the new tag to the front while keeping only the last 20 items
+    await mongo.user_settings.update_one(
+        {"discord_user": user_id},
+        {"$push": {f"search.{type_field.get(type)}.recent": {"$each": [tag], "$position": 0, "$slice": 20}}}
     )
     return {"success": True}

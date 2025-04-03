@@ -14,7 +14,6 @@ router = APIRouter(prefix="/v2", tags=["War"], include_in_schema=True)
 
 
 @router.get("/war/{clan_tag}/previous",
-            tags=["War Endpoints"],
             name="Previous Wars for a clan")
 async def war_previous(
         clan_tag: str,

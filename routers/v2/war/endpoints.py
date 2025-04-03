@@ -1,22 +1,21 @@
-import operator
-
-import coc
+from fastapi.responses import JSONResponse
 import pendulum as pend
-from collections import defaultdict
 from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request, Depends
+from fastapi import APIRouter, Request
+
+from routers.v2.clan.models import ClanTagsRequest
+from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_info, ranking_create, \
+    fetch_war_league_infos
+from utils.time import is_cwl
 from utils.utils import fix_tag, remove_id_fields
-from utils.time import gen_season_date, gen_raid_date
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
 
-router = APIRouter(prefix="/v2",tags=["War"], include_in_schema=True)
-
+router = APIRouter(prefix="/v2", tags=["War"], include_in_schema=True)
 
 
 @router.get("/war/{clan_tag}/previous",
-         tags=["War Endpoints"],
-         name="Previous Wars for a clan")
+            tags=["War Endpoints"],
+            name="Previous Wars for a clan")
 async def war_previous(
         clan_tag: str,
         request: Request = Request,
@@ -42,7 +41,7 @@ async def war_previous(
 
     full_wars = await mongo.clan_wars.find(query).sort("data.endTime", -1).limit(limit).to_list(length=None)
 
-    #early on we had some duplicate wars, so just filter them out
+    # early on we had some duplicate wars, so just filter them out
     found_ids = set()
     new_wars = []
     for war in full_wars:
@@ -53,7 +52,7 @@ async def war_previous(
         new_wars.append(war.get("data"))
         found_ids.add(id)
 
-    return remove_id_fields({"items" : new_wars})
+    return remove_id_fields({"items": new_wars})
 
 
 @router.get("/cwl/{clan_tag}/ranking-history", name="CWL ranking history for a clan")
@@ -61,7 +60,7 @@ async def cwl_ranking_history(clan_tag: str, request: Request):
     clan_tag = fix_tag(clan_tag)
 
     # Fetch all CWL group documents containing the clan
-    results = await mongo.cwl_groups.find({"data.clans.tag": clan_tag}, {"data.clans" : 0}).to_list(length=None)
+    results = await mongo.cwl_groups.find({"data.clans.tag": clan_tag}, {"data.clans": 0}).to_list(length=None)
     if not results:
         raise HTTPException(status_code=404, detail="No CWL Data Found")
 
@@ -83,7 +82,7 @@ async def cwl_ranking_history(clan_tag: str, request: Request):
         matching_wars_data = await mongo.clan_wars.find({
             "data.tag": {"$in": list(all_war_tags)}
         },
-        {"data.clan.members" : 0, "data.opponent.members" : 0}
+            {"data.clan.members": 0, "data.opponent.members": 0}
         ).to_list(length=None)
         # Build a lookup dictionary keyed by war tag
         war_lookup = {w["data"]["tag"]: w["data"] for w in matching_wars_data}
@@ -138,173 +137,169 @@ async def cwl_ranking_history(clan_tag: str, request: Request):
 @router.get("/cwl/league-thresholds", name="Promo and demotion thresholds for CWL leagues")
 async def cwl_league_thresholds(request: Request):
     return {
-      "items": [
-        {
-          "id": 48000001,
-          "name": "Bronze League III",
-          "promo" : 3,
-          "demote" : 9
-        },
-        {
-          "id": 48000002,
-          "name": "Bronze League II",
-          "promo" : 3,
-          "demote" : 8
-        },
-        {
-          "id": 48000003,
-          "name": "Bronze League I",
-          "promo" : 3,
-          "demote" : 8
-        },
-        {
-          "id": 48000004,
-          "name": "Silver League III",
-          "promo" : 2,
-          "demote" : 8
-        },
-        {
-          "id": 48000005,
-          "name": "Silver League II",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000006,
-          "name": "Silver League I",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000007,
-          "name": "Gold League III",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000008,
-          "name": "Gold League II",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000009,
-          "name": "Gold League I",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000010,
-          "name": "Crystal League III",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000011,
-          "name": "Crystal League II",
-          "promo" : 2,
-          "demote" : 7
-        },
-        {
-          "id": 48000012,
-          "name": "Crystal League I",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000013,
-          "name": "Master League III",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000014,
-          "name": "Master League II",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000015,
-          "name": "Master League I",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000016,
-          "name": "Champion League III",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000017,
-          "name": "Champion League II",
-          "promo" : 1,
-          "demote" : 7
-        },
-        {
-          "id": 48000018,
-          "name": "Champion League I",
-          "promo" : 0,
-          "demote" : 6
-        }
-      ]
+        "items": [
+            {
+                "id": 48000001,
+                "name": "Bronze League III",
+                "promo": 3,
+                "demote": 9
+            },
+            {
+                "id": 48000002,
+                "name": "Bronze League II",
+                "promo": 3,
+                "demote": 8
+            },
+            {
+                "id": 48000003,
+                "name": "Bronze League I",
+                "promo": 3,
+                "demote": 8
+            },
+            {
+                "id": 48000004,
+                "name": "Silver League III",
+                "promo": 2,
+                "demote": 8
+            },
+            {
+                "id": 48000005,
+                "name": "Silver League II",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000006,
+                "name": "Silver League I",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000007,
+                "name": "Gold League III",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000008,
+                "name": "Gold League II",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000009,
+                "name": "Gold League I",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000010,
+                "name": "Crystal League III",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000011,
+                "name": "Crystal League II",
+                "promo": 2,
+                "demote": 7
+            },
+            {
+                "id": 48000012,
+                "name": "Crystal League I",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000013,
+                "name": "Master League III",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000014,
+                "name": "Master League II",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000015,
+                "name": "Master League I",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000016,
+                "name": "Champion League III",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000017,
+                "name": "Champion League II",
+                "promo": 1,
+                "demote": 7
+            },
+            {
+                "id": 48000018,
+                "name": "Champion League I",
+                "promo": 0,
+                "demote": 6
+            }
+        ]
     }
 
-def ranking_create(data: dict):
-    # Initialize accumulators
-    star_dict = defaultdict(int)
-    dest_dict = defaultdict(int)
-    tag_to_name = {}
-    rounds_won = defaultdict(int)
-    rounds_lost = defaultdict(int)
-    rounds_tied = defaultdict(int)
 
-    for rnd in data.get("rounds", []):
-        for war in rnd.get("warTags", []):
-            if war is None:
-                continue
+@router.get(
+    "/clan/{clan_tag}/war-summary",
+    name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
+)
+async def get_clan_war_summary(clan_tag: str):
+    war_info = fetch_current_war_info_bypass(clan_tag)
+    league_info = None
+    war_league_infos = []
 
-            war_obj = coc.ClanWar(data=war, client=None)
-            status = str(war_obj.status)
-            if status == "won":
-                rounds_won[war_obj.clan.tag] += 1
-                rounds_lost[war_obj.opponent.tag] += 1
-                star_dict[war_obj.clan.tag] += 10
-            elif status == "lost":
-                rounds_won[war_obj.opponent.tag] += 1
-                rounds_lost[war_obj.clan.tag] += 1
-                star_dict[war_obj.opponent.tag] += 10
-            else:
-                rounds_tied[war_obj.clan.tag] += 1
-                rounds_tied[war_obj.opponent.tag] += 1
+    if is_cwl():
+        league_info = fetch_league_info(clan_tag)
+        if league_info and "rounds" in league_info:
+            for round_entry in league_info["rounds"]:
+                war_tags = round_entry.get("warTags", [])
+                war_league_infos.extend(fetch_war_league_infos(war_tags))
 
-            tag_to_name[war_obj.clan.tag] = war_obj.clan.name
-            tag_to_name[war_obj.opponent.tag] = war_obj.opponent.name
+    return JSONResponse(content={
+        "isInWar": war_info["state"] == "war",
+        "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+        "war_info": war_info,
+        "league_info": league_info,
+        "war_league_infos": war_league_infos
+    })
 
-            for clan in [war_obj.clan, war_obj.opponent]:
-                star_dict[clan.tag] += clan.stars
-                dest_dict[clan.tag] += clan.destruction
 
-    # Create a list of stats per clan for sorting
-    star_list = []
-    for tag, stars in star_dict.items():
-        destruction = dest_dict[tag]
-        name = tag_to_name.get(tag, "")
-        star_list.append([name, tag, stars, destruction])
+@router.post("/clan/war-summary", name="Get full war and CWL summary for multiple clans")
+async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request):
+    if not body.clan_tags:
+        raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
 
-    # Sort descending by stars then destruction
-    sorted_list = sorted(star_list, key=lambda x: (x[2], x[3]), reverse=True)
-    return [
-        {
-            "name": x[0],
-            "tag": x[1],
-            "stars": x[2],
-            "destruction": x[3],
-            "rounds": {
-                "won": rounds_won.get(x[1], 0),
-                "tied": rounds_tied.get(x[1], 0),
-                "lost": rounds_lost.get(x[1], 0)
-            }
-        }
-        for x in sorted_list
-    ]
+    results = []
+    for clan_tag in body.clan_tags:
+        war_info = fetch_current_war_info_bypass(clan_tag)
+        league_info = None
+        war_league_infos = []
+
+        if is_cwl():
+            league_info = fetch_league_info(clan_tag)
+            if league_info and "rounds" in league_info:
+                for round_entry in league_info["rounds"]:
+                    war_tags = round_entry.get("warTags", [])
+                    war_league_infos.extend(fetch_war_league_infos(war_tags))
+
+        results.append({
+            "clan_tag": clan_tag,
+            "isInWar": war_info["state"] == "war",
+            "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+            "war_info": war_info,
+            "league_info": league_info,
+            "war_league_infos": war_league_infos
+        })
+
+    return JSONResponse(content={"items": results})

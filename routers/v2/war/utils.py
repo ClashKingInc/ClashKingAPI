@@ -64,7 +64,7 @@ def ranking_create(data: dict):
         for x in sorted_list
     ]
 
-def fetch_current_war_info(clan_tag, bypass=False):
+async def fetch_current_war_info(clan_tag, bypass=False):
     try:
         tag_encoded = clan_tag.replace("#", "%23")
         url = f"https://proxy.clashk.ing/v1/clans/{tag_encoded}/currentwar"
@@ -84,7 +84,7 @@ def fetch_current_war_info(clan_tag, bypass=False):
     return {"state": "notInWar"}
 
 
-def fetch_opponent_tag(clan_tag):
+async def fetch_opponent_tag(clan_tag):
     tag_clean = clan_tag.lstrip("#")
     url = f"https://proxy.clashk.ing/v1/war/{tag_clean}/basic"
     res = requests.get(url)
@@ -98,16 +98,16 @@ def fetch_opponent_tag(clan_tag):
     return None
 
 
-def fetch_current_war_info_bypass(clan_tag):
-    war = fetch_current_war_info(clan_tag)
+async def fetch_current_war_info_bypass(clan_tag):
+    war = await fetch_current_war_info(clan_tag)
     if war["state"] == "accessDenied":
-        opponent_tag = fetch_opponent_tag(clan_tag)
+        opponent_tag = await fetch_opponent_tag(clan_tag)
         if opponent_tag:
-            return fetch_current_war_info(opponent_tag, bypass=True)
+            return await fetch_current_war_info(opponent_tag, bypass=True)
     return war
 
 
-def fetch_league_info(clan_tag):
+async def fetch_league_info(clan_tag):
     try:
         tag_encoded = clan_tag.replace("#", "%23")
         url = f"https://proxy.clashk.ing/v1/clans/{tag_encoded}/currentwar/leaguegroup"
@@ -121,7 +121,7 @@ def fetch_league_info(clan_tag):
         print(f"Error fetching CWL info: {e}")
     return None
 
-def fetch_war_league_info(war_tag):
+async def fetch_war_league_info(war_tag):
     retry_count = 0
     war_tag_encoded = war_tag.replace('#', '%23')
     while retry_count < 3:
@@ -142,11 +142,11 @@ def fetch_war_league_info(war_tag):
     return None
 
 
-def fetch_war_league_infos(war_tags):
+async def fetch_war_league_infos(war_tags):
     infos = []
     for tag in war_tags:
         if tag != "#0":
-            info = fetch_war_league_info(tag)
+            info = await fetch_war_league_info(tag)
             if info:
                 infos.append(info)
     return infos

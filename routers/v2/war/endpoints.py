@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi.responses import JSONResponse
 import pendulum as pend
 from fastapi import HTTPException
@@ -279,26 +281,27 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
     if not body.clan_tags:
         raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
 
-    results = []
-    for clan_tag in body.clan_tags:
-        war_info = fetch_current_war_info_bypass(clan_tag)
+    async def process_clan(clan_tag: str):
+        war_info = await fetch_current_war_info_bypass(clan_tag)
         league_info = None
         war_league_infos = []
 
         if is_cwl():
-            league_info = fetch_league_info(clan_tag)
+            league_info = await fetch_league_info(clan_tag)
             if league_info and "rounds" in league_info:
+                war_tags = []
                 for round_entry in league_info["rounds"]:
-                    war_tags = round_entry.get("warTags", [])
-                    war_league_infos.extend(fetch_war_league_infos(war_tags))
+                    war_tags.extend(round_entry.get("warTags", []))
+                war_league_infos = await fetch_war_league_infos(war_tags)
 
-        results.append({
+        return {
             "clan_tag": clan_tag,
             "isInWar": war_info["state"] == "war",
             "isInCwl": league_info is not None and war_info["state"] == "notInWar",
             "war_info": war_info,
             "league_info": league_info,
             "war_league_infos": war_league_infos
-        })
+        }
 
+    results = await asyncio.gather(*(process_clan(tag) for tag in body.clan_tags))
     return JSONResponse(content={"items": results})

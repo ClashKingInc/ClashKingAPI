@@ -131,6 +131,7 @@ async def fetch_war_league_info(war_tag):
             if response.status_code == 200:
                 data = response.json()
                 if data.get("state") != "notInWar":
+                    data["war_tag"] = war_tag
                     return data
                 return None
             else:

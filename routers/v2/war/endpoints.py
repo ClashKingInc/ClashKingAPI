@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 
 from routers.v2.clan.models import ClanTagsRequest
 from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_info, ranking_create, \
-    fetch_war_league_infos
+    fetch_war_league_infos, enrich_league_info
 from utils.time import is_cwl
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
@@ -256,16 +256,16 @@ async def cwl_league_thresholds(request: Request):
     name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
 )
 async def get_clan_war_summary(clan_tag: str):
-    war_info = fetch_current_war_info_bypass(clan_tag)
+    war_info = await fetch_current_war_info_bypass(clan_tag)
     league_info = None
     war_league_infos = []
 
     if is_cwl():
-        league_info = fetch_league_info(clan_tag)
+        league_info = await fetch_league_info(clan_tag)
         if league_info and "rounds" in league_info:
             for round_entry in league_info["rounds"]:
                 war_tags = round_entry.get("warTags", [])
-                war_league_infos.extend(fetch_war_league_infos(war_tags))
+                war_league_infos.extend(await fetch_war_league_infos(war_tags))
 
     return JSONResponse(content={
         "isInWar": war_info["state"] == "war",
@@ -289,10 +289,9 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
         if is_cwl():
             league_info = await fetch_league_info(clan_tag)
             if league_info and "rounds" in league_info:
-                war_tags = []
-                for round_entry in league_info["rounds"]:
-                    war_tags.extend(round_entry.get("warTags", []))
+                war_tags = [tag for r in league_info["rounds"] for tag in r.get("warTags", [])]
                 war_league_infos = await fetch_war_league_infos(war_tags)
+                league_info = await enrich_league_info(league_info, war_league_infos)
 
         return {
             "clan_tag": clan_tag,

@@ -1,5 +1,4 @@
 from collections import defaultdict
-
 import coc
 import requests
 import time
@@ -121,6 +120,7 @@ async def fetch_league_info(clan_tag):
         print(f"Error fetching CWL info: {e}")
     return None
 
+
 async def fetch_war_league_info(war_tag):
     retry_count = 0
     war_tag_encoded = war_tag.replace('#', '%23')
@@ -150,3 +150,133 @@ async def fetch_war_league_infos(war_tags):
             if info:
                 infos.append(info)
     return infos
+
+
+async def init_clan_summary_map(league_info):
+    clan_summary_map = {}
+    for clan in league_info.get("clans", []):
+        tag = clan.get("tag")
+        clan_summary_map[tag] = {
+            "total_stars": 0,
+            "attack_count": 0,
+            "total_destruction": 0.0,  # destruction subie
+            "total_destruction_inflicted": 0.0,  # destruction infligée
+            "wars_played": 0,
+            "members": defaultdict(lambda: {
+                "name": None,
+                "stars": 0,
+                "3_stars": 0,
+                "2_stars": 0,
+                "1_star": 0,
+                "0_star": 0,
+                "total_destruction": 0.0,
+                "attack_count": 0,
+                "defense_stars_taken": 0,
+                "defense_total_destruction": 0.0,
+                "defense_count": 0
+            })
+        }
+    return clan_summary_map
+
+
+async def process_war_stats(war_league_infos, clan_summary_map):
+    for war in war_league_infos:
+        if war.get("state") not in ["inWar", "warEnded"]:
+            continue
+
+        for side in ["clan", "opponent"]:
+            clan = war[side]
+            tag = clan["tag"]
+            if tag not in clan_summary_map:
+                continue
+            summary = clan_summary_map[tag]
+
+            summary["total_stars"] += clan.get("stars", 0)
+            summary["wars_played"] += 1
+
+            for member in clan.get("members", []):
+                name = member["name"]
+                mtag = member.get("tag")
+                stats = summary["members"][mtag]
+                stats["name"] = name
+
+                attack = member.get("attacks")
+                if attack:
+                    attack = attack[0] if isinstance(attack, list) else attack
+                    stars = attack["stars"]
+                    destruction = attack["destructionPercentage"]
+                    stats["stars"] += stars
+                    stats["total_destruction"] += destruction
+                    stats["attack_count"] += 1
+                    summary["total_destruction_inflicted"] += destruction
+                    summary["attack_count"] += 1
+                    if stars == 3:
+                        stats["3_stars"] += 1
+                    elif stars == 2:
+                        stats["2_stars"] += 1
+                    elif stars == 1:
+                        stats["1_star"] += 1
+                    else:
+                        stats["0_star"] += 1
+
+                defense = member.get("bestOpponentAttack")
+                if defense:
+                    stats["defense_stars_taken"] += defense["stars"]
+                    stats["defense_total_destruction"] += defense["destructionPercentage"]
+                    stats["defense_count"] += 1
+                    summary["total_destruction"] += defense["destructionPercentage"]
+
+
+async def compute_clan_ranking(clan_summary_map):
+    clan_ranking = [
+        {
+            "tag": tag,
+            "stars": summary["total_stars"],
+            "destruction": summary["total_destruction_inflicted"]
+        }
+        for tag, summary in clan_summary_map.items()
+    ]
+    sorted_clans = sorted(clan_ranking, key=lambda x: (-x["stars"], -x["destruction"]))
+    for idx, clan in enumerate(sorted_clans):
+        clan["rank"] = idx + 1
+    return sorted_clans
+
+
+async def enrich_league_info(league_info, war_league_infos):
+    clan_summary_map = await init_clan_summary_map(league_info)
+    await process_war_stats(war_league_infos, clan_summary_map)
+    sorted_clans = await compute_clan_ranking(clan_summary_map)
+
+    league_info["total_stars"] = sum(c["stars"] for c in sorted_clans)
+    league_info["total_destruction"] = round(sum(c["destruction"] for c in sorted_clans), 2)
+
+    for clan in league_info.get("clans", []):
+        tag = clan.get("tag")
+        if tag not in clan_summary_map:
+            continue
+        summary = clan_summary_map[tag]
+        clan["total_stars"] = summary["total_stars"]
+        clan["total_destruction"] = round(summary["total_destruction"], 2)
+        clan["total_destruction_inflicted"] = round(summary["total_destruction_inflicted"], 2)
+        clan["wars_played"] = summary["wars_played"]
+        clan["rank"] = next((r["rank"] for r in sorted_clans if r["tag"] == tag), None)
+        clan["attack_count"] = summary["attack_count"]
+
+        for member in clan.get("members", []):
+            mtag = member.get("tag")
+            if mtag in summary["members"]:
+                stats = summary["members"][mtag]
+                member.update({
+                    "stars": stats["stars"],
+                    "3_stars": stats["3_stars"],
+                    "2_stars": stats["2_stars"],
+                    "1_star": stats["1_star"],
+                    "0_star": stats["0_star"],
+                    "total_destruction": round(stats["total_destruction"], 2),
+                    "attack_count": stats["attack_count"],
+                    "defense_stars_taken": stats["defense_stars_taken"],
+                    "defense_total_destruction": round(stats["defense_total_destruction"], 2),
+                    "defense_count": stats["defense_count"]
+                })
+
+    return league_info

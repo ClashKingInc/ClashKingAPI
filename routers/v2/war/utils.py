@@ -159,8 +159,9 @@ async def init_clan_summary_map(league_info):
         clan_summary_map[tag] = {
             "total_stars": 0,
             "attack_count": 0,
-            "total_destruction": 0.0,  # destruction subie
-            "total_destruction_inflicted": 0.0,  # destruction infligée
+            "missed_attacks": 0,
+            "total_destruction": 0.0,
+            "total_destruction_inflicted": 0.0,
             "wars_played": 0,
             "members": defaultdict(lambda: {
                 "name": None,
@@ -171,7 +172,12 @@ async def init_clan_summary_map(league_info):
                 "0_star": 0,
                 "total_destruction": 0.0,
                 "attack_count": 0,
+                "missed_attacks": 0,
                 "defense_stars_taken": 0,
+                "defense_3_stars": 0,
+                "defense_2_stars": 0,
+                "defense_1_star": 0,
+                "defense_0_star": 0,
                 "defense_total_destruction": 0.0,
                 "defense_count": 0
             })
@@ -218,13 +224,25 @@ async def process_war_stats(war_league_infos, clan_summary_map):
                         stats["1_star"] += 1
                     else:
                         stats["0_star"] += 1
+                elif war.get("state") == "warEnded":
+                    stats["missed_attacks"] += 1
+                    summary["missed_attacks"] += 1
 
                 defense = member.get("bestOpponentAttack")
                 if defense:
-                    stats["defense_stars_taken"] += defense["stars"]
+                    stars = defense["stars"]
+                    stats["defense_stars_taken"] += stars
                     stats["defense_total_destruction"] += defense["destructionPercentage"]
                     stats["defense_count"] += 1
                     summary["total_destruction"] += defense["destructionPercentage"]
+                    if stars == 3:
+                        stats["defense_3_stars"] += 1
+                    elif stars == 2:
+                        stats["defense_2_stars"] += 1
+                    elif stars == 1:
+                        stats["defense_1_star"] += 1
+                    else:
+                        stats["defense_0_star"] += 1
 
 
 async def compute_clan_ranking(clan_summary_map):
@@ -261,22 +279,32 @@ async def enrich_league_info(league_info, war_league_infos):
         clan["wars_played"] = summary["wars_played"]
         clan["rank"] = next((r["rank"] for r in sorted_clans if r["tag"] == tag), None)
         clan["attack_count"] = summary["attack_count"]
+        clan["missed_attacks"] = summary["missed_attacks"]
 
         for member in clan.get("members", []):
             mtag = member.get("tag")
             if mtag in summary["members"]:
                 stats = summary["members"][mtag]
                 member.update({
-                    "stars": stats["stars"],
-                    "3_stars": stats["3_stars"],
-                    "2_stars": stats["2_stars"],
-                    "1_star": stats["1_star"],
-                    "0_star": stats["0_star"],
-                    "total_destruction": round(stats["total_destruction"], 2),
-                    "attack_count": stats["attack_count"],
-                    "defense_stars_taken": stats["defense_stars_taken"],
-                    "defense_total_destruction": round(stats["defense_total_destruction"], 2),
-                    "defense_count": stats["defense_count"]
+                    "attacks": {
+                        "stars": stats["stars"],
+                        "3_stars": stats["3_stars"],
+                        "2_stars": stats["2_stars"],
+                        "1_star": stats["1_star"],
+                        "0_star": stats["0_star"],
+                        "total_destruction": round(stats["total_destruction"], 2),
+                        "attack_count": stats["attack_count"],
+                        "missed_attacks": stats["missed_attacks"]
+                    },
+                    "defense": {
+                        "stars": stats["defense_stars_taken"],
+                        "3_stars": stats["defense_3_stars"],
+                        "2_stars": stats["defense_2_stars"],
+                        "1_star": stats["defense_1_star"],
+                        "0_star": stats["defense_0_star"],
+                        "total_destruction": round(stats["defense_total_destruction"], 2),
+                        "defense_count": stats["defense_count"]
+                    }
                 })
 
     return league_info

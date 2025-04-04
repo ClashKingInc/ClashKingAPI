@@ -61,6 +61,7 @@ async def auth_discord(request: Request):
     code_verifier = form.get("code_verifier")
     device_id = form.get("device_id")
     device_name = form.get("device_name")
+    redirect_uri = form.get("redirect_uri") or config.DISCORD_REDIRECT_URI
 
     if not code or not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")
@@ -71,7 +72,7 @@ async def auth_discord(request: Request):
         "client_id": config.DISCORD_CLIENT_ID,
         "code": code,
         "grant_type": "authorization_code",
-        "redirect_uri": config.DISCORD_REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code_verifier": code_verifier
     }
 

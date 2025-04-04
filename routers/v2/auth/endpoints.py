@@ -80,7 +80,10 @@ async def auth_discord(request: Request):
                                            headers={"Content-Type": "application/x-www-form-urlencoded"})
 
         if token_response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Error during Discord authentication")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Discord token error: {token_response.status_code} - {token_response.text}"
+            )
 
         discord_data = token_response.json()
         access_token_discord = discord_data["access_token"]

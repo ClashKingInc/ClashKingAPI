@@ -18,7 +18,7 @@ from slowapi.util import get_ipaddr
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
-from utils.utils import config
+from utils.utils import config, coc_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,34 +42,40 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
-def include_routers(app, directory):
-    for filename in os.listdir(directory):
-        if filename.endswith(".py") and not filename.startswith("__"):
-            module_name = filename[:-3]
-            file_path = os.path.join(directory, filename)
 
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+def include_routers(app, directory, recursive=False):
+    """Include routers from a given directory. If recursive is True, search for 'endpoints.py' in subdirectories."""
+    for root, _, files in os.walk(directory) if recursive else [(directory, [], os.listdir(directory))]:
+        for filename in files:
+            if filename == "endpoints.py" if recursive else filename.endswith(".py") and not filename.startswith("__"):
+                module_name = os.path.relpath(os.path.join(root, filename), start=directory).replace(os.sep, ".")[:-3]
+                file_path = os.path.join(root, filename)
 
-            router = getattr(module, "router", None)
-            if router:
-                app.include_router(router)
+                spec = importlib.util.spec_from_file_location(module_name, file_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
 
-# Include routers from public and private directories
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
+                router = getattr(module, "router", None)
+                if router:
+                    app.include_router(router)
+
+# Include routers from public (v1) and private (v2 with subfolders)
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
 
 
 @app.on_event("startup")
 async def startup_event():
     FastAPICache.init(InMemoryBackend())
+    await coc_client.login_with_tokens('')
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)
 async def docs():
-    if config.is_local:
-        return RedirectResponse(f"http://localhost/docs")
+    if config.IS_LOCAL:
+        return RedirectResponse(f"http://localhost:8000/docs")
+    if config.IS_DEV:
+        return RedirectResponse(f"https://dev-api.clashk.ing/docs")
     return RedirectResponse(f"https://api.clashk.ing/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
@@ -121,10 +127,6 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == "__main__":
-    if config.is_local:
-        uvicorn.run("main:app", host="localhost", port=8000, reload=True)
-    else:
-        uvicorn.run("main:app", host="0.0.0.0", port=8010)
-
+    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=config.RELOAD)
 
 

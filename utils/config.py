@@ -1,6 +1,11 @@
 from os import getenv
-from dotenv import load_dotenv
 from dataclasses import dataclass
+import os
+from dotenv import load_dotenv
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+from cryptography.fernet import Fernet
+
 load_dotenv()
 
 @dataclass(frozen=True, slots=True)
@@ -25,8 +30,29 @@ class Config:
 
     internal_api_token = getenv("INTERNAL_API_TOKEN")
 
-    is_local = (getenv("LOCAL") == "TRUE")
-
     client_secret = getenv("CLIENT_SECRET")
     bot_token = getenv("BOT_TOKEN")
+
+    ENV = os.getenv("APP_ENV", "local")
+    IS_LOCAL = ENV == "local"
+    IS_DEV = ENV == "development"
+    IS_PROD = ENV == "production"
+
+    HOST = "localhost" if IS_LOCAL else "0.0.0.0"
+    PORT = 8000 if IS_LOCAL else (8073 if IS_DEV else 8010)
+    RELOAD = IS_LOCAL or IS_DEV
+
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    REFRESH_SECRET = os.getenv('REFRESH_SECRET')
+    DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
+    DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
+    DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI')
+    ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+    ALGORITHM = "HS256"
+
+    # Encryption/Decryption/Hashing/Token
+    cipher = Fernet(ENCRYPTION_KEY)
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 

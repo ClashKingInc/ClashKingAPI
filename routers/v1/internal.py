@@ -10,7 +10,7 @@ import requests
 from fastapi import  Request, Response, HTTPException, Header
 from fastapi import APIRouter
 from typing import List
-from utils.utils import fix_tag, redis, db_client, config, create_keys
+from utils.utils import fix_tag, redis, db_client, config
 from expiring_dict import ExpiringDict
 
 
@@ -25,12 +25,6 @@ async def fetch_image(url: str) -> bytes:
             response.raise_for_status()
             return await response.read()
 
-
-@router.post("/ck/generate-api-keys", include_in_schema=False)
-async def generate_api_keys(emails: List[str], passwords: List[str], request: Request, response: Response):
-    ip = request.client.host
-    keys = await create_keys(emails=emails, passwords=passwords, ip=ip)
-    return {"keys" : keys}
 
 
 

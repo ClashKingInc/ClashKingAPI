@@ -1,8 +1,10 @@
+import asyncio
 from collections import defaultdict
 import coc
 import requests
-import time
+import aiohttp
 
+semaphore = asyncio.Semaphore(10)
 
 def ranking_create(data: dict):
     # Initialize accumulators
@@ -63,6 +65,7 @@ def ranking_create(data: dict):
         for x in sorted_list
     ]
 
+
 async def fetch_current_war_info(clan_tag, bypass=False):
     try:
         tag_encoded = clan_tag.replace("#", "%23")
@@ -97,60 +100,73 @@ async def fetch_opponent_tag(clan_tag):
     return None
 
 
-async def fetch_current_war_info_bypass(clan_tag):
+async def fetch_current_war_info_bypass(clan_tag, session):
     war = await fetch_current_war_info(clan_tag)
     if war["state"] == "accessDenied":
-        opponent_tag = await fetch_opponent_tag(clan_tag)
+        opponent_tag = await fetch_opponent_tag(clan_tag, session)
         if opponent_tag:
             return await fetch_current_war_info(opponent_tag, bypass=True)
     return war
 
 
-async def fetch_league_info(clan_tag):
+async def fetch_league_info(clan_tag, session):
     try:
         tag_encoded = clan_tag.replace("#", "%23")
         url = f"https://proxy.clashk.ing/v1/clans/{tag_encoded}/currentwar/leaguegroup"
-        res = requests.get(url, timeout=15)
-
-        if res.status_code == 200:
-            data = res.json()
-            if data.get("state") != "notInWar":
-                return data
+        async with session.get(url, timeout=15) as res:
+            if res.status == 200:
+                data = await res.json()
+                if data.get("state") != "notInWar":
+                    return data
     except Exception as e:
         print(f"Error fetching CWL info: {e}")
     return None
 
 
-async def fetch_war_league_info(war_tag):
-    retry_count = 0
+async def fetch_war_league_info(war_tag, session):
     war_tag_encoded = war_tag.replace('#', '%23')
-    while retry_count < 3:
+    url = f"https://proxy.clashk.ing/v1/clanwarleagues/wars/{war_tag_encoded}"
+
+    for _ in range(3):
         try:
-            url = f"https://proxy.clashk.ing/v1/clanwarleagues/wars/{war_tag_encoded}"
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("state") != "notInWar":
-                    data["war_tag"] = war_tag
-                    return data
-                return None
-            else:
-                retry_count += 1
-                time.sleep(5)
+            async with semaphore:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("state") != "notInWar":
+                            data["war_tag"] = war_tag
+                            return data
+                        return None
         except Exception:
-            retry_count += 1
-            time.sleep(5)
+            await asyncio.sleep(5)
     return None
 
 
-async def fetch_war_league_infos(war_tags):
-    infos = []
-    for tag in war_tags:
-        if tag != "#0":
-            info = await fetch_war_league_info(tag)
-            if info:
-                infos.append(info)
-    return infos
+async def fetch_war_league_infos(war_tags, session):
+    tasks = [
+        fetch_war_league_info(tag, session)
+        for tag in war_tags
+        if tag != "#0"
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    return [r for r in results if r and not isinstance(r, Exception)]
+
+
+
+async def fetch_opponent_tag(clan_tag, session):
+    tag_clean = clan_tag.lstrip("#")
+    url = f"https://proxy.clashk.ing/v1/war/{tag_clean}/basic"
+    try:
+        async with session.get(url) as res:
+            if res.status == 200:
+                data = await res.json()
+                if "clans" in data and isinstance(data["clans"], list):
+                    for tag in data["clans"]:
+                        if tag != clan_tag:
+                            return tag
+    except Exception:
+        pass
+    return None
 
 
 async def init_clan_summary_map(league_info):

@@ -1,5 +1,6 @@
 import asyncio
 
+import aiohttp
 from fastapi.responses import JSONResponse
 import pendulum as pend
 from fastapi import HTTPException
@@ -281,26 +282,28 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
     if not body.clan_tags:
         raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
 
-    async def process_clan(clan_tag: str):
-        war_info = await fetch_current_war_info_bypass(clan_tag)
-        league_info = None
-        war_league_infos = []
+    async with aiohttp.ClientSession() as session:
 
-        if is_cwl():
-            league_info = await fetch_league_info(clan_tag)
-            if league_info and "rounds" in league_info:
-                war_tags = [tag for r in league_info["rounds"] for tag in r.get("warTags", [])]
-                war_league_infos = await fetch_war_league_infos(war_tags)
-                league_info = await enrich_league_info(league_info, war_league_infos)
+        async def process_clan(clan_tag: str):
+            war_info = await fetch_current_war_info_bypass(clan_tag, session)
+            league_info = None
+            war_league_infos = []
 
-        return {
-            "clan_tag": clan_tag,
-            "isInWar": war_info["state"] == "war",
-            "isInCwl": league_info is not None and war_info["state"] == "notInWar",
-            "war_info": war_info,
-            "league_info": league_info,
-            "war_league_infos": war_league_infos
-        }
+            if is_cwl():
+                league_info = await fetch_league_info(clan_tag, session)
+                if league_info and "rounds" in league_info:
+                    war_tags = [tag for r in league_info["rounds"] for tag in r.get("warTags", [])]
+                    war_league_infos = await fetch_war_league_infos(war_tags, session)
+                    league_info = await enrich_league_info(league_info, war_league_infos)
 
-    results = await asyncio.gather(*(process_clan(tag) for tag in body.clan_tags))
-    return JSONResponse(content={"items": results})
+            return {
+                "clan_tag": clan_tag,
+                "isInWar": war_info["state"] == "war",
+                "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+                "war_info": war_info,
+                "league_info": league_info,
+                "war_league_infos": war_league_infos
+            }
+
+        results = await asyncio.gather(*(process_clan(tag) for tag in body.clan_tags))
+        return JSONResponse(content={"items": results})

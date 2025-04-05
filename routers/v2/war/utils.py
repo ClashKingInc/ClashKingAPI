@@ -180,6 +180,7 @@ async def init_clan_summary_map(league_info):
             "total_destruction": 0.0,
             "total_destruction_inflicted": 0.0,
             "wars_played": 0,
+            "town_hall_levels": {},
             "members": defaultdict(lambda: {
                 "name": None,
                 "stars": 0,
@@ -298,8 +299,14 @@ async def enrich_league_info(league_info, war_league_infos):
         clan["attack_count"] = summary["attack_count"]
         clan["missed_attacks"] = summary["missed_attacks"]
 
+        townhall_counts = defaultdict(int)
+
         for member in clan.get("members", []):
             mtag = member.get("tag")
+            th_level = member.get("townHallLevel")
+            if th_level:
+                townhall_counts[th_level] += 1
+
             if mtag in summary["members"]:
                 stats = summary["members"][mtag]
                 member.update({
@@ -323,5 +330,7 @@ async def enrich_league_info(league_info, war_league_infos):
                         "defense_count": stats["defense_count"]
                     }
                 })
+
+        clan["town_hall_levels"] = dict(townhall_counts)
 
     return league_info

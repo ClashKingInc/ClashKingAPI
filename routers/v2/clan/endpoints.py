@@ -112,7 +112,7 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
 
 
 @router.post("/clans/full-stats", name="Get full stats for a list of clans")
-async def get_full_clan_stats(request: Request, body: ClanTagsRequest):
+async def get_clans_stats(request: Request, body: ClanTagsRequest):
     """Retrieve Clash of Clans account details for a list of clans."""
 
     if not body.clan_tags:
@@ -132,8 +132,34 @@ async def get_full_clan_stats(request: Request, body: ClanTagsRequest):
 
     return {"items": remove_id_fields(api_responses)}
 
+
+@router.get("/clan/{clan_tag}/full-stats", name="Get full stats for a single clan")
+async def get_clan_stats(clan_tag: str, request: Request):
+    """Retrieve Clash of Clans account details for a single clan."""
+
+    if not clan_tag:
+        raise HTTPException(status_code=400, detail="clan_tag is required")
+
+    fixed_tag = fix_tag(clan_tag)
+
+    async def fetch_clan_data(session, tag):
+        url = f"https://proxy.clashk.ing/v1/clans/{tag.replace('#', '%23')}"
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.json()
+            return None
+
+    async with aiohttp.ClientSession() as session:
+        api_response = await fetch_clan_data(session, fixed_tag)
+
+    if not api_response:
+        raise HTTPException(status_code=404, detail="Clan not found")
+
+    return remove_id_fields(api_response)
+
+
 @router.get("/clan/{clan_tag}/donations/{season}",
-             name="Get donations for a clan's members in a specific season")
+            name="Get donations for a clan's members in a specific season")
 async def clan_donations(clan_tag: str, season: str, request: Request):
     clan_stats = await mongo.clan_stats.find_one({'tag': fix_tag(clan_tag)}, projection={'_id': 0, f'{season}': 1})
     clan_season_donations = clan_stats.get(season, {})
@@ -141,8 +167,8 @@ async def clan_donations(clan_tag: str, season: str, request: Request):
     items = []
     for tag, data in clan_season_donations.items():
         items.append({
-            "tag" : tag,
-            "donated" : data.get('donated', 0),
-            "received" : data.get('received', 0)
+            "tag": tag,
+            "donated": data.get('donated', 0),
+            "received": data.get('received', 0)
         })
     return {"items": items}

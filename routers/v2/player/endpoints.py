@@ -89,7 +89,7 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
 
 
 @router.post("/players/full-stats", name="Get full stats for a list of players")
-async def get_full_player_stats(body: PlayerTagsRequest, request: Request):
+async def get_players_stats(body: PlayerTagsRequest, request: Request):
     """Retrieve Clash of Clans account details for a list of players."""
 
     if not body.player_tags:
@@ -163,6 +163,64 @@ async def get_full_player_stats(body: PlayerTagsRequest, request: Request):
     return {"items": remove_id_fields(combined_results)}
 
 
+@router.get("/player/{player_tag}/full-stats", name="Get full stats for a single player")
+async def get_player_stats(player_tag: str, request: Request):
+    """Retrieve Clash of Clans account details for a single player."""
+
+    if not player_tag:
+        raise HTTPException(status_code=400, detail="player_tag is required")
+
+    fixed_tag = fix_tag(player_tag)
+
+    # Fetch MongoDB data
+    player_mongo = await mongo.player_stats.find_one(
+        {"tag": fixed_tag},
+        {
+            '_id': 0,
+            'tag': 1,
+            'donations': 1,
+            'clan_games': 1,
+            'season_pass': 1,
+            'activity': 1,
+            'last_online': 1,
+            'last_online_time': 1,
+            'attack_wins': 1,
+            'dark_elixir': 1,
+            'gold': 1,
+            'capital_gold': 1,
+            'season_trophies': 1,
+            'last_updated': 1
+        }
+    ) or {}
+
+    # Fetch API data
+    async def fetch_player_data(session, tag):
+        url = f"https://proxy.clashk.ing/v1/players/{tag.replace('#', '%23')}"
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.json()
+            return None
+
+    async with aiohttp.ClientSession() as session:
+        api_data = await fetch_player_data(session, fixed_tag)
+
+    if api_data:
+        player_mongo.update(api_data)
+    else:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Inject legend stats
+    legends_data = await get_legend_stats_common([fixed_tag])
+    player_mongo["legends_by_season"] = legends_data[0]["legends_by_season"] if legends_data else {}
+    player_mongo.pop("legends", None)
+
+    # Inject end-of-season and current rankings
+    player_mongo["legend_eos_ranking"] = await get_legend_rankings_for_tag(fixed_tag)
+    player_mongo["rankings"] = await get_current_rankings(fixed_tag)
+
+    return remove_id_fields(player_mongo)
+
+
 @router.post("/players/legend-days", name="Get legend stats for multiple players")
 async def get_legend_stats(body: PlayerTagsRequest, request: Request):
     if not body.player_tags:
@@ -197,10 +255,10 @@ async def get_bulk_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
 
     return {"items": results}
 
+
 @router.post("/players/summary/{season}/top",
              name="Get summary of top stats for a list of players")
 async def players_summary_top(season: str, request: Request, body: PlayerTagsRequest, limit: int = 10):
-
     results = await mongo.player_stats.find(
         {'$and': [{'tag': {'$in': body.player_tags}}]}
     ).to_list(length=None)
@@ -228,15 +286,17 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
         top_results = sorted(results, key=lambda d: key_fetcher(d, attr=option), reverse=True)[:limit]
         for count, result in enumerate(top_results, 1):
             field = key_fetcher(result, attr=option)
-            new_data[name].append({"tag" : result["tag"], "value" : field, "count" : count})
+            new_data[name].append({"tag": result["tag"], "value": field, "count": count})
 
     season_raid_weeks = get_season_raid_weeks(season=season)
+
     def capital_gold_donated(elem):
         cc_results = []
         for week in season_raid_weeks:
             week_result = elem.get('capital_gold', {}).get(week, {})
             cc_results.append(sum(week_result.get('donate', [])))
         return sum(cc_results)
+
     top_capital_donos = sorted(results, key=capital_gold_donated, reverse=True)[:limit]
     for count, result in enumerate(top_capital_donos, 1):
         cg_donated = capital_gold_donated(result)
@@ -248,6 +308,7 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
             week_result = elem.get('capital_gold', {}).get(week, {})
             cc_results.append(sum(week_result.get('raid', [])))
         return sum(cc_results)
+
     top_capital_raided = sorted(results, key=capital_gold_raided, reverse=True)[:limit]
     for count, result in enumerate(top_capital_raided, 1):
         cg_raided = capital_gold_raided(result)
@@ -325,5 +386,4 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
     new_data["war_stars"] = [{"tag": result["_id"], "value": result["totalStars"], "count": count}
                              for count, result in enumerate(war_star_results, 1)]
 
-    return {"items" : [{key : value} for key, value in new_data.items()]}
-
+    return {"items": [{key: value} for key, value in new_data.items()]}

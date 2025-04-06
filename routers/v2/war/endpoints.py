@@ -257,24 +257,28 @@ async def cwl_league_thresholds(request: Request):
     name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
 )
 async def get_clan_war_summary(clan_tag: str):
-    war_info = await fetch_current_war_info_bypass(clan_tag)
-    league_info = None
-    war_league_infos = []
 
-    if is_cwl():
-        league_info = await fetch_league_info(clan_tag)
-        if league_info and "rounds" in league_info:
-            for round_entry in league_info["rounds"]:
-                war_tags = round_entry.get("warTags", [])
-                war_league_infos.extend(await fetch_war_league_infos(war_tags))
+    async with aiohttp.ClientSession() as session:
+        war_info = await fetch_current_war_info_bypass(clan_tag, session)
+        league_info = None
+        war_league_infos = []
 
-    return JSONResponse(content={
-        "isInWar": war_info["state"] == "war",
-        "isInCwl": league_info is not None and war_info["state"] == "notInWar",
-        "war_info": war_info,
-        "league_info": league_info,
-        "war_league_infos": war_league_infos
-    })
+        if is_cwl():
+            league_info = await fetch_league_info(clan_tag, session)
+            if league_info and "rounds" in league_info:
+                for round_entry in league_info["rounds"]:
+                    war_tags = round_entry.get("warTags", [])
+                    war_league_infos.extend(await fetch_war_league_infos(war_tags, session))
+
+                league_info = await enrich_league_info(league_info, war_league_infos)
+
+        return JSONResponse(content={
+            "isInWar": war_info["state"] == "war",
+            "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+            "war_info": war_info,
+            "league_info": league_info,
+            "war_league_infos": war_league_infos
+        })
 
 
 @router.post("/war/war-summary", name="Get full war and CWL summary for multiple clans")

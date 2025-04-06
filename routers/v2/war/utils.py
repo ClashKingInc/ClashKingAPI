@@ -6,6 +6,7 @@ import aiohttp
 
 semaphore = asyncio.Semaphore(10)
 
+
 def ranking_create(data: dict):
     # Initialize accumulators
     star_dict = defaultdict(int)
@@ -152,7 +153,6 @@ async def fetch_war_league_infos(war_tags, session):
     return [r for r in results if r and not isinstance(r, Exception)]
 
 
-
 async def fetch_opponent_tag(clan_tag, session):
     tag_clean = clan_tag.lstrip("#")
     url = f"https://proxy.clashk.ing/v1/war/{tag_clean}/basic"
@@ -183,6 +183,9 @@ async def init_clan_summary_map(league_info):
             "town_hall_levels": {},
             "members": defaultdict(lambda: {
                 "name": None,
+                "map_position": None,
+                "avg_opponent_position": None,
+                "avg_attack_order": None,
                 "stars": 0,
                 "3_stars": 0,
                 "2_stars": 0,
@@ -218,11 +221,19 @@ async def process_war_stats(war_league_infos, clan_summary_map):
             summary["total_stars"] += clan.get("stars", 0)
             summary["wars_played"] += 1
 
+            avg_pos_map = compute_member_position_stats(war, side, "opponent" if side == "clan" else "clan")
+
             for member in clan.get("members", []):
                 name = member["name"]
                 mtag = member.get("tag")
                 stats = summary["members"][mtag]
                 stats["name"] = name
+
+                if mtag in avg_pos_map:
+                    stats = summary["members"][mtag]
+                    stats["map_position"] = avg_pos_map[mtag]["map_position"]
+                    stats["avg_opponent_position"] = avg_pos_map[mtag]["avg_opponent_position"]
+                    stats["avg_attack_order"] = avg_pos_map[mtag]["avg_attack_order"]
 
                 attack = member.get("attacks")
                 if attack:
@@ -278,6 +289,49 @@ async def compute_clan_ranking(clan_summary_map):
     return sorted_clans
 
 
+def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent"):
+    enemy_map = {
+        member["tag"]: member.get("mapPosition")
+        for member in war[opponent_key]["members"]
+    }
+
+    result = {}
+
+    for member in war[clan_key]["members"]:
+        tag = member["tag"]
+        position = member.get("mapPosition")
+        attacks = member.get("attacks", [])
+
+        opponent_positions = []
+        attack_orders = []
+
+        for attack in attacks:
+            defender_tag = attack.get("defenderTag")
+            if defender_tag in enemy_map:
+                opponent_positions.append(enemy_map[defender_tag])
+            if "order" in attack:
+                attack_orders.append(attack["order"])
+
+        avg_opponent_position = (
+            round(sum(opponent_positions) / len(opponent_positions), 2)
+            if opponent_positions else None
+        )
+
+        avg_attack_order = (
+            round(sum(attack_orders) / len(attack_orders), 2)
+            if attack_orders else None
+        )
+
+        result[tag] = {
+            "map_position": position,
+            "avg_opponent_position": avg_opponent_position,
+            "avg_attack_order": avg_attack_order,
+        }
+
+    return result
+
+
+
 async def enrich_league_info(league_info, war_league_infos):
     clan_summary_map = await init_clan_summary_map(league_info)
     await process_war_stats(war_league_infos, clan_summary_map)
@@ -310,6 +364,9 @@ async def enrich_league_info(league_info, war_league_infos):
             if mtag in summary["members"]:
                 stats = summary["members"][mtag]
                 member.update({
+                    "avgMapPosition": stats["map_position"],
+                    "avgOpponentPosition": stats["avg_opponent_position"],
+                    "avgAttackOrder": stats["avg_attack_order"],
                     "attacks": {
                         "stars": stats["stars"],
                         "3_stars": stats["3_stars"],

@@ -229,11 +229,28 @@ async def process_war_stats(war_league_infos, clan_summary_map):
                 stats = summary["members"][mtag]
                 stats["name"] = name
 
+                if "map_position_list" not in stats:
+                    stats["map_position_list"] = []
+                    stats["opponent_position_list"] = []
+                    stats["opponent_th_level_list"] = []
+                    stats["attack_order_list"] = []
+
                 if mtag in avg_pos_map:
                     stats = summary["members"][mtag]
                     stats["map_position"] = avg_pos_map[mtag]["map_position"]
                     stats["avg_opponent_position"] = avg_pos_map[mtag]["avg_opponent_position"]
                     stats["avg_attack_order"] = avg_pos_map[mtag]["avg_attack_order"]
+                    stats["avg_townhall_level"] = avg_pos_map[mtag]["avg_townhall_level"]
+                    stats["avg_opponent_townhall_level"] = avg_pos_map[mtag]["avg_opponent_townhall_level"]
+                    data = avg_pos_map[mtag]
+                    if data["map_position"] is not None:
+                        stats["map_position_list"].append(data["map_position"])
+                    if data["avg_opponent_position"] is not None:
+                        stats["opponent_position_list"].append(data["avg_opponent_position"])
+                    if data["avg_opponent_townhall_level"] is not None:
+                        stats["opponent_th_level_list"].append(data["avg_opponent_townhall_level"])
+                    if data["avg_attack_order"] is not None:
+                        stats["attack_order_list"].append(data["avg_attack_order"])
 
                 attack = member.get("attacks")
                 if attack:
@@ -295,26 +312,46 @@ def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent")
         for member in war[opponent_key]["members"]
     }
 
+    enemy_townhall_map = {
+        member["tag"]: member.get("townhallLevel")
+        for member in war[opponent_key]["members"]
+    }
+
     result = {}
 
     for member in war[clan_key]["members"]:
         tag = member["tag"]
         position = member.get("mapPosition")
+        townhall = member.get("townhallLevel")
         attacks = member.get("attacks", [])
 
         opponent_positions = []
+        opponent_th_levels = []
         attack_orders = []
+
+        if tag == "#PGPU0URYV":
+            print(attacks)
 
         for attack in attacks:
             defender_tag = attack.get("defenderTag")
             if defender_tag in enemy_map:
                 opponent_positions.append(enemy_map[defender_tag])
+            if defender_tag in enemy_townhall_map:
+                opponent_th_levels.append(enemy_townhall_map[defender_tag])
             if "order" in attack:
                 attack_orders.append(attack["order"])
+
+        if tag == "#PGPU0URYV":
+            print(opponent_th_levels)
 
         avg_opponent_position = (
             round(sum(opponent_positions) / len(opponent_positions), 2)
             if opponent_positions else None
+        )
+
+        avg_opponent_townhall_level = (
+            round(sum(opponent_th_levels) / len(opponent_th_levels), 2)
+            if opponent_th_levels else None
         )
 
         avg_attack_order = (
@@ -324,12 +361,13 @@ def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent")
 
         result[tag] = {
             "map_position": position,
+            "avg_townhall_level": townhall,
             "avg_opponent_position": avg_opponent_position,
-            "avg_attack_order": avg_attack_order,
+            "avg_opponent_townhall_level": avg_opponent_townhall_level,
+            "avg_attack_order": avg_attack_order
         }
 
     return result
-
 
 
 async def enrich_league_info(league_info, war_league_infos):
@@ -361,12 +399,16 @@ async def enrich_league_info(league_info, war_league_infos):
             if th_level:
                 townhall_counts[th_level] += 1
 
+            avg = lambda l: round(sum(l) / len(l), 1) if l else None
+
             if mtag in summary["members"]:
                 stats = summary["members"][mtag]
                 member.update({
-                    "avgMapPosition": stats["map_position"],
-                    "avgOpponentPosition": stats["avg_opponent_position"],
-                    "avgAttackOrder": stats["avg_attack_order"],
+                    "avgMapPosition": avg(stats.get("map_position_list", [])),
+                    "avgOpponentPosition": avg(stats.get("opponent_position_list", [])),
+                    "avgAttackOrder": avg(stats.get("attack_order_list", [])),
+                    "avgTownHallLevel": stats.get("avg_townhall_level"),
+                    "avgOpponentTownHallLevel": avg(stats.get("opponent_th_level_list", [])),
                     "attacks": {
                         "stars": stats["stars"],
                         "3_stars": stats["3_stars"],

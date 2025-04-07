@@ -234,6 +234,9 @@ async def process_war_stats(war_league_infos, clan_summary_map):
                     stats["opponent_position_list"] = []
                     stats["opponent_th_level_list"] = []
                     stats["attack_order_list"] = []
+                    stats["avg_attacker_position"] = avg_pos_map[mtag]["avg_attacker_position"]
+                    stats["avg_defense_order"] = avg_pos_map[mtag]["avg_defense_order"]
+                    stats["avg_attacker_townhall_level"] = avg_pos_map[mtag]["avg_attacker_townhall_level"]
 
                 if mtag in avg_pos_map:
                     stats = summary["members"][mtag]
@@ -324,13 +327,15 @@ def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent")
         position = member.get("mapPosition")
         townhall = member.get("townhallLevel")
         attacks = member.get("attacks", [])
+        defense = member.get("bestOpponentAttack")
 
         opponent_positions = []
         opponent_th_levels = []
         attack_orders = []
 
-        if tag == "#PGPU0URYV":
-            print(attacks)
+        defense_positions = []
+        defense_orders = []
+        attacker_th_levels = []
 
         for attack in attacks:
             defender_tag = attack.get("defenderTag")
@@ -341,30 +346,25 @@ def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent")
             if "order" in attack:
                 attack_orders.append(attack["order"])
 
-        if tag == "#PGPU0URYV":
-            print(opponent_th_levels)
-
-        avg_opponent_position = (
-            round(sum(opponent_positions) / len(opponent_positions), 2)
-            if opponent_positions else None
-        )
-
-        avg_opponent_townhall_level = (
-            round(sum(opponent_th_levels) / len(opponent_th_levels), 2)
-            if opponent_th_levels else None
-        )
-
-        avg_attack_order = (
-            round(sum(attack_orders) / len(attack_orders), 2)
-            if attack_orders else None
-        )
+        # Defensive stats
+        if defense:
+            attacker_tag = defense.get("attackerTag")
+            if attacker_tag in enemy_map:
+                defense_positions.append(enemy_map[attacker_tag])
+            if attacker_tag in enemy_townhall_map:
+                attacker_th_levels.append(enemy_townhall_map[attacker_tag])
+            if "order" in defense:
+                defense_orders.append(defense["order"])
 
         result[tag] = {
             "map_position": position,
             "avg_townhall_level": townhall,
-            "avg_opponent_position": avg_opponent_position,
-            "avg_opponent_townhall_level": avg_opponent_townhall_level,
-            "avg_attack_order": avg_attack_order
+            "avg_opponent_position": round(sum(opponent_positions) / len(opponent_positions), 1) if opponent_positions else None,
+            "avg_opponent_townhall_level": round(sum(opponent_th_levels) / len(opponent_th_levels), 1) if opponent_th_levels else None,
+            "avg_attack_order": round(sum(attack_orders) / len(attack_orders), 1) if attack_orders else None,
+            "avg_attacker_position": round(sum(defense_positions) / len(defense_positions), 1) if defense_positions else None,
+            "avg_defense_order": round(sum(defense_orders) / len(defense_orders), 1) if defense_orders else None,
+            "avg_attacker_townhall_level": round(sum(attacker_th_levels) / len(attacker_th_levels), 1) if attacker_th_levels else None,
         }
 
     return result
@@ -409,6 +409,9 @@ async def enrich_league_info(league_info, war_league_infos):
                     "avgAttackOrder": avg(stats.get("attack_order_list", [])),
                     "avgTownHallLevel": stats.get("avg_townhall_level"),
                     "avgOpponentTownHallLevel": avg(stats.get("opponent_th_level_list", [])),
+                    "avgAttackerPosition": stats["avg_attacker_position"],
+                    "avgDefenseOrder": stats["avg_defense_order"],
+                    "avgAttackerTownHallLevel": stats["avg_attacker_townhall_level"],
                     "attacks": {
                         "stars": stats["stars"],
                         "3_stars": stats["3_stars"],

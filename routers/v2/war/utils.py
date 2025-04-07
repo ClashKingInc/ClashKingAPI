@@ -177,6 +177,7 @@ async def init_clan_summary_map(league_info):
             "total_stars": 0,
             "attack_count": 0,
             "missed_attacks": 0,
+            "missed_defenses": 0,
             "total_destruction": 0.0,
             "total_destruction_inflicted": 0.0,
             "wars_played": 0,
@@ -194,6 +195,7 @@ async def init_clan_summary_map(league_info):
                 "total_destruction": 0.0,
                 "attack_count": 0,
                 "missed_attacks": 0,
+                "missed_defenses": 0,
                 "defense_stars_taken": 0,
                 "defense_3_stars": 0,
                 "defense_2_stars": 0,
@@ -292,6 +294,9 @@ async def process_war_stats(war_league_infos, clan_summary_map):
                         stats["defense_1_star"] += 1
                     else:
                         stats["defense_0_star"] += 1
+                else:
+                    stats["missed_defenses"] += 1
+                    summary["missed_defenses"] += 1
 
 
 async def compute_clan_ranking(clan_summary_map):
@@ -429,7 +434,8 @@ async def enrich_league_info(league_info, war_league_infos):
                         "1_star": stats["defense_1_star"],
                         "0_star": stats["defense_0_star"],
                         "total_destruction": round(stats["defense_total_destruction"], 2),
-                        "defense_count": stats["defense_count"]
+                        "defense_count": stats["defense_count"],
+                        "missed_defenses": stats["missed_defenses"]
                     }
                 })
 

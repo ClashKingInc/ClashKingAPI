@@ -1,5 +1,22 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+
 
 class PlayerTagsRequest(BaseModel):
     player_tags: List[str]
+
+class PlayerWarhitsFilter(BaseModel):
+    player_tags: List[str]
+    timestamp_start: int = 0
+    timestamp_end: int = 2527625513
+    limit: int = 50
+    own_th: Optional[int] = None
+    enemy_th: Optional[int] = None
+    type: str = "all"
+    fresh_only: Optional[bool] = None
+    min_stars: Optional[int] = None
+    max_stars: Optional[int] = None
+    min_destruction: Optional[float] = None
+    max_destruction: Optional[float] = None
+    map_position_min: Optional[int] = None
+    map_position_max: Optional[int] = None

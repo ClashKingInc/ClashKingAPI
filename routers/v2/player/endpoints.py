@@ -1,15 +1,17 @@
 import asyncio
 from collections import defaultdict
+import coc
 
 import aiohttp
 from fastapi import HTTPException
 from fastapi import APIRouter, Request, Response
-
-from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings
-from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT
+import pendulum as pend
+from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings, \
+    assemble_full_player_data, fetch_full_player_data, compute_warhit_stats
+from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT, is_raids
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
+from routers.v2.player.models import PlayerTagsRequest, PlayerWarhitsFilter
 
 router = APIRouter(prefix="/v2", tags=["Player"], include_in_schema=True)
 
@@ -97,83 +99,58 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
 
     player_tags = [fix_tag(tag) for tag in body.player_tags]
 
-    # Get Mongo-stored data
+    # Fetch MongoDB player_stats in bulk
     players_info = await mongo.player_stats.find(
-        {'tag': {'$in': player_tags}},
+        {"tag": {"$in": player_tags}},
         {
-            '_id': 0,
-            'tag': 1,
-            'donations': 1,
-            'clan_games': 1,
-            'season_pass': 1,
-            'activity': 1,
-            'last_online': 1,
-            'last_online_time': 1,
-            'attack_wins': 1,
-            'dark_elixir': 1,
-            'gold': 1,
-            'capital_gold': 1,
-            'season_trophies': 1,
-            'last_updated': 1
+            "_id": 0,
+            "tag": 1,
+            "donations": 1,
+            "clan_games": 1,
+            "season_pass": 1,
+            "activity": 1,
+            "last_online": 1,
+            "last_online_time": 1,
+            "attack_wins": 1,
+            "dark_elixir": 1,
+            "gold": 1,
+            "capital_gold": 1,
+            "season_trophies": 1,
+            "last_updated": 1
         }
     ).to_list(length=None)
 
     mongo_data_dict = {player["tag"]: player for player in players_info}
 
-    # Get data from Clash of Clans API
-    async def fetch_player_data(session, tag):
-        url = f"https://proxy.clashk.ing/v1/players/{tag.replace('#', '%23')}"
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
-
-    async with aiohttp.ClientSession() as session:
-        api_responses = await asyncio.gather(
-            *(fetch_player_data(session, tag) for tag in player_tags)
-        )
-
-    # Load legend stats
+    # Load legends data in bulk
     legends_data = await get_legend_stats_common(player_tags)
     tag_to_legends = {entry["tag"]: entry["legends_by_season"] for entry in legends_data}
 
-    # Merge and enrich data
-    combined_results = []
+    # Fetch API, raid & war data per player in parallel
+    async with aiohttp.ClientSession() as session:
+        fetch_tasks = [
+            fetch_full_player_data(session, tag, mongo_data_dict.get(tag, {}))
+            for tag in player_tags
+        ]
+        player_results = await asyncio.gather(*fetch_tasks)
 
-    for tag, api_data in zip(player_tags, api_responses):
-        player_data = mongo_data_dict.get(tag, {})
-
-        if api_data:
-            player_data.update(api_data)
-
-        # Inject legend days (by season)
-        player_data["legends_by_season"] = tag_to_legends.get(tag, {})
-        player_data.pop("legends", None)
-
-        # Inject legend history rankings
-        legend_rankings = await get_legend_rankings_for_tag(tag)
-        player_data["legend_eos_ranking"] = legend_rankings
-
-        # Inject current season rankings
-        legends_current_rankings = await get_current_rankings(tag)
-        player_data["rankings"] = legends_current_rankings
-
-        combined_results.append(player_data)
+    # Assemble enriched player data in parallel
+    combined_results = await asyncio.gather(*[
+        assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, tag_to_legends)
+        for tag, api_data, raid_data, war_data, mongo_data in player_results
+    ])
 
     return {"items": remove_id_fields(combined_results)}
 
 
 @router.get("/player/{player_tag}/full-stats", name="Get full stats for a single player")
 async def get_player_stats(player_tag: str, request: Request):
-    """Retrieve Clash of Clans account details for a single player."""
-
     if not player_tag:
         raise HTTPException(status_code=400, detail="player_tag is required")
 
     fixed_tag = fix_tag(player_tag)
 
-    # Fetch MongoDB data
-    player_mongo = await mongo.player_stats.find_one(
+    mongo_data = await mongo.player_stats.find_one(
         {"tag": fixed_tag},
         {
             '_id': 0,
@@ -193,32 +170,15 @@ async def get_player_stats(player_tag: str, request: Request):
         }
     ) or {}
 
-    # Fetch API data
-    async def fetch_player_data(session, tag):
-        url = f"https://proxy.clashk.ing/v1/players/{tag.replace('#', '%23')}"
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            return None
+    legends_data = await get_legend_stats_common([fixed_tag])
+    tag_to_legends = {entry["tag"]: entry["legends_by_season"] for entry in legends_data}
 
     async with aiohttp.ClientSession() as session:
-        api_data = await fetch_player_data(session, fixed_tag)
+        tag, api_data, raid_data, war_data, mongo_data = await fetch_full_player_data(session, fixed_tag, mongo_data)
 
-    if api_data:
-        player_mongo.update(api_data)
-    else:
-        raise HTTPException(status_code=404, detail="Player not found")
+    player_data = await assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, tag_to_legends)
 
-    # Inject legend stats
-    legends_data = await get_legend_stats_common([fixed_tag])
-    player_mongo["legends_by_season"] = legends_data[0]["legends_by_season"] if legends_data else {}
-    player_mongo.pop("legends", None)
-
-    # Inject end-of-season and current rankings
-    player_mongo["legend_eos_ranking"] = await get_legend_rankings_for_tag(fixed_tag)
-    player_mongo["rankings"] = await get_current_rankings(fixed_tag)
-
-    return remove_id_fields(player_mongo)
+    return remove_id_fields(player_data)
 
 
 @router.post("/players/legend-days", name="Get legend stats for multiple players")
@@ -387,3 +347,135 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
                              for count, result in enumerate(war_star_results, 1)]
 
     return {"items": [{key: value} for key, value in new_data.items()]}
+
+
+@router.post("/players/warhits", name="Bulk war hits overview and detailed stats")
+async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
+    client = coc.Client(raw_attribute=True)
+
+    START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+
+    player_tags = [fix_tag(tag) for tag in filter.player_tags]
+
+    pipeline = [
+        {"$match": {
+            "$and": [
+                {"$or": [
+                    {"data.clan.members.tag": {"$in": player_tags}},
+                    {"data.opponent.members.tag": {"$in": player_tags}}
+                ]},
+                {"data.preparationStartTime": {"$gte": START}},
+                {"data.preparationStartTime": {"$lte": END}}
+            ]
+        }},
+        {"$unset": ["_id"]},
+        {"$project": {"data": "$data"}},
+        {"$sort": {"data.preparationStartTime": -1}}
+    ]
+
+    wars = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+    found_wars = set()
+    player_data = {tag: {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0} for tag in player_tags}
+
+    for war_doc in wars:
+        war_raw = war_doc["data"]
+        war = coc.ClanWar(data=war_raw, client=client)
+        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        if war_id in found_wars:
+            continue
+        if len(found_wars) >= filter.limit:
+            break
+        found_wars.add(war_id)
+
+        if filter.type != "all" and war.type.lower() != filter.type.lower():
+            continue
+
+        for tag in player_tags:
+            war_member = war.get_member(tag)
+            if not war_member:
+                continue
+
+            player_data[tag]["townhall"] = war_member.town_hall
+            player_data[tag]["missedAttacks"] += war.attacks_per_member - len(war_member.attacks)
+            player_data[tag]["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
+
+            for atk in war_member.attacks:
+                atk_data = atk._raw_data
+                atk_data["defender"] = {
+                    "tag": atk.defender.tag,
+                    "townhallLevel": atk.defender.town_hall,
+                    "mapPosition": atk.defender.map_position,
+                }
+                atk_data["attacker"] = {
+                    "townhallLevel": war_member.town_hall
+                }
+
+                if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
+                    continue
+                if filter.fresh_only and not atk.is_fresh_attack:
+                    continue
+                if filter.min_stars and atk.stars < filter.min_stars:
+                    continue
+                if filter.max_stars and atk.stars > filter.max_stars:
+                    continue
+                if filter.min_destruction and atk.destruction < filter.min_destruction:
+                    continue
+                if filter.max_destruction and atk.destruction > filter.max_destruction:
+                    continue
+                if filter.map_position_min and atk.defender.map_position < filter.map_position_min:
+                    continue
+                if filter.map_position_max and atk.defender.map_position > filter.map_position_max:
+                    continue
+
+                player_data[tag]["attacks"].append(atk_data)
+
+            for defn in war_member.defenses:
+                def_data = defn._raw_data
+                def_data["attacker"] = {
+                    "tag": defn.attacker.tag,
+                    "townhallLevel": defn.attacker.town_hall,
+                    "mapPosition": defn.attacker.map_position,
+                }
+                def_data["defender"] = {
+                    "townhallLevel": war_member.town_hall
+                }
+
+                if filter.enemy_th and defn.attacker.town_hall != filter.enemy_th:
+                    continue
+                if filter.fresh_only and not defn.is_fresh_attack:
+                    continue
+                if filter.min_stars and defn.stars < filter.min_stars:
+                    continue
+                if filter.max_stars and defn.stars > filter.max_stars:
+                    continue
+                if filter.min_destruction and defn.destruction < filter.min_destruction:
+                    continue
+                if filter.max_destruction and defn.destruction > filter.max_destruction:
+                    continue
+                if filter.map_position_min and defn.attacker.map_position < filter.map_position_min:
+                    continue
+                if filter.map_position_max and defn.attacker.map_position > filter.map_position_max:
+                    continue
+
+                player_data[tag]["defenses"].append(def_data)
+
+    enriched_data = []
+    for tag, data in player_data.items():
+        enriched_data.append({
+            "tag": tag,
+            "stats": compute_warhit_stats(
+                tag=tag,
+                townhall_level=data["townhall"],
+                attacks=data["attacks"],
+                defenses=data["defenses"],
+                filter=filter,
+                missed_attacks=data["missedAttacks"],
+                missed_defenses=data["missedDefenses"]
+            ),
+            "attacks": data["attacks"],
+            "defenses": data["defenses"]
+        })
+
+    return {"items": enriched_data}

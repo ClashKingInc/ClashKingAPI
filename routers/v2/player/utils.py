@@ -1,7 +1,13 @@
+from collections import defaultdict
+
+import coc
 from fastapi import HTTPException
 
 import pendulum
+
+from routers.v2.player.models import PlayerWarhitsFilter
 from utils.database import MongoClient as mongo
+from utils.time import is_raids
 
 from utils.utils import fix_tag
 
@@ -254,17 +260,6 @@ def count_number_of_attacks_from_list(attacks: list[int]) -> int:
     return count
 
 
-def get_star_distribution(trophies_list: list[int]) -> tuple[dict[int, int], int]:
-    distribution = {0: 0, 1: 0, 2: 0, 3: 0}
-    total_attacks = 0
-    for trophies in trophies_list:
-        stars = trophies_to_stars_stacked(trophies)
-        for star, count in stars.items():
-            distribution[star] += count
-            total_attacks += count
-    return distribution, total_attacks
-
-
 async def process_legend_stats(raw_legends: dict) -> dict:
     """Enrich raw legends days and group them by season."""
     for day, data in raw_legends.items():
@@ -314,3 +309,136 @@ async def get_current_rankings(tag: str) -> dict:
         if fallback:
             ranking_data["global_rank"] = fallback.get("rank")
     return ranking_data
+
+async def fetch_player_api_data(session, tag: str):
+    url = f"https://proxy.clashk.ing/v1/players/{tag.replace('#', '%23')}"
+    async with session.get(url) as response:
+        if response.status == 200:
+            return await response.json()
+    return None
+
+
+async def fetch_raid_data(session, tag: str, player_clan_tag: str):
+    raid_data = {}
+    if player_clan_tag:
+        url = f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1"
+        async with session.get(url) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get("items"):
+                    raid_weekend_entry = coc.RaidLogEntry(data=data["items"][0], client=None, clan_tag=player_clan_tag)
+                    if raid_weekend_entry.end_time.seconds_until >= 0:
+                        raid_member = raid_weekend_entry.get_member(tag=tag)
+                        if raid_member:
+                            raid_data = {
+                                "attacks_done": raid_member.attack_count,
+                                "attack_limit": raid_member.attack_limit + raid_member.bonus_attack_limit,
+                            }
+    return raid_data
+
+
+async def fetch_full_player_data(session, tag: str, mongo_data: dict):
+    api_data = await fetch_player_api_data(session, tag)
+    clan_tag = api_data.get("clan", {}).get("tag") if api_data else None
+    raid_data = await fetch_raid_data(session, tag, clan_tag) if is_raids() else {}
+    war_data = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
+    return tag, api_data, raid_data, war_data, mongo_data
+
+async def assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, legends_data):
+    player_data = mongo_data or {}
+    if api_data:
+        player_data.update(api_data)
+
+    player_data["legends_by_season"] = legends_data.get(tag, {})
+    player_data.pop("legends", None)
+
+    player_data["legend_eos_ranking"] = await get_legend_rankings_for_tag(tag)
+    player_data["rankings"] = await get_current_rankings(tag)
+    player_data["raid_data"] = raid_data
+    player_data["war_data"] = war_data
+
+    return player_data
+
+
+def compute_warhit_stats(
+    tag: str,
+    townhall_level: int,
+    attacks: List[dict],
+    defenses: List[dict],
+    filter: PlayerWarhitsFilter,
+    missed_attacks: int = 0,
+    missed_defenses: int = 0
+):
+    from collections import defaultdict
+
+    def filter_hit(hit, is_attack=True):
+        th_key = "defender" if is_attack else "attacker"
+
+        if filter.min_stars is not None and hit["stars"] < filter.min_stars:
+            return False
+        if filter.max_stars is not None and hit["stars"] > filter.max_stars:
+            return False
+        if filter.min_destruction is not None and hit["destructionPercentage"] < filter.min_destruction:
+            return False
+        if filter.max_destruction is not None and hit["destructionPercentage"] > filter.max_destruction:
+            return False
+        if filter.enemy_th is not None and hit[th_key].get("townhallLevel") != filter.enemy_th:
+            return False
+        if filter.map_position_min is not None and hit[th_key].get("mapPosition") < filter.map_position_min:
+            return False
+        if filter.map_position_max is not None and hit[th_key].get("mapPosition") > filter.map_position_max:
+            return False
+        if filter.own_th is not None and hit["attacker"].get("townhallLevel") != filter.own_th:
+            return False
+        return True
+
+    filtered_attacks = [a for a in attacks if filter_hit(a, is_attack=True)]
+    filtered_defenses = [d for d in defenses if filter_hit(d, is_attack=False)]
+
+    def average(key, lst):
+        return round(sum(hit[key] for hit in lst) / len(lst), 2) if lst else 0.0
+
+    def count_stars(lst):
+        star_count = defaultdict(int)
+        for hit in lst:
+            star_count[hit["stars"]] += 1
+        return {str(k): star_count[k] for k in range(4)}
+
+    def group_by_enemy_th(lst, is_attack=True):
+        th_key = "defender" if is_attack else "attacker"
+        grouped = defaultdict(list)
+        for hit in lst:
+            enemy_th_level = hit[th_key]["townhallLevel"]
+            grouped[enemy_th_level].append(hit)
+
+        result = {}
+        for th, hits in grouped.items():
+            result[str(th)] = {
+                "averageStars": average("stars", hits),
+                "averageDestruction": average("destructionPercentage", hits),
+                "count": len(hits),
+                "starsCount": count_stars(hits),
+            }
+        return result
+
+    return {
+        "tag": tag,
+        "townhallLevel": townhall_level,
+        "totalAttacks": len(filtered_attacks),
+        "totalDefenses": len(filtered_defenses),
+        "missedAttacks": missed_attacks,
+        "missedDefenses": missed_defenses,
+        "averageStars": average("stars", filtered_attacks),
+        "averageDestruction": average("destructionPercentage", filtered_attacks),
+        "averageStarsDef": average("stars", filtered_defenses),
+        "averageDestructionDef": average("destructionPercentage", filtered_defenses),
+        "starsCount": count_stars(filtered_attacks),
+        "starsCountDef": count_stars(filtered_defenses),
+        "byEnemyTownhall": group_by_enemy_th(filtered_attacks, is_attack=True),
+        "byEnemyTownhallDef": group_by_enemy_th(filtered_defenses, is_attack=False),
+        "timeRange": {
+            "start": filter.timestamp_start,
+            "end": filter.timestamp_end,
+        },
+        "warType": filter.type,
+    }

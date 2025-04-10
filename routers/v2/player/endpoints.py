@@ -413,6 +413,10 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 }
 
                 if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
+                    print("Enemy TH filter applied")
+                    continue
+                if filter.same_th and atk.defender.town_hall != war_member.town_hall:
+                    print("Same TH filter applied")
                     continue
                 if filter.fresh_only and not atk.is_fresh_attack:
                     continue
@@ -443,6 +447,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 }
 
                 if filter.enemy_th and defn.attacker.town_hall != filter.enemy_th:
+                    continue
+                if filter.same_th and defn.defender.town_hall != war_member.town_hall:
                     continue
                 if filter.fresh_only and not defn.is_fresh_attack:
                     continue

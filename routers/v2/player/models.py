@@ -12,6 +12,7 @@ class PlayerWarhitsFilter(BaseModel):
     limit: int = 50
     own_th: Optional[int] = None
     enemy_th: Optional[int] = None
+    same_th: bool = False
     type: str = "all"
     fresh_only: Optional[bool] = None
     min_stars: Optional[int] = None

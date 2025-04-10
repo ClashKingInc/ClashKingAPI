@@ -310,6 +310,7 @@ async def get_current_rankings(tag: str) -> dict:
             ranking_data["global_rank"] = fallback.get("rank")
     return ranking_data
 
+
 async def fetch_player_api_data(session, tag: str):
     url = f"https://proxy.clashk.ing/v1/players/{tag.replace('#', '%23')}"
     async with session.get(url) as response:
@@ -344,6 +345,7 @@ async def fetch_full_player_data(session, tag: str, mongo_data: dict):
     war_data = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
     return tag, api_data, raid_data, war_data, mongo_data
 
+
 async def assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, legends_data):
     player_data = mongo_data or {}
     if api_data:
@@ -361,13 +363,14 @@ async def assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_da
 
 
 def compute_warhit_stats(
-    tag: str,
-    townhall_level: int,
-    attacks: List[dict],
-    defenses: List[dict],
-    filter: PlayerWarhitsFilter,
-    missed_attacks: int = 0,
-    missed_defenses: int = 0
+        tag: str,
+        townhall_level: int,
+        attacks: List[dict],
+        defenses: List[dict],
+        filter: PlayerWarhitsFilter,
+        missed_attacks: int = 0,
+        missed_defenses: int = 0,
+        num_wars: int = 0,
 ):
     from collections import defaultdict
 
@@ -424,6 +427,7 @@ def compute_warhit_stats(
     return {
         "tag": tag,
         "townhallLevel": townhall_level,
+        "warsCounts": num_wars,
         "totalAttacks": len(filtered_attacks),
         "totalDefenses": len(filtered_defenses),
         "missedAttacks": missed_attacks,

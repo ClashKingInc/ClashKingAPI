@@ -377,12 +377,14 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
     wars = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
 
     found_wars = set()
-    player_data = {tag: {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0} for tag in player_tags}
+    player_data = {tag: {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0,
+                         "warsCount": 0} for tag in player_tags}
 
     for war_doc in wars:
         war_raw = war_doc["data"]
         war = coc.ClanWar(data=war_raw, client=client)
-        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        war_id = "-".join(
+            sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
         if war_id in found_wars:
             continue
         if len(found_wars) >= filter.limit:
@@ -400,6 +402,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
             player_data[tag]["townhall"] = war_member.town_hall
             player_data[tag]["missedAttacks"] += war.attacks_per_member - len(war_member.attacks)
             player_data[tag]["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
+            player_data[tag]["warsCount"] += 1
 
             for atk in war_member.attacks:
                 atk_data = atk._raw_data
@@ -413,10 +416,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 }
 
                 if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
-                    print("Enemy TH filter applied")
                     continue
                 if filter.same_th and atk.defender.town_hall != war_member.town_hall:
-                    print("Same TH filter applied")
                     continue
                 if filter.fresh_only and not atk.is_fresh_attack:
                     continue
@@ -478,7 +479,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 defenses=data["defenses"],
                 filter=filter,
                 missed_attacks=data["missedAttacks"],
-                missed_defenses=data["missedDefenses"]
+                missed_defenses=data["missedDefenses"],
+                num_wars=data["warsCount"]
             ),
             "attacks": data["attacks"],
             "defenses": data["defenses"]

@@ -459,14 +459,17 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
             for atk in war_member.attacks:
                 atk_data = atk._raw_data
-                atk_data["defender"] = {
-                    "tag": atk.defender.tag,
-                    "townhallLevel": atk.defender.town_hall,
-                    "mapPosition": atk.defender.map_position,
-                }
+                defender_data = atk.defender._raw_data.copy()
+                defender_data.pop("attacks", None)
+                defender_data.pop("bestOpponentAttack", None)
+                atk_data["defender"] = defender_data
                 atk_data["attacker"] = {
-                    "townhallLevel": war_member.town_hall
+                    "tag": war_member.tag,
+                    "townhallLevel": war_member.town_hall,
+                    "name": war_member.name,
+                    "mapPosition": war_member.map_position
                 }
+
                 atk_data["attack_order"] = atk.order
                 atk_data["fresh"] = atk.is_fresh_attack
 
@@ -494,13 +497,20 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
             for defn in war_member.defenses:
                 def_data = defn._raw_data
-                def_data["attacker"] = {
-                    "tag": defn.attacker.tag,
-                    "townhallLevel": defn.attacker.town_hall,
-                    "mapPosition": defn.attacker.map_position,
-                }
+                def_data["attack_order"] = defn.order
+                def_data["fresh"] = defn.is_fresh_attack
+
+                if defn.attacker:
+                    attacker_data = defn.attacker._raw_data.copy()
+                    attacker_data.pop("attacks", None)
+                    attacker_data.pop("bestOpponentAttack", None)
+                    def_data["attacker"] = attacker_data
+
                 def_data["defender"] = {
-                    "townhallLevel": war_member.town_hall
+                    "tag": war_member.tag,
+                    "townhallLevel": war_member.town_hall,
+                    "name": war_member.name,
+                    "mapPosition": war_member.map_position,
                 }
                 def_data["attack_order"] = defn.order
                 def_data["fresh"] = defn.is_fresh_attack

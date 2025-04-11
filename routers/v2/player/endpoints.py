@@ -556,9 +556,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
         computed_stats = {}
         for war_type, data in grouped.items():
-            print(war_type, data)
             computed_stats[war_type] = compute_warhit_stats(
-                townhall_level=player_data["townhall"],
                 attacks=data["attacks"],
                 defenses=data["defenses"],
                 filter=filter,
@@ -569,8 +567,14 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
         return {
             "tag": tag,
+            "townhallLevel": player_data["townhall"],
             "stats": computed_stats,
-            "wars": player_data["wars"]
+            "wars": player_data["wars"],
+            "timeRange": {
+                "start": filter.timestamp_start,
+                "end": filter.timestamp_end,
+            },
+            "warType": filter.type,
         }
 
     results = await asyncio.gather(*[fetch_player_wars(tag) for tag in player_tags])

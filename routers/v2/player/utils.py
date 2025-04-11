@@ -361,7 +361,6 @@ async def assemble_full_player_data(tag, raid_data, war_data, mongo_data, legend
 
 
 def compute_warhit_stats(
-        townhall_level: int,
         attacks: List[dict],
         defenses: List[dict],
         filter: PlayerWarhitsFilter,
@@ -422,10 +421,7 @@ def compute_warhit_stats(
             }
         return result
 
-    print("Number of wars:", num_wars)
-
     return {
-        "townhallLevel": townhall_level,
         "warsCounts": num_wars,
         "totalAttacks": len(filtered_attacks),
         "totalDefenses": len(filtered_defenses),
@@ -435,11 +431,6 @@ def compute_warhit_stats(
         "starsCountDef": count_stars(filtered_defenses),
         "byEnemyTownhall": group_by_enemy_th(filtered_attacks, is_attack=True),
         "byEnemyTownhallDef": group_by_enemy_th(filtered_defenses, is_attack=False),
-        "timeRange": {
-            "start": filter.timestamp_start,
-            "end": filter.timestamp_end,
-        },
-        "warType": filter.type,
     }
 
 

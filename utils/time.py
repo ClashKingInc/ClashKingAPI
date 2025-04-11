@@ -152,7 +152,7 @@ def is_raids():
 
 def is_cwl():
     now = pend.now(tz=pend.UTC)
-    return 1 <= now.day <= 10 and not ((now.day == 1 and now.hour < 8) or (now.day == 11 and now.hour >= 8))
+    return 1 <= now.day <= 10 and not ((now.day == 1 and now.hour < 8) or (now.day == 12 and now.hour >= 8))
 
 
 def is_clan_games():

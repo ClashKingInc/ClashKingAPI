@@ -37,7 +37,7 @@ def get_legend_season_range(date: pendulum.DateTime) -> tuple[pendulum.DateTime,
     return season_start, season_end
 
 
-from typing import Union, List
+from typing import Union, List, Optional
 
 
 async def get_legend_stats_common(player_tags: Union[str, List[str]]) -> Union[dict, List[dict]]:
@@ -338,22 +338,20 @@ async def fetch_raid_data(session, tag: str, player_clan_tag: str):
     return raid_data
 
 
-async def fetch_full_player_data(session, tag: str, mongo_data: dict):
-    api_data = await fetch_player_api_data(session, tag)
-    clan_tag = api_data.get("clan", {}).get("tag") if api_data else None
+async def fetch_full_player_data(session, tag: str, mongo_data: dict, clan_tag: Optional[str]):
     raid_data = await fetch_raid_data(session, tag, clan_tag) if is_raids() else {}
     war_data = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
-    return tag, api_data, raid_data, war_data, mongo_data
+    return tag, raid_data, war_data, mongo_data
 
 
-async def assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, legends_data):
+async def assemble_full_player_data(tag, raid_data, war_data, mongo_data, legends_data):
     player_data = mongo_data or {}
-    if api_data:
-        player_data.update(api_data)
 
+    # Add legends data
     player_data["legends_by_season"] = legends_data.get(tag, {})
     player_data.pop("legends", None)
 
+    # Add additional stats
     player_data["legend_eos_ranking"] = await get_legend_rankings_for_tag(tag)
     player_data["rankings"] = await get_current_rankings(tag)
     player_data["raid_data"] = raid_data

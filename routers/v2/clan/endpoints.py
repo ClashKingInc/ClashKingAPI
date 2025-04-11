@@ -111,7 +111,7 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
     }
 
 
-@router.post("/clans/full-stats", name="Get full stats for a list of clans")
+@router.post("/clans/details", name="Get full stats for a list of clans")
 async def get_clans_stats(request: Request, body: ClanTagsRequest):
     """Retrieve Clash of Clans account details for a list of clans."""
 
@@ -133,7 +133,7 @@ async def get_clans_stats(request: Request, body: ClanTagsRequest):
     return {"items": remove_id_fields(api_responses)}
 
 
-@router.get("/clan/{clan_tag}/full-stats", name="Get full stats for a single clan")
+@router.get("/clan/{clan_tag}/details", name="Get full stats for a single clan")
 async def get_clan_stats(clan_tag: str, request: Request):
     """Retrieve Clash of Clans account details for a single clan."""
 

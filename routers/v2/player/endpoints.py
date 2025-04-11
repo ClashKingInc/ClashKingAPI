@@ -3,11 +3,11 @@ from collections import defaultdict
 import coc
 
 import aiohttp
-from fastapi import HTTPException
+from fastapi import HTTPException, Query
 from fastapi import APIRouter, Request, Response
 import pendulum as pend
 from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings, \
-    assemble_full_player_data, fetch_full_player_data, compute_warhit_stats
+    assemble_full_player_data, fetch_full_player_data, compute_warhit_stats, fetch_player_api_data
 from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT, is_raids
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
@@ -89,8 +89,31 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
 
     return {"items": sorted(new_data, key=lambda x: (x["value"] is not None, x["value"]), reverse=True)}
 
+@router.post("/players", name="Get full stats for a list of players")
+async def get_players_stats(body: PlayerTagsRequest, request: Request):
+    """Quickly retrieve base API player data only for a list of players."""
 
-@router.post("/players/full-stats", name="Get full stats for a list of players")
+    if not body.player_tags:
+        raise HTTPException(status_code=400, detail="player_tags cannot be empty")
+
+    player_tags = [fix_tag(tag) for tag in body.player_tags]
+
+    async with aiohttp.ClientSession() as session:
+        fetch_tasks = [fetch_player_api_data(session, tag) for tag in player_tags]
+        api_results = await asyncio.gather(*fetch_tasks)
+
+    result = []
+    for tag, data in zip(player_tags, api_results):
+        if data:
+            result.append({
+                "tag": tag,
+                **data
+            })
+
+    return {"items": result}
+
+
+@router.post("/players/extended", name="Get full stats for a list of players")
 async def get_players_stats(body: PlayerTagsRequest, request: Request):
     """Retrieve Clash of Clans account details for a list of players."""
 
@@ -129,22 +152,28 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
     # Fetch API, raid & war data per player in parallel
     async with aiohttp.ClientSession() as session:
         fetch_tasks = [
-            fetch_full_player_data(session, tag, mongo_data_dict.get(tag, {}))
+            fetch_full_player_data(
+                session,
+                tag,
+                mongo_data_dict.get(tag, {}),
+                body.clan_tags.get(tag) if body.clan_tags else None
+            )
             for tag in player_tags
         ]
+
         player_results = await asyncio.gather(*fetch_tasks)
 
     # Assemble enriched player data in parallel
     combined_results = await asyncio.gather(*[
-        assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, tag_to_legends)
-        for tag, api_data, raid_data, war_data, mongo_data in player_results
+        assemble_full_player_data(tag, raid_data, war_data, mongo_data, tag_to_legends)
+        for tag, raid_data, war_data, mongo_data in player_results
     ])
 
     return {"items": remove_id_fields(combined_results)}
 
 
-@router.get("/player/{player_tag}/full-stats", name="Get full stats for a single player")
-async def get_player_stats(player_tag: str, request: Request):
+@router.get("/player/{player_tag}/extended", name="Get full stats for a single player")
+async def get_player_stats(player_tag: str, request: Request, clan_tag: str = Query(None)):
     if not player_tag:
         raise HTTPException(status_code=400, detail="player_tag is required")
 
@@ -174,9 +203,9 @@ async def get_player_stats(player_tag: str, request: Request):
     tag_to_legends = {entry["tag"]: entry["legends_by_season"] for entry in legends_data}
 
     async with aiohttp.ClientSession() as session:
-        tag, api_data, raid_data, war_data, mongo_data = await fetch_full_player_data(session, fixed_tag, mongo_data)
+        tag, raid_data, war_data, mongo_data = await fetch_full_player_data(session, fixed_tag, mongo_data, clan_tag)
 
-    player_data = await assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_data, tag_to_legends)
+    player_data = await assemble_full_player_data(tag, raid_data, war_data, mongo_data, tag_to_legends)
 
     return remove_id_fields(player_data)
 

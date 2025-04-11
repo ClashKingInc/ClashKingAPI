@@ -371,6 +371,7 @@ def compute_warhit_stats(
 ):
     from collections import defaultdict
 
+
     def filter_hit(hit, is_attack=True):
         th_key = "defender" if is_attack else "attacker"
 
@@ -421,6 +422,8 @@ def compute_warhit_stats(
             }
         return result
 
+    print("Number of wars:", num_wars)
+
     return {
         "townhallLevel": townhall_level,
         "warsCounts": num_wars,
@@ -428,10 +431,6 @@ def compute_warhit_stats(
         "totalDefenses": len(filtered_defenses),
         "missedAttacks": missed_attacks,
         "missedDefenses": missed_defenses,
-        "averageStars": average("stars", filtered_attacks),
-        "averageDestruction": average("destructionPercentage", filtered_attacks),
-        "averageStarsDef": average("stars", filtered_defenses),
-        "averageDestructionDef": average("destructionPercentage", filtered_defenses),
         "starsCount": count_stars(filtered_attacks),
         "starsCountDef": count_stars(filtered_defenses),
         "byEnemyTownhall": group_by_enemy_th(filtered_attacks, is_attack=True),
@@ -442,3 +441,40 @@ def compute_warhit_stats(
         },
         "warType": filter.type,
     }
+
+
+def group_attacks_by_type(attacks, defenses, wars):
+    grouped = {
+        "all": {"attacks": [], "defenses": [], "missedAttacks": 0, "missedDefenses": 0, "warsCounts": 0},
+        "random": {"attacks": [], "defenses": [], "missedAttacks": 0, "missedDefenses": 0, "warsCounts": 0},
+        "cwl": {"attacks": [], "defenses": [], "missedAttacks": 0, "missedDefenses": 0, "warsCounts": 0},
+        "friendly": {"attacks": [], "defenses": [], "missedAttacks": 0, "missedDefenses": 0, "warsCounts": 0},
+    }
+
+    for war in wars:
+        war_type = war.get("war_data", {}).get("type", "all").lower()
+        missed_attacks = war.get("missedAttacks", 0)
+        missed_defenses = war.get("missedDefenses", 0)
+
+        grouped["all"]["missedAttacks"] += missed_attacks
+        grouped["all"]["missedDefenses"] += missed_defenses
+        grouped["all"]["warsCounts"] += 1
+
+        if war_type in grouped:
+            grouped[war_type]["missedAttacks"] += missed_attacks
+            grouped[war_type]["missedDefenses"] += missed_defenses
+            grouped[war_type]["warsCounts"] += 1
+
+    for atk in attacks:
+        war_type = atk.get("war_type", "all").lower()
+        grouped["all"]["attacks"].append(atk)
+        if war_type in grouped:
+            grouped[war_type]["attacks"].append(atk)
+
+    for dfn in defenses:
+        war_type = dfn.get("war_type", "all").lower()
+        grouped["all"]["defenses"].append(dfn)
+        if war_type in grouped:
+            grouped[war_type]["defenses"].append(dfn)
+
+    return grouped

@@ -7,7 +7,8 @@ from fastapi import HTTPException, Query
 from fastapi import APIRouter, Request, Response
 import pendulum as pend
 from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings, \
-    assemble_full_player_data, fetch_full_player_data, compute_warhit_stats, fetch_player_api_data
+    assemble_full_player_data, fetch_full_player_data, compute_warhit_stats, fetch_player_api_data, \
+    group_attacks_by_type
 from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT, is_raids
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
@@ -88,6 +89,7 @@ async def player_sorted(attribute: str, request: Request, body: PlayerTagsReques
     ]
 
     return {"items": sorted(new_data, key=lambda x: (x["value"] is not None, x["value"]), reverse=True)}
+
 
 @router.post("/players", name="Get full stats for a list of players")
 async def get_players_stats(body: PlayerTagsRequest, request: Request):
@@ -421,7 +423,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
         for war_doc in wars_docs:
             war_raw = war_doc["data"]
             war = coc.ClanWar(data=war_raw, client=client)
-            war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+            war_id = "-".join(
+                sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
             if war_id in found_wars:
                 continue
             found_wars.add(war_id)
@@ -537,19 +540,36 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 player_data["defenses"].append(def_data)
                 war_info["defenses"].append(def_data)
 
+            war_info["missedAttacks"] = war.attacks_per_member - len(war_member.attacks)
+            war_info["missedDefenses"] = 1 if not war_member.best_opponent_attack else 0
             player_data["wars"].append(war_info)
+
+        # Inject war_type dans chaque attaque et défense
+        for war_info in player_data["wars"]:
+            war_type = war_info["war_data"].get("type", "all").lower()
+            for atk in war_info["attacks"]:
+                atk["war_type"] = war_type
+            for dfn in war_info["defenses"]:
+                dfn["war_type"] = war_type
+
+        grouped = group_attacks_by_type(player_data["attacks"], player_data["defenses"], player_data["wars"])
+
+        computed_stats = {}
+        for war_type, data in grouped.items():
+            print(war_type, data)
+            computed_stats[war_type] = compute_warhit_stats(
+                townhall_level=player_data["townhall"],
+                attacks=data["attacks"],
+                defenses=data["defenses"],
+                filter=filter,
+                missed_attacks=data["missedAttacks"],
+                missed_defenses=data["missedDefenses"],
+                num_wars=data["warsCounts"],
+            )
 
         return {
             "tag": tag,
-            "stats": compute_warhit_stats(
-                townhall_level=player_data["townhall"],
-                attacks=player_data["attacks"],
-                defenses=player_data["defenses"],
-                filter=filter,
-                missed_attacks=player_data["missedAttacks"],
-                missed_defenses=player_data["missedDefenses"],
-                num_wars=player_data["warsCount"]
-            ),
+            "stats": computed_stats,
             "wars": player_data["wars"]
         }
 

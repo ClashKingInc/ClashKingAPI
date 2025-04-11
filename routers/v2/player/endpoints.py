@@ -358,51 +358,48 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
     player_tags = [fix_tag(tag) for tag in filter.player_tags]
 
-    pipeline = [
-        {"$match": {
-            "$and": [
-                {"$or": [
-                    {"data.clan.members.tag": {"$in": player_tags}},
-                    {"data.opponent.members.tag": {"$in": player_tags}}
-                ]},
-                {"data.preparationStartTime": {"$gte": START}},
-                {"data.preparationStartTime": {"$lte": END}}
-            ]
-        }},
-        {"$unset": ["_id"]},
-        {"$project": {"data": "$data"}},
-        {"$sort": {"data.preparationStartTime": -1}}
-    ]
+    async def fetch_player_wars(tag: str):
+        pipeline = [
+            {"$match": {
+                "$and": [
+                    {"$or": [
+                        {"data.clan.members.tag": tag},
+                        {"data.opponent.members.tag": tag}
+                    ]},
+                    {"data.preparationStartTime": {"$gte": START}},
+                    {"data.preparationStartTime": {"$lte": END}}
+                ]
+            }},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
+            {"$sort": {"data.preparationStartTime": -1}},
+            {"$limit": filter.limit},
+        ]
 
-    wars = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
 
-    found_wars = set()
-    player_data = {tag: {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0,
-                         "warsCount": 0} for tag in player_tags}
+        player_data = {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0, "warsCount": 0}
+        found_wars = set()
 
-    for war_doc in wars:
-        war_raw = war_doc["data"]
-        war = coc.ClanWar(data=war_raw, client=client)
-        war_id = "-".join(
-            sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
-        if war_id in found_wars:
-            continue
-        if len(found_wars) >= filter.limit:
-            break
-        found_wars.add(war_id)
+        for war_doc in wars_docs:
+            war_raw = war_doc["data"]
+            war = coc.ClanWar(data=war_raw, client=client)
+            war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+            if war_id in found_wars:
+                continue
+            found_wars.add(war_id)
 
-        if filter.type != "all" and war.type.lower() != filter.type.lower():
-            continue
+            if filter.type != "all" and war.type.lower() != filter.type.lower():
+                continue
 
-        for tag in player_tags:
             war_member = war.get_member(tag)
             if not war_member:
                 continue
 
-            player_data[tag]["townhall"] = war_member.town_hall
-            player_data[tag]["missedAttacks"] += war.attacks_per_member - len(war_member.attacks)
-            player_data[tag]["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
-            player_data[tag]["warsCount"] += 1
+            player_data["townhall"] = war_member.town_hall
+            player_data["missedAttacks"] += war.attacks_per_member - len(war_member.attacks)
+            player_data["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
+            player_data["warsCount"] += 1
 
             for atk in war_member.attacks:
                 atk_data = atk._raw_data
@@ -434,7 +431,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 if filter.map_position_max and atk.defender.map_position > filter.map_position_max:
                     continue
 
-                player_data[tag]["attacks"].append(atk_data)
+                player_data["attacks"].append(atk_data)
 
             for defn in war_member.defenses:
                 def_data = defn._raw_data
@@ -466,24 +463,22 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 if filter.map_position_max and defn.attacker.map_position > filter.map_position_max:
                     continue
 
-                player_data[tag]["defenses"].append(def_data)
+                player_data["defenses"].append(def_data)
 
-    enriched_data = []
-    for tag, data in player_data.items():
-        enriched_data.append({
+        return {
             "tag": tag,
             "stats": compute_warhit_stats(
-                tag=tag,
-                townhall_level=data["townhall"],
-                attacks=data["attacks"],
-                defenses=data["defenses"],
+                townhall_level=player_data["townhall"],
+                attacks=player_data["attacks"],
+                defenses=player_data["defenses"],
                 filter=filter,
-                missed_attacks=data["missedAttacks"],
-                missed_defenses=data["missedDefenses"],
-                num_wars=data["warsCount"]
+                missed_attacks=player_data["missedAttacks"],
+                missed_defenses=player_data["missedDefenses"],
+                num_wars=player_data["warsCount"]
             ),
-            "attacks": data["attacks"],
-            "defenses": data["defenses"]
-        })
+            "attacks": player_data["attacks"],
+            "defenses": player_data["defenses"]
+        }
 
-    return {"items": enriched_data}
+    results = await asyncio.gather(*[fetch_player_wars(tag) for tag in player_tags])
+    return {"items": results}

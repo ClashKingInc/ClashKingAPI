@@ -363,7 +363,6 @@ async def assemble_full_player_data(tag, api_data, raid_data, war_data, mongo_da
 
 
 def compute_warhit_stats(
-        tag: str,
         townhall_level: int,
         attacks: List[dict],
         defenses: List[dict],
@@ -425,7 +424,6 @@ def compute_warhit_stats(
         return result
 
     return {
-        "tag": tag,
         "townhallLevel": townhall_level,
         "warsCounts": num_wars,
         "totalAttacks": len(filtered_attacks),

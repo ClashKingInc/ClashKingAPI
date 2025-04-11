@@ -9,7 +9,7 @@ class PlayerWarhitsFilter(BaseModel):
     player_tags: List[str]
     timestamp_start: int = 0
     timestamp_end: int = 2527625513
-    limit: int = 50
+    limit: int = None
     own_th: Optional[int] = None
     enemy_th: Optional[int] = None
     same_th: bool = False

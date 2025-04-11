@@ -407,7 +407,15 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
         wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
 
-        player_data = {"attacks": [], "defenses": [], "townhall": None, "missedAttacks": 0, "missedDefenses": 0, "warsCount": 0}
+        player_data = {
+            "attacks": [],
+            "defenses": [],
+            "townhall": None,
+            "missedAttacks": 0,
+            "missedDefenses": 0,
+            "warsCount": 0,
+            "wars": []
+        }
         found_wars = set()
 
         for war_doc in wars_docs:
@@ -430,6 +438,25 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
             player_data["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
             player_data["warsCount"] += 1
 
+            # Base war and member data
+            war_data = war._raw_data.copy()
+            for field in ["status_code", "_response_retry", "timestamp"]:
+                war_data.pop(field, None)
+            war_data["type"] = war.type
+            war_data["clan"].pop("members", None)
+            war_data["opponent"].pop("members", None)
+
+            member_raw_data = war_member._raw_data.copy()
+            member_raw_data.pop("attacks", None)
+            member_raw_data.pop("bestOpponentAttack", None)
+
+            war_info = {
+                "war_data": war_data,
+                "member_data": member_raw_data,
+                "attacks": [],
+                "defenses": []
+            }
+
             for atk in war_member.attacks:
                 atk_data = atk._raw_data
                 atk_data["defender"] = {
@@ -440,6 +467,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 atk_data["attacker"] = {
                     "townhallLevel": war_member.town_hall
                 }
+                atk_data["attack_order"] = atk.order
+                atk_data["fresh"] = atk.is_fresh_attack
 
                 if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
                     continue
@@ -461,6 +490,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                     continue
 
                 player_data["attacks"].append(atk_data)
+                war_info["attacks"].append(atk_data)
 
             for defn in war_member.defenses:
                 def_data = defn._raw_data
@@ -472,6 +502,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 def_data["defender"] = {
                     "townhallLevel": war_member.town_hall
                 }
+                def_data["attack_order"] = defn.order
+                def_data["fresh"] = defn.is_fresh_attack
 
                 if filter.enemy_th and defn.attacker.town_hall != filter.enemy_th:
                     continue
@@ -493,6 +525,9 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                     continue
 
                 player_data["defenses"].append(def_data)
+                war_info["defenses"].append(def_data)
+
+            player_data["wars"].append(war_info)
 
         return {
             "tag": tag,
@@ -505,8 +540,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                 missed_defenses=player_data["missedDefenses"],
                 num_wars=player_data["warsCount"]
             ),
-            "attacks": player_data["attacks"],
-            "defenses": player_data["defenses"]
+            "wars": player_data["wars"]
         }
 
     results = await asyncio.gather(*[fetch_player_wars(tag) for tag in player_tags])

@@ -1,10 +1,12 @@
 import asyncio
+import uuid
 
 import aiohttp
 from fastapi.responses import JSONResponse
 import pendulum as pend
 from fastapi import HTTPException
 from fastapi import APIRouter, Request
+from openpyxl.cell import Cell
 
 from routers.v2.clan.models import ClanTagsRequest
 from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_info, ranking_create, \
@@ -12,6 +14,14 @@ from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_inf
 from utils.time import is_cwl
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
+
+from fastapi.responses import FileResponse
+from openpyxl import Workbook
+from tempfile import NamedTemporaryFile
+import datetime
+from openpyxl.styles import Font, Alignment
+from openpyxl.worksheet.dimensions import ColumnDimension
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 router = APIRouter(prefix="/v2", tags=["War"], include_in_schema=True)
 
@@ -257,7 +267,6 @@ async def cwl_league_thresholds(request: Request):
     name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
 )
 async def get_clan_war_summary(clan_tag: str):
-
     async with aiohttp.ClientSession() as session:
         war_info = await fetch_current_war_info_bypass(clan_tag, session)
         league_info = None
@@ -311,3 +320,240 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
 
         results = await asyncio.gather(*(process_clan(tag) for tag in body.clan_tags))
         return JSONResponse(content={"items": results})
+
+
+@router.get("/war/cwl-summary/export", name="Export CWL summary and members stats to Excel")
+async def export_cwl_summary_to_excel(tag: str):
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    def format_table(sheet, start_row, end_row, table_name_hint):
+        # Generate a unique table name from the hint
+        table_name = f"{table_name_hint}_{uuid.uuid4().hex[:8]}"  # max 31 chars
+
+        # Bold + center header
+        for cell in sheet[start_row]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center")
+
+        # Center all values
+        for row in sheet.iter_rows(min_row=start_row + 1, max_row=end_row):
+            for cell in row:
+                cell.alignment = Alignment(horizontal="center")
+
+        # Adjust width
+        for column_cells in sheet.columns:
+            first_real_cell = next((cell for cell in column_cells if isinstance(cell, Cell)), None)
+            if not first_real_cell:
+                continue
+            length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
+            col_letter = first_real_cell.column_letter
+            sheet.column_dimensions[col_letter].width = length + 2
+
+        # Add table (with filters)
+        last_col_letter = sheet[end_row][len(sheet[end_row]) - 1].column_letter
+        table_range = f"A{start_row}:{last_col_letter}{end_row}"
+        table = Table(displayName=table_name, ref=table_range)
+        style = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
+        )
+        table.tableStyleInfo = style
+        sheet.add_table(table)
+
+    # Fetch league_info from the existing war-summary endpoint
+    async with aiohttp.ClientSession() as session:
+        try:
+            response = await session.get(f"http://localhost:8000/v2/war/{tag}/war-summary")
+            response.raise_for_status()
+            data = await response.json()
+            league_info = data.get("league_info")
+        except aiohttp.ClientError as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching war summary: {str(e)}")
+
+    if not league_info:
+        raise HTTPException(status_code=404, detail="No league info available")
+
+    wb = Workbook()
+    ws_clan = wb.active
+    ws_clan.title = "Clan Summary"
+    clan_name = ""
+
+    # Sort clans by rank
+    clans = sorted(league_info.get("clans", []), key=lambda c: c.get("rank", 0))
+
+    # Add header row for clans overview
+    ws_clan.append([
+        "Rank",  # Rank in CWL
+        "Name",  # Clan name
+        "Tag",  # Clan tag
+        "Level",  # Clan level
+        "Wars Played",  # Number of wars played
+        "Total Stars",  # Total stars
+        "Total Destruction %",  # Total destruction % dealt
+        "Destruction Taken %",  # Total destruction % received
+        "Attack Count",  # Number of attacks performed
+        "Missed Attacks"  # Number of missed attacks
+    ])
+    start_row = ws_clan.max_row
+
+    for clan in clans:
+        ws_clan.append([
+            clan.get("rank"),
+            clan.get("name"),
+            clan.get("tag"),
+            clan.get("clanLevel"),
+            clan.get("wars_played"),
+            clan.get("total_stars"),
+            clan.get("total_destruction"),
+            clan.get("total_destruction_inflicted"),
+            clan.get("attack_count"),
+            clan.get("missed_attacks"),
+        ])
+
+    end_row = ws_clan.max_row
+
+    format_table(ws_clan, start_row, end_row, "ClanSummary")
+
+    # Find our clan and create a separate sheet for its members
+    tag = tag.replace("!", "#")
+
+    for clan in clans:
+        sheet = wb.create_sheet(title=clan.get("name", "Clan")[:30])
+
+        row = sheet.max_row
+        sheet.merge_cells(f"A{row}:P{row}")
+        cell = sheet.cell(row=row, column=1)
+        cell.value = "⚔️ Attacks"
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        headers_attack = [
+            "Name", "Tag", "TH", "War Participated", "Attacks Done", "Missed",
+            "Stars", "Avg Stars", "3 Stars",
+            "2 Stars", "1 Star", "0 Star", "3 Stars %", "0-1 Stars %",
+            "Total Destruction", "Avg Destruction", "Avg Map Position", "Avg Opponent Map Position",
+            "Avg Order", "Avg Opponent TH Level", "Lower TH", "Upper TH"
+        ]
+
+        sheet.append(headers_attack)
+        attack_start_row = sheet.max_row
+
+        for member in clan.get("members", []):
+            if member.get("avgMapPosition"):
+                attacks = member.get("attacks", {}) or {}
+                war_participated = attacks.get("missed_attacks", 0) + attacks.get("attack_count", 0)
+                attack_count = attacks.get("attack_count", 0)
+                stars_total = attacks.get("stars", 0)
+                destruction_total = attacks.get("total_destruction", 0)
+
+                three_stars = sum((attacks.get("3_stars") or {}).values())
+                two_stars = sum((attacks.get("2_stars") or {}).values())
+                one_star = sum((attacks.get("1_star") or {}).values())
+                zero_star = sum((attacks.get("0_star") or {}).values())
+
+                sheet.append([
+                    member.get("name"),
+                    member.get("tag"),
+                    member.get("townHallLevel"),
+                    war_participated,
+                    attack_count,
+                    attacks.get("missed_attacks", 0),
+                    stars_total,
+                    round(stars_total / attack_count if attack_count > 0 else 0, 2),
+                    three_stars,
+                    two_stars,
+                    one_star,
+                    zero_star,
+                    round((three_stars / attack_count) * 100 if attack_count > 0 else 0, 2),
+                    round((zero_star + one_star) * 100 / attack_count if attack_count > 0 else 0, 2),
+                    destruction_total,
+                    round(destruction_total / attack_count if attack_count > 0 else 0, 2),
+                    member.get("avgMapPosition"),
+                    member.get("avgOpponentPosition"),
+                    member.get("avgAttackOrder"),
+                    member.get("avgOpponentTownHallLevel"),
+                    member.get("attackLowerTHLevel"),
+                    member.get("attackUpperTHLevel"),
+                ])
+
+        attack_end_row = sheet.max_row
+        format_table(sheet, attack_start_row, attack_end_row, "AttacksTable")
+
+        sheet.append([])  # Empty row
+        sheet.append([])  # Empty row
+        # Merge cells A{row} to Q{row} and write "🛡️ Defenses"
+        row = sheet.max_row + 2
+        sheet.merge_cells(f"A{row}:P{row}")
+        cell = sheet.cell(row=row, column=1)
+        cell.value = "🛡️ Defenses"
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        headers_defense = [
+            "Name", "Tag", "TH", "War Participated", "Defenses Received", "Missed",
+            "Stars Taken", "Avg Stars", "3 Stars",
+            "2 Stars", "1 Star", "0 Star", "3 Stars %", "0-1 Stars %",
+            "Total Destruction", "Avg Destruction", "Avg Attacker Map Position", "Avg Map Position",
+            "Avg Opponent Order",
+            "Avg Opponent TH Level", "Lower TH", "Upper TH"
+        ]
+        sheet.append(headers_defense)
+        defense_start_row = sheet.max_row
+
+        for member in clan.get("members", []):
+            if member.get("avgMapPosition"):
+                attacks = member.get("attacks", {}) or {}
+                war_participated = attacks.get("missed_attacks", 0) + attacks.get("attack_count", 0)
+                defenses = member.get("defense", {}) or {}
+                defense_count = defenses.get("defense_count", 0)
+                stars_total = defenses.get("stars", 0)
+                destruction_total = defenses.get("total_destruction", 0)
+                missed_defenses = defenses.get("missed_defenses", 0)
+
+                three_stars = sum((defenses.get("3_stars") or {}).values())
+                two_stars = sum((defenses.get("2_stars") or {}).values())
+                one_star = sum((defenses.get("1_star") or {}).values())
+                zero_star = sum((defenses.get("0_star") or {}).values())
+
+                sheet.append([
+                    member.get("name"),
+                    member.get("tag"),
+                    member.get("townHallLevel"),
+                    war_participated,
+                    defense_count,
+                    missed_defenses,
+                    stars_total,
+                    round(stars_total / defense_count * 100 if defense_count > 0 else 0, 2),
+                    three_stars,
+                    two_stars,
+                    one_star,
+                    zero_star,
+                    round((three_stars / defense_count) * 100 if defense_count > 0 else 0, 2),
+                    round(((zero_star + one_star) * 100 / defense_count) if defense_count > 0 else 0, 2),
+                    destruction_total,
+                    round(destruction_total / defense_count if defense_count > 0 else 0, 2),
+                    member.get("avgOpponentPosition"),
+                    member.get("avgMapPosition"),
+                    member.get("avgDefenseOrder"),
+                    member.get("avgAttackerTownHallLevel"),
+                    member.get("defenseLowerTHLevel"),
+                    member.get("defenseUpperTHLevel"),
+                ])
+
+        defense_end_row = sheet.max_row
+        format_table(sheet, defense_start_row, defense_end_row, "DefensesTable")
+
+    # Save the Excel file to a temporary location
+    tmp = NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.seek(0)
+
+    clan_name = next((c for c in clans if c.get("tag") == tag), None).get("name")
+    season = league_info.get("season")
+    filename = f"cwl_summary_{clan_name}_{season}.xlsx"
+    return FileResponse(
+        path=tmp.name,
+        filename=filename,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )

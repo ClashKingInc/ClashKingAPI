@@ -1,4 +1,6 @@
 import asyncio
+import os
+import tempfile
 import uuid
 
 import aiohttp
@@ -18,10 +20,9 @@ from utils.database import MongoClient as mongo
 from fastapi.responses import FileResponse
 from openpyxl import Workbook
 from tempfile import NamedTemporaryFile
-import datetime
-from openpyxl.styles import Font, Alignment
-from openpyxl.worksheet.dimensions import ColumnDimension
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.drawing.image import Image as OpenpyxlImage
 
 router = APIRouter(prefix="/v2", tags=["War"], include_in_schema=True)
 
@@ -279,7 +280,7 @@ async def get_clan_war_summary(clan_tag: str):
                     war_tags = round_entry.get("warTags", [])
                     war_league_infos.extend(await fetch_war_league_infos(war_tags, session))
 
-                league_info = await enrich_league_info(league_info, war_league_infos)
+                league_info = await enrich_league_info(league_info, war_league_infos, session)
 
         return JSONResponse(content={
             "isInWar": war_info["state"] == "war",
@@ -307,7 +308,7 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
                 if league_info and "rounds" in league_info:
                     war_tags = [tag for r in league_info["rounds"] for tag in r.get("warTags", [])]
                     war_league_infos = await fetch_war_league_infos(war_tags, session)
-                    league_info = await enrich_league_info(league_info, war_league_infos)
+                    league_info = await enrich_league_info(league_info, war_league_infos, session)
 
             return {
                 "clan_tag": clan_tag,
@@ -322,25 +323,33 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
         return JSONResponse(content={"items": results})
 
 
+
 @router.get("/war/cwl-summary/export", name="Export CWL summary and members stats to Excel")
 async def export_cwl_summary_to_excel(tag: str):
-    from openpyxl.worksheet.table import Table, TableStyleInfo
 
     def format_table(sheet, start_row, end_row, table_name_hint):
-        # Generate a unique table name from the hint
-        table_name = f"{table_name_hint}_{uuid.uuid4().hex[:8]}"  # max 31 chars
+        table_name = f"{table_name_hint}_{uuid.uuid4().hex[:8]}"[:31]
 
-        # Bold + center header
+        thin_border = Border(
+            left=Side(style='thin', color="000000"),
+            right=Side(style='thin', color="000000"),
+            top=Side(style='thin', color="000000"),
+            bottom=Side(style='thin', color="000000")
+        )
+
         for cell in sheet[start_row]:
-            cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center")
+            cell.fill = clashking_theme["header_fill_red"]
+            cell.font = clashking_theme["header_font_white"]
+            cell.border = thin_border
 
-        # Center all values
         for row in sheet.iter_rows(min_row=start_row + 1, max_row=end_row):
             for cell in row:
                 cell.alignment = Alignment(horizontal="center")
+                cell.fill = clashking_theme["data_fill_white"]
+                cell.border = thin_border
 
-        # Adjust width
+
         for column_cells in sheet.columns:
             first_real_cell = next((cell for cell in column_cells if isinstance(cell, Cell)), None)
             if not first_real_cell:
@@ -349,7 +358,6 @@ async def export_cwl_summary_to_excel(tag: str):
             col_letter = first_real_cell.column_letter
             sheet.column_dimensions[col_letter].width = length + 2
 
-        # Add table (with filters)
         last_col_letter = sheet[end_row][len(sheet[end_row]) - 1].column_letter
         table_range = f"A{start_row}:{last_col_letter}{end_row}"
         table = Table(displayName=table_name, ref=table_range)
@@ -363,7 +371,34 @@ async def export_cwl_summary_to_excel(tag: str):
         table.tableStyleInfo = style
         sheet.add_table(table)
 
-    # Fetch league_info from the existing war-summary endpoint
+    async def insert_logo_from_cdn(sheet, image_url: str, anchor_cell="A1", height=80):
+        # Download the image to a temporary file
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Failed to download logo from CDN: {resp.status}")
+                image_data = await resp.read()
+
+        # Write image to a temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_img:
+            tmp_img.write(image_data)
+            tmp_img_path = tmp_img.name
+
+        # Insert into Excel
+        logo = OpenpyxlImage(tmp_img_path)
+        logo.height = height
+        logo.width = int(height * 3)
+        sheet.add_image(logo, anchor_cell)
+
+    clashking_theme = {
+        "header_fill_red": PatternFill(start_color="D00000", end_color="D00000", fill_type="solid"),
+        "header_fill_black": PatternFill(start_color="000000", end_color="000000", fill_type="solid"),
+        "header_font_white": Font(color="FFFFFF", bold=True),
+        "data_font_black": Font(color="000000"),
+        "title_fill": PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid"),
+        "data_fill_white": PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"),
+    }
+
     async with aiohttp.ClientSession() as session:
         try:
             response = await session.get(f"http://localhost:8000/v2/war/{tag}/war-summary")
@@ -378,24 +413,38 @@ async def export_cwl_summary_to_excel(tag: str):
 
     wb = Workbook()
     ws_clan = wb.active
-    ws_clan.title = "Clan Summary"
-    clan_name = ""
+    ws_clan.title = "Summary"
 
-    # Sort clans by rank
     clans = sorted(league_info.get("clans", []), key=lambda c: c.get("rank", 0))
 
-    # Add header row for clans overview
+
+    await insert_logo_from_cdn(
+        ws_clan,
+        image_url="https://assets.clashk.ing/logos/crown-text-white-bg/BqlEp974170917vB1qK0zunfANJCGi0W031dTksEq7KQ9LoXWMFk0u77unHJa.png",
+        anchor_cell="F1",
+        height=50
+    )
+
+    row = ws_clan.max_row + 3
+    ws_clan.merge_cells(f"A{row}:J{row}")
+    cell = ws_clan.cell(row=row, column=1)
+    cell.value = f"[{league_info.get('season', '')}] 🏆 {league_info.get('war_league', '')}"
+    cell.alignment = Alignment(horizontal="center")
+    cell.fill = clashking_theme["title_fill"]
+    cell.font = Font(bold=True, size=14)
+
+    row = ws_clan.max_row + 1
+    ws_clan.merge_cells(f"A{row}:J{row}")
+    cell = ws_clan.cell(row=row, column=1)
+    cell.value = "CWL Clan Rankings"
+    cell.alignment = Alignment(horizontal="center")
+    cell.fill = clashking_theme["header_fill_black"]
+    cell.font = clashking_theme["header_font_white"]
+
     ws_clan.append([
-        "Rank",  # Rank in CWL
-        "Name",  # Clan name
-        "Tag",  # Clan tag
-        "Level",  # Clan level
-        "Wars Played",  # Number of wars played
-        "Total Stars",  # Total stars
-        "Total Destruction %",  # Total destruction % dealt
-        "Destruction Taken %",  # Total destruction % received
-        "Attack Count",  # Number of attacks performed
-        "Missed Attacks"  # Number of missed attacks
+        "Rank", "Name", "Tag", "Level", "Wars Played",
+        "Total Stars", "Total Destruction %", "Destruction Taken %",
+        "Attack Count", "Missed Attacks"
     ])
     start_row = ws_clan.max_row
 
@@ -412,23 +461,27 @@ async def export_cwl_summary_to_excel(tag: str):
             clan.get("attack_count"),
             clan.get("missed_attacks"),
         ])
-
     end_row = ws_clan.max_row
-
     format_table(ws_clan, start_row, end_row, "ClanSummary")
 
-    # Find our clan and create a separate sheet for its members
     tag = tag.replace("!", "#")
-
     for clan in clans:
         sheet = wb.create_sheet(title=clan.get("name", "Clan")[:30])
+        await insert_logo_from_cdn(
+            sheet,
+            image_url="https://assets.clashk.ing/logos/crown-text-white-bg/BqlEp974170917vB1qK0zunfANJCGi0W031dTksEq7KQ9LoXWMFk0u77unHJa.png",
+            anchor_cell="N1",
+            height=50
+        )
 
-        row = sheet.max_row
-        sheet.merge_cells(f"A{row}:P{row}")
+        row = sheet.max_row + 3
+        sheet.merge_cells(f"A{row}:V{row}")
         cell = sheet.cell(row=row, column=1)
         cell.value = "⚔️ Attacks"
-        cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center")
+        cell.fill = clashking_theme["header_fill_black"]
+        cell.font = clashking_theme["header_font_white"]
+
         headers_attack = [
             "Name", "Tag", "TH", "War Participated", "Attacks Done", "Missed",
             "Stars", "Avg Stars", "3 Stars",
@@ -436,40 +489,33 @@ async def export_cwl_summary_to_excel(tag: str):
             "Total Destruction", "Avg Destruction", "Avg Map Position", "Avg Opponent Map Position",
             "Avg Order", "Avg Opponent TH Level", "Lower TH", "Upper TH"
         ]
-
         sheet.append(headers_attack)
         attack_start_row = sheet.max_row
 
         for member in clan.get("members", []):
             if member.get("avgMapPosition"):
-                attacks = member.get("attacks", {}) or {}
-                war_participated = attacks.get("missed_attacks", 0) + attacks.get("attack_count", 0)
-                attack_count = attacks.get("attack_count", 0)
-                stars_total = attacks.get("stars", 0)
-                destruction_total = attacks.get("total_destruction", 0)
-
-                three_stars = sum((attacks.get("3_stars") or {}).values())
-                two_stars = sum((attacks.get("2_stars") or {}).values())
-                one_star = sum((attacks.get("1_star") or {}).values())
-                zero_star = sum((attacks.get("0_star") or {}).values())
+                a = member.get("attacks", {}) or {}
+                w = a.get("missed_attacks", 0) + a.get("attack_count", 0)
+                s = a.get("stars", 0)
+                d = a.get("total_destruction", 0)
 
                 sheet.append([
                     member.get("name"),
                     member.get("tag"),
                     member.get("townHallLevel"),
-                    war_participated,
-                    attack_count,
-                    attacks.get("missed_attacks", 0),
-                    stars_total,
-                    round(stars_total / attack_count if attack_count > 0 else 0, 2),
-                    three_stars,
-                    two_stars,
-                    one_star,
-                    zero_star,
-                    round((three_stars / attack_count) * 100 if attack_count > 0 else 0, 2),
-                    round((zero_star + one_star) * 100 / attack_count if attack_count > 0 else 0, 2),
-                    destruction_total,
-                    round(destruction_total / attack_count if attack_count > 0 else 0, 2),
+                    w,
+                    a.get("attack_count", 0),
+                    a.get("missed_attacks", 0),
+                    s,
+                    round(s / w if w > 0 else 0, 2),
+                    sum((a.get("3_stars") or {}).values()),
+                    sum((a.get("2_stars") or {}).values()),
+                    sum((a.get("1_star") or {}).values()),
+                    sum((a.get("0_star") or {}).values()),
+                    round((sum((a.get("3_stars") or {}).values()) / w) * 100 if w > 0 else 0, 2),
+                    round(((sum((a.get("0_star") or {}).values()) + sum((a.get("1_star") or {}).values())) * 100 / w) if w > 0 else 0, 2),
+                    d,
+                    round(d / w if w > 0 else 0, 2),
                     member.get("avgMapPosition"),
                     member.get("avgOpponentPosition"),
                     member.get("avgAttackOrder"),
@@ -481,15 +527,19 @@ async def export_cwl_summary_to_excel(tag: str):
         attack_end_row = sheet.max_row
         format_table(sheet, attack_start_row, attack_end_row, "AttacksTable")
 
+
         sheet.append([])  # Empty row
         sheet.append([])  # Empty row
-        # Merge cells A{row} to Q{row} and write "🛡️ Defenses"
+
+
         row = sheet.max_row + 2
-        sheet.merge_cells(f"A{row}:P{row}")
+        sheet.merge_cells(f"A{row}:V{row}")
         cell = sheet.cell(row=row, column=1)
         cell.value = "🛡️ Defenses"
-        cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center")
+        cell.fill = clashking_theme["header_fill_black"]
+        cell.font = clashking_theme["header_font_white"]
+
         headers_defense = [
             "Name", "Tag", "TH", "War Participated", "Defenses Received", "Missed",
             "Stars Taken", "Avg Stars", "3 Stars",
@@ -524,15 +574,15 @@ async def export_cwl_summary_to_excel(tag: str):
                     defense_count,
                     missed_defenses,
                     stars_total,
-                    round(stars_total / defense_count * 100 if defense_count > 0 else 0, 2),
+                    round(stars_total / war_participated * 100 if defense_count > 0 else 0, 2),
                     three_stars,
                     two_stars,
                     one_star,
                     zero_star,
-                    round((three_stars / defense_count) * 100 if defense_count > 0 else 0, 2),
-                    round(((zero_star + one_star) * 100 / defense_count) if defense_count > 0 else 0, 2),
+                    round((three_stars / war_participated) * 100 if war_participated > 0 else 0, 2),
+                    round(((zero_star + one_star) * 100 / war_participated) if war_participated > 0 else 0, 2),
                     destruction_total,
-                    round(destruction_total / defense_count if defense_count > 0 else 0, 2),
+                    round(destruction_total / war_participated if war_participated > 0 else 0, 2),
                     member.get("avgOpponentPosition"),
                     member.get("avgMapPosition"),
                     member.get("avgDefenseOrder"),
@@ -544,12 +594,12 @@ async def export_cwl_summary_to_excel(tag: str):
         defense_end_row = sheet.max_row
         format_table(sheet, defense_start_row, defense_end_row, "DefensesTable")
 
-    # Save the Excel file to a temporary location
+
     tmp = NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(tmp.name)
     tmp.seek(0)
 
-    clan_name = next((c for c in clans if c.get("tag") == tag), None).get("name")
+    clan_name = next((c for c in clans if c.get("tag") == tag), None).get("name", "clan")
     season = league_info.get("season")
     filename = f"cwl_summary_{clan_name}_{season}.xlsx"
     return FileResponse(
@@ -557,3 +607,4 @@ async def export_cwl_summary_to_excel(tag: str):
         filename=filename,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+

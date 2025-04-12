@@ -4,6 +4,8 @@ import coc
 import requests
 import aiohttp
 
+from utils.utils import fix_tag
+
 semaphore = asyncio.Semaphore(10)
 
 
@@ -436,7 +438,7 @@ def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent")
     return result
 
 
-async def enrich_league_info(league_info, war_league_infos):
+async def enrich_league_info(league_info, war_league_infos, session):
     clan_summary_map = await init_clan_summary_map(league_info)
     await process_war_stats(war_league_infos, clan_summary_map)
     sorted_clans = await compute_clan_ranking(clan_summary_map)
@@ -523,5 +525,18 @@ async def enrich_league_info(league_info, war_league_infos):
                 })
 
         clan["town_hall_levels"] = dict(townhall_counts)
+
+    # Get clan with rank = 3 to get current league because they won't go up or down
+    third_clan = next((clan for clan in league_info["clans"] if clan["rank"] == 3), None)
+    clan_tag = third_clan.get("tag", "").replace("#", "%23")
+    url = f"https://proxy.clashk.ing/v1/clans/{clan_tag}"
+    try:
+        async with session.get(url) as res:
+            if res.status == 200:
+                data = await res.json()
+                if "warLeague" in data:
+                    league_info["war_league"] = data["warLeague"]["name"]
+    except Exception:
+        pass
 
     return league_info

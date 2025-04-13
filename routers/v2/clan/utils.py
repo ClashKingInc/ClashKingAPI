@@ -104,28 +104,28 @@ def generate_stats(events):
     leave_events = [e for e in events if e["type"] == "leave"]
 
     tags = [e["tag"] for e in events]
-    names = [e["name"] for e in events]
     players_by_tag = Counter(tags)
 
     active_players = set()
-    seen = set()
+    seen_players = set()
+    tag_events = defaultdict(list)
+
+    for e in events:
+        tag_events[e["tag"]].append(e)
+
     for e in sorted(events, key=lambda x: x["time"]):
         if e["type"] == "join":
             active_players.add(e["tag"])
         elif e["type"] == "leave":
             active_players.discard(e["tag"])
-        seen.add(e["tag"])
+        seen_players.add(e["tag"])
 
     time_deltas = []
-    tag_events = defaultdict(list)
-    for e in events:
-        tag_events[e["tag"]].append(e)
-
     for tag, evs in tag_events.items():
         evs_sorted = sorted(evs, key=lambda x: x["time"])
         for i in range(len(evs_sorted) - 1):
-            if evs_sorted[i]["type"] == "join" and evs_sorted[i+1]["type"] == "leave":
-                delta = (evs_sorted[i+1]["time"] - evs_sorted[i]["time"]).total_seconds()
+            if evs_sorted[i]["type"] == "join" and evs_sorted[i + 1]["type"] == "leave":
+                delta = (evs_sorted[i + 1]["time"] - evs_sorted[i]["time"]).total_seconds()
                 time_deltas.append(delta)
 
     hours = [e["time"].hour for e in events]
@@ -134,16 +134,30 @@ def generate_stats(events):
     top_users = Counter(tags).most_common(3)
     top_users_named = [{"tag": t, "count": c, "name": next(e['name'] for e in events if e["tag"] == t)} for t, c in top_users]
 
+    still_in_clan = set()
+    for tag, evs in tag_events.items():
+        evs_sorted = sorted(evs, key=lambda x: x["time"])
+        if evs_sorted[-1]["type"] == "join":
+            still_in_clan.add(tag)
+
+    left_and_never_came_back = set()
+    for tag, evs in tag_events.items():
+        evs_sorted = sorted(evs, key=lambda x: x["time"])
+        if evs_sorted[-1]["type"] == "leave":
+            left_and_never_came_back.add(tag)
+
     return {
         "total_events": len(events),
         "total_joins": len(join_events),
         "total_leaves": len(leave_events),
-        "unique_players": len(set(tags)),
+        "unique_players": len(seen_players),
         "moving_players": len(active_players),
         "rejoined_players": sum(1 for v in players_by_tag.values() if v > 1),
         "first_event": min(e["time"] for e in events).isoformat() if events else None,
         "last_event": max(e["time"] for e in events).isoformat() if events else None,
         "most_moving_hour": most_common_hour,
         "avg_time_between_join_leave": round(statistics.mean(time_deltas), 2) if time_deltas else None,
-        "most_moving_players": top_users_named
+        "players_still_in_clan": len(still_in_clan),
+        "players_left_forever": len(left_and_never_came_back),
+        "most_moving_players": top_users_named,
     }

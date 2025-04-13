@@ -321,6 +321,7 @@ async def fetch_player_api_data(session, tag: str):
 
 async def fetch_raid_data(session, tag: str, player_clan_tag: str):
     raid_data = {}
+    print(f"Fetching raid data for {tag} from {player_clan_tag}")
     if player_clan_tag:
         url = f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1"
         async with session.get(url) as response:

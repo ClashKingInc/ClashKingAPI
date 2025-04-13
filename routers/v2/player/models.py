@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 
 class PlayerTagsRequest(BaseModel):
     player_tags: List[str]
-    clan_tags: Optional[Dict[str, str]] = None  # {"player_tag": "clan_tag"}
+    clan_tags: Optional[Dict[str, str]] = None
 
 class PlayerWarhitsFilter(BaseModel):
     player_tags: List[str]

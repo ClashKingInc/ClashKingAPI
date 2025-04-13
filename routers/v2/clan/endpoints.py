@@ -187,7 +187,12 @@ async def clan_join_leave(
         clan_tag = fix_tag(clan_tag)
 
         if filters.season:
-            season_start, season_end = season_start_end(filters.season, gold_pass_season=True)
+            season_start, season_end = season_start_end(filters.season)
+            filters.timestamp_start = int(season_start.timestamp())
+            filters.time_stamp_end = int(season_end.timestamp())
+
+        if filters.current_season:
+            season_start, season_end = season_start_end(pend.now(tz=pend.UTC).format("YYYY-MM"))
             filters.timestamp_start = int(season_start.timestamp())
             filters.time_stamp_end = int(season_end.timestamp())
 
@@ -209,7 +214,7 @@ async def clan_join_leave(
             base_query["$and"].append({"name": {"$regex": filters.name_contains, "$options": "i"}})
 
         cursor = mongo.clan_join_leave.find(base_query, {"_id": 0}).sort("time", -1)
-        if not filters.season:
+        if not filters.season and not filters.current_season:
             cursor = cursor.limit(filters.limit)
 
         result = await cursor.to_list(length=None)
@@ -222,6 +227,8 @@ async def clan_join_leave(
             result = extract_join_leave_pairs(result, filters.filter_time, direction=filters.only_type)
 
         return {
+            "timestamp_start": filters.timestamp_start,
+            "timestamp_end": filters.time_stamp_end,
             "stats": generate_stats(result),
             "join_leave_list": result
         }
@@ -243,6 +250,8 @@ async def get_multiple_clan_join_leave(
             response = await clan_join_leave(clan_tag=clan_tag, request=request, filters=filters)
             return {
                 "clan_tag": clan_tag,
+                "timestamp_start": response["timestamp_start"],
+                "timestamp_end": response["timestamp_end"],
                 "stats": response["stats"],
                 "join_leave_list": response["join_leave_list"]
             }

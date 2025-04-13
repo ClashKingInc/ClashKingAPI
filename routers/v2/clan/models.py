@@ -11,6 +11,7 @@ class JoinLeaveQueryParams:
         season: Optional[str] = Query(
             None, regex=r"^\d{4}-\d{2}$", description="Season format YYYY-MM"
         ),
+        current_season: Optional[bool] = Query(False),
         limit: int = Query(50),
         filter_leave_join_enabled: bool = Query(False),
         filter_join_leave_enabled: bool = Query(False),
@@ -26,6 +27,7 @@ class JoinLeaveQueryParams:
         self.timestamp_start = timestamp_start
         self.time_stamp_end = time_stamp_end
         self.season = season
+        self.current_season = current_season
         self.limit = limit
         self.filter_leave_join_enabled = filter_leave_join_enabled
         self.filter_join_leave_enabled = filter_join_leave_enabled

@@ -1,14 +1,17 @@
 import asyncio
+from typing import Optional, List
 
 import aiohttp
 import pendulum as pend
 from collections import defaultdict
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi import APIRouter, Query, Request
+from h11 import Response
 
-from routers.v2.clan.models import ClanTagsRequest
+from routers.v2.clan.models import ClanTagsRequest, JoinLeaveQueryParams
+from routers.v2.clan.utils import filter_leave_join, extract_join_leave_pairs, filter_join_leave, generate_stats
 from utils.utils import fix_tag, remove_id_fields
-from utils.time import gen_season_date, gen_raid_date
+from utils.time import gen_season_date, gen_raid_date, season_start_end
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest
 
@@ -172,3 +175,80 @@ async def clan_donations(clan_tag: str, season: str, request: Request):
             "received": data.get('received', 0)
         })
     return {"items": items}
+
+
+@router.get("/clan/{clan_tag}/join-leave", name="Join Leaves in a season")
+async def clan_join_leave(
+    clan_tag: str,
+    request: Request,
+    filters: JoinLeaveQueryParams = Depends()
+):
+    try:
+        clan_tag = fix_tag(clan_tag)
+
+        if filters.season:
+            season_start, season_end = season_start_end(filters.season, gold_pass_season=True)
+            filters.timestamp_start = int(season_start.timestamp())
+            filters.time_stamp_end = int(season_end.timestamp())
+
+        base_query = {
+            "$and": [
+                {"clan": clan_tag},
+                {"time": {"$gte": pend.from_timestamp(filters.timestamp_start, tz=pend.UTC)}},
+                {"time": {"$lte": pend.from_timestamp(filters.time_stamp_end, tz=pend.UTC)}}
+            ]
+        }
+
+        if filters.type:
+            base_query["$and"].append({"type": filters.type})
+        if filters.townhall:
+            base_query["$and"].append({"th": {"$in": filters.townhall}})
+        if filters.tag:
+            base_query["$and"].append({"tag": {"$in": filters.tag}})
+        if filters.name_contains:
+            base_query["$and"].append({"name": {"$regex": filters.name_contains, "$options": "i"}})
+
+        cursor = mongo.clan_join_leave.find(base_query, {"_id": 0}).sort("time", -1)
+        if not filters.season:
+            cursor = cursor.limit(filters.limit)
+
+        result = await cursor.to_list(length=None)
+
+        if filters.filter_leave_join_enabled:
+            result = filter_leave_join(result, filters.filter_time)
+        if filters.filter_join_leave_enabled:
+            result = filter_join_leave(result, filters.filter_time)
+        if filters.only_type in ("join_leave", "leave_join"):
+            result = extract_join_leave_pairs(result, filters.filter_time, direction=filters.only_type)
+
+        return {
+            "stats": generate_stats(result),
+            "join_leave_list": result
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching data: {str(e)}")
+
+
+@router.post("/clans/join-leave", name="Join Leaves in a season")
+async def get_multiple_clan_join_leave(
+    body: ClanTagsRequest,
+    request: Request,
+    filters: JoinLeaveQueryParams = Depends()
+):
+    try:
+        clan_tags = [fix_tag(tag) for tag in body.clan_tags]
+
+        async def process_join_leave(clan_tag: str):
+            response = await clan_join_leave(clan_tag=clan_tag, request=request, filters=filters)
+            return {
+                "clan_tag": clan_tag,
+                "stats": response["stats"],
+                "join_leave_list": response["join_leave_list"]
+            }
+
+        results = await asyncio.gather(*(process_join_leave(tag) for tag in clan_tags))
+        return {"items": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bulk data: {str(e)}")

@@ -106,13 +106,16 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
 
     result = []
     for tag, data in zip(player_tags, api_results):
+        if isinstance(data, HTTPException):
+            if data.status_code == 503 or data.status_code == 500:
+                raise data
+            else:
+                continue
         if data:
             result.append({
                 "tag": tag,
                 **data
             })
-
-    return {"items": result}
 
 
 @router.post("/players/extended", name="Get full stats for a list of players")

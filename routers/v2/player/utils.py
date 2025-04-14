@@ -316,6 +316,10 @@ async def fetch_player_api_data(session, tag: str):
     async with session.get(url) as response:
         if response.status == 200:
             return await response.json()
+        elif response.status == 503:
+            raise HTTPException(status_code=503, detail="Clash of Clans API is currently in maintenance. Please try again later.")
+        elif response.status == 500:
+            raise HTTPException(status_code=500, detail="Clash of Clans API is currently down. Please try again later.")
     return None
 
 

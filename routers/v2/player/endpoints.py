@@ -103,6 +103,7 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
     async with aiohttp.ClientSession() as session:
         fetch_tasks = [fetch_player_api_data(session, tag) for tag in player_tags]
         api_results = await asyncio.gather(*fetch_tasks)
+        print("API results:", api_results)
 
     result = []
     for tag, data in zip(player_tags, api_results):
@@ -112,10 +113,13 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
             else:
                 continue
         if data:
+            print("Data:", data)
             result.append({
                 "tag": tag,
                 **data
             })
+
+    return {"items": result}
 
 
 @router.post("/players/extended", name="Get full stats for a list of players")

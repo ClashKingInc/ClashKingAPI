@@ -6,6 +6,7 @@ from fastapi import HTTPException
 import pendulum
 
 from routers.v2.player.models import PlayerWarhitsFilter
+from routers.v2.war.utils import fetch_current_war_info_bypass
 from utils.database import MongoClient as mongo
 from utils.time import is_raids
 
@@ -325,7 +326,6 @@ async def fetch_player_api_data(session, tag: str):
 
 async def fetch_raid_data(session, tag: str, player_clan_tag: str):
     raid_data = {}
-    print(f"Fetching raid data for {tag} from {player_clan_tag}")
     if player_clan_tag:
         url = f"https://proxy.clashk.ing/v1/clans/{player_clan_tag.replace('#', '%23')}/capitalraidseasons?limit=1"
         async with session.get(url) as response:
@@ -344,8 +344,12 @@ async def fetch_raid_data(session, tag: str, player_clan_tag: str):
 
 
 async def fetch_full_player_data(session, tag: str, mongo_data: dict, clan_tag: Optional[str]):
+    war_data = {}
     raid_data = await fetch_raid_data(session, tag, clan_tag) if is_raids() else {}
-    war_data = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
+    war_timer = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
+    if clan_tag not in war_timer.get("clans", []):
+        war_clan_tag = war_timer.get("clans", [])[0] if war_timer.get("clans") else None
+        war_data = await fetch_current_war_info_bypass(war_clan_tag, session)
     return tag, raid_data, war_data, mongo_data
 
 

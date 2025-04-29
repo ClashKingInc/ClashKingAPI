@@ -44,7 +44,7 @@ async def war_previous(clan_tag: str, request: Request, response: Response,  tim
         found_ids.add(id)
 
     actual_results = sorted(new_wars, key=lambda x: x.get("endTime", 0), reverse=True)
-    return actual_results[:limit]
+    return {"items" : actual_results[:limit]}
 
 
 @router.get("/war/{clan_tag}/previous/{end_time}",

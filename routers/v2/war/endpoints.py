@@ -602,17 +602,14 @@ async def export_cwl_summary_to_excel(tag: str):
     )
 
 
-@router.post("/war/players/warhits", name="Bulk war hits overview and detailed stats")
+@router.post("/war/players/warhits")
 async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
     client = coc.Client(raw_attribute=True)
     START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
 
-    results = []
-
-    for tag in filter.player_tags:
+    async def fetch_player(tag: str):
         player_tag = fix_tag(tag)
-
         pipeline = [
             {"$match": {
                 "$and": [
@@ -639,21 +636,23 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
             filter=filter,
             client=client
         )
+        return result["items"]
 
-        results.extend(result["items"])
+    player_tasks = [fetch_player(tag) for tag in filter.player_tags]
+    results_per_player = await asyncio.gather(*player_tasks)
+    results = [item for sublist in results_per_player for item in sublist]  # flatten
 
-    return { "items": results }
+    return {"items": results}
 
 
-@router.post("/war/clans/warhits", name="Get war hit stats for all players in a clan")
+@router.post("/war/clans/warhits")
 async def clan_warhits_stats(filter: ClanWarHitsFilter):
     client = coc.Client(raw_attribute=True)
     START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     clan_tags = [fix_tag(tag) for tag in filter.clan_tags]
 
-    items = []
-    for clan_tag in clan_tags:
+    async def fetch_clan(clan_tag: str):
         pipeline = [
             {"$match": {
                 "data.clan.tag": clan_tag,
@@ -675,10 +674,13 @@ async def clan_warhits_stats(filter: ClanWarHitsFilter):
             client=client,
         )
 
-        items.append({
+        return {
             "clan_tag": clan_tag,
             "players": results["items"],
             "wars": results["wars"]
-        })
+        }
+
+    clan_tasks = [fetch_clan(tag) for tag in clan_tags]
+    items = await asyncio.gather(*clan_tasks)
 
     return {"items": items}

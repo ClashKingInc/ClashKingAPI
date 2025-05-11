@@ -859,7 +859,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             "warType": filter.type,
         })
 
-    all_wars = list(all_wars_dict.values())
-
-    results.append({"wars": all_wars})
-    return results
+    return {
+        "items": results,
+        "wars": list(all_wars_dict.values())
+    }

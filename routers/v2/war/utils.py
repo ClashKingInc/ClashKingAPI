@@ -705,7 +705,7 @@ def defense_passes_filters(dfn, member, filter):
     return True
 
 
-async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tag=None, filter=None, client=None):
+async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tags=None, filter=None, client=None):
     from collections import defaultdict
 
     players_data = defaultdict(lambda: {
@@ -720,12 +720,12 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
 
     seen_wars = set()
     all_wars_dict = {}
-    added_war_ids = set()
 
     for war_doc in wars_docs:
         war_raw = war_doc["data"]
         war = coc.ClanWar(data=war_raw, client=client)
-        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        war_id = "-".join(
+            sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
         if war_id in seen_wars:
             continue
         seen_wars.add(war_id)
@@ -734,7 +734,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             continue
 
         for side in [war.clan, war.opponent]:
-            if clan_tag and side.tag != clan_tag:
+            if clan_tags and side.tag not in clan_tags:
                 continue
 
             for member in side.members:
@@ -848,7 +848,8 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             )
 
         results.append({
-            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"]["name"],
+            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"][
+                "name"],
             "tag": tag,
             "townhallLevel": data["townhall"],
             "stats": stats,
@@ -859,7 +860,24 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             "warType": filter.type,
         })
 
-    return {
-        "items": results,
-        "wars": list(all_wars_dict.values())
-    }
+    if clan_tags:
+        return {
+            "items": results,
+            "wars": list(all_wars_dict.values())
+        }
+    else:
+        for tag in players_data:
+            player_data = players_data[tag]
+            wars_per_player = []
+            for war_info in player_data["wars"]:
+                wars_per_player.append({
+                    "war_data": war_info["war_data"],
+                    "members": [war_info["member_data"]]
+                })
+
+            for item in results:
+                if item["tag"] == tag:
+                    item["wars"] = wars_per_player
+        return {
+            "items": results
+        }

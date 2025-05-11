@@ -1,9 +1,8 @@
 from typing import Optional, List
-
 from pydantic import BaseModel
 
-
-class Clanwarhitsfilter(BaseModel):
+class ClanWarHitsFilter(BaseModel):
+    clan_tags: List[str]
     timestamp_start: int = 0
     timestamp_end: int = 2527625513
     limit: int = None

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from openpyxl.cell import Cell
 
 from routers.v2.clan.models import ClanTagsRequest
-from routers.v2.war.models import PlayerWarhitsFilter, Clanwarhitsfilter
+from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
 from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_info, ranking_create, \
     fetch_war_league_infos, enrich_league_info, collect_player_hits_from_wars
 from utils.time import is_cwl
@@ -607,50 +607,78 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
     client = coc.Client(raw_attribute=True)
     START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
-    player_tags = [fix_tag(tag) for tag in filter.player_tags]
 
-    pipeline = [
-        {"$match": {
-            "$and": [
-                {"$or": [
-                    {"data.clan.members.tag": {"$in": player_tags}},
-                    {"data.opponent.members.tag": {"$in": player_tags}}
-                ]},
-                {"data.preparationStartTime": {"$gte": START}},
-                {"data.preparationStartTime": {"$lte": END}}
-            ]
-        }},
-        {"$unset": ["_id"]},
-        {"$project": {"data": "$data"}},
-        {"$sort": {"data.preparationStartTime": -1}},
-        {"$limit": filter.limit or 50},
-    ]
+    results = []
 
-    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
-    results = await collect_player_hits_from_wars(wars_docs, tags_to_include=player_tags, clan_tag=None, filter=filter, client=client)
-    return results
+    for tag in filter.player_tags:
+        player_tag = fix_tag(tag)
+
+        pipeline = [
+            {"$match": {
+                "$and": [
+                    {"$or": [
+                        {"data.clan.members.tag": player_tag},
+                        {"data.opponent.members.tag": player_tag}
+                    ]},
+                    {"data.preparationStartTime": {"$gte": START}},
+                    {"data.preparationStartTime": {"$lte": END}}
+                ]
+            }},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
+            {"$sort": {"data.preparationStartTime": -1}},
+            {"$limit": filter.limit or 50},
+        ]
+
+        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+        result = await collect_player_hits_from_wars(
+            wars_docs,
+            tags_to_include=[player_tag],
+            clan_tags=None,
+            filter=filter,
+            client=client
+        )
+
+        results.extend(result["items"])
+
+    return { "items": results }
 
 
-@router.post("/war/clan/{clan_tag}/warhits", name="Get war hit stats for all players in a clan")
-async def clan_warhits_stats(clan_tag: str, filter: Clanwarhitsfilter):
+@router.post("/war/clans/warhits", name="Get war hit stats for all players in a clan")
+async def clan_warhits_stats(filter: ClanWarHitsFilter):
     client = coc.Client(raw_attribute=True)
     START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
-    tag = fix_tag(clan_tag)
+    clan_tags = [fix_tag(tag) for tag in filter.clan_tags]
 
-    pipeline = [
-        {"$match": {
-            "data.clan.tag": tag,
-            "data.preparationStartTime": {"$gte": START, "$lte": END}
-        }},
-        {"$unset": ["_id"]},
-        {"$project": {"data": "$data"}},
-        {"$sort": {"data.preparationStartTime": -1}},
-        {"$limit": filter.limit or 100},
-    ]
+    items = []
+    for clan_tag in clan_tags:
+        pipeline = [
+            {"$match": {
+                "data.clan.tag": clan_tag,
+                "data.preparationStartTime": {"$gte": START, "$lte": END}
+            }},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
+            {"$sort": {"data.preparationStartTime": -1}},
+            {"$limit": filter.limit or 100},
+        ]
 
-    clan_tag = clan_tag.replace("!", "#")
+        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
 
-    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
-    results = await collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tag=clan_tag, filter=filter, client=client)
-    return results
+        results = await collect_player_hits_from_wars(
+            wars_docs,
+            tags_to_include=None,
+            clan_tags=[clan_tag],
+            filter=filter,
+            client=client,
+        )
+
+        items.append({
+            "clan_tag": clan_tag,
+            "players": results["items"],
+            "wars": results["wars"]
+        })
+
+    return {"items": items}

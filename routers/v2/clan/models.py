@@ -41,3 +41,7 @@ class JoinLeaveQueryParams:
 
 class ClanTagsRequest(BaseModel):
     clan_tags: List[str]
+
+class RaidsRequest(BaseModel):
+    clan_tags: List[str]
+    limit : int = 100

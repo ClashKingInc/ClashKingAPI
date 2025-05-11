@@ -1,15 +1,13 @@
 import asyncio
-from typing import Optional, List
 
 import aiohttp
 import pendulum as pend
 from collections import defaultdict
 from fastapi import HTTPException, Depends
-from fastapi import APIRouter, Query, Request
-from h11 import Response
-
-from routers.v2.clan.models import ClanTagsRequest, JoinLeaveQueryParams
-from routers.v2.clan.utils import filter_leave_join, extract_join_leave_pairs, filter_join_leave, generate_stats
+from fastapi import APIRouter, Request
+from routers.v2.clan.models import ClanTagsRequest, JoinLeaveQueryParams, RaidsRequest
+from routers.v2.clan.utils import filter_leave_join, extract_join_leave_pairs, filter_join_leave, generate_stats, \
+    generate_raids_clan_stats, predict_rewards
 from utils.utils import fix_tag, remove_id_fields
 from utils.time import gen_season_date, gen_raid_date, season_start_end
 from utils.database import MongoClient as mongo
@@ -261,3 +259,37 @@ async def get_multiple_clan_join_leave(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching bulk data: {str(e)}")
+
+@router.post("/clans/capital-raids", name="Get capital raids history & stats for a list of clans")
+async def get_clans_capital_raids(request: Request, body: RaidsRequest):
+    """Retrieve Clash of Clans account details for a list of clans."""
+
+    if not body.clan_tags:
+        raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
+
+    if not body.limit:
+        body.limit = 1
+
+    clan_tags = [fix_tag(tag) for tag in body.clan_tags]
+
+    async def fetch_clan_data(session, tag):
+        url = f"https://proxy.clashk.ing/v1/clans/{tag.replace('#', '%23')}/capitalraidseasons?limit={body.limit}"
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.json()
+            return None
+
+    async with aiohttp.ClientSession() as session:
+        api_responses = await asyncio.gather(*(fetch_clan_data(session, tag) for tag in clan_tags))
+
+    result = []
+    for clan_data in api_responses:
+        if clan_data:
+            history = clan_data.get("items", [])
+            predict_rewards(history)
+            result.append({
+                "stats": generate_raids_clan_stats(history),
+                "history": remove_id_fields(history)
+            })
+
+    return {"items": result}

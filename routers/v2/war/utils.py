@@ -725,7 +725,8 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
     for war_doc in wars_docs:
         war_raw = war_doc["data"]
         war = coc.ClanWar(data=war_raw, client=client)
-        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        war_id = "-".join(
+            sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
         if war_id in seen_wars:
             continue
         seen_wars.add(war_id)
@@ -843,7 +844,8 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             )
 
         results.append({
-            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"]["name"],
+            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"][
+                "name"],
             "tag": tag,
             "townhallLevel": data["townhall"],
             "stats": stats,
@@ -854,5 +856,4 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             "warType": filter.type,
         })
 
-    results.append({"wars": all_wars})
-    return results
+    return {"items": results, "wars": all_wars}

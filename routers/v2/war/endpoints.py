@@ -630,7 +630,7 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
 
     wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     results = await collect_player_hits_from_wars(wars_docs, tags_to_include=player_tags, clan_tag=None, filter=filter, client=client)
-    return {"items": results}
+    return results
 
 
 @router.post("/war/clan/{clan_tag}/warhits", name="Get war hit stats for all players in a clan")
@@ -655,4 +655,4 @@ async def clan_warhits_stats(clan_tag: str, filter: Clanwarhitsfilter):
 
     wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     results = await collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tag=clan_tag, filter=filter, client=client)
-    return {"items": results}
+    return results

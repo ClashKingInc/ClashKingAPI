@@ -719,14 +719,13 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
     })
 
     seen_wars = set()
-    all_wars = []
+    all_wars_dict = {}
     added_war_ids = set()
 
     for war_doc in wars_docs:
         war_raw = war_doc["data"]
         war = coc.ClanWar(data=war_raw, client=client)
-        war_id = "-".join(
-            sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
         if war_id in seen_wars:
             continue
         seen_wars.add(war_id)
@@ -761,11 +760,12 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                 member_raw_data.pop("attacks", None)
                 member_raw_data.pop("bestOpponentAttack", None)
 
+                member_raw_data["attacks"] = []
+                member_raw_data["defenses"] = []
+
                 war_info = {
                     "war_data": war_data,
-                    "member_data": member_raw_data,
-                    "attacks": [],
-                    "defenses": []
+                    "member_data": member_raw_data
                 }
 
                 for atk in member.attacks:
@@ -788,7 +788,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                     atk_data["war_type"] = war.type.lower()
 
                     player_data["attacks"].append(atk_data)
-                    war_info["attacks"].append(atk_data)
+                    member_raw_data["attacks"].append(atk_data)
 
                 for dfn in member.defenses:
                     if not defense_passes_filters(dfn, member, filter):
@@ -813,22 +813,26 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                     def_data["war_type"] = war.type.lower()
 
                     player_data["defenses"].append(def_data)
-                    war_info["defenses"].append(def_data)
+                    member_raw_data["defenses"].append(def_data)
 
-                war_info["missedAttacks"] = war.attacks_per_member - len(member.attacks)
-                war_info["missedDefenses"] = 1 if not member.best_opponent_attack else 0
-                if war_id not in added_war_ids:
-                    all_wars.append(war_info["war_data"])
-                    added_war_ids.add(war_id)
+                member_raw_data["missedAttacks"] = war.attacks_per_member - len(member.attacks)
+                member_raw_data["missedDefenses"] = 1 if not member.best_opponent_attack else 0
+                if war_id not in all_wars_dict:
+                    all_wars_dict[war_id] = {
+                        "war_data": war_data,
+                        "members": []
+                    }
+
+                all_wars_dict[war_id]["members"].append(member_raw_data)
                 player_data["wars"].append(war_info)
 
     results = []
     for tag, data in players_data.items():
         for war_info in data["wars"]:
             war_type = war_info["war_data"].get("type", "all").lower()
-            for atk in war_info["attacks"]:
+            for atk in war_info["member_data"].get("attacks", []):
                 atk["war_type"] = war_type
-            for dfn in war_info["defenses"]:
+            for dfn in war_info["member_data"].get("defenses", []):
                 dfn["war_type"] = war_type
 
         grouped = group_attacks_by_type(data["attacks"], data["defenses"], data["wars"])
@@ -844,8 +848,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             )
 
         results.append({
-            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"][
-                "name"],
+            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"]["name"],
             "tag": tag,
             "townhallLevel": data["townhall"],
             "stats": stats,
@@ -856,4 +859,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             "warType": filter.type,
         })
 
-    return {"items": results, "wars": all_wars}
+    all_wars = list(all_wars_dict.values())
+
+    results.append({"wars": all_wars})
+    return results

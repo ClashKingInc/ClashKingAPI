@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import uuid
 import coc
@@ -397,14 +398,11 @@ async def export_cwl_summary_to_excel(tag: str):
         "data_fill_white": PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"),
     }
 
-    async with aiohttp.ClientSession() as session:
-        try:
-            response = await session.get(f"http://localhost:8000/v2/war/{tag}/war-summary")
-            response.raise_for_status()
-            data = await response.json()
-            league_info = data.get("league_info")
-        except aiohttp.ClientError as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching war summary: {str(e)}")
+    summary = await get_clan_war_summary(tag)
+    if isinstance(summary, JSONResponse):
+        summary = json.loads(summary.body)
+
+    league_info = summary.get("league_info")
 
     if not league_info:
         raise HTTPException(status_code=404, detail="No league info available")

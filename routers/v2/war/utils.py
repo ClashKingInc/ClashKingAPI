@@ -555,7 +555,6 @@ def compute_warhit_stats(
 ):
     from collections import defaultdict
 
-
     def filter_hit(hit, is_attack=True):
         th_key = "defender" if is_attack else "attacker"
 
@@ -654,3 +653,206 @@ def group_attacks_by_type(attacks, defenses, wars):
             grouped[war_type]["defenses"].append(dfn)
 
     return grouped
+
+
+def attack_passes_filters(atk, member, filter):
+    if not filter:
+        return True
+    if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
+        return False
+    if filter.same_th and atk.defender.town_hall != member.town_hall:
+        return False
+    if filter.fresh_only and not atk.is_fresh_attack:
+        return False
+    if filter.min_stars and atk.stars < filter.min_stars:
+        return False
+    if filter.max_stars and atk.stars > filter.max_stars:
+        return False
+    if filter.min_destruction and atk.destruction < filter.min_destruction:
+        return False
+    if filter.max_destruction and atk.destruction > filter.max_destruction:
+        return False
+    if filter.map_position_min and atk.defender.map_position < filter.map_position_min:
+        return False
+    if filter.map_position_max and atk.defender.map_position > filter.map_position_max:
+        return False
+    return True
+
+
+def defense_passes_filters(dfn, member, filter):
+    if not filter:
+        return True
+    if not dfn.attacker:
+        return False
+    if filter.enemy_th and dfn.attacker.town_hall != filter.enemy_th:
+        return False
+    if filter.same_th and dfn.defender.town_hall != member.town_hall:
+        return False
+    if filter.fresh_only and not dfn.is_fresh_attack:
+        return False
+    if filter.min_stars and dfn.stars < filter.min_stars:
+        return False
+    if filter.max_stars and dfn.stars > filter.max_stars:
+        return False
+    if filter.min_destruction and dfn.destruction < filter.min_destruction:
+        return False
+    if filter.max_destruction and dfn.destruction > filter.max_destruction:
+        return False
+    if filter.map_position_min and dfn.attacker.map_position < filter.map_position_min:
+        return False
+    if filter.map_position_max and dfn.attacker.map_position > filter.map_position_max:
+        return False
+    return True
+
+
+async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tag=None, filter=None, client=None):
+    from collections import defaultdict
+
+    players_data = defaultdict(lambda: {
+        "attacks": [],
+        "defenses": [],
+        "townhall": None,
+        "missedAttacks": 0,
+        "missedDefenses": 0,
+        "warsCount": 0,
+        "wars": []
+    })
+
+    seen_wars = set()
+    all_wars = []
+    added_war_ids = set()
+
+    for war_doc in wars_docs:
+        war_raw = war_doc["data"]
+        war = coc.ClanWar(data=war_raw, client=client)
+        war_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+        if war_id in seen_wars:
+            continue
+        seen_wars.add(war_id)
+
+        if filter and filter.type != "all" and war.type.lower() != filter.type.lower():
+            continue
+
+        for side in [war.clan, war.opponent]:
+            if clan_tag and side.tag != clan_tag:
+                continue
+
+            for member in side.members:
+                tag = member.tag
+                if tags_to_include and tag not in tags_to_include:
+                    continue
+
+                player_data = players_data[tag]
+                player_data["townhall"] = member.town_hall
+                player_data["missedAttacks"] += war.attacks_per_member - len(member.attacks)
+                player_data["missedDefenses"] += 1 if not member.best_opponent_attack else 0
+                player_data["warsCount"] += 1
+
+                # Base war and member data
+                war_data = war._raw_data.copy()
+                for field in ["status_code", "_response_retry", "timestamp"]:
+                    war_data.pop(field, None)
+                war_data["type"] = war.type
+                war_data["clan"].pop("members", None)
+                war_data["opponent"].pop("members", None)
+
+                member_raw_data = member._raw_data.copy()
+                member_raw_data.pop("attacks", None)
+                member_raw_data.pop("bestOpponentAttack", None)
+
+                war_info = {
+                    "war_data": war_data,
+                    "member_data": member_raw_data,
+                    "attacks": [],
+                    "defenses": []
+                }
+
+                for atk in member.attacks:
+                    if not attack_passes_filters(atk, member, filter):
+                        continue
+
+                    atk_data = atk._raw_data.copy()
+                    defender_data = atk.defender._raw_data.copy()
+                    defender_data.pop("attacks", None)
+                    defender_data.pop("bestOpponentAttack", None)
+                    atk_data["defender"] = defender_data
+                    atk_data["attacker"] = {
+                        "tag": member.tag,
+                        "townhallLevel": member.town_hall,
+                        "name": member.name,
+                        "mapPosition": member.map_position
+                    }
+                    atk_data["attack_order"] = atk.order
+                    atk_data["fresh"] = atk.is_fresh_attack
+                    atk_data["war_type"] = war.type.lower()
+
+                    player_data["attacks"].append(atk_data)
+                    war_info["attacks"].append(atk_data)
+
+                for dfn in member.defenses:
+                    if not defense_passes_filters(dfn, member, filter):
+                        continue
+
+                    def_data = dfn._raw_data.copy()
+                    def_data["attack_order"] = dfn.order
+                    def_data["fresh"] = dfn.is_fresh_attack
+
+                    if dfn.attacker:
+                        attacker_data = dfn.attacker._raw_data.copy()
+                        attacker_data.pop("attacks", None)
+                        attacker_data.pop("bestOpponentAttack", None)
+                        def_data["attacker"] = attacker_data
+
+                    def_data["defender"] = {
+                        "tag": member.tag,
+                        "townhallLevel": member.town_hall,
+                        "name": member.name,
+                        "mapPosition": member.map_position,
+                    }
+                    def_data["war_type"] = war.type.lower()
+
+                    player_data["defenses"].append(def_data)
+                    war_info["defenses"].append(def_data)
+
+                war_info["missedAttacks"] = war.attacks_per_member - len(member.attacks)
+                war_info["missedDefenses"] = 1 if not member.best_opponent_attack else 0
+                if war_id not in added_war_ids:
+                    all_wars.append(war_info["war_data"])
+                    added_war_ids.add(war_id)
+                player_data["wars"].append(war_info)
+
+    results = []
+    for tag, data in players_data.items():
+        for war_info in data["wars"]:
+            war_type = war_info["war_data"].get("type", "all").lower()
+            for atk in war_info["attacks"]:
+                atk["war_type"] = war_type
+            for dfn in war_info["defenses"]:
+                dfn["war_type"] = war_type
+
+        grouped = group_attacks_by_type(data["attacks"], data["defenses"], data["wars"])
+        stats = {}
+        for war_type, d in grouped.items():
+            stats[war_type] = compute_warhit_stats(
+                attacks=d["attacks"],
+                defenses=d["defenses"],
+                filter=filter,
+                missed_attacks=d["missedAttacks"],
+                missed_defenses=d["missedDefenses"],
+                num_wars=d["warsCounts"],
+            )
+
+        results.append({
+            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"]["name"],
+            "tag": tag,
+            "townhallLevel": data["townhall"],
+            "stats": stats,
+            "timeRange": {
+                "start": filter.timestamp_start,
+                "end": filter.timestamp_end,
+            },
+            "warType": filter.type,
+        })
+
+    results.append({"wars": all_wars})
+    return results

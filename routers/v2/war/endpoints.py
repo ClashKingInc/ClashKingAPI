@@ -11,9 +11,9 @@ from fastapi import APIRouter, Request
 from openpyxl.cell import Cell
 
 from routers.v2.clan.models import ClanTagsRequest
-from routers.v2.war.models import PlayerWarhitsFilter
+from routers.v2.war.models import PlayerWarhitsFilter, Clanwarhitsfilter
 from routers.v2.war.utils import fetch_current_war_info_bypass, fetch_league_info, ranking_create, \
-    fetch_war_league_infos, enrich_league_info, group_attacks_by_type, compute_warhit_stats
+    fetch_war_league_infos, enrich_league_info, collect_player_hits_from_wars
 from utils.time import is_cwl
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
@@ -324,10 +324,8 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
         return JSONResponse(content={"items": results})
 
 
-
 @router.get("/war/cwl-summary/export", name="Export CWL summary and members stats to Excel")
 async def export_cwl_summary_to_excel(tag: str):
-
     def format_table(sheet, start_row, end_row, table_name_hint):
         table_name = f"{table_name_hint}_{uuid.uuid4().hex[:8]}"[:31]
 
@@ -349,7 +347,6 @@ async def export_cwl_summary_to_excel(tag: str):
                 cell.alignment = Alignment(horizontal="center")
                 cell.fill = clashking_theme["data_fill_white"]
                 cell.border = thin_border
-
 
         for column_cells in sheet.columns:
             first_real_cell = next((cell for cell in column_cells if isinstance(cell, Cell)), None)
@@ -417,7 +414,6 @@ async def export_cwl_summary_to_excel(tag: str):
     ws_clan.title = "Summary"
 
     clans = sorted(league_info.get("clans", []), key=lambda c: c.get("rank", 0))
-
 
     await insert_logo_from_cdn(
         ws_clan,
@@ -514,7 +510,8 @@ async def export_cwl_summary_to_excel(tag: str):
                     sum((a.get("1_star") or {}).values()),
                     sum((a.get("0_star") or {}).values()),
                     round((sum((a.get("3_stars") or {}).values()) / w) * 100 if w > 0 else 0, 2),
-                    round(((sum((a.get("0_star") or {}).values()) + sum((a.get("1_star") or {}).values())) * 100 / w) if w > 0 else 0, 2),
+                    round(((sum((a.get("0_star") or {}).values()) + sum(
+                        (a.get("1_star") or {}).values())) * 100 / w) if w > 0 else 0, 2),
                     d,
                     round(d / w if w > 0 else 0, 2),
                     member.get("avgMapPosition"),
@@ -528,10 +525,8 @@ async def export_cwl_summary_to_excel(tag: str):
         attack_end_row = sheet.max_row
         format_table(sheet, attack_start_row, attack_end_row, "AttacksTable")
 
-
         sheet.append([])  # Empty row
         sheet.append([])  # Empty row
-
 
         row = sheet.max_row + 2
         sheet.merge_cells(f"A{row}:V{row}")
@@ -595,7 +590,6 @@ async def export_cwl_summary_to_excel(tag: str):
         defense_end_row = sheet.max_row
         format_table(sheet, defense_start_row, defense_end_row, "DefensesTable")
 
-
     tmp = NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(tmp.name)
     tmp.seek(0)
@@ -609,202 +603,56 @@ async def export_cwl_summary_to_excel(tag: str):
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
+
 @router.post("/war/players/warhits", name="Bulk war hits overview and detailed stats")
 async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
     client = coc.Client(raw_attribute=True)
-
     START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
-
     player_tags = [fix_tag(tag) for tag in filter.player_tags]
 
-    async def fetch_player_wars(tag: str):
-        pipeline = [
-            {"$match": {
-                "$and": [
-                    {"$or": [
-                        {"data.clan.members.tag": tag},
-                        {"data.opponent.members.tag": tag}
-                    ]},
-                    {"data.preparationStartTime": {"$gte": START}},
-                    {"data.preparationStartTime": {"$lte": END}}
-                ]
-            }},
-            {"$unset": ["_id"]},
-            {"$project": {"data": "$data"}},
-            {"$sort": {"data.preparationStartTime": -1}},
-            {"$limit": filter.limit},
-        ]
+    pipeline = [
+        {"$match": {
+            "$and": [
+                {"$or": [
+                    {"data.clan.members.tag": {"$in": player_tags}},
+                    {"data.opponent.members.tag": {"$in": player_tags}}
+                ]},
+                {"data.preparationStartTime": {"$gte": START}},
+                {"data.preparationStartTime": {"$lte": END}}
+            ]
+        }},
+        {"$unset": ["_id"]},
+        {"$project": {"data": "$data"}},
+        {"$sort": {"data.preparationStartTime": -1}},
+        {"$limit": filter.limit or 50},
+    ]
 
-        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+    results = await collect_player_hits_from_wars(wars_docs, tags_to_include=player_tags, clan_tag=None, filter=filter, client=client)
+    return {"items": results}
 
-        player_data = {
-            "attacks": [],
-            "defenses": [],
-            "townhall": None,
-            "missedAttacks": 0,
-            "missedDefenses": 0,
-            "warsCount": 0,
-            "wars": []
-        }
-        found_wars = set()
 
-        for war_doc in wars_docs:
-            war_raw = war_doc["data"]
-            war = coc.ClanWar(data=war_raw, client=client)
-            war_id = "-".join(
-                sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
-            if war_id in found_wars:
-                continue
-            found_wars.add(war_id)
+@router.post("/war/clan/{clan_tag}/warhits", name="Get war hit stats for all players in a clan")
+async def clan_warhits_stats(clan_tag: str, filter: Clanwarhitsfilter):
+    client = coc.Client(raw_attribute=True)
+    START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    tag = fix_tag(clan_tag)
 
-            if filter.type != "all" and war.type.lower() != filter.type.lower():
-                continue
+    pipeline = [
+        {"$match": {
+            "data.clan.tag": tag,
+            "data.preparationStartTime": {"$gte": START, "$lte": END}
+        }},
+        {"$unset": ["_id"]},
+        {"$project": {"data": "$data"}},
+        {"$sort": {"data.preparationStartTime": -1}},
+        {"$limit": filter.limit or 100},
+    ]
 
-            war_member = war.get_member(tag)
-            if not war_member:
-                continue
+    clan_tag = clan_tag.replace("!", "#")
 
-            player_data["townhall"] = war_member.town_hall
-            player_data["missedAttacks"] += war.attacks_per_member - len(war_member.attacks)
-            player_data["missedDefenses"] += 1 if not war_member.best_opponent_attack else 0
-            player_data["warsCount"] += 1
-
-            # Base war and member data
-            war_data = war._raw_data.copy()
-            for field in ["status_code", "_response_retry", "timestamp"]:
-                war_data.pop(field, None)
-            war_data["type"] = war.type
-            war_data["clan"].pop("members", None)
-            war_data["opponent"].pop("members", None)
-
-            member_raw_data = war_member._raw_data.copy()
-            member_raw_data.pop("attacks", None)
-            member_raw_data.pop("bestOpponentAttack", None)
-
-            war_info = {
-                "war_data": war_data,
-                "member_data": member_raw_data,
-                "attacks": [],
-                "defenses": []
-            }
-
-            for atk in war_member.attacks:
-                atk_data = atk._raw_data
-                defender_data = atk.defender._raw_data.copy()
-                defender_data.pop("attacks", None)
-                defender_data.pop("bestOpponentAttack", None)
-                atk_data["defender"] = defender_data
-                atk_data["attacker"] = {
-                    "tag": war_member.tag,
-                    "townhallLevel": war_member.town_hall,
-                    "name": war_member.name,
-                    "mapPosition": war_member.map_position
-                }
-
-                atk_data["attack_order"] = atk.order
-                atk_data["fresh"] = atk.is_fresh_attack
-
-                if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
-                    continue
-                if filter.same_th and atk.defender.town_hall != war_member.town_hall:
-                    continue
-                if filter.fresh_only and not atk.is_fresh_attack:
-                    continue
-                if filter.min_stars and atk.stars < filter.min_stars:
-                    continue
-                if filter.max_stars and atk.stars > filter.max_stars:
-                    continue
-                if filter.min_destruction and atk.destruction < filter.min_destruction:
-                    continue
-                if filter.max_destruction and atk.destruction > filter.max_destruction:
-                    continue
-                if filter.map_position_min and atk.defender.map_position < filter.map_position_min:
-                    continue
-                if filter.map_position_max and atk.defender.map_position > filter.map_position_max:
-                    continue
-
-                player_data["attacks"].append(atk_data)
-                war_info["attacks"].append(atk_data)
-
-            for defn in war_member.defenses:
-                def_data = defn._raw_data
-                def_data["attack_order"] = defn.order
-                def_data["fresh"] = defn.is_fresh_attack
-
-                if defn.attacker:
-                    attacker_data = defn.attacker._raw_data.copy()
-                    attacker_data.pop("attacks", None)
-                    attacker_data.pop("bestOpponentAttack", None)
-                    def_data["attacker"] = attacker_data
-
-                def_data["defender"] = {
-                    "tag": war_member.tag,
-                    "townhallLevel": war_member.town_hall,
-                    "name": war_member.name,
-                    "mapPosition": war_member.map_position,
-                }
-                def_data["attack_order"] = defn.order
-                def_data["fresh"] = defn.is_fresh_attack
-
-                if filter.enemy_th and defn.attacker.town_hall != filter.enemy_th:
-                    continue
-                if filter.same_th and defn.defender.town_hall != war_member.town_hall:
-                    continue
-                if filter.fresh_only and not defn.is_fresh_attack:
-                    continue
-                if filter.min_stars and defn.stars < filter.min_stars:
-                    continue
-                if filter.max_stars and defn.stars > filter.max_stars:
-                    continue
-                if filter.min_destruction and defn.destruction < filter.min_destruction:
-                    continue
-                if filter.max_destruction and defn.destruction > filter.max_destruction:
-                    continue
-                if filter.map_position_min and defn.attacker.map_position < filter.map_position_min:
-                    continue
-                if filter.map_position_max and defn.attacker.map_position > filter.map_position_max:
-                    continue
-
-                player_data["defenses"].append(def_data)
-                war_info["defenses"].append(def_data)
-
-            war_info["missedAttacks"] = war.attacks_per_member - len(war_member.attacks)
-            war_info["missedDefenses"] = 1 if not war_member.best_opponent_attack else 0
-            player_data["wars"].append(war_info)
-
-        # Inject war_type dans chaque attaque et défense
-        for war_info in player_data["wars"]:
-            war_type = war_info["war_data"].get("type", "all").lower()
-            for atk in war_info["attacks"]:
-                atk["war_type"] = war_type
-            for dfn in war_info["defenses"]:
-                dfn["war_type"] = war_type
-
-        grouped = group_attacks_by_type(player_data["attacks"], player_data["defenses"], player_data["wars"])
-
-        computed_stats = {}
-        for war_type, data in grouped.items():
-            computed_stats[war_type] = compute_warhit_stats(
-                attacks=data["attacks"],
-                defenses=data["defenses"],
-                filter=filter,
-                missed_attacks=data["missedAttacks"],
-                missed_defenses=data["missedDefenses"],
-                num_wars=data["warsCounts"],
-            )
-
-        return {
-            "tag": tag,
-            "townhallLevel": player_data["townhall"],
-            "stats": computed_stats,
-            "wars": player_data["wars"],
-            "timeRange": {
-                "start": filter.timestamp_start,
-                "end": filter.timestamp_end,
-            },
-            "warType": filter.type,
-        }
-
-    results = await asyncio.gather(*[fetch_player_wars(tag) for tag in player_tags])
+    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+    results = await collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tag=clan_tag, filter=filter, client=client)
     return {"items": results}

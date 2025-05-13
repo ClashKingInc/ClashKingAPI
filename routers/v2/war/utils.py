@@ -1,16 +1,11 @@
 import asyncio
 from collections import defaultdict
 from typing import List
-
 import coc
 import requests
-import aiohttp
-
 from routers.v2.war.models import PlayerWarhitsFilter
-from utils.utils import fix_tag
 
 semaphore = asyncio.Semaphore(10)
-
 
 def ranking_create(data: dict):
     # Initialize accumulators
@@ -284,9 +279,9 @@ async def process_war_stats(war_league_infos, clan_summary_map):
                     if data["avg_attacker_townhall_level"] is not None:
                         stats["attacker_th_level_list"].append(data["avg_attacker_townhall_level"])
 
-                attack = member.get("attacks")
-                if attack:
-                    attack = attack[0] if isinstance(attack, list) else attack
+                attacks = member.get("attacks")
+                if attacks:
+                    attack = attacks[0] if isinstance(attacks, list) else attacks
                     stars = attack["stars"]
                     destruction = attack["destructionPercentage"]
                     defender_tag = attack.get("defenderTag")
@@ -361,7 +356,6 @@ async def compute_clan_ranking(clan_summary_map):
 
 
 def compute_member_position_stats(war, clan_key="clan", opponent_key="opponent"):
-    from collections import defaultdict
 
     enemy_map = {
         member["tag"]: member.get("mapPosition")
@@ -553,8 +547,6 @@ def compute_warhit_stats(
         missed_defenses: int = 0,
         num_wars: int = 0,
 ):
-    from collections import defaultdict
-
     def filter_hit(hit, is_attack=True):
         th_key = "defender" if is_attack else "attacker"
 
@@ -588,16 +580,21 @@ def compute_warhit_stats(
             star_count[hit["stars"]] += 1
         return {str(k): star_count[k] for k in range(4)}
 
-    def group_by_enemy_th(lst, is_attack=True):
-        th_key = "defender" if is_attack else "attacker"
+    def group_by_th_matchup(lst, is_attack=True):
+
+        th2_key = "defender" if is_attack else "attacker"
+        th1_key = "attacker" if is_attack else "defender"
         grouped = defaultdict(list)
+
         for hit in lst:
-            enemy_th_level = hit[th_key]["townhallLevel"]
-            grouped[enemy_th_level].append(hit)
+            attacker_th = hit[th1_key]["townhallLevel"]
+            defender_th = hit[th2_key]["townhallLevel"]
+            matchup = f"{attacker_th}vs{defender_th}"
+            grouped[matchup].append(hit)
 
         result = {}
-        for th, hits in grouped.items():
-            result[str(th)] = {
+        for matchup, hits in grouped.items():
+            result[matchup] = {
                 "averageStars": average("stars", hits),
                 "averageDestruction": average("destructionPercentage", hits),
                 "count": len(hits),
@@ -613,8 +610,8 @@ def compute_warhit_stats(
         "missedDefenses": missed_defenses,
         "starsCount": count_stars(filtered_attacks),
         "starsCountDef": count_stars(filtered_defenses),
-        "byEnemyTownhall": group_by_enemy_th(filtered_attacks, is_attack=True),
-        "byEnemyTownhallDef": group_by_enemy_th(filtered_defenses, is_attack=False),
+        "byEnemyTownhall": group_by_th_matchup(filtered_attacks, is_attack=True),
+        "byEnemyTownhallDef": group_by_th_matchup(filtered_defenses, is_attack=False),
     }
 
 
@@ -706,7 +703,6 @@ def defense_passes_filters(dfn, member, filter):
 
 
 async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tags=None, filter=None, client=None):
-    from collections import defaultdict
 
     players_data = defaultdict(lambda: {
         "attacks": [],
@@ -824,6 +820,8 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                     }
 
                 all_wars_dict[war_id]["members"].append(member_raw_data)
+                war_info["missedAttacks"] = war.attacks_per_member - len(member.attacks)
+                war_info["missedDefenses"] = 1 if not member.best_opponent_attack else 0
                 player_data["wars"].append(war_info)
 
     results = []

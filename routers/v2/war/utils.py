@@ -739,7 +739,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                     continue
 
                 player_data = players_data[tag]
-                player_data["townhall"] = member.town_hall
+                player_data["townhall"] = max(player_data["townhall"] or 0, member.town_hall)
                 player_data["missedAttacks"] += war.attacks_per_member - len(member.attacks)
                 player_data["missedDefenses"] += 1 if not member.best_opponent_attack else 0
                 player_data["warsCount"] += 1

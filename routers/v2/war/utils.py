@@ -846,8 +846,7 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             )
 
         results.append({
-            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else data["defenses"][0]["defender"][
-                "name"],
+            "name": data["attacks"][0]["attacker"]["name"] if data["attacks"] else (data["defenses"][0]["defender"]["name"] if data["defenses"] else None),
             "tag": tag,
             "townhallLevel": data["townhall"],
             "stats": stats,

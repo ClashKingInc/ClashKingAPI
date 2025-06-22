@@ -44,7 +44,7 @@ async def get_current_user_info(user_id: str = Depends(get_current_user_id)):
             pass
 
     return UserInfo(
-        user_id=current_user["user_id"],
+        user_id=str(current_user["user_id"]),
         username=username,
         avatar_url=avatar_url
     )
@@ -202,10 +202,15 @@ async def refresh_access_token(request: RefreshTokenRequest) -> dict:
 @router.post("/auth/register", response_model=AuthResponse)
 @limiter.limit("3/minute")
 async def register_email_user(req: EmailRegisterRequest, request: Request):
-    # Validate input
-    PasswordValidator.validate_email(req.email)
-    PasswordValidator.validate_password(req.password)
-    PasswordValidator.validate_username(req.username)
+    try:
+        # Validate input
+        PasswordValidator.validate_email(req.email)
+        PasswordValidator.validate_password(req.password)
+        PasswordValidator.validate_username(req.username)
+    except HTTPException as e:
+        # Log the specific validation error for debugging
+        print(f"Validation error in registration: {e.detail}")
+        raise e
     
     existing_user = await db_client.app_users.find_one({"email": req.email})
     if existing_user:
@@ -233,8 +238,8 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             "created_at": pend.now()
         })
 
-    access_token = generate_jwt(user_id, req.device_id)
-    refresh_token = generate_refresh_token(user_id)
+    access_token = generate_jwt(str(user_id), req.device_id)
+    refresh_token = generate_refresh_token(str(user_id))
 
     await db_client.app_refresh_tokens.update_one(
         {"user_id": user_id},
@@ -270,8 +275,8 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
     if not user or not verify_password(req.password, user.get("password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    access_token = generate_jwt(user["user_id"], req.device_id)
-    refresh_token = generate_refresh_token(user["user_id"])
+    access_token = generate_jwt(str(user["user_id"]), req.device_id)
+    refresh_token = generate_refresh_token(str(user["user_id"]))
 
     await db_client.app_refresh_tokens.update_one(
         {"user_id": user["user_id"]},
@@ -289,7 +294,7 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         access_token=access_token,
         refresh_token=refresh_token,
         user=UserInfo(
-            user_id=user["user_id"],
+            user_id=str(user["user_id"]),
             username=user["username"],
             avatar_url=user.get("avatar_url", "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png")
         )

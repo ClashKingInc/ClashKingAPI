@@ -1,35 +1,9 @@
-import os
 import jwt
 import requests
 import pendulum as pend
-from dotenv import load_dotenv
 from fastapi import HTTPException
-from utils.utils import db_client
-from passlib.context import CryptContext
-from cryptography.fernet import Fernet
+from utils.utils import db_client, config
 import base64
-
-############################
-# Load environment variables
-############################
-load_dotenv()
-
-############################
-# Global configuration
-############################
-SECRET_KEY = os.getenv('SECRET_KEY')
-REFRESH_SECRET = os.getenv('REFRESH_SECRET')
-DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
-DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
-ALGORITHM = "HS256"
-
-# Fernet cipher for encryption/decryption
-cipher = Fernet(ENCRYPTION_KEY)
-
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 ############################
 # Utility functions
@@ -38,7 +12,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Encrypt data using Fernet
 async def encrypt_data(data: str) -> str:
     """Encrypt data using Fernet."""
-    encrypted = cipher.encrypt(data.encode("utf-8"))  # Returns bytes
+    encrypted = config.cipher.encrypt(data.encode("utf-8"))  # Returns bytes
     return base64.urlsafe_b64encode(encrypted).decode("utf-8")  # Convert to str for storage
 
 # Decrypt data using Fernet
@@ -46,7 +20,7 @@ async def decrypt_data(data: str) -> str:
     """Decrypt data using Fernet."""
     try:
         data_bytes = base64.urlsafe_b64decode(data.encode("utf-8"))  # Convert back to bytes
-        decrypted = cipher.decrypt(data_bytes).decode("utf-8")  # Decrypt and decode
+        decrypted = config.cipher.decrypt(data_bytes).decode("utf-8")  # Decrypt and decode
         return decrypted
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to decrypt data: {str(e)}")
@@ -57,15 +31,16 @@ def generate_jwt(user_id: str, device_id: str) -> str:
     payload = {
         "sub": user_id,
         "device": device_id,
-        "exp": pend.now().add(days=90).int_timestamp
+        "iat": pend.now().int_timestamp,
+        "exp": pend.now().add(hours=24).int_timestamp
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
 
 def decode_jwt(token: str) -> dict:
-    """Decode the JWT token and return the payload."""
+    """Decode the JWT access token and return the payload."""
     try:
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        decoded_token = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         return decoded_token
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Expired token. Please refresh.")
@@ -74,9 +49,21 @@ def decode_jwt(token: str) -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error decoding token: {str(e)}")
 
+def decode_refresh_token(token: str) -> dict:
+    """Decode the JWT refresh token and return the payload."""
+    try:
+        decoded_token = jwt.decode(token, config.REFRESH_SECRET, algorithms=[config.ALGORITHM])
+        return decoded_token
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Expired refresh token. Please login again.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token. Please login again.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error decoding refresh token: {str(e)}")
+
 # Verify a plaintext password against a hashed one
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return config.pwd_context.verify(plain_password, hashed_password)
 
 
 # Generate a long-lived refresh token (90 days)
@@ -86,8 +73,10 @@ def generate_clashking_access_token(user_id: str, device_id: str):
         "device": device_id,
         "exp": pend.now().add(days=90).int_timestamp
     }
-    return jwt.encode(payload, REFRESH_SECRET, algorithm="HS256")
+    return jwt.encode(payload, config.REFRESH_SECRET, algorithm=config.ALGORITHM)
 
+def hash_password(password: str) -> str:
+    return config.pwd_context.hash(password)
 
 async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
     """
@@ -96,8 +85,8 @@ async def refresh_discord_access_token(encrypted_refresh_token: str) -> dict:
     try:
         refresh_token = await decrypt_data(encrypted_refresh_token)
         token_data = {
-            "client_id": DISCORD_CLIENT_ID,
-            "client_secret": DISCORD_CLIENT_SECRET,
+            "client_id": config.DISCORD_CLIENT_ID,
+            "client_secret": config.DISCORD_CLIENT_SECRET,
             "grant_type": "refresh_token",
             "refresh_token": refresh_token
         }
@@ -161,6 +150,7 @@ def generate_refresh_token(user_id: str) -> str:
     """Generate a refresh token for the user."""
     payload = {
         "sub": user_id,
-        "exp": pend.now().add(days=180)
+        "iat": pend.now().int_timestamp,
+        "exp": pend.now().add(days=30).int_timestamp
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, config.REFRESH_SECRET, algorithm=config.ALGORITHM)

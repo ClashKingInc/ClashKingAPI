@@ -394,10 +394,15 @@ async def bulk_requests(urls: list[str]):
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
 
-def generate_custom_id(input_number):
+def generate_custom_id(input_number: int = None):
+    # Use input_number if provided, otherwise generate a random number
+    base_input = input_number or random.randint(1000000000, 9999999999)
+
+    # Combine with current UTC timestamp to get a unique ID
     base_number = (
-        input_number
+        base_input
         + int(pend.now(tz=pend.UTC).timestamp())
         + random.randint(1000000000, 9999999999)
     )
+
     return base_number

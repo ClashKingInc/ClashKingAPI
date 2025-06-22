@@ -1,21 +1,18 @@
 import pendulum as pend
 import re
-from fastapi import HTTPException, Header, APIRouter
+from fastapi import HTTPException, Header, APIRouter, Depends
 
 from routers.v2.accounts.utils import fetch_coc_account_data, is_coc_account_linked, verify_coc_ownership
 from routers.v2.auth.models import CocAccountRequest
 from utils.utils import db_client, generate_custom_id
-from utils.auth_utils import decode_jwt
+from utils.security_middleware import get_current_user_id
 
 router = APIRouter(prefix="/v2", tags=["Coc Accounts"], include_in_schema=True)
 
 
 @router.post("/users/add-coc-account", name="Link a Clash of Clans account to a user")
-async def add_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
+async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Associate a Clash of Clans account (tag) with a user WITHOUT ownership verification."""
-    token = authorization.split("Bearer ")[1]
-    decoded_token = decode_jwt(token)
-    user_id = decoded_token["sub"]
     player_tag = request.player_tag
 
     if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
@@ -56,11 +53,8 @@ async def add_coc_account(request: CocAccountRequest, authorization: str = Heade
 
 @router.post("/users/add-coc-account-with-token",
              name="Link a Clash of Clans account to a user with a token verification")
-async def add_coc_account_with_verification(request: CocAccountRequest, authorization: str = Header(None)):
+async def add_coc_account_with_verification(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Associate a Clash of Clans account with a user WITH ownership verification."""
-    token = authorization.split("Bearer ")[1]
-    decoded_token = decode_jwt(token)
-    user_id = decoded_token["sub"]
     player_tag = request.player_tag
     player_token = request.player_token
 
@@ -120,12 +114,8 @@ async def add_coc_account_with_verification(request: CocAccountRequest, authoriz
 
 
 @router.get("/users/coc-accounts", name="Get all Clash of Clans accounts linked to a user")
-async def get_coc_accounts(authorization: str = Header(None)):
+async def get_coc_accounts(user_id: str = Depends(get_current_user_id)):
     """Retrieve all Clash of Clans accounts linked to a user."""
-
-    token = authorization.split("Bearer ")[1]
-    decoded_token = decode_jwt(token)
-    user_id = decoded_token["sub"]
 
     accounts = await db_client.coc_accounts.find({"user_id": user_id}).sort("order_index", 1).to_list(length=None)
 
@@ -133,12 +123,8 @@ async def get_coc_accounts(authorization: str = Header(None)):
 
 
 @router.delete("/users/remove-coc-account", name="Remove a Clash of Clans account linked to a user")
-async def remove_coc_account(request: CocAccountRequest, authorization: str = Header(None)):
+async def remove_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Remove a specific Clash of Clans account linked to a user."""
-
-    token = authorization.split("Bearer ")[1]
-    decoded_token = decode_jwt(token)
-    user_id = decoded_token["sub"]
     player_tag = request.player_tag
 
     if not player_tag.startswith("#"):
@@ -182,12 +168,8 @@ async def check_coc_account(player_tag: str):
 
 
 @router.put("/users/reorder-coc-accounts", name="Reorder linked Clash of Clans accounts")
-async def reorder_coc_accounts(request: dict, authorization: str = Header(None)):
+async def reorder_coc_accounts(request: dict, user_id: str = Depends(get_current_user_id)):
     """Reorder Clash of Clans accounts based on user preferences."""
-
-    token = authorization.split("Bearer ")[1]
-    decoded_token = decode_jwt(token)
-    user_id = decoded_token["sub"]
 
     new_order = request.get("ordered_tags", [])
     if not new_order:

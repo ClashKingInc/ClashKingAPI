@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class CocAccountRequest(BaseModel):
@@ -18,3 +18,16 @@ class AuthResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
     device_id: str
+
+class EmailAuthRequest(BaseModel):
+    email: EmailStr
+    password: str
+    device_id: str
+    device_name: str
+
+class EmailRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    username: str
+    device_id: str
+    device_name: str

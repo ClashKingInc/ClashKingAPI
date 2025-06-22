@@ -15,6 +15,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
+from slowapi.middleware import SlowAPIMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
@@ -27,9 +28,11 @@ limiter = Limiter(key_func=get_ipaddr)
 middleware = [
     Middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["*"],  # Support mobile apps, web browsers, and bots
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+        allow_credentials=True,  # Enable for web browsers and potential cookie-based auth
+        expose_headers=["*"],
     ),
     Middleware(
         GZipMiddleware,
@@ -38,6 +41,8 @@ middleware = [
 ]
 
 app = FastAPI(middleware=middleware)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 

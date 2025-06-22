@@ -14,18 +14,37 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         decoded_token = decode_jwt(credentials.credentials)
         user_id = decoded_token["sub"]
         
-        # Verify user still exists
+        # Verify user still exists - try both string and int formats
         user = await db_client.app_users.find_one({"user_id": user_id})
         if not user:
+            # Try as integer if string lookup failed
+            try:
+                user_id_int = int(user_id)
+                user = await db_client.app_users.find_one({"user_id": user_id_int})
+            except (ValueError, TypeError):
+                pass
+        
+        if not user:
+            print(f"❌ User lookup failed for user_id: {user_id} (type: {type(user_id)})")
             raise HTTPException(status_code=401, detail="User not found")
-            
-        return user_id
+        
+        print(f"✅ User found: {user_id}")
+        return str(user_id)  # Always return as string for consistency
     except Exception as e:
+        print(f"❌ Auth error: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid authentication token: " + str(e))
 
 async def get_current_user(user_id: str = Depends(get_current_user_id)) -> dict:
     """Get full user object from validated user ID."""
+    # Try both string and int formats for user_id lookup
     user = await db_client.app_users.find_one({"user_id": user_id})
+    if not user:
+        try:
+            user_id_int = int(user_id)
+            user = await db_client.app_users.find_one({"user_id": user_id_int})
+        except (ValueError, TypeError):
+            pass
+    
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user

@@ -41,8 +41,6 @@ middleware = [
 ]
 
 app = FastAPI(middleware=middleware)
-app.state.limiter = limiter
-app.add_middleware(SlowAPIMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 

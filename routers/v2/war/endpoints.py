@@ -286,8 +286,8 @@ async def get_clan_war_summary(clan_tag: str):
                 league_info = await enrich_league_info(league_info, war_league_infos, session)
 
         return JSONResponse(content={
-            "isInWar": war_info["state"] == "war",
-            "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+            "isInWar": war_info and war_info.get("state") == "war",
+            "isInCwl": league_info is not None and war_info and war_info.get("state") == "notInWar",
             "war_info": war_info,
             "league_info": league_info,
             "war_league_infos": war_league_infos
@@ -315,8 +315,8 @@ async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request)
 
             return {
                 "clan_tag": clan_tag,
-                "isInWar": war_info["state"] == "war",
-                "isInCwl": league_info is not None and war_info["state"] == "notInWar",
+                "isInWar": war_info and war_info.get("state") == "war",
+                "isInCwl": league_info is not None and war_info and war_info.get("state") == "notInWar",
                 "war_info": war_info,
                 "league_info": league_info,
                 "war_league_infos": war_league_infos

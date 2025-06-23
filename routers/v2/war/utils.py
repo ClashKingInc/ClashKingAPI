@@ -107,8 +107,8 @@ async def fetch_opponent_tag(clan_tag):
 
 async def fetch_current_war_info_bypass(clan_tag, session):
     war = await fetch_current_war_info(clan_tag)
-    if war["state"] == "accessDenied":
-        opponent_tag = await fetch_opponent_tag(clan_tag, session)
+    if war and war.get("state") == "accessDenied":
+        opponent_tag = await fetch_opponent_tag(clan_tag)
         if opponent_tag:
             return await fetch_current_war_info(opponent_tag, bypass=True)
     return war

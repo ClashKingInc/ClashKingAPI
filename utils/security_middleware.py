@@ -25,13 +25,9 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
                 pass
         
         if not user:
-            print(f"❌ User lookup failed for user_id: {user_id} (type: {type(user_id)})")
             raise HTTPException(status_code=401, detail="User not found")
-        
-        print(f"✅ User found: {user_id}")
         return str(user_id)  # Always return as string for consistency
     except Exception as e:
-        print(f"❌ Auth error: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid authentication token: " + str(e))
 
 async def get_current_user(user_id: str = Depends(get_current_user_id)) -> dict:

@@ -31,6 +31,6 @@ async def verify_coc_ownership(coc_tag: str, player_token: str) -> bool:
 
 async def is_coc_account_linked(coc_tag: str) -> bool:
     """Check if the Clash of Clans account is already linked to another user."""
-    existing_account = await db_client.coc_accounts.find_one({"coc_tag": coc_tag})
+    existing_account = await db_client.coc_accounts.find_one({"player_tag": coc_tag})
     return existing_account is not None
 

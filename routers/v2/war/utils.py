@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import List
 import coc
 import requests
+import sentry_sdk
 from routers.v2.war.models import PlayerWarhitsFilter
 
 semaphore = asyncio.Semaphore(10)
@@ -69,6 +70,9 @@ def ranking_create(data: dict):
 
 async def fetch_current_war_info(clan_tag, bypass=False):
     try:
+        if clan_tag is None:
+            sentry_sdk.capture_message("clan_tag is None in fetch_current_war_info", level="error")
+            return None
         tag_encoded = clan_tag.replace("#", "%23")
         url = f"https://proxy.clashk.ing/v1/clans/{tag_encoded}/currentwar"
         res = requests.get(url, timeout=15)
@@ -82,7 +86,7 @@ async def fetch_current_war_info(clan_tag, bypass=False):
         elif res.status_code == 403:
             return {"state": "accessDenied"}
     except Exception as e:
-        print(f"Error fetching current war info: {e}")
+        sentry_sdk.capture_exception(e, tags={"function": "fetch_current_war_info", "clan_tag": clan_tag})
 
     return {"state": "notInWar"}
 
@@ -112,6 +116,9 @@ async def fetch_current_war_info_bypass(clan_tag, session):
 
 async def fetch_league_info(clan_tag, session):
     try:
+        if clan_tag is None:
+            sentry_sdk.capture_message("clan_tag is None in fetch_league_info", level="error")
+            return None
         tag_encoded = clan_tag.replace("#", "%23")
         url = f"https://proxy.clashk.ing/v1/clans/{tag_encoded}/currentwar/leaguegroup"
         async with session.get(url, timeout=15) as res:
@@ -120,11 +127,14 @@ async def fetch_league_info(clan_tag, session):
                 if data.get("state") != "notInWar":
                     return data
     except Exception as e:
-        print(f"Error fetching CWL info: {e}")
+        sentry_sdk.capture_exception(e, tags={"function": "fetch_league_info", "clan_tag": clan_tag})
     return None
 
 
 async def fetch_war_league_info(war_tag, session):
+    if war_tag is None:
+        sentry_sdk.capture_message("war_tag is None in fetch_war_league_info", level="error")
+        return None
     war_tag_encoded = war_tag.replace('#', '%23')
     url = f"https://proxy.clashk.ing/v1/clanwarleagues/wars/{war_tag_encoded}"
 
@@ -525,6 +535,9 @@ async def enrich_league_info(league_info, war_league_infos, session):
 
     # Get clan with rank = 3 to get current league because they won't go up or down
     third_clan = next((clan for clan in league_info["clans"] if clan["rank"] == 3), None)
+    if third_clan is None:
+        sentry_sdk.capture_message("No clan found with rank 3 in league_info", level="warning")
+        return league_info
     clan_tag = third_clan.get("tag", "").replace("#", "%23")
     url = f"https://proxy.clashk.ing/v1/clans/{clan_tag}"
     try:

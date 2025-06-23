@@ -271,9 +271,9 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
                 }}
             )
         else:
-            user_id = generate_custom_id()
+            user_id = str(generate_custom_id())
             await db_client.app_users.insert_one({
-                "_id": user_id,
+                "_id": int(user_id),
                 "user_id": user_id,
                 "email": req.email,
                 "username": req.username,
@@ -288,7 +288,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": str(generate_custom_id())},
+                "$setOnInsert": {"_id": int(user_id)},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)
@@ -332,7 +332,7 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user["user_id"])},
             {
-                "$setOnInsert": {"_id": generate_custom_id()},
+                "$setOnInsert": {"_id": int(str(user["user_id"]))},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)

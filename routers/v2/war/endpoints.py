@@ -3,6 +3,7 @@ import json
 import tempfile
 import uuid
 import coc
+import sentry_sdk
 
 import aiohttp
 from fastapi.responses import JSONResponse
@@ -459,6 +460,9 @@ async def export_cwl_summary_to_excel(tag: str):
     end_row = ws_clan.max_row
     format_table(ws_clan, start_row, end_row, "ClanSummary")
 
+    if tag is None:
+        sentry_sdk.capture_message("clan tag is None in export_cwl_summary_to_excel", level="error")
+        raise HTTPException(status_code=400, detail="clan tag cannot be None")
     tag = tag.replace("!", "#")
     for clan in clans:
         sheet = wb.create_sheet(title=clan.get("name", "Clan")[:30])

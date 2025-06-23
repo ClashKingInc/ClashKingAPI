@@ -173,11 +173,11 @@ async def auth_discord(request: Request):
             upsert=True
         )
 
-        access_token = generate_jwt(user_id, device_id)
-        refresh_token = generate_refresh_token(user_id)
+        access_token = generate_jwt(str(user_id), device_id)
+        refresh_token = generate_refresh_token(str(user_id))
 
         await db_client.app_refresh_tokens.update_one(
-            {"user_id": user_id},
+            {"user_id": str(user_id)},
             {
                 "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
                 "$set": {
@@ -227,12 +227,12 @@ async def refresh_access_token(request: RefreshTokenRequest) -> dict:
 
         user_id = stored_refresh_token["user_id"]
         
-        # Verify user_id matches
-        if user_id != user_id_from_token:
+        # Verify user_id matches (ensure both are strings for comparison)
+        if str(user_id) != str(user_id_from_token):
             sentry_sdk.capture_message(f"User ID mismatch in refresh token: stored={user_id}, token={user_id_from_token}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-        new_access_token = generate_jwt(user_id, request.device_id)
+        new_access_token = generate_jwt(str(user_id), request.device_id)
 
         return {"access_token": new_access_token}
     except HTTPException:
@@ -286,7 +286,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         refresh_token = generate_refresh_token(str(user_id))
 
         await db_client.app_refresh_tokens.update_one(
-            {"user_id": user_id},
+            {"user_id": str(user_id)},
             {
                 "$setOnInsert": {"_id": str(generate_custom_id())},
                 "$set": {
@@ -330,7 +330,7 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         refresh_token = generate_refresh_token(str(user["user_id"]))
 
         await db_client.app_refresh_tokens.update_one(
-            {"user_id": user["user_id"]},
+            {"user_id": str(user["user_id"])},
             {
                 "$setOnInsert": {"_id": generate_custom_id()},
                 "$set": {

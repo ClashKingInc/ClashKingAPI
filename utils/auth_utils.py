@@ -1,6 +1,7 @@
 import jwt
 import requests
 import pendulum as pend
+import hashlib
 from fastapi import HTTPException
 from utils.utils import db_client, config
 import base64
@@ -24,6 +25,21 @@ async def decrypt_data(data: str) -> str:
         return decrypted
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to decrypt data: {str(e)}")
+
+# Hash email for lookup purposes (one-way, deterministic)
+def hash_email(email: str) -> str:
+    """Create a deterministic hash of email for database lookups."""
+    email_normalized = email.lower().strip()
+    return hashlib.sha256(f"{email_normalized}{config.SECRET_KEY}".encode()).hexdigest()
+
+# Encrypt and prepare email data for storage
+async def prepare_email_for_storage(email: str) -> dict:
+    """Encrypt email and create lookup hash."""
+    email_normalized = email.lower().strip()
+    return {
+        "email_encrypted": await encrypt_data(email_normalized),
+        "email_hash": hash_email(email_normalized)
+    }
 
 
 def generate_jwt(user_id: str, device_id: str) -> str:

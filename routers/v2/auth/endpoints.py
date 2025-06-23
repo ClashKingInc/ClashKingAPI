@@ -5,7 +5,7 @@ from fastapi import Header, HTTPException, Request, APIRouter, Depends
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
 from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
-    generate_refresh_token, verify_password, hash_password
+    generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data
 from utils.utils import db_client, generate_custom_id, config
 from utils.password_validator import PasswordValidator
 from utils.security_middleware import get_current_user_id
@@ -32,7 +32,16 @@ async def get_current_user_info(user_id: str = Depends(get_current_user_id)):
             sentry_sdk.capture_message(f"User not found in /auth/me for user_id: {user_id} (type: {type(user_id)})", level="warning")
             raise HTTPException(status_code=404, detail="User not found")
 
-        username = current_user.get("username") or current_user.get("email")
+        # Decrypt email for username fallback if needed
+        decrypted_email = None
+        if current_user.get("email_encrypted"):
+            try:
+                decrypted_email = await decrypt_data(current_user["email_encrypted"])
+            except Exception as e:
+                sentry_sdk.capture_exception(e, tags={"function": "decrypt_email_in_auth_me", "user_id": user_id})
+                # Continue without email if decryption fails
+        
+        username = current_user.get("username") or decrypted_email
         avatar_url = current_user.get("avatar_url") or "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png"
 
         if "discord" in current_user.get("auth_methods", []):
@@ -127,35 +136,50 @@ async def auth_discord(request: Request):
 
         discord_user_id = user_data["id"]
         email = user_data.get("email")
-
-        existing_user = await db_client.app_users.find_one({"$or": [
-            {"user_id": discord_user_id},
-            {"email": email}
-        ]})
+        
+        # Prepare email encryption if email exists
+        email_conditions = [{"user_id": discord_user_id}]
+        if email:
+            email_hash = hash_email(email)
+            email_conditions.append({"email_hash": email_hash})
+        
+        existing_user = await db_client.app_users.find_one({"$or": email_conditions})
 
         if existing_user:
             user_id = existing_user["user_id"]
             auth_methods = set(existing_user.get("auth_methods", []))
             auth_methods.add("discord")
+            
+            # Prepare email data for update
+            update_data = {
+                "auth_methods": list(auth_methods),
+                "username": user_data["username"]
+            }
+            
+            if email:
+                email_data = await prepare_email_for_storage(email)
+                update_data.update(email_data)
 
             await db_client.app_users.update_one(
                 {"user_id": user_id},
-                {"$set": {
-                    "auth_methods": list(auth_methods),
-                    "email": email,
-                    "username": user_data["username"]
-                }}
+                {"$set": update_data}
             )
         else:
             user_id = discord_user_id
-            await db_client.app_users.insert_one({
+            insert_data = {
                 "_id": generate_custom_id(int(user_id)),
                 "user_id": user_id,
                 "auth_methods": ["discord"],
-                "email": email,
                 "username": user_data["username"],
                 "created_at": pend.now()
-            })
+            }
+            
+            # Add encrypted email if available
+            if email:
+                email_data = await prepare_email_for_storage(email)
+                insert_data.update(email_data)
+            
+            await db_client.app_users.insert_one(insert_data)
 
         encrypted_discord_access = await encrypt_data(access_token_discord)
         encrypted_discord_refresh = await encrypt_data(refresh_token_discord)
@@ -256,7 +280,10 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             sentry_sdk.capture_message(f"Validation error in registration: {e.detail}", level="warning")
             raise e
         
-        existing_user = await db_client.app_users.find_one({"email": req.email})
+        # Prepare email encryption
+        email_hash = hash_email(req.email)
+        email_data = await prepare_email_for_storage(req.email)
+        existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
         if existing_user:
             user_id = existing_user["user_id"]
             auth_methods = set(existing_user.get("auth_methods", []))
@@ -267,7 +294,9 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
                 {"$set": {
                     "auth_methods": list(auth_methods),
                     "username": req.username,
-                    "password": hash_password(req.password)
+                    "password": hash_password(req.password),
+                    "email_encrypted": email_data["email_encrypted"],
+                    "email_hash": email_data["email_hash"]
                 }}
             )
         else:
@@ -275,7 +304,8 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             await db_client.app_users.insert_one({
                 "_id": int(user_id),
                 "user_id": user_id,
-                "email": req.email,
+                "email_encrypted": email_data["email_encrypted"],
+                "email_hash": email_data["email_hash"],
                 "username": req.username,
                 "password": hash_password(req.password),
                 "auth_methods": ["email"],
@@ -321,7 +351,9 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         import asyncio
         await asyncio.sleep(0.1)
         
-        user = await db_client.app_users.find_one({"email": req.email})
+        # Look up user by email hash
+        email_hash = hash_email(req.email)
+        user = await db_client.app_users.find_one({"email_hash": email_hash})
         if not user or not verify_password(req.password, user.get("password", "")):
             sentry_sdk.capture_message(f"Failed email login attempt for: {req.email}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -462,16 +494,22 @@ async def link_email_account(req: EmailRegisterRequest, user_id: str = Depends(g
             sentry_sdk.capture_message(f"User not found for email linking: {user_id}", level="warning")
             raise HTTPException(status_code=404, detail="User not found")
 
-        email_conflict = await db_client.app_users.find_one({"email": req.email})
+        # Check for email conflicts using hash
+        email_hash = hash_email(req.email)
+        email_conflict = await db_client.app_users.find_one({"email_hash": email_hash})
         if email_conflict and email_conflict["user_id"] != user_id:
             sentry_sdk.capture_message(f"Email {req.email} already linked to user {email_conflict['user_id']}, attempted by {user_id}", level="warning")
             raise HTTPException(status_code=400, detail="Email already linked to another account")
 
+        # Prepare encrypted email data
+        email_data = await prepare_email_for_storage(req.email)
+        
         await db_client.app_users.update_one(
             {"user_id": user_id},
             {"$set": {
                 "auth_methods": list(set(current_user.get("auth_methods", []) + ["email"])),
-                "email": req.email,
+                "email_encrypted": email_data["email_encrypted"],
+                "email_hash": email_data["email_hash"],
                 "username": req.username,
                 "password": hash_password(req.password)
             }}

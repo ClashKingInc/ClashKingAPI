@@ -3,6 +3,7 @@ import logging
 import uvicorn
 import importlib.util
 import time
+import sentry_sdk
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
@@ -20,6 +21,12 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
 from utils.utils import config, coc_client
+
+# Initialize Sentry SDK
+sentry_sdk.init(
+    dsn=config.SENTRY_DSN,
+    send_default_pii=True,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

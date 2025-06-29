@@ -98,10 +98,12 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
     # Extract clan tags from player data
     clan_tags = set()
     for player in players_result.get("items", []):
-        if player and player.get("clan"):
-            clan_tags.add(player["clan"]["tag"])
+        if player and player.get("clan") and player["clan"].get("tag"):
+            clan_tag = str(player["clan"]["tag"])  # Ensure string type
+            if clan_tag:  # Only add non-empty strings
+                clan_tags.add(clan_tag)
     
-    clan_tags_list = list(clan_tags)
+    clan_tags_list = list(clan_tags)  # Now guaranteed to be List[str]
 
     if not clan_tags_list:
         # No clans found, return player data only with proper empty structure

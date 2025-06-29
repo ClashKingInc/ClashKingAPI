@@ -376,11 +376,12 @@ async def get_clans_capital_raids(request: Request, body: RaidsRequest):
         api_responses = await asyncio.gather(*(fetch_clan_data(session, tag) for tag in clan_tags))
 
     result = []
-    for clan_data in api_responses:
+    for i, clan_data in enumerate(api_responses):
         if clan_data:
             history = clan_data.get("items", [])
             predict_rewards(history)
             result.append({
+                "clan_tag": clan_tags[i],  # Add clan_tag to associate data with clan
                 "stats": generate_raids_clan_stats(history),
                 "history": remove_id_fields(history)
             })

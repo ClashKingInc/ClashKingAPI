@@ -7,9 +7,11 @@ from fastapi import HTTPException, APIRouter, Request
 from routers.v2.clan.endpoints import get_clans_stats, get_clans_capital_raids
 from routers.v2.clan.models import ClanTagsRequest, RaidsRequest
 from routers.v2.player.models import PlayerTagsRequest
+from routers.v2.player.utils import get_legend_stats_common, assemble_full_player_data, fetch_full_player_data
 from routers.v2.war.endpoints import get_multiple_clan_war_summary, clan_warhits_stats, players_warhits_stats
 from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
-from utils.utils import fix_tag
+from utils.utils import fix_tag, remove_id_fields
+from utils.database import MongoClient as mongo
 
 # Constants
 PREPARATION_START_TIME_FIELD = "data.preparationStartTime"
@@ -72,14 +74,15 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
         )
         return await clan_warhits_stats(mongo_filter)
     
-    # Get player data with clan information (using basic API call that includes clan data)
-    async def fetch_players_with_clans():
+    # Get both basic and extended player data
+    async def fetch_players_basic_and_extended():
+        # Fetch basic API data for clan information
         async with aiohttp.ClientSession() as session:
             from routers.v2.player.utils import fetch_player_api_data
             fetch_tasks = [fetch_player_api_data(session, tag) for tag in player_tags]
             api_results = await asyncio.gather(*fetch_tasks)
 
-        result = []
+        basic_result = []
         for tag, data in zip(player_tags, api_results):
             if isinstance(data, HTTPException):
                 if data.status_code == 503 or data.status_code == 500:
@@ -87,17 +90,71 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
                 else:
                     continue
             if data:
-                result.append({
+                basic_result.append({
                     "tag": tag,
                     **data
                 })
-        return {"items": result}
+
+        # Fetch extended player data with MongoDB tracking stats
+        # Fetch MongoDB player_stats in bulk
+        players_info = await mongo.player_stats.find(
+            {"tag": {"$in": player_tags}},
+            {
+                "_id": 0,
+                "tag": 1,
+                "donations": 1,
+                "clan_games": 1,
+                "season_pass": 1,
+                "activity": 1,
+                "last_online": 1,
+                "last_online_time": 1,
+                "attack_wins": 1,
+                "dark_elixir": 1,
+                "gold": 1,
+                "capital_gold": 1,
+                "season_trophies": 1,
+                "last_updated": 1
+            }
+        ).to_list(length=None)
+
+        mongo_data_dict = {player["tag"]: player for player in players_info}
+
+        # Load legends data in bulk
+        legends_data = await get_legend_stats_common(player_tags)
+        tag_to_legends = {entry["tag"]: entry["legends_by_season"] for entry in legends_data}
+
+        # Fetch extended data per player in parallel
+        async with aiohttp.ClientSession() as session:
+            fetch_tasks = [
+                fetch_full_player_data(
+                    session,
+                    tag,
+                    mongo_data_dict.get(tag, {}),
+                    None  # clan_tag - we'll get from basic data
+                )
+                for tag in player_tags
+            ]
+
+            player_results = await asyncio.gather(*fetch_tasks)
+
+        # Assemble enriched player data in parallel
+        extended_results = await asyncio.gather(*[
+            assemble_full_player_data(tag, raid_data, war_data, mongo_data, tag_to_legends)
+            for tag, raid_data, war_data, mongo_data in player_results
+        ])
+        
+        # Remove MongoDB _id fields from extended results
+        extended_results = remove_id_fields(extended_results)
+
+        return {"basic": basic_result, "extended": extended_results}
     
-    players_result = await fetch_players_with_clans()
+    players_data = await fetch_players_basic_and_extended()
+    players_basic = players_data["basic"]
+    players_extended = players_data["extended"]
     
     # Extract clan tags from player data
     clan_tags = set()
-    for player in players_result.get("items", []):
+    for player in players_basic:
         if player and player.get("clan") and player["clan"].get("tag"):
             clan_tag = str(player["clan"]["tag"])  # Ensure string type
             if clan_tag:  # Only add non-empty strings
@@ -109,8 +166,8 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
         # No clans found, return player data only with proper empty structure
         war_stats_result = await app_player_war_stats(body)
         return {
-            "players": players_result.get("items", []),
-            "players_basic": players_result.get("items", []),
+            "players": players_basic,
+            "players_basic": players_basic,
             "clans": {
                 "clan_details": {},
                 "clan_stats": {},
@@ -176,8 +233,8 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
     
     # Structure the response with all required data
     return {
-        "players": players_result.get("items", []),
-        "players_basic": players_result.get("items", []),
+        "players": players_extended,
+        "players_basic": players_basic,
         "clans": {
             "clan_details": {item.get("tag", ""): item for item in clan_details_result.get("items", []) if item},
             "clan_stats": {},  # To do

@@ -39,7 +39,7 @@ class Config:
     IS_PROD = ENV == "production"
 
     HOST = "localhost" if IS_LOCAL else "0.0.0.0"
-    PORT = 8000 if IS_LOCAL else (8073 if IS_DEV else 8010)
+    PORT = 8010 if IS_LOCAL else (8073 if IS_DEV else 8010)
     RELOAD = IS_LOCAL or IS_DEV
 
     SECRET_KEY = os.getenv('SECRET_KEY')

@@ -1,14 +1,12 @@
 import asyncio
 from collections import defaultdict
-import coc
 
 import aiohttp
 from fastapi import HTTPException, Query
-from fastapi import APIRouter, Request, Response
-import pendulum as pend
-from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, get_current_rankings, \
+from fastapi import APIRouter, Request
+from routers.v2.player.utils import get_legend_rankings_for_tag, get_legend_stats_common, \
     assemble_full_player_data, fetch_full_player_data, fetch_player_api_data
-from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT, is_raids
+from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
 from routers.v2.player.models import PlayerTagsRequest

@@ -237,24 +237,117 @@ async def clan_join_leave(
 
 @router.post("/clans/join-leave", name="Join Leaves in a season")
 async def get_multiple_clan_join_leave(
-    body: ClanTagsRequest,
-    request: Request,
-    filters: JoinLeaveQueryParams = Depends()
+    body: ClanTagsRequest = None,
+    request: Request = None,
+    filters: JoinLeaveQueryParams = Depends(),
+    # Programmatic parameters
+    clan_tags: list[str] = None,
+    programmatic_filters: dict = None
 ):
+    """
+    Unified function that handles both FastAPI endpoint calls and programmatic calls.
+    
+    For FastAPI endpoint: Use body, request, and filters (with Depends())
+    For programmatic calls: Use clan_tags and programmatic_filters
+    """
     try:
-        clan_tags = [fix_tag(tag) for tag in body.clan_tags]
+        # Determine if this is a programmatic call or FastAPI endpoint call
+        if clan_tags is not None:
+            # Programmatic call
+            clan_tags_list = [fix_tag(tag) for tag in clan_tags]
+            
+            # Set default filters if none provided
+            if programmatic_filters is None:
+                programmatic_filters = {
+                    "current_season": True,
+                    "limit": 50,
+                    "filter_leave_join_enabled": False,
+                    "filter_join_leave_enabled": False,
+                    "filter_time": 48,
+                    "only_type": None,
+                    "type": None,
+                    "townhall": None,
+                    "tag": None,
+                    "name_contains": None
+                }
+            
+            async def process_clan_join_leave(clan_tag: str):
+                try:
+                    # Use current season by default
+                    if programmatic_filters.get("current_season", True):
+                        season_start, season_end = season_start_end(pend.now(tz=pend.UTC).format("YYYY-MM"))
+                        timestamp_start = int(season_start.timestamp())
+                        time_stamp_end = int(season_end.timestamp())
+                    else:
+                        timestamp_start = programmatic_filters.get("timestamp_start", 0)
+                        time_stamp_end = programmatic_filters.get("time_stamp_end", 9999999999)
 
-        async def process_join_leave(clan_tag: str):
-            response = await clan_join_leave(clan_tag=clan_tag, request=request, filters=filters)
-            return {
-                "clan_tag": clan_tag,
-                "timestamp_start": response["timestamp_start"],
-                "timestamp_end": response["timestamp_end"],
-                "stats": response["stats"],
-                "join_leave_list": response["join_leave_list"]
-            }
+                    base_query = {
+                        "$and": [
+                            {"clan": clan_tag},
+                            {"time": {"$gte": pend.from_timestamp(timestamp_start, tz=pend.UTC)}},
+                            {"time": {"$lte": pend.from_timestamp(time_stamp_end, tz=pend.UTC)}}
+                        ]
+                    }
 
-        results = await asyncio.gather(*(process_join_leave(tag) for tag in clan_tags))
+                    if programmatic_filters.get("type"):
+                        base_query["$and"].append({"type": programmatic_filters["type"]})
+                    if programmatic_filters.get("townhall"):
+                        base_query["$and"].append({"th": {"$in": programmatic_filters["townhall"]}})
+                    if programmatic_filters.get("tag"):
+                        base_query["$and"].append({"tag": {"$in": programmatic_filters["tag"]}})
+                    if programmatic_filters.get("name_contains"):
+                        base_query["$and"].append({"name": {"$regex": programmatic_filters["name_contains"], "$options": "i"}})
+
+                    cursor = mongo.clan_join_leave.find(base_query, {"_id": 0}).sort("time", -1)
+                    if not programmatic_filters.get("current_season", True):
+                        cursor = cursor.limit(programmatic_filters.get("limit", 50))
+
+                    result = await cursor.to_list(length=None)
+
+                    if programmatic_filters.get("filter_leave_join_enabled"):
+                        result = filter_leave_join(result, programmatic_filters.get("filter_time", 48))
+                    if programmatic_filters.get("filter_join_leave_enabled"):
+                        result = filter_join_leave(result, programmatic_filters.get("filter_time", 48))
+                    if programmatic_filters.get("only_type") in ("join_leave", "leave_join"):
+                        result = extract_join_leave_pairs(result, programmatic_filters.get("filter_time", 48), direction=programmatic_filters["only_type"])
+
+                    return {
+                        "clan_tag": clan_tag,
+                        "timestamp_start": timestamp_start,
+                        "timestamp_end": time_stamp_end,
+                        "stats": generate_stats(result),
+                        "join_leave_list": result
+                    }
+
+                except Exception as e:
+                    print(f"❌ Error fetching join/leave data for {clan_tag}: {e}")
+                    return {
+                        "clan_tag": clan_tag,
+                        "timestamp_start": 0,
+                        "timestamp_end": 0,
+                        "stats": {},
+                        "join_leave_list": []
+                    }
+                    
+        else:
+            # FastAPI endpoint call
+            if not body or not body.clan_tags:
+                raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
+                
+            clan_tags_list = [fix_tag(tag) for tag in body.clan_tags]
+            
+            async def process_clan_join_leave(clan_tag: str):
+                response = await clan_join_leave(clan_tag=clan_tag, request=request, filters=filters)
+                return {
+                    "clan_tag": clan_tag,
+                    "timestamp_start": response["timestamp_start"],
+                    "timestamp_end": response["timestamp_end"],
+                    "stats": response["stats"],
+                    "join_leave_list": response["join_leave_list"]
+                }
+
+        results = await asyncio.gather(*(process_clan_join_leave(tag) for tag in clan_tags_list))
         return {"items": results}
 
     except Exception as e:

@@ -1,19 +1,15 @@
 import asyncio
 from typing import Any, Dict, List
 import aiohttp
-import coc
 import pendulum as pend
 from fastapi import HTTPException, APIRouter, Request
 
 from routers.v2.clan.endpoints import get_clans_stats, get_clans_capital_raids
 from routers.v2.clan.models import ClanTagsRequest, RaidsRequest
-from routers.v2.player.endpoints import get_players_stats
 from routers.v2.player.models import PlayerTagsRequest
 from routers.v2.war.endpoints import get_multiple_clan_war_summary, clan_warhits_stats, players_warhits_stats
 from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
-from routers.v2.war.utils import collect_player_hits_from_wars
-from utils.database import MongoClient as Mongo
-from utils.utils import fix_tag, remove_id_fields
+from utils.utils import fix_tag
 
 # Constants
 PREPARATION_START_TIME_FIELD = "data.preparationStartTime"
@@ -52,9 +48,6 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
 
     player_tags = [fix_tag(tag) for tag in body.player_tags]
-    
-    # Define player_request_type alias
-    player_request_type = PlayerTagsRequest
     
     async def fetch_clan_war_logs(input_clan_tags: List[str]) -> List[Dict[str, Any]]:
         """Fetch war logs using same logic as mobile app - direct API calls"""

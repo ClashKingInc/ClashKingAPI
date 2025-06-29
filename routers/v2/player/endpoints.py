@@ -14,83 +14,20 @@ from routers.v2.player.models import PlayerTagsRequest
 router = APIRouter(prefix="/v2", tags=["Player"], include_in_schema=True)
 
 
-@router.post("/players/location",
-             name="Get locations for a list of players")
-async def player_location_list(request: Request, body: PlayerTagsRequest):
-    player_tags = [fix_tag(tag) for tag in body.player_tags]
-    location_info = await mongo.leaderboard_db.find(
-        {'tag': {'$in': player_tags}},
-        {'_id': 0, 'tag': 1, 'country_name': 1, 'country_code': 1}
-    ).to_list(length=None)
+# ============================================================================
+# BASIC PLAYER DATA ENDPOINTS
+# ============================================================================
 
-    return {"items": remove_id_fields(location_info)}
-
-
-@router.post("/players/sorted/{attribute}",
-             name="Get players sorted by an attribute")
-async def player_sorted(attribute: str, request: Request, body: PlayerTagsRequest):
-    urls = [f"players/{fix_tag(t).replace('#', '%23')}" for t in body.player_tags]
-    player_responses = await bulk_requests(urls=urls)
-
-    def fetch_attribute(data: dict, attr: str):
-        """
-        Fetches a nested attribute from a dictionary using dot notation.
-
-        Supports:
-        - Standard dictionary lookups (e.g., "name" -> data["name"])
-        - Nested dictionary lookups (e.g., "league.name" -> data["league"]["name"])
-        - List item lookups (e.g., "achievements[name=test].value" -> gets "value" from the achievement where name="test")
-
-        :param data: The dictionary to fetch the attribute from.
-        :param attr: The attribute path in dot notation.
-        :return: The fetched value or None if not found.
-        """
-
-        if attr == "cumulative_heroes":
-            return sum([h.get("level") for h in data.get("heroes", []) if h.get("village") == "home"])
-
-        keys = attr.split(".")
-        for i, key in enumerate(keys):
-            # Handle list lookup pattern: "achievements[name=test]"
-            if "[" in key and "]" in key:
-                list_key, condition = key[:-1].split("[", 1)  # Extract list name and condition
-                if "=" in condition:
-                    cond_key, cond_value = condition.split("=", 1)
-                    if list_key in data and isinstance(data[list_key], list):
-                        for item in data[list_key]:
-                            if isinstance(item, dict) and item.get(cond_key) == cond_value:
-                                data = item  # Move into the matched dictionary
-                                break
-                        else:
-                            return None  # No matching item found
-                    else:
-                        return None
-                else:
-                    return None  # Invalid format
-            else:
-                data = data.get(key, {}) if i < len(keys) - 1 else data.get(key)  # Move deeper into dict
-
-            if data is None:
-                return None  # Key not found
-
-        return data
-
-    new_data = [
-        {
-            "name": p.get("name"),
-            "tag": p.get("tag"),
-            "value": fetch_attribute(data=p, attr=attribute),
-            "clan": p.get("clan", {})
-        }
-        for p in player_responses
-    ]
-
-    return {"items": sorted(new_data, key=lambda x: (x["value"] is not None, x["value"]), reverse=True)}
-
-
-@router.post("/players", name="Get full stats for a list of players")
-async def get_players_stats(body: PlayerTagsRequest, request: Request):
-    """Quickly retrieve base API player data only for a list of players."""
+@router.post("/players", name="Get basic API data for multiple players")
+async def get_players_basic_stats(body: PlayerTagsRequest, request: Request):
+    """Retrieve basic Clash of Clans API data for multiple players.
+    
+    Fast endpoint that returns only core player information from the CoC API:
+    - Basic player stats (trophies, level, townhall, etc.)
+    - Clan information (if player is in a clan)
+    - Heroes, troops, spells, and achievements
+    - No extended tracking data or MongoDB statistics
+    """
 
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
@@ -117,9 +54,22 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
     return {"items": result}
 
 
-@router.post("/players/extended", name="Get full stats for a list of players")
-async def get_players_stats(body: PlayerTagsRequest, request: Request):
-    """Retrieve Clash of Clans account details for a list of players."""
+# ============================================================================
+# EXTENDED PLAYER DATA ENDPOINTS
+# ============================================================================
+
+@router.post("/players/extended", name="Get comprehensive stats for multiple players")
+async def get_players_extended_stats(body: PlayerTagsRequest, request: Request):
+    """Retrieve comprehensive player data combining API and tracking statistics.
+    
+    Returns enriched player profiles including:
+    - Core API data (trophies, level, townhall, etc.)
+    - Extended tracking stats (donations, clan games, activity, etc.)
+    - Season-based statistics (gold, elixir, dark elixir earnings)
+    - Capital gold contributions and raid data
+    - Legend league statistics and rankings
+    - War performance data
+    """
 
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
@@ -176,8 +126,14 @@ async def get_players_stats(body: PlayerTagsRequest, request: Request):
     return {"items": remove_id_fields(combined_results)}
 
 
-@router.get("/player/{player_tag}/extended", name="Get full stats for a single player")
-async def get_player_stats(player_tag: str, request: Request, clan_tag: str = Query(None)):
+@router.get("/player/{player_tag}/extended", name="Get comprehensive stats for single player")
+async def get_player_extended_stats(player_tag: str, request: Request, clan_tag: str = Query(None)):
+    """Retrieve comprehensive data for a single player.
+    
+    Same as /players/extended but optimized for single player queries.
+    Includes all tracking statistics, legends data, and war performance.
+    Optional clan_tag parameter for clan-specific context.
+    """
     if not player_tag:
         raise HTTPException(status_code=400, detail="player_tag is required")
 
@@ -214,25 +170,32 @@ async def get_player_stats(player_tag: str, request: Request, clan_tag: str = Qu
     return remove_id_fields(player_data)
 
 
-@router.post("/players/legend-days", name="Get legend stats for multiple players")
-async def get_legend_stats(body: PlayerTagsRequest, request: Request):
+# ============================================================================
+# LEGEND LEAGUE ENDPOINTS
+# ============================================================================
+
+@router.post("/players/legend-days", name="Get legend league statistics for multiple players")
+async def get_players_legend_stats(body: PlayerTagsRequest, request: Request):
+    """Retrieve legend league daily statistics for multiple players.
+    
+    Returns detailed legend league performance data including:
+    - Daily trophy gains/losses by season
+    - Attack and defense statistics
+    - Ranking history and best finishes
+    - Season-over-season performance trends
+    """
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
     return {"items": await get_legend_stats_common(body.player_tags)}
 
 
-@router.get("/player/{player_tag}/legend-days", name="Get legend stats for one player")
-async def get_legend_stats_by_player(player_tag: str, request: Request):
-    return await get_legend_stats_common(player_tag)
-
-
-@router.get("/player/{player_tag}/legend_rankings", name="Get previous player legend rankings")
-async def get_player_legend_rankings(player_tag: str, limit: int = 10):
-    return await get_legend_rankings_for_tag(player_tag, limit=limit)
-
-
-@router.post("/players/legend_rankings", name="Get legend rankings for multiple players")
-async def get_bulk_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
+@router.post("/players/legend_rankings", name="Get historical legend league rankings for multiple players")
+async def get_multiple_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
+    """Retrieve historical legend league rankings for multiple players.
+    
+    Returns each player's best legend league finishes with timestamps.
+    Processes multiple players in parallel for efficient bulk queries.
+    """
     if not body.player_tags:
         raise HTTPException(status_code=400, detail="player_tags cannot be empty")
 
@@ -249,9 +212,25 @@ async def get_bulk_legend_rankings(body: PlayerTagsRequest, limit: int = 10):
     return {"items": results}
 
 
+# ============================================================================
+# ANALYTICS & STATISTICS ENDPOINTS
+# ============================================================================
+
 @router.post("/players/summary/{season}/top",
-             name="Get summary of top stats for a list of players")
-async def players_summary_top(season: str, request: Request, body: PlayerTagsRequest, limit: int = 10):
+             name="Get top player statistics for a season")
+async def players_season_leaderboard(season: str, request: Request, body: PlayerTagsRequest, limit: int = 10):
+    """Generate season leaderboards for various player statistics.
+    
+    Creates ranked lists for multiple categories:
+    - Resource earnings (gold, elixir, dark elixir)
+    - Activity levels and attack wins
+    - Donation statistics (given and received)
+    - Capital gold contributions (donated and raided)
+    - War performance (total stars earned)
+    - Trophy progression for the season
+    
+    Returns top performers in each category with rankings.
+    """
     results = await mongo.player_stats.find(
         {'$and': [{'tag': {'$in': body.player_tags}}]}
     ).to_list(length=None)
@@ -380,3 +359,92 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
                              for count, result in enumerate(war_star_results, 1)]
 
     return {"items": [{key: value} for key, value in new_data.items()]}
+
+
+@router.post("/players/location",
+             name="Get location data for multiple players")
+async def player_location_list(request: Request, body: PlayerTagsRequest):
+    """Retrieve geographic location information (country name/code) for a list of players.
+    
+    Returns country names and codes for players based on leaderboard data.
+    Used for analytics and geographic distribution analysis.
+    """
+    player_tags = [fix_tag(tag) for tag in body.player_tags]
+    location_info = await mongo.leaderboard_db.find(
+        {'tag': {'$in': player_tags}},
+        {'_id': 0, 'tag': 1, 'country_name': 1, 'country_code': 1}
+    ).to_list(length=None)
+
+    return {"items": remove_id_fields(location_info)}
+
+
+# ============================================================================
+# UTILITY ENDPOINTS
+# ============================================================================
+
+@router.post("/players/sorted/{attribute}",
+             name="Sort players by any attribute value")
+async def player_sorted(attribute: str, request: Request, body: PlayerTagsRequest):
+    """Sort a list of players by any attribute in descending order.
+    
+    Supports nested attributes (e.g., 'league.name') and achievement lookups.
+    Special attribute 'cumulative_heroes' sums all home village hero levels.
+    Returns players with their name, tag, clan, and the sorted attribute value.
+    """
+    urls = [f"players/{fix_tag(t).replace('#', '%23')}" for t in body.player_tags]
+    player_responses = await bulk_requests(urls=urls)
+
+    def fetch_attribute(data: dict, attr: str):
+        """
+        Fetches a nested attribute from a dictionary using dot notation.
+
+        Supports:
+        - Standard dictionary lookups (e.g., "name" -> data["name"])
+        - Nested dictionary lookups (e.g., "league.name" -> data["league"]["name"])
+        - List item lookups (e.g., "achievements[name=test].value" -> gets "value" from the achievement where name="test")
+
+        :param data: The dictionary to fetch the attribute from.
+        :param attr: The attribute path in dot notation.
+        :return: The fetched value or None if not found.
+        """
+
+        if attr == "cumulative_heroes":
+            return sum([h.get("level") for h in data.get("heroes", []) if h.get("village") == "home"])
+
+        keys = attr.split(".")
+        for i, key in enumerate(keys):
+            # Handle list lookup pattern: "achievements[name=test]"
+            if "[" in key and "]" in key:
+                list_key, condition = key[:-1].split("[", 1)  # Extract list name and condition
+                if "=" in condition:
+                    cond_key, cond_value = condition.split("=", 1)
+                    if list_key in data and isinstance(data[list_key], list):
+                        for item in data[list_key]:
+                            if isinstance(item, dict) and item.get(cond_key) == cond_value:
+                                data = item  # Move into the matched dictionary
+                                break
+                        else:
+                            return None  # No matching item found
+                    else:
+                        return None
+                else:
+                    return None  # Invalid format
+            else:
+                data = data.get(key, {}) if i < len(keys) - 1 else data.get(key)  # Move deeper into dict
+
+            if data is None:
+                return None  # Key not found
+
+        return data
+
+    new_data = [
+        {
+            "name": p.get("name"),
+            "tag": p.get("tag"),
+            "value": fetch_attribute(data=p, attr=attribute),
+            "clan": p.get("clan", {})
+        }
+        for p in player_responses
+    ]
+
+    return {"items": sorted(new_data, key=lambda x: (x["value"] is not None, x["value"]), reverse=True)}

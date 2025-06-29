@@ -37,6 +37,7 @@ async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get
         "user_id": user_id,
         "player_tag": coc_account_data["tag"],
         "order_index": order_index,
+        "is_verified": False,
         "added_at": pend.now()
     })
 
@@ -99,6 +100,7 @@ async def add_coc_account_with_verification(request: CocAccountRequest, user_id:
         "user_id": user_id,
         "player_tag": coc_account_data["tag"],
         "order_index": order_index,
+        "is_verified": True,  # Verified during account addition
         "added_at": pend.now()
     })
 
@@ -190,3 +192,41 @@ async def reorder_coc_accounts(request: dict, user_id: str = Depends(get_current
         )
 
     return {"message": "Accounts reordered successfully"}
+
+
+@router.post("/users/verify-coc-account", name="Verify ownership of an existing linked Clash of Clans account")
+async def verify_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
+    """Verify ownership of an existing linked Clash of Clans account using API token."""
+    player_tag = request.player_tag
+    player_token = request.player_token
+
+    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
+        raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
+
+    if not player_tag.startswith("#"):
+        player_tag = f"#{player_tag}"
+
+    if not player_token:
+        raise HTTPException(status_code=400, detail="Player token is required for verification")
+
+    # Check if the account is linked to this user
+    existing_account = await db_client.coc_accounts.find_one({"user_id": user_id, "player_tag": player_tag})
+    if not existing_account:
+        raise HTTPException(status_code=404, detail="Clash of Clans account not found or not linked to your profile")
+
+    # Check if already verified
+    if existing_account.get("is_verified", False):
+        return {"message": "Account is already verified", "verified": True}
+
+    # Verify ownership using the token
+    if not await verify_coc_ownership(player_tag, player_token):
+        raise HTTPException(status_code=403,
+                            detail="Invalid player token. Check your Clash of Clans account settings and try again.")
+
+    # Update verification status in database
+    await db_client.coc_accounts.update_one(
+        {"user_id": user_id, "player_tag": player_tag},
+        {"$set": {"is_verified": True, "verified_at": pend.now()}}
+    )
+
+    return {"message": "Account verified successfully", "verified": True}

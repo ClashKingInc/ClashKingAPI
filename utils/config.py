@@ -49,6 +49,9 @@ class Config:
     DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI')
     ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
     SENTRY_DSN = os.getenv('SENTRY_DSN')
+    APP_SENTRY_DSN = os.getenv('APP_SENTRY_DSN')
+    DISCORDCOC_LOGIN = os.getenv('DISCORDCOC_LOGIN')
+    DISCORDCOC_PASSWORD = os.getenv('DISCORDCOC_PASSWORD')
     ALGORITHM = "HS256"
 
     # Encryption/Decryption/Hashing/Token

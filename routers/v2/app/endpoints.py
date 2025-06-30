@@ -12,12 +12,25 @@ from routers.v2.war.endpoints import get_multiple_clan_war_summary, clan_warhits
 from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
+from utils.config import Config
+from fastapi import Depends
+from utils.auth_utils import get_current_user
 
 # Constants
 PREPARATION_START_TIME_FIELD = "data.preparationStartTime"
 
 router = APIRouter(prefix="/v2/app", tags=["Mobile App"], include_in_schema=True)
 
+
+@router.get("/public-config", name="Get public app configuration")
+async def get_public_config() -> Dict[str, Any]:
+    """
+    Get non-sensitive configuration values needed by the mobile app.
+    No authentication required - only returns safe, public config values.
+    """
+    return {
+        "sentry_dsn": Config.APP_SENTRY_DSN,
+    }
 
 async def app_player_war_stats(body: PlayerTagsRequest) -> Dict[str, Any]:
     """Use existing war endpoint with mobile app defaults"""

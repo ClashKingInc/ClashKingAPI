@@ -13,8 +13,6 @@ from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
 from utils.config import Config
-from fastapi import Depends
-from utils.auth_utils import get_current_user
 
 # Constants
 PREPARATION_START_TIME_FIELD = "data.preparationStartTime"

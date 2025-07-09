@@ -96,8 +96,8 @@ VERIFICATION_EMAIL_TEMPLATE = """
 async def send_verification_email(email: str, username: str, verification_token: str):
     """Send email verification email to user."""
     try:
-        # Create verification URL
-        verification_url = f"{config.FRONTEND_URL}/verify-email?token={verification_token}"
+        # Create verification URL using the generic app endpoint
+        verification_url = f"{config.FRONTEND_URL}/app/verify-email?token={verification_token}"
         
         # Render email template with auto-escaping for security
         template = Template(VERIFICATION_EMAIL_TEMPLATE, autoescape=True)

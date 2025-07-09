@@ -102,6 +102,7 @@ async def docs():
         return RedirectResponse(f"https://dev-api.clashk.ing/docs")
     return RedirectResponse(f"https://api.clashk.ing/docs")
 
+
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():
     from fastapi.openapi.utils import get_openapi

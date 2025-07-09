@@ -104,7 +104,7 @@ async def send_verification_email(email: str, username: str, verification_token:
         else:
             base_url = "https://api.clashk.ing"
         
-        verification_url = f"{base_url}/app/verify-email?token={verification_token}"
+        verification_url = f"{base_url}/v2/app/verify-email?token={verification_token}"
         
         # Render email template with auto-escaping for security
         template = Template(VERIFICATION_EMAIL_TEMPLATE, autoescape=True)

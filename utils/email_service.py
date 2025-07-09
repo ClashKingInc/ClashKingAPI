@@ -33,20 +33,24 @@ VERIFICATION_EMAIL_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Verify Your Email - ClashKing</title>
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; background: #f9f9f9; }
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { background: #D90709; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { padding: 30px; background: white; }
         .button { 
             display: inline-block; 
-            padding: 12px 24px; 
-            background: #4CAF50; 
+            padding: 15px 30px; 
+            background: #D90709; 
             color: white; 
             text-decoration: none; 
-            border-radius: 4px; 
+            border-radius: 6px; 
             margin: 20px 0;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(217,7,9,0.3);
         }
-        .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+        .button:hover { background: #B8060A; }
+        .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
+        .highlight { color: #D90709; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -56,23 +60,33 @@ VERIFICATION_EMAIL_TEMPLATE = """
         </div>
         
         <div class="content">
-            <h2>Welcome to ClashKing!</h2>
-            <p>Thank you for registering with ClashKing. To complete your registration, please verify your email address by clicking the button below:</p>
+            <h2>Welcome to <span class="highlight">ClashKing</span>!</h2>
+            <p>Hello <strong>{{ username }}</strong>,</p>
             
-            <div style="text-align: center;">
-                <a href="{{ verification_url }}" class="button">Verify Email Address</a>
+            <p>Thank you for joining the ClashKing community! To complete your account registration and start tracking your Clash of Clans progress, please verify your email address.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ verification_url }}" class="button">Verify My Email Address</a>
             </div>
             
-            <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; background: #eee; padding: 10px;">{{ verification_url }}</p>
+            <p>This verification link will expire in <span class="highlight">24 hours</span> for security purposes.</p>
             
-            <p><strong>This link will expire in 24 hours.</strong></p>
+            <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; background: #f0f0f0; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 14px;">{{ verification_url }}</p>
             
-            <p>If you didn't create an account with ClashKing, please ignore this email.</p>
+            <p><strong>What's next?</strong> Once verified, you'll be able to:</p>
+            <ul>
+                <li>Track your Clash of Clans statistics</li>
+                <li>View detailed clan analytics</li>
+                <li>Monitor war performance</li>
+                <li>Access advanced player insights</li>
+            </ul>
+            
+            <p>If you didn't create an account with ClashKing, please ignore this email or contact us for assistance.</p>
         </div>
         
         <div class="footer">
-            <p>This email was sent by ClashKing. If you have any questions, please contact support@clashk.ing.</p>
+            <p>This email was sent by ClashKing. If you have any questions, please contact devs@clashk.ing.</p>
         </div>
     </div>
 </body>
@@ -97,7 +111,13 @@ async def send_verification_email(email: str, username: str, verification_token:
             subject="Verify Your Email - ClashKing",
             recipients=[email],
             body=html_content,
-            subtype="html"
+            subtype="html",
+            headers={
+                "X-Priority": "1",
+                "X-MSMail-Priority": "High",
+                "List-Unsubscribe": "<mailto:unsubscribe@clashk.ing>",
+                "Reply-To": "noreply@clashk.ing"
+            }
         )
         
         # Send email with configuration validation

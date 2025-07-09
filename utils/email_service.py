@@ -96,8 +96,15 @@ VERIFICATION_EMAIL_TEMPLATE = """
 async def send_verification_email(email: str, username: str, verification_token: str):
     """Send email verification email to user."""
     try:
-        # Create verification URL using the generic app endpoint
-        verification_url = f"{config.FRONTEND_URL}/app/verify-email?token={verification_token}"
+        # Create verification URL using the same logic as the docs endpoint
+        if config.IS_LOCAL:
+            base_url = "http://localhost:8000"
+        elif config.IS_DEV:
+            base_url = "https://dev.api.clashk.ing"
+        else:
+            base_url = "https://api.clashk.ing"
+        
+        verification_url = f"{base_url}/app/verify-email?token={verification_token}"
         
         # Render email template with auto-escaping for security
         template = Template(VERIFICATION_EMAIL_TEMPLATE, autoescape=True)

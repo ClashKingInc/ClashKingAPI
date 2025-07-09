@@ -2,9 +2,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from urllib.parse import urlencode
 
-router = APIRouter()
+router = APIRouter(prefix="app", tags=["App Redirect"], include_in_schema=False)
 
-@router.get("/app/{path:path}", include_in_schema=False)
+@router.get("/{path:path}", include_in_schema=False)
 async def app_redirect(path: str, request: Request):
     """Generic deep link endpoint that redirects to the ClashKing mobile app."""
     

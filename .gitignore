@@ -5,3 +5,4 @@
 .idea/
 *pycache*
 .venv/
+.claude/*

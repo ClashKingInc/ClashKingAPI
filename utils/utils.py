@@ -118,6 +118,7 @@ class DBClient():
         self.app_users: collection_class = self.app.users
         self.app_discord_tokens: collection_class = self.app.discord_tokens
         self.app_refresh_tokens: collection_class = self.app.refresh_tokens
+        self.app_email_verifications: collection_class = self.app.email_verifications
         self.coc_accounts: collection_class = client.clashking.coc_accounts
 
 db_client = DBClient()

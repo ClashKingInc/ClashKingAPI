@@ -39,7 +39,7 @@ class Config:
     IS_PROD = ENV == "production"
 
     HOST = "localhost" if IS_LOCAL else "0.0.0.0"
-    PORT = 8010 if IS_LOCAL else (8073 if IS_DEV else 8010)
+    PORT = 8000 if IS_LOCAL else (8073 if IS_DEV else 8010)
     RELOAD = IS_LOCAL or IS_DEV
 
     SECRET_KEY = os.getenv('SECRET_KEY')
@@ -53,6 +53,16 @@ class Config:
     DISCORDCOC_LOGIN = os.getenv('DISCORDCOC_LOGIN')
     DISCORDCOC_PASSWORD = os.getenv('DISCORDCOC_PASSWORD')
     ALGORITHM = "HS256"
+    
+    # Email configuration
+    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+    SMTP_USERNAME = os.getenv('SMTP_USERNAME')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+    SMTP_FROM = os.getenv('SMTP_FROM')
+    SMTP_STARTTLS = os.getenv('SMTP_STARTTLS', 'true').lower() == 'true'
+    SMTP_SSL_TLS = os.getenv('SMTP_SSL_TLS', 'false').lower() == 'true'
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
     # Encryption/Decryption/Hashing/Token
     cipher = Fernet(ENCRYPTION_KEY)

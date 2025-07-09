@@ -5,7 +5,9 @@ from fastapi import Header, HTTPException, Request, APIRouter, Depends
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
 from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
-    generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data
+    generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
+    generate_email_verification_token, generate_email_verification_jwt, decode_email_verification_jwt
+from utils.email_service import send_verification_email
 from utils.utils import db_client, generate_custom_id, config
 from utils.password_validator import PasswordValidator
 from utils.security_middleware import get_current_user_id
@@ -14,6 +16,141 @@ from routers.v2.auth.models import AuthResponse, UserInfo, RefreshTokenRequest, 
 limiter = Limiter(key_func=get_ipaddr)
 
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
+
+
+@router.post("/auth/verify-email", name="Verify email address")
+@limiter.limit("10/minute")
+async def verify_email(request: Request):
+    try:
+        data = await request.json()
+        token = data.get("token")
+        
+        if not token:
+            raise HTTPException(status_code=400, detail="Verification token is required")
+        
+        # Basic token validation before JWT decoding
+        if not token or len(token.strip()) < 50:
+            raise HTTPException(status_code=400, detail="Invalid token format")
+        
+        if token.count('.') != 2:
+            raise HTTPException(status_code=400, detail="Invalid token structure")
+        
+        # Decode and validate the JWT token
+        try:
+            payload = decode_email_verification_jwt(token)
+            email = payload["sub"]
+            verification_token = payload["token"]
+            
+            # Additional payload validation
+            if not email or not verification_token:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            sentry_sdk.capture_message(f"JWT decode error in email verification: {str(e)}", level="warning")
+            raise HTTPException(status_code=401, detail="Invalid verification token")
+        
+        # Find the pending verification
+        pending_verification = await db_client.app_email_verifications.find_one({
+            "email_hash": hash_email(email),
+            "verification_token": verification_token
+        })
+        
+        if not pending_verification:
+            raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+        
+        # Check if token has expired
+        if pend.now() > pending_verification["expires_at"]:
+            await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
+            raise HTTPException(status_code=401, detail="Verification token expired. Please register again.")
+        
+        # Get the pending user data
+        user_data = pending_verification["user_data"]
+        
+        # Check if email is already registered (to prevent race conditions)
+        email_hash = hash_email(email)
+        existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
+        
+        if existing_user:
+            # Check if it's a Discord user trying to add email auth
+            if "discord" in existing_user.get("auth_methods", []) and "email" not in existing_user.get("auth_methods", []):
+                # Update existing Discord user with email auth
+                auth_methods = set(existing_user.get("auth_methods", []))
+                auth_methods.add("email")
+                
+                await db_client.app_users.update_one(
+                    {"user_id": existing_user["user_id"]},
+                    {"$set": {
+                        "auth_methods": list(auth_methods),
+                        "username": user_data["username"],
+                        "password": user_data["password"],
+                        "email_encrypted": user_data["email_encrypted"],
+                        "email_hash": user_data["email_hash"]
+                    }}
+                )
+                
+                user_id = existing_user["user_id"]
+                sentry_sdk.capture_message(f"Email auth added to existing Discord user: {user_id}", level="info")
+            else:
+                # Email already registered for email auth or verification already completed
+                await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
+                raise HTTPException(status_code=400, detail="This email has already been verified. Please try logging in instead.")
+        else:
+            # Create new user
+            user_id = str(generate_custom_id())
+            try:
+                await db_client.app_users.insert_one({
+                    "_id": int(user_id),
+                    "user_id": user_id,
+                    "email_encrypted": user_data["email_encrypted"],
+                    "email_hash": user_data["email_hash"],
+                    "username": user_data["username"],
+                    "password": user_data["password"],
+                    "auth_methods": ["email"],
+                    "created_at": pend.now()
+                })
+                sentry_sdk.capture_message(f"New user created via email verification: {user_id}", level="info")
+            except Exception as e:
+                # If user creation fails, don't clean up verification yet
+                sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email", "user_id": user_id})
+                raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
+        
+        # Clean up pending verification only after successful account creation/update
+        await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
+        
+        # Generate auth tokens
+        access_token = generate_jwt(str(user_id), user_data["device_id"])
+        refresh_token = generate_refresh_token(str(user_id))
+        
+        # Store refresh token
+        await db_client.app_refresh_tokens.update_one(
+            {"user_id": str(user_id)},
+            {
+                "$setOnInsert": {"_id": int(user_id)},
+                "$set": {
+                    "refresh_token": refresh_token,
+                    "expires_at": pend.now().add(days=30)
+                }
+            },
+            upsert=True
+        )
+        
+        return AuthResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserInfo(
+                user_id=str(user_id),
+                username=user_data["username"],
+                avatar_url="https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png"
+            )
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email"})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/auth/me", name="Get current user information")
@@ -266,7 +403,7 @@ async def refresh_access_token(request: RefreshTokenRequest) -> dict:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/register", response_model=AuthResponse)
+@router.post("/auth/register", name="Register with email (sends verification email)")
 @limiter.limit("3/minute")
 async def register_email_user(req: EmailRegisterRequest, request: Request):
     try:
@@ -280,66 +417,146 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             sentry_sdk.capture_message(f"Validation error in registration: {e.detail}", level="warning")
             raise e
         
-        # Prepare email encryption
+        # Check if email is already registered or has pending verification
         email_hash = hash_email(req.email)
-        email_data = await prepare_email_for_storage(req.email)
         existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
-        if existing_user:
-            user_id = existing_user["user_id"]
-            auth_methods = set(existing_user.get("auth_methods", []))
-            auth_methods.add("email")
-
-            await db_client.app_users.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "auth_methods": list(auth_methods),
-                    "username": req.username,
-                    "password": hash_password(req.password),
-                    "email_encrypted": email_data["email_encrypted"],
-                    "email_hash": email_data["email_hash"]
-                }}
-            )
-        else:
-            user_id = str(generate_custom_id())
-            await db_client.app_users.insert_one({
-                "_id": int(user_id),
-                "user_id": user_id,
+        
+        if existing_user and "email" in existing_user.get("auth_methods", []):
+            # Email already registered for email auth
+            raise HTTPException(status_code=400, detail="Email already registered. Please try logging in instead.")
+        
+        # Check if there's already a pending verification for this email
+        existing_verification = await db_client.app_email_verifications.find_one({"email_hash": email_hash})
+        if existing_verification:
+            # Check if it's expired
+            if pend.now() > existing_verification["expires_at"]:
+                # Clean up expired verification and allow new registration
+                await db_client.app_email_verifications.delete_one({"_id": existing_verification["_id"]})
+            else:
+                # Still valid - suggest resending instead of registering again
+                raise HTTPException(
+                    status_code=409, 
+                    detail="A verification email was already sent to this address. Please check your email or request a resend."
+                )
+        
+        # Prepare email encryption and user data
+        email_data = await prepare_email_for_storage(req.email)
+        
+        # Generate verification token
+        verification_token = generate_email_verification_token()
+        verification_jwt = generate_email_verification_jwt(req.email, verification_token)
+        
+        # Store pending verification with user data
+        pending_verification = {
+            "_id": generate_custom_id(),
+            "email_hash": email_hash,
+            "verification_token": verification_token,
+            "user_data": {
                 "email_encrypted": email_data["email_encrypted"],
                 "email_hash": email_data["email_hash"],
                 "username": req.username,
                 "password": hash_password(req.password),
-                "auth_methods": ["email"],
-                "created_at": pend.now()
-            })
-
-        access_token = generate_jwt(str(user_id), req.device_id)
-        refresh_token = generate_refresh_token(str(user_id))
-
-        await db_client.app_refresh_tokens.update_one(
-            {"user_id": str(user_id)},
-            {
-                "$setOnInsert": {"_id": int(user_id)},
-                "$set": {
-                    "refresh_token": refresh_token,
-                    "expires_at": pend.now().add(days=30)
-                }
+                "device_id": req.device_id
             },
-            upsert=True
-        )
-
-        return AuthResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            user=UserInfo(
-                user_id=str(user_id),
-                username=req.username,
-                avatar_url="https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png"
-            )
-        )
+            "created_at": pend.now(),
+            "expires_at": pend.now().add(hours=24)
+        }
+        
+        # Clean up any existing pending verifications for this email
+        await db_client.app_email_verifications.delete_many({"email_hash": email_hash})
+        
+        # Insert new pending verification
+        await db_client.app_email_verifications.insert_one(pending_verification)
+        
+        # Send verification email
+        try:
+            await send_verification_email(req.email, req.username, verification_jwt)
+        except Exception as e:
+            # Clean up pending verification if email fails
+            await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": req.email})
+            raise HTTPException(status_code=500, detail="Failed to send verification email")
+        
+        return {
+            "message": "Verification email sent. Please check your email and click the verification link.",
+            "verification_token": verification_jwt if config.IS_LOCAL else None  # Only show in local dev
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
         sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": req.email})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/auth/resend-verification", name="Resend verification email")
+@limiter.limit("3/minute")
+async def resend_verification_email(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        # Validate email format
+        try:
+            PasswordValidator.validate_email(email)
+        except HTTPException as e:
+            sentry_sdk.capture_message(f"Invalid email format in resend verification: {email}", level="warning")
+            raise e
+        
+        email_hash = hash_email(email)
+        
+        # Check if there's a pending verification for this email
+        pending_verification = await db_client.app_email_verifications.find_one({"email_hash": email_hash})
+        
+        if not pending_verification:
+            # Check if user already exists with this email
+            existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
+            if existing_user and "email" in existing_user.get("auth_methods", []):
+                raise HTTPException(status_code=400, detail="This email is already verified. Please try logging in instead.")
+            else:
+                raise HTTPException(status_code=404, detail="No pending verification found for this email. Please register first.")
+        
+        # Check if verification has expired
+        if pend.now() > pending_verification["expires_at"]:
+            await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
+            raise HTTPException(status_code=410, detail="Verification expired. Please register again.")
+        
+        # Generate new verification token
+        verification_token = generate_email_verification_token()
+        verification_jwt = generate_email_verification_jwt(email, verification_token)
+        
+        # Update the pending verification with new token
+        await db_client.app_email_verifications.update_one(
+            {"_id": pending_verification["_id"]},
+            {"$set": {
+                "verification_token": verification_token,
+                "created_at": pend.now(),
+                # Don't extend expiration - keep original 24h window
+            }}
+        )
+        
+        # Send new verification email
+        user_data = pending_verification["user_data"]
+        username = user_data.get("username", "User")
+        
+        try:
+            await send_verification_email(email, username, verification_jwt)
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/resend-verification", "email": email})
+            raise HTTPException(status_code=500, detail="Failed to send verification email")
+        
+        return {
+            "message": "Verification email resent successfully. Please check your email.",
+            "verification_token": verification_jwt if config.IS_LOCAL else None  # Only show in local dev
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/resend-verification"})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

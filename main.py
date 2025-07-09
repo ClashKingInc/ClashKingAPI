@@ -2,10 +2,9 @@ import os
 import logging
 import uvicorn
 import importlib.util
-import time
 import sentry_sdk
-
-from fastapi import FastAPI, Request, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -13,14 +12,12 @@ from fastapi.openapi.utils import get_openapi
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
-from slowapi.middleware import SlowAPIMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-
+from slowapi import Limiter
+from slowapi.util import get_ipaddr
 from utils.utils import config, coc_client
+from utils.email_service import create_verification_indexes
 
 # Initialize Sentry SDK
 sentry_sdk.init(
@@ -47,10 +44,33 @@ middleware = [
     )
 ]
 
-app = FastAPI(middleware=middleware)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup and shutdown tasks."""
+    # Startup
+    try:
+        FastAPICache.init(InMemoryBackend())
+        
+        # Login COC client with tokens
+        await coc_client.login_with_tokens('')
+        
+        # Create email verification indexes for performance
+        await create_verification_indexes()
+        
+        print("✅ Startup tasks completed successfully")
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+        sentry_sdk.capture_exception(e, tags={"startup": "failed"})
+    
+    yield
+    
+    # Shutdown (if needed in the future)
+    print("🔄 Application shutting down...")
+
+
+app = FastAPI(middleware=middleware, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
 
 
 def include_routers(app, directory, recursive=False):
@@ -72,12 +92,6 @@ def include_routers(app, directory, recursive=False):
 # Include routers from public (v1) and private (v2 with subfolders)
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
-
-
-@app.on_event("startup")
-async def startup_event():
-    FastAPICache.init(InMemoryBackend())
-    await coc_client.login_with_tokens('')
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)

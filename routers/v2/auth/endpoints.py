@@ -154,6 +154,7 @@ async def verify_email_with_code(request: Request):
                 )
                 
                 user_id = existing_user["user_id"]
+                user_id_raw = existing_user["user_id"]  # Set user_id_raw for existing user
                 sentry_sdk.capture_message(f"Email auth added to existing Discord user: {user_id}", level="info")
             else:
                 # Email already registered for email auth or verification already completed
@@ -197,10 +198,31 @@ async def verify_email_with_code(request: Request):
         
         # Store refresh token
         print("DEBUG: Storing refresh token")
+        print(f"DEBUG: user_id: {user_id} (type: {type(user_id)})")
+        print(f"DEBUG: user_id_raw: {user_id_raw} (type: {type(user_id_raw)})")
+        
+        # Convert user_id_raw to int for generate_custom_id
+        try:
+            user_id_for_custom_id = int(user_id_raw)
+            print(f"DEBUG: Successfully converted user_id_raw to int: {user_id_for_custom_id}")
+        except (ValueError, TypeError) as e:
+            # Fallback for string user IDs (like Discord IDs)
+            user_id_for_custom_id = hash(str(user_id_raw)) % (10**10)
+            print(f"DEBUG: Failed to convert user_id_raw to int ({e}), using hash fallback: {user_id_for_custom_id}")
+        
+        print(f"DEBUG: About to call generate_custom_id with: {user_id_for_custom_id}")
+        try:
+            custom_id = generate_custom_id(user_id_for_custom_id)
+            print(f"DEBUG: generate_custom_id returned: {custom_id}")
+        except Exception as e:
+            print(f"ERROR: generate_custom_id failed: {e}")
+            raise
+        
+        print("DEBUG: About to update refresh tokens collection")
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": generate_custom_id(int(user_id_raw))},
+                "$setOnInsert": {"_id": custom_id},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)

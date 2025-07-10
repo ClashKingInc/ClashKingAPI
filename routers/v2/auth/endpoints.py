@@ -57,6 +57,7 @@ async def verify_email_with_code(request: Request):
         print(f"DEBUG: Found pending verification: {pending_verification is not None}")
         
         if not pending_verification:
+            print("DEBUG: No verification found, checking for old format...")
             # Also check for old records that might still have verification_token field
             # This provides backwards compatibility during transition
             pending_verification = await db_client.app_email_verifications.find_one({
@@ -64,19 +65,39 @@ async def verify_email_with_code(request: Request):
             })
             if pending_verification and pending_verification.get("verification_token"):
                 # Old record format - this should not match codes, reject it
+                print("DEBUG: Found old verification token format")
                 raise HTTPException(status_code=401, detail="Please request a new verification code")
             
+            print("DEBUG: No verification found at all")
             raise HTTPException(status_code=401, detail="Invalid verification code")
         
-        # Check if code has expired
-        expires_at = pending_verification["expires_at"]
-        if isinstance(expires_at, str):
-            # Handle string datetime format
-            expires_at = pend.parse(expires_at)
+        print("DEBUG: Checking expiration...")
+        print(f"DEBUG: Verification record keys: {list(pending_verification.keys())}")
         
+        # Check if code has expired
+        try:
+            expires_at = pending_verification["expires_at"]
+            print(f"DEBUG: Expires at: {expires_at} (type: {type(expires_at)})")
+        except KeyError as e:
+            print(f"ERROR: Missing expires_at field: {e}")
+            raise HTTPException(status_code=500, detail="Invalid verification record format")
+        if isinstance(expires_at, str):
+            print(f"DEBUG: Parsing string datetime: {expires_at}")
+            # Handle string datetime format
+            try:
+                expires_at = pend.parse(expires_at)
+                print(f"DEBUG: Parsed to: {expires_at}")
+            except Exception as e:
+                print(f"ERROR: Failed to parse datetime: {e}")
+                raise HTTPException(status_code=500, detail="Invalid datetime format in verification record")
+        
+        print(f"DEBUG: Checking if {pend.now()} > {expires_at}")
         if pend.now() > expires_at:
+            print("DEBUG: Verification code expired, deleting record")
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")
+        
+        print("DEBUG: Verification code is still valid")
         
         # Get the pending user data
         print("DEBUG: Extracting user_data from verification record")

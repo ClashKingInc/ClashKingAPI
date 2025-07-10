@@ -91,8 +91,19 @@ async def verify_email_with_code(request: Request):
                 print(f"ERROR: Failed to parse datetime: {e}")
                 raise HTTPException(status_code=500, detail="Invalid datetime format in verification record")
         
-        print(f"DEBUG: Checking if {pend.now()} > {expires_at}")
-        if pend.now() > expires_at:
+        # Ensure both datetimes have timezone info for comparison
+        current_time = pend.now()
+        if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
+            # expires_at is naive, make it UTC aware
+            expires_at = pend.instance(expires_at, tz='UTC')
+            print(f"DEBUG: Made expires_at timezone aware: {expires_at}")
+        elif not hasattr(expires_at, 'tzinfo'):
+            # Handle case where expires_at might be a different type
+            expires_at = pend.parse(str(expires_at)).in_timezone('UTC')
+            print(f"DEBUG: Converted expires_at to pendulum: {expires_at}")
+        
+        print(f"DEBUG: Checking if {current_time} > {expires_at}")
+        if current_time > expires_at:
             print("DEBUG: Verification code expired, deleting record")
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")

@@ -29,13 +29,9 @@ def safe_email_log(email: str) -> str:
 @router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
 async def verify_email_with_code(request: Request):
     try:
-        print("DEBUG: Starting email verification endpoint")
-        
         data = await request.json()
         email = data.get("email")
         code = data.get("code")
-        
-        print(f"DEBUG: Email verification attempt for: {safe_email_log(email)}, code length: {len(code) if code else 'None'}")
         
         if not email or not code:
             raise HTTPException(status_code=400, detail="Email and verification code are required")
@@ -47,17 +43,13 @@ async def verify_email_with_code(request: Request):
         
         # Find the pending verification by email hash and code
         email_hash = hash_email(email)
-        print(f"DEBUG: Looking for verification with email_hash: {email_hash[:10]}..., code: {code}")
         
         pending_verification = await db_client.app_email_verifications.find_one({
             "email_hash": email_hash,
             "verification_code": code
         })
         
-        print(f"DEBUG: Found pending verification: {pending_verification is not None}")
-        
         if not pending_verification:
-            print("DEBUG: No verification found, checking for old format...")
             # Also check for old records that might still have verification_token field
             # This provides backwards compatibility during transition
             pending_verification = await db_client.app_email_verifications.find_one({
@@ -65,30 +57,20 @@ async def verify_email_with_code(request: Request):
             })
             if pending_verification and pending_verification.get("verification_token"):
                 # Old record format - this should not match codes, reject it
-                print("DEBUG: Found old verification token format")
                 raise HTTPException(status_code=401, detail="Please request a new verification code")
             
-            print("DEBUG: No verification found at all")
             raise HTTPException(status_code=401, detail="Invalid verification code")
-        
-        print("DEBUG: Checking expiration...")
-        print(f"DEBUG: Verification record keys: {list(pending_verification.keys())}")
         
         # Check if code has expired
         try:
             expires_at = pending_verification["expires_at"]
-            print(f"DEBUG: Expires at: {expires_at} (type: {type(expires_at)})")
         except KeyError as e:
-            print(f"ERROR: Missing expires_at field: {e}")
             raise HTTPException(status_code=500, detail="Invalid verification record format")
         if isinstance(expires_at, str):
-            print(f"DEBUG: Parsing string datetime: {expires_at}")
             # Handle string datetime format
             try:
                 expires_at = pend.parse(expires_at)
-                print(f"DEBUG: Parsed to: {expires_at}")
             except Exception as e:
-                print(f"ERROR: Failed to parse datetime: {e}")
                 raise HTTPException(status_code=500, detail="Invalid datetime format in verification record")
         
         # Ensure both datetimes have timezone info for comparison
@@ -96,29 +78,19 @@ async def verify_email_with_code(request: Request):
         if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
             # expires_at is naive, make it UTC aware
             expires_at = pend.instance(expires_at, tz='UTC')
-            print(f"DEBUG: Made expires_at timezone aware: {expires_at}")
         elif not hasattr(expires_at, 'tzinfo'):
             # Handle case where expires_at might be a different type
             expires_at = pend.parse(str(expires_at)).in_timezone('UTC')
-            print(f"DEBUG: Converted expires_at to pendulum: {expires_at}")
         
-        print(f"DEBUG: Checking if {current_time} > {expires_at}")
         if current_time > expires_at:
-            print("DEBUG: Verification code expired, deleting record")
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")
         
-        print("DEBUG: Verification code is still valid")
-        
         # Get the pending user data
-        print("DEBUG: Extracting user_data from verification record")
         user_data = pending_verification.get("user_data")
         if not user_data:
-            print(f"ERROR: Missing user_data in verification record for email: {safe_email_log(email)}")
             sentry_sdk.capture_message(f"Missing user_data in verification record for email: {safe_email_log(email)}", level="error")
             raise HTTPException(status_code=500, detail="Invalid verification record")
-        
-        print(f"DEBUG: user_data keys: {list(user_data.keys()) if user_data else 'None'}")
         
         # Validate required fields in user_data
         required_fields = ["email_encrypted", "email_hash", "username", "password", "device_id"]
@@ -128,16 +100,11 @@ async def verify_email_with_code(request: Request):
             raise HTTPException(status_code=500, detail="Invalid verification record")
         
         # Check if email is already registered (to prevent race conditions)
-        print("DEBUG: Checking for existing user")
         existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
-        print(f"DEBUG: Existing user found: {existing_user is not None}")
-        if existing_user:
-            print(f"DEBUG: Existing user auth methods: {existing_user.get('auth_methods', [])}")
         
         if existing_user:
             # Check if it's a Discord user trying to add email auth
             if "discord" in existing_user.get("auth_methods", []) and "email" not in existing_user.get("auth_methods", []):
-                print("DEBUG: Adding email auth to existing Discord user")
                 # Update existing Discord user with email auth
                 auth_methods = set(existing_user.get("auth_methods", []))
                 auth_methods.add("email")
@@ -162,13 +129,10 @@ async def verify_email_with_code(request: Request):
                 raise HTTPException(status_code=400, detail="This email has already been verified. Please try logging in instead.")
         else:
             # Create new user
-            print("DEBUG: Creating new user")
             user_id_raw = generate_custom_id()
             user_id = str(user_id_raw)
-            print(f"DEBUG: Generated user_id: {user_id}, raw: {user_id_raw}")
             
             try:
-                print("DEBUG: Inserting user into database")
                 await db_client.app_users.insert_one({
                     "_id": user_id_raw,
                     "user_id": user_id,
@@ -179,46 +143,31 @@ async def verify_email_with_code(request: Request):
                     "auth_methods": ["email"],
                     "created_at": pend.now()
                 })
-                print(f"DEBUG: User successfully inserted with ID: {user_id}")
             except Exception as e:
                 # If user creation fails, don't clean up verification yet
-                print(f"ERROR: Failed to insert user: {str(e)}")
                 sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code", "user_id": user_id})
                 raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
         
         # Clean up pending verification only after successful account creation/update
-        print("DEBUG: Cleaning up verification record")
         await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
         
         # Generate auth tokens
-        print("DEBUG: Generating auth tokens")
         access_token = generate_jwt(str(user_id), user_data["device_id"])
         refresh_token = generate_refresh_token(str(user_id))
-        print("DEBUG: Auth tokens generated successfully")
         
         # Store refresh token
-        print("DEBUG: Storing refresh token")
-        print(f"DEBUG: user_id: {user_id} (type: {type(user_id)})")
-        print(f"DEBUG: user_id_raw: {user_id_raw} (type: {type(user_id_raw)})")
-        
         # Convert user_id_raw to int for generate_custom_id
         try:
             user_id_for_custom_id = int(user_id_raw)
-            print(f"DEBUG: Successfully converted user_id_raw to int: {user_id_for_custom_id}")
         except (ValueError, TypeError) as e:
             # Fallback for string user IDs (like Discord IDs)
             user_id_for_custom_id = hash(str(user_id_raw)) % (10**10)
-            print(f"DEBUG: Failed to convert user_id_raw to int ({e}), using hash fallback: {user_id_for_custom_id}")
         
-        print(f"DEBUG: About to call generate_custom_id with: {user_id_for_custom_id}")
         try:
             custom_id = generate_custom_id(user_id_for_custom_id)
-            print(f"DEBUG: generate_custom_id returned: {custom_id}")
         except Exception as e:
-            print(f"ERROR: generate_custom_id failed: {e}")
             raise
         
-        print("DEBUG: About to update refresh tokens collection")
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
@@ -230,9 +179,7 @@ async def verify_email_with_code(request: Request):
             },
             upsert=True
         )
-        print("DEBUG: Refresh token stored successfully")
         
-        print("DEBUG: Creating AuthResponse")
         return AuthResponse(
             access_token=access_token,
             refresh_token=refresh_token,

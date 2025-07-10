@@ -1,9 +1,8 @@
+import asyncio
 import httpx
 import pendulum as pend
 import sentry_sdk
 from fastapi import Header, HTTPException, Request, APIRouter, Depends
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
     generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
     generate_verification_code
@@ -13,25 +12,35 @@ from utils.password_validator import PasswordValidator
 from utils.security_middleware import get_current_user_id
 from routers.v2.auth.models import AuthResponse, UserInfo, RefreshTokenRequest, EmailRegisterRequest, EmailAuthRequest
 
-limiter = Limiter(key_func=get_ipaddr)
 
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
 
 
+def safe_email_log(email: str) -> str:
+    """Safely format email for logging to prevent crashes."""
+    if not email or not isinstance(email, str):
+        return "unknown"
+    if len(email) < 3:
+        return "short"
+    return email[:min(10, len(email))] + "***"
+
+
 
 @router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
-@limiter.limit("10/minute")
 async def verify_email_with_code(request: Request):
     try:
         data = await request.json()
         email = data.get("email")
         code = data.get("code")
         
+        sentry_sdk.capture_message(f"Email verification attempt for: {safe_email_log(email)}", level="info")
+        
         if not email or not code:
             raise HTTPException(status_code=400, detail="Email and verification code are required")
         
         # Validate code format
         if not code.isdigit() or len(code) != 6:
+            sentry_sdk.capture_message(f"Invalid code format: {code}", level="warning")
             raise HTTPException(status_code=400, detail="Invalid verification code format")
         
         # Find the pending verification by email hash and code
@@ -42,15 +51,39 @@ async def verify_email_with_code(request: Request):
         })
         
         if not pending_verification:
+            # Also check for old records that might still have verification_token field
+            # This provides backwards compatibility during transition
+            pending_verification = await db_client.app_email_verifications.find_one({
+                "email_hash": email_hash
+            })
+            if pending_verification and pending_verification.get("verification_token"):
+                # Old record format - this should not match codes, reject it
+                raise HTTPException(status_code=401, detail="Please request a new verification code")
+            
             raise HTTPException(status_code=401, detail="Invalid verification code")
         
         # Check if code has expired
-        if pend.now() > pending_verification["expires_at"]:
+        expires_at = pending_verification["expires_at"]
+        if isinstance(expires_at, str):
+            # Handle string datetime format
+            expires_at = pend.parse(expires_at)
+        
+        if pend.now() > expires_at:
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")
         
         # Get the pending user data
-        user_data = pending_verification["user_data"]
+        user_data = pending_verification.get("user_data")
+        if not user_data:
+            sentry_sdk.capture_message(f"Missing user_data in verification record for email: {safe_email_log(email)}", level="error")
+            raise HTTPException(status_code=500, detail="Invalid verification record")
+        
+        # Validate required fields in user_data
+        required_fields = ["email_encrypted", "email_hash", "username", "password", "device_id"]
+        missing_fields = [field for field in required_fields if not user_data.get(field)]
+        if missing_fields:
+            sentry_sdk.capture_message(f"Missing user_data fields: {missing_fields} for email: {safe_email_log(email)}", level="error")
+            raise HTTPException(status_code=500, detail="Invalid verification record")
         
         # Check if email is already registered (to prevent race conditions)
         existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
@@ -110,7 +143,7 @@ async def verify_email_with_code(request: Request):
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": int(user_id)},
+                "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)
@@ -132,7 +165,9 @@ async def verify_email_with_code(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code"})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code", "email": safe_email_log(email) if 'email' in locals() else "unknown"})
+        # Log the specific error for debugging
+        sentry_sdk.capture_message(f"Verify email code error: {str(e)}", level="error")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -198,7 +233,6 @@ async def get_current_user_info(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/auth/discord", response_model=AuthResponse, name="Authenticate with Discord")
-@limiter.limit("5/minute")
 async def auth_discord(request: Request):
     try:
         # Handle both JSON and form data for backward compatibility
@@ -387,7 +421,6 @@ async def refresh_access_token(request: RefreshTokenRequest) -> dict:
 
 
 @router.post("/auth/register", name="Register with email (sends verification email)")
-@limiter.limit("3/minute")
 async def register_email_user(req: EmailRegisterRequest, request: Request):
     try:
         try:
@@ -412,7 +445,11 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         existing_verification = await db_client.app_email_verifications.find_one({"email_hash": email_hash})
         if existing_verification:
             # Check if it's expired
-            if pend.now() > existing_verification["expires_at"]:
+            expires_at = existing_verification["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = pend.parse(expires_at)
+            
+            if pend.now() > expires_at:
                 # Clean up expired verification and allow new registration
                 await db_client.app_email_verifications.delete_one({"_id": existing_verification["_id"]})
             else:
@@ -472,7 +509,6 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
 
 
 @router.post("/auth/resend-verification", name="Resend verification email")
-@limiter.limit("3/minute")
 async def resend_verification_email(request: Request):
     try:
         data = await request.json()
@@ -502,7 +538,11 @@ async def resend_verification_email(request: Request):
                 raise HTTPException(status_code=404, detail="No pending verification found for this email. Please register first.")
         
         # Check if verification has expired
-        if pend.now() > pending_verification["expires_at"]:
+        expires_at = pending_verification["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = pend.parse(expires_at)
+        
+        if pend.now() > expires_at:
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=410, detail="Verification expired. Please register again.")
         
@@ -542,11 +582,11 @@ async def resend_verification_email(request: Request):
 
 
 @router.post("/auth/email", response_model=AuthResponse)
-@limiter.limit("5/minute")
 async def login_with_email(req: EmailAuthRequest, request: Request):
     try:
+        sentry_sdk.capture_message(f"Email login attempt for: {safe_email_log(req.email)}", level="info")
+        
         # Add small delay to prevent timing attacks
-        import asyncio
         await asyncio.sleep(0.1)
         
         # Look up user by email hash
@@ -555,21 +595,56 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         if not user or not verify_password(req.password, user.get("password", "")):
             sentry_sdk.capture_message(f"Failed email login attempt for: {req.email}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Validate user record structure
+        if not user.get("user_id"):
+            sentry_sdk.capture_message(f"User record missing user_id for: {safe_email_log(req.email)}", level="error")
+            raise HTTPException(status_code=500, detail="Invalid user record")
+        
+        if not user.get("username"):
+            sentry_sdk.capture_message(f"User record missing username for: {safe_email_log(req.email)}", level="warning")
+            # Set a fallback username
+            user["username"] = safe_email_log(req.email)
 
-        access_token = generate_jwt(str(user["user_id"]), req.device_id)
-        refresh_token = generate_refresh_token(str(user["user_id"]))
+        try:
+            access_token = generate_jwt(str(user["user_id"]), req.device_id)
+            refresh_token = generate_refresh_token(str(user["user_id"]))
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"function": "token_generation", "user_id": str(user["user_id"])})
+            raise HTTPException(status_code=500, detail="Failed to generate authentication tokens")
 
-        await db_client.app_refresh_tokens.update_one(
-            {"user_id": str(user["user_id"])},
-            {
-                "$setOnInsert": {"_id": int(str(user["user_id"]))},
-                "$set": {
-                    "refresh_token": refresh_token,
-                    "expires_at": pend.now().add(days=30)
-                }
-            },
-            upsert=True
-        )
+        try:
+            user_id_raw = user["user_id"]
+            user_id = str(user_id_raw)
+            
+            # Safely convert user_id to int for ID generation
+            try:
+                if isinstance(user_id_raw, int):
+                    user_id_int = user_id_raw
+                elif isinstance(user_id_raw, str) and user_id_raw.isdigit():
+                    user_id_int = int(user_id_raw)
+                else:
+                    # Try to convert the string version
+                    user_id_int = int(user_id)
+            except (ValueError, TypeError):
+                # Fallback: generate a new ID if conversion fails
+                user_id_int = generate_custom_id()
+                sentry_sdk.capture_message(f"Invalid user_id format, using fallback: {user_id}", level="warning")
+            
+            await db_client.app_refresh_tokens.update_one(
+                {"user_id": user_id},
+                {
+                    "$setOnInsert": {"_id": generate_custom_id(user_id_int)},
+                    "$set": {
+                        "refresh_token": refresh_token,
+                        "expires_at": pend.now().add(days=30)
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"function": "refresh_token_storage", "user_id": str(user["user_id"])})
+            raise HTTPException(status_code=500, detail="Failed to store authentication tokens")
 
         return AuthResponse(
             access_token=access_token,
@@ -583,7 +658,8 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/email", "email": req.email})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/email", "email": safe_email_log(req.email) if hasattr(req, 'email') else "unknown"})
+        sentry_sdk.capture_message(f"Email login error: {str(e)}", level="error")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/auth/link-discord", name="Link Discord to an existing account")

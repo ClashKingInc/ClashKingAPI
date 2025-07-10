@@ -14,8 +14,6 @@ from starlette.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from utils.utils import config, coc_client
 from utils.email_service import create_verification_indexes
 
@@ -28,7 +26,6 @@ sentry_sdk.init(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_ipaddr)
 middleware = [
     Middleware(
         CORSMiddleware,

@@ -10,8 +10,6 @@ from collections import defaultdict
 from datetime import timedelta
 from fastapi import Request, Response, HTTPException, Query, APIRouter
 from fastapi_cache.decorator import cache
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from typing import List, Annotated
 from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season, leagues
 

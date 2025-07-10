@@ -200,7 +200,7 @@ async def verify_email_with_code(request: Request):
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": generate_custom_id(user_id_raw)},
+                "$setOnInsert": {"_id": generate_custom_id(int(user_id_raw))},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)

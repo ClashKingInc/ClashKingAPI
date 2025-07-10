@@ -36,21 +36,24 @@ VERIFICATION_EMAIL_TEMPLATE = """
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header { background: #D90709; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { padding: 30px; background: white; }
-        .button { 
+        .content { padding: 30px; background: white; text-align: center; }
+        .code-box { 
             display: inline-block; 
-            padding: 15px 30px; 
-            background: #D90709; 
-            color: white; 
-            text-decoration: none; 
-            border-radius: 6px; 
-            margin: 20px 0;
+            padding: 20px 40px; 
+            background: #f8f9fa; 
+            border: 2px solid #D90709; 
+            border-radius: 8px; 
+            margin: 30px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 32px;
             font-weight: bold;
-            box-shadow: 0 2px 5px rgba(217,7,9,0.3);
+            color: #D90709;
+            letter-spacing: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .button:hover { background: #B8060A; }
         .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
         .highlight { color: #D90709; font-weight: bold; }
+        .warning { background: #fff3cd; border: 1px solid #ffecb3; padding: 15px; border-radius: 4px; margin: 20px 0; color: #856404; }
     </style>
 </head>
 <body>
@@ -63,19 +66,18 @@ VERIFICATION_EMAIL_TEMPLATE = """
             <h2>Welcome to <span class="highlight">ClashKing</span>!</h2>
             <p>Hello <strong>{{ username }}</strong>,</p>
             
-            <p>Thank you for joining the ClashKing community! To complete your account registration and start tracking your Clash of Clans progress, please verify your email address.</p>
+            <p>Thank you for joining the ClashKing community! To complete your account registration and start tracking your Clash of Clans progress, please verify your email address by entering this verification code in the app:</p>
             
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ verification_url }}" class="button">Verify My Email Address</a>
+            <div class="code-box">
+                {{ verification_code }}
             </div>
             
-            <p>This verification link will expire in <span class="highlight">24 hours</span> for security purposes.</p>
-            
-            <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; background: #f0f0f0; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 14px;">{{ verification_url }}</p>
+            <div class="warning">
+                <strong>⏰ This verification code will expire in 15 minutes</strong> for security purposes.
+            </div>
             
             <p><strong>What's next?</strong> Once verified, you'll be able to:</p>
-            <ul>
+            <ul style="text-align: left; display: inline-block;">
                 <li>Track your Clash of Clans statistics</li>
                 <li>View detailed clan analytics</li>
                 <li>Monitor war performance</li>
@@ -93,29 +95,19 @@ VERIFICATION_EMAIL_TEMPLATE = """
 </html>
 """
 
-async def send_verification_email(email: str, username: str, verification_token: str):
+async def send_verification_email(email: str, username: str, verification_code: str):
     """Send email verification email to user."""
     try:
-        # Create verification URL using the same logic as the docs endpoint
-        if config.IS_LOCAL:
-            base_url = "http://localhost:8000"
-        elif config.IS_DEV:
-            base_url = "https://dev.api.clashk.ing"
-        else:
-            base_url = "https://api.clashk.ing"
-        
-        verification_url = f"{base_url}/v2/app/verify-email?token={verification_token}"
-        
         # Render email template with auto-escaping for security
         template = Template(VERIFICATION_EMAIL_TEMPLATE, autoescape=True)
         html_content = template.render(
             username=username,
-            verification_url=verification_url
+            verification_code=verification_code
         )
         
         # Create message
         message = MessageSchema(
-            subject="Verify Your Email - ClashKing",
+            subject="Your ClashKing Verification Code",
             recipients=[email],
             body=html_content,
             subtype="html",

@@ -178,26 +178,6 @@ def generate_email_verification_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def generate_email_verification_jwt(email: str, token: str) -> str:
-    """Generate a JWT token for email verification that expires in 24 hours (matches DB record)."""
-    payload = {
-        "sub": email,
-        "token": token,
-        "type": "email_verification",
-        "iat": pend.now().int_timestamp,
-        "exp": pend.now().add(hours=24).int_timestamp
-    }
-    return jwt.encode(payload, config.SECRET_KEY, algorithm=config.ALGORITHM)
-
-
-def decode_email_verification_jwt(token: str) -> dict:
-    """Decode and validate email verification JWT token."""
-    try:
-        payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
-        if payload.get("type") != "email_verification":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Verification token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid verification token")
+def generate_verification_code() -> str:
+    """Generate a 6-digit verification code."""
+    return f"{secrets.randbelow(900000) + 100000:06d}"

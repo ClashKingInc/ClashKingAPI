@@ -6,7 +6,7 @@ from slowapi import Limiter
 from slowapi.util import get_ipaddr
 from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
     generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
-    generate_email_verification_token, generate_email_verification_jwt, decode_email_verification_jwt
+    generate_verification_code
 from utils.email_service import send_verification_email
 from utils.utils import db_client, generate_custom_id, config
 from utils.password_validator import PasswordValidator
@@ -18,58 +18,41 @@ limiter = Limiter(key_func=get_ipaddr)
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
 
 
-@router.post("/auth/verify-email", name="Verify email address")
+
+@router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
 @limiter.limit("10/minute")
-async def verify_email(request: Request):
+async def verify_email_with_code(request: Request):
     try:
         data = await request.json()
-        token = data.get("token")
+        email = data.get("email")
+        code = data.get("code")
         
-        if not token:
-            raise HTTPException(status_code=400, detail="Verification token is required")
+        if not email or not code:
+            raise HTTPException(status_code=400, detail="Email and verification code are required")
         
-        # Basic token validation before JWT decoding
-        if not token or len(token.strip()) < 50:
-            raise HTTPException(status_code=400, detail="Invalid token format")
+        # Validate code format
+        if not code.isdigit() or len(code) != 6:
+            raise HTTPException(status_code=400, detail="Invalid verification code format")
         
-        if token.count('.') != 2:
-            raise HTTPException(status_code=400, detail="Invalid token structure")
-        
-        # Decode and validate the JWT token
-        try:
-            payload = decode_email_verification_jwt(token)
-            email = payload["sub"]
-            verification_token = payload["token"]
-            
-            # Additional payload validation
-            if not email or not verification_token:
-                raise HTTPException(status_code=401, detail="Invalid token payload")
-                
-        except HTTPException:
-            raise
-        except Exception as e:
-            sentry_sdk.capture_message(f"JWT decode error in email verification: {str(e)}", level="warning")
-            raise HTTPException(status_code=401, detail="Invalid verification token")
-        
-        # Find the pending verification
+        # Find the pending verification by email hash and code
+        email_hash = hash_email(email)
         pending_verification = await db_client.app_email_verifications.find_one({
-            "email_hash": hash_email(email),
-            "verification_token": verification_token
+            "email_hash": email_hash,
+            "verification_code": code
         })
         
         if not pending_verification:
-            raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+            raise HTTPException(status_code=401, detail="Invalid verification code")
         
-        # Check if token has expired
+        # Check if code has expired
         if pend.now() > pending_verification["expires_at"]:
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
-            raise HTTPException(status_code=401, detail="Verification token expired. Please register again.")
+            raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")
         
         # Get the pending user data
         user_data = pending_verification["user_data"]
         
         # Check if email is already registered (to prevent race conditions)
-        email_hash = hash_email(email)
         existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
         
         if existing_user:
@@ -113,7 +96,7 @@ async def verify_email(request: Request):
                 sentry_sdk.capture_message(f"New user created via email verification: {user_id}", level="info")
             except Exception as e:
                 # If user creation fails, don't clean up verification yet
-                sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email", "user_id": user_id})
+                sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code", "user_id": user_id})
                 raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
         
         # Clean up pending verification only after successful account creation/update
@@ -149,7 +132,7 @@ async def verify_email(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email"})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code"})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -442,15 +425,14 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         # Prepare email encryption and user data
         email_data = await prepare_email_for_storage(req.email)
         
-        # Generate verification token
-        verification_token = generate_email_verification_token()
-        verification_jwt = generate_email_verification_jwt(req.email, verification_token)
+        # Generate 6-digit verification code
+        verification_code = generate_verification_code()
         
         # Store pending verification with user data
         pending_verification = {
             "_id": generate_custom_id(),
             "email_hash": email_hash,
-            "verification_token": verification_token,
+            "verification_code": verification_code,
             "user_data": {
                 "email_encrypted": email_data["email_encrypted"],
                 "email_hash": email_data["email_hash"],
@@ -459,7 +441,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
                 "device_id": req.device_id
             },
             "created_at": pend.now(),
-            "expires_at": pend.now().add(hours=24)
+            "expires_at": pend.now().add(minutes=15)  # Shorter expiration for codes
         }
         
         # Clean up any existing pending verifications for this email
@@ -470,7 +452,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         
         # Send verification email
         try:
-            await send_verification_email(req.email, req.username, verification_jwt)
+            await send_verification_email(req.email, req.username, verification_code)
         except Exception as e:
             # Clean up pending verification if email fails
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
@@ -478,8 +460,8 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             raise HTTPException(status_code=500, detail="Failed to send verification email")
         
         return {
-            "message": "Verification email sent. Please check your email and click the verification link.",
-            "verification_token": verification_jwt if config.IS_LOCAL else None  # Only show in local dev
+            "message": "Verification email sent. Please check your email and enter the 6-digit code.",
+            "verification_code": verification_code if config.IS_LOCAL else None  # Only show in local dev
         }
         
     except HTTPException:
@@ -524,17 +506,16 @@ async def resend_verification_email(request: Request):
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=410, detail="Verification expired. Please register again.")
         
-        # Generate new verification token
-        verification_token = generate_email_verification_token()
-        verification_jwt = generate_email_verification_jwt(email, verification_token)
+        # Generate new verification code
+        verification_code = generate_verification_code()
         
-        # Update the pending verification with new token
+        # Update the pending verification with new code
         await db_client.app_email_verifications.update_one(
             {"_id": pending_verification["_id"]},
             {"$set": {
-                "verification_token": verification_token,
+                "verification_code": verification_code,
                 "created_at": pend.now(),
-                # Don't extend expiration - keep original 24h window
+                "expires_at": pend.now().add(minutes=15)  # Reset expiration for new code
             }}
         )
         
@@ -543,14 +524,14 @@ async def resend_verification_email(request: Request):
         username = user_data.get("username", "User")
         
         try:
-            await send_verification_email(email, username, verification_jwt)
+            await send_verification_email(email, username, verification_code)
         except Exception as e:
             sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/resend-verification", "email": email})
             raise HTTPException(status_code=500, detail="Failed to send verification email")
         
         return {
             "message": "Verification email resent successfully. Please check your email.",
-            "verification_token": verification_jwt if config.IS_LOCAL else None  # Only show in local dev
+            "verification_code": verification_code if config.IS_LOCAL else None  # Only show in local dev
         }
         
     except HTTPException:

@@ -29,11 +29,13 @@ def safe_email_log(email: str) -> str:
 @router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
 async def verify_email_with_code(request: Request):
     try:
+        print("DEBUG: Starting email verification endpoint")
+        
         data = await request.json()
         email = data.get("email")
         code = data.get("code")
         
-        sentry_sdk.capture_message(f"Email verification attempt for: {safe_email_log(email)}", level="info")
+        print(f"DEBUG: Email verification attempt for: {safe_email_log(email)}, code length: {len(code) if code else 'None'}")
         
         if not email or not code:
             raise HTTPException(status_code=400, detail="Email and verification code are required")
@@ -45,10 +47,14 @@ async def verify_email_with_code(request: Request):
         
         # Find the pending verification by email hash and code
         email_hash = hash_email(email)
+        print(f"DEBUG: Looking for verification with email_hash: {email_hash[:10]}..., code: {code}")
+        
         pending_verification = await db_client.app_email_verifications.find_one({
             "email_hash": email_hash,
             "verification_code": code
         })
+        
+        print(f"DEBUG: Found pending verification: {pending_verification is not None}")
         
         if not pending_verification:
             # Also check for old records that might still have verification_token field
@@ -73,10 +79,14 @@ async def verify_email_with_code(request: Request):
             raise HTTPException(status_code=401, detail="Verification code expired. Please request a new one.")
         
         # Get the pending user data
+        print("DEBUG: Extracting user_data from verification record")
         user_data = pending_verification.get("user_data")
         if not user_data:
+            print(f"ERROR: Missing user_data in verification record for email: {safe_email_log(email)}")
             sentry_sdk.capture_message(f"Missing user_data in verification record for email: {safe_email_log(email)}", level="error")
             raise HTTPException(status_code=500, detail="Invalid verification record")
+        
+        print(f"DEBUG: user_data keys: {list(user_data.keys()) if user_data else 'None'}")
         
         # Validate required fields in user_data
         required_fields = ["email_encrypted", "email_hash", "username", "password", "device_id"]
@@ -86,11 +96,16 @@ async def verify_email_with_code(request: Request):
             raise HTTPException(status_code=500, detail="Invalid verification record")
         
         # Check if email is already registered (to prevent race conditions)
+        print("DEBUG: Checking for existing user")
         existing_user = await db_client.app_users.find_one({"email_hash": email_hash})
+        print(f"DEBUG: Existing user found: {existing_user is not None}")
+        if existing_user:
+            print(f"DEBUG: Existing user auth methods: {existing_user.get('auth_methods', [])}")
         
         if existing_user:
             # Check if it's a Discord user trying to add email auth
             if "discord" in existing_user.get("auth_methods", []) and "email" not in existing_user.get("auth_methods", []):
+                print("DEBUG: Adding email auth to existing Discord user")
                 # Update existing Discord user with email auth
                 auth_methods = set(existing_user.get("auth_methods", []))
                 auth_methods.add("email")
@@ -114,10 +129,15 @@ async def verify_email_with_code(request: Request):
                 raise HTTPException(status_code=400, detail="This email has already been verified. Please try logging in instead.")
         else:
             # Create new user
-            user_id = str(generate_custom_id())
+            print("DEBUG: Creating new user")
+            user_id_raw = generate_custom_id()
+            user_id = str(user_id_raw)
+            print(f"DEBUG: Generated user_id: {user_id}, raw: {user_id_raw}")
+            
             try:
+                print("DEBUG: Inserting user into database")
                 await db_client.app_users.insert_one({
-                    "_id": int(user_id),
+                    "_id": user_id_raw,
                     "user_id": user_id,
                     "email_encrypted": user_data["email_encrypted"],
                     "email_hash": user_data["email_hash"],
@@ -126,24 +146,29 @@ async def verify_email_with_code(request: Request):
                     "auth_methods": ["email"],
                     "created_at": pend.now()
                 })
-                sentry_sdk.capture_message(f"New user created via email verification: {user_id}", level="info")
+                print(f"DEBUG: User successfully inserted with ID: {user_id}")
             except Exception as e:
                 # If user creation fails, don't clean up verification yet
+                print(f"ERROR: Failed to insert user: {str(e)}")
                 sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/verify-email-code", "user_id": user_id})
                 raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
         
         # Clean up pending verification only after successful account creation/update
+        print("DEBUG: Cleaning up verification record")
         await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
         
         # Generate auth tokens
+        print("DEBUG: Generating auth tokens")
         access_token = generate_jwt(str(user_id), user_data["device_id"])
         refresh_token = generate_refresh_token(str(user_id))
+        print("DEBUG: Auth tokens generated successfully")
         
         # Store refresh token
+        print("DEBUG: Storing refresh token")
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
+                "$setOnInsert": {"_id": generate_custom_id(user_id_raw)},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)
@@ -151,7 +176,9 @@ async def verify_email_with_code(request: Request):
             },
             upsert=True
         )
+        print("DEBUG: Refresh token stored successfully")
         
+        print("DEBUG: Creating AuthResponse")
         return AuthResponse(
             access_token=access_token,
             refresh_token=refresh_token,

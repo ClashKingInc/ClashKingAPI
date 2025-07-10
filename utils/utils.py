@@ -14,7 +14,8 @@ import asyncio
 import aiohttp
 import orjson
 from json import loads as json_loads
-
+from slowapi import Limiter
+from slowapi.util import get_ipaddr
 from .config import Config
 from datetime import datetime
 import pytz
@@ -23,7 +24,13 @@ from bson import json_util
 
 config = Config()
 
+limiter = Limiter(key_func=get_ipaddr, key_style="endpoint")
 
+
+def dynamic_limit(key: str):
+    if key in {"::1", "65.108.77.253", "85.10.200.219"}:
+        return "1000/second"
+    return "30/second"
 
 load_dotenv()
 client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")

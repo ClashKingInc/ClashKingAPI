@@ -1,9 +1,7 @@
 import os
 import ujson
-from fastapi import  Request, Response, HTTPException
+from fastapi import  Request, Response
 from fastapi import APIRouter
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 
 
 

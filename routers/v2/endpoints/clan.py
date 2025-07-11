@@ -1,12 +1,15 @@
 
+import coc
 import pendulum as pend
 from collections import defaultdict
-from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request
+
+from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path
 from utils.utils import fix_tag, remove_id_fields
+from utils.dependencies import get_coc_client
+
 from utils.time import gen_season_date, gen_raid_date
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
+from routers.v2.models.player import PlayerTagsRequest
 
 router = APIRouter(prefix="/v2",tags=["Clan"], include_in_schema=True)
 
@@ -62,7 +65,7 @@ async def clan_board_totals(clan_tag: str, request: Request, body: PlayerTagsReq
     for date in gen_raid_date(num_weeks=4):
         donated_cc += sum(
             [
-                sum(player.get(f'capital_gold', {}).get(f'{date}', {}).get('donate', []))
+                sum(player.get('capital_gold', {}).get(f'{date}', {}).get('donate', []))
                 for player in player_stats
             ]
         )
@@ -121,6 +124,102 @@ async def clan_donations(clan_tag: str, season: str, request: Request):
             "received" : data.get('received', 0)
         })
     return {"items": items}
+
+
+@router.get("/clan/compo",
+             name="Get composition of a clan or clans")
+async def clan_compo(
+        request: Request,
+        clan_tags: list[str] = Query(..., min_length=1, max_length=100),
+        coc_client: coc.Client = Depends(get_coc_client)
+):
+    clans = []
+    async for clan in coc_client.get_clans(tags=clan_tags):
+        clans.append(clan)
+
+    member_tags = [m.tag for clan in clans for m in clan.members]
+
+    location_info = await mongo.leaderboard_db.find(
+        {'tag': {'$in': member_tags}},
+        {'_id': 0, 'tag': 1, 'country_name': 1, 'country_code': 1}
+    ).to_list(length=None)
+
+    tag_to_location = {x.get("tag") : x for x in location_info}
+
+    country_map = {x.get("country_code") : x.get("country_name") for x in location_info}
+
+    buckets = {
+        "townhall" : defaultdict(int),
+        "trophies" : defaultdict(int),
+        "location" : defaultdict(int),
+        "role" : defaultdict(int),
+        "league" : defaultdict(int),
+        "country_map" : country_map,
+        "total_members" : len(member_tags),
+        "clan_count" : len(clans)
+    }
+
+    if len(clans) == 1:
+        buckets["clan"] = clans[0]._raw_data
+
+    for clan in clans:
+        for member in clan.members:
+            buckets["townhall"][member.town_hall] += 1 if member.town_hall != 0 else 0
+
+            if member.trophies >= 1000:
+                buckets["trophies"][str((member.trophies // 1000) * 1000)] += 1
+            else:
+                buckets["trophies"]['100'] += 1
+
+            if member.tag in tag_to_location:
+                location = tag_to_location[member.tag]
+                if location.get("country_code") is not None:
+                    buckets["location"][(location.get("country_code"))] += 1
+
+            buckets["role"][member.role.in_game_name] += 1
+            buckets["league"][member.league.name] += 1
+
+    return buckets
+
+
+@router.get("/clan/donations/{season}",
+             name="Get donations of a clan or clans")
+async def clan_donations(
+        request: Request,
+        season: str = Path(description="Season to get donations for"),
+        clan_tags: list[str] = Query(..., min_length=1, max_length=100),
+        only_current_members: bool = Query(False, description="Only include members currently in the clan"),
+        coc_client: coc.Client = Depends(get_coc_client)
+):
+    clan_tags = [fix_tag(t) for t in clan_tags]
+    pipeline = [
+        {"$match": {"clan_tag": {"$in": clan_tags}, "$or": [
+                    {"donated": {"$ne": None}},
+                    {"received": {"$ne": None}}
+                ]
+            }},
+        {"$group": {
+            "_id": "$tag",
+            "donated": {"$sum": {"$ifNull": ["$donated", 0]}},
+            "received": {"$sum": {"$ifNull": ["$received", 0]}},
+        }},
+        {"$project": {
+            "_id": 0,
+            "tag": "$_id",
+            "donated": 1,
+            "received": 1
+        }}
+    ]
+    stats = await mongo.new_player_stats.aggregate(pipeline).to_list(length=None)
+    return stats
+
+
+
+
+
+
+
+
 
 
 

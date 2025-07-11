@@ -1,13 +1,8 @@
-import pendulum as pend
-from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request
-from typing import Annotated
+from fastapi import APIRouter, Request
 from utils.time import (
     gen_season_date, gen_raid_date, gen_legend_date,
     gen_games_season, season_start_end, get_season_raid_weeks
 )
-from utils.utils import fix_tag, remove_id_fields, check_authentication
-from utils.database import MongoClient as mongo
 
 
 router = APIRouter(prefix="/v2",tags=["Dates"], include_in_schema=True)

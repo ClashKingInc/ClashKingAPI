@@ -13,14 +13,11 @@ import asyncio
 import aiohttp
 import orjson
 from fastapi import HTTPException
-from base64 import b64decode as base64_b64decode
 from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
 
 from .config import Config
-from collections import deque
-from datetime import datetime
 import pytz
 from bson import json_util
 
@@ -43,16 +40,6 @@ other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True,
                        max_connections=25, retry_on_error=[redis.ConnectionError])
 
-coc_client = coc.Client(
-    base_url='https://proxy.clashk.ing/v1',
-    key_count=10,
-    key_names='test',
-    throttle_limit=500,
-    cache_max_size=10_000,
-    load_game_data=coc.LoadGameData(default=False),
-    raw_attribute=True,
-    stats_max_size=10_000,
-)
 
 
 
@@ -255,9 +242,8 @@ def remove_id_fields(data):
     return data
 
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from functools import wraps
-import os
 
 
 def check_authentication(func):

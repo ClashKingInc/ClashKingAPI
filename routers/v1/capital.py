@@ -1,13 +1,10 @@
 
-import coc
 
 from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import List
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, leagues
 from datetime import datetime
 
@@ -24,7 +21,7 @@ router = APIRouter(tags=["Clan Capital Endpoints"])
 async def capital_stats_district(weekend: str, request: Request, response: Response):
     weekend_to_iso = datetime.strptime(weekend, "%Y-%m-%d")
     if (datetime.now() - weekend_to_iso).total_seconds() <= 273600:
-        raise HTTPException(status_code=404, detail=f"Please wait until 4 hours after Raid Weekend is completed to collect stats")
+        raise HTTPException(status_code=404, detail="Please wait until 4 hours after Raid Weekend is completed to collect stats")
     weekend_to_iso = weekend_to_iso.replace(hour=7)
     weekend = weekend_to_iso.strftime('%Y%m%dT%H%M%S.000Z')
     pipeline = [{"$match": {"data.startTime": weekend}},
@@ -60,7 +57,7 @@ async def capital_stats_leagues(weekend: str, request: Request, response: Respon
     og_weekend = weekend
     weekend_to_iso = datetime.strptime(weekend, "%Y-%m-%d")
     if (datetime.now() - weekend_to_iso).total_seconds() <= 273600:
-        raise HTTPException(status_code=404, detail=f"Please wait until 4 hours after Raid Weekend is completed to collect stats")
+        raise HTTPException(status_code=404, detail="Please wait until 4 hours after Raid Weekend is completed to collect stats")
     weekend_to_iso = weekend_to_iso.replace(hour=7)
     weekend = weekend_to_iso.strftime('%Y%m%dT%H%M%S.000Z')
     pipeline = [

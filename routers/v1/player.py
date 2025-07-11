@@ -7,13 +7,10 @@ import time
 import copy
 
 from collections import defaultdict
-from datetime import timedelta
 from fastapi import Request, Response, HTTPException, Query, APIRouter
 from fastapi_cache.decorator import cache
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from typing import List, Annotated
-from utils.utils import fix_tag, redis, db_client, gen_legend_date, gen_games_season, leagues
+from utils.utils import fix_tag, db_client, gen_legend_date, gen_games_season
 
 
 
@@ -28,7 +25,7 @@ async def player_stat(player_tag: str, request: Request, response: Response):
     lb_spot = await db_client.player_leaderboard_db.find_one({"tag": player_tag})
 
     if result is None:
-        raise HTTPException(status_code=404, detail=f"No player found")
+        raise HTTPException(status_code=404, detail="No player found")
     try:
         del result["legends"]["streak"]
     except:
@@ -75,7 +72,7 @@ async def player_legend(player_tag: str, request: Request, response: Response, s
     c_time = time.time()
     result = await db_client.player_stats_db.find_one({"tag": player_tag}, projection={"name" : 1, "townhall" : 1, "legends" : 1, "tag" : 1})
     if result is None:
-        raise HTTPException(status_code=404, detail=f"No player found")
+        raise HTTPException(status_code=404, detail="No player found")
     ranking_data = await db_client.player_leaderboard_db.find_one({"tag": player_tag}, projection={"_id" : 0})
 
     default = {"country_code": None,

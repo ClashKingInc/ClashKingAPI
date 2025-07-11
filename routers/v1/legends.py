@@ -1,7 +1,5 @@
-from fastapi import Request, Response, HTTPException, APIRouter, Query
+from fastapi import Request, Response, APIRouter, Query
 from fastapi_cache.decorator import cache
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from utils.utils import db_client, fix_tag
 
 

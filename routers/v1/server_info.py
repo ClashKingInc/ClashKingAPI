@@ -1,7 +1,7 @@
 import json
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
-from utils.utils import  db_client, token_verify, limiter
+from utils.utils import  db_client, token_verify
 
 from bson import json_util
 

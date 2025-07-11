@@ -1,14 +1,13 @@
-import operator
 
 import coc
 import pendulum as pend
 from collections import defaultdict
 from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request, Depends
+from fastapi import APIRouter, Query, Request
 from utils.utils import fix_tag, remove_id_fields
-from utils.time import gen_season_date, gen_raid_date
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
+
+from routers.v2.utils.war import calculate_war_stats, deconstruct_type
 
 router = APIRouter(prefix="/v2",tags=["War"], include_in_schema=True)
 
@@ -54,6 +53,7 @@ async def war_previous(
         found_ids.add(id)
 
     return remove_id_fields({"items" : new_wars})
+
 
 
 @router.get("/cwl/{clan_tag}/ranking-history", name="CWL ranking history for a clan")
@@ -308,3 +308,60 @@ def ranking_create(data: dict):
         }
         for x in sorted_list
     ]
+
+
+@router.get("/war/clan/stats")
+async def clan_war_stats(
+        request: Request,
+        clan_tags: list[str] = Query(..., min_length=1),
+        timestamp_start: int = 0,
+        timestamp_end: int = 9999999999,
+        war_types: int = 7,
+        townhall_filter: str = "all",
+        limit: int = 1000
+):
+    clan_tags = [fix_tag(tag=tag) for tag in clan_tags]
+
+    START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+
+    first_match = {"$or": [{"data.clan.tag": {"$in" : clan_tags}}, {"data.opponent.tag": {"$in" : clan_tags}}]}
+
+    query = {
+        "$and": [
+            first_match,
+            {"data.preparationStartTime": {"$gte": START}},
+            {"data.preparationStartTime": {"$lte": END}}
+        ]
+    }
+
+
+    pipeline = [
+        {"$match": query},
+        {"$unset": ["_id"]},
+        {"$sort": {"endTime": -1}},
+        {"$project": {"data": "$data"}},
+        {"$limit": limit}
+    ]
+
+    if war_types != 7:
+        war_types: list[int] = deconstruct_type(war_types)
+        check = []
+        if 1 in war_types:
+            check.append({"type": "random"})
+
+        if 2 in war_types:
+            check.append({"type": "friendly"})
+
+        if 4 in war_types:
+            check.append({"data.tag": {"$ne": None}})
+
+        pipeline.insert(1, {"$match" : {"$or": check}})
+
+    wars = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+    return await calculate_war_stats(
+        wars=wars, clan_tags=set(clan_tags),
+        townhall_filter=townhall_filter
+    )
+

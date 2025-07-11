@@ -1,13 +1,11 @@
 from collections import defaultdict
 
-import pendulum as pend
-from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 
 from utils.time import get_season_raid_weeks, season_start_end, CLASH_ISO_FORMAT
 from utils.utils import fix_tag, remove_id_fields, bulk_requests
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
+from routers.v2.models.player import PlayerTagsRequest
 
 router = APIRouter(prefix="/v2",tags=["Player"], include_in_schema=True)
 

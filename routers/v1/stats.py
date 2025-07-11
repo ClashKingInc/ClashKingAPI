@@ -2,11 +2,9 @@
 import coc
 
 from collections import defaultdict
-from fastapi import  Request, Response, HTTPException, APIRouter, Query
+from fastapi import  Request, Response, APIRouter, Query
 from fastapi_cache.decorator import cache
 from typing import List, Annotated
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, gen_season_date, gen_games_season, gen_raid_date
 from statistics import mean, median
 from datetime import datetime, timedelta
@@ -604,8 +602,8 @@ async def war_stats(request: Request, response: Response,
                     clan_to_name[result.get("clan")] = result.get("clan_name")
                 if result_type != "defense":
                     by_clan[result.get("clan")]["attacks"] += 1
-                    by_clan[result.get("clan")][f"stars"] += result.get("stars")
-                    by_clan[result.get("clan")][f"destruction"] += result.get("destruction")
+                    by_clan[result.get("clan")]["stars"] += result.get("stars")
+                    by_clan[result.get("clan")]["destruction"] += result.get("destruction")
                     by_clan[result.get("clan")][f"{num_to_word.get(result.get('stars'))}_stars"] += 1
 
                 for type in [("All","All"), ("townhall", hr_type), ("freshness", result.get("fresh")),

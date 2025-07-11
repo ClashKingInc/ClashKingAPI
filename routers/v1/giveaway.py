@@ -266,7 +266,7 @@ async def preview_giveaway_form(
     image_url = None
     if image and image.filename:
         # Mock an image URL for preview purposes
-        image_url = f"https://via.placeholder.com/400?text=Preview+Image"
+        image_url = "https://via.placeholder.com/400?text=Preview+Image"
 
     # Format the end time
     footer_text = ""

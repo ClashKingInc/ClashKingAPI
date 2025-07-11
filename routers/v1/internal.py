@@ -1,16 +1,11 @@
 import aiohttp
 import orjson
 import asyncio
-from fastapi import FastAPI, Query
-from fastapi.responses import StreamingResponse
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-import requests
 
 from fastapi import  Request, Response, HTTPException, Header
 from fastapi import APIRouter
 from typing import List
-from utils.utils import fix_tag, redis, db_client, config
+from utils.utils import fix_tag, db_client, config
 from expiring_dict import ExpiringDict
 
 

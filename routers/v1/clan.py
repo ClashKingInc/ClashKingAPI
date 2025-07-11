@@ -1,14 +1,11 @@
-import coc
 import pendulum as pend
 
 from bson.objectid import ObjectId
-from fastapi import  Request, Response, HTTPException
+from fastapi import  Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from models.clan import JoinLeaveList
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
-from utils.utils import fix_tag, leagues, db_client
+from routers.v2.models.clan import JoinLeaveList
+from utils.utils import fix_tag, db_client
 
 
 router = APIRouter(tags=["Clan Endpoints"])

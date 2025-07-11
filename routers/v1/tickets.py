@@ -1,16 +1,10 @@
-import datetime
 import aiohttp
-import json
-import re
 import uuid
-import base64
-import pendulum as pend
-from fastapi import APIRouter, Form, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter
 from fastapi.templating import Jinja2Templates
 
 from starlette.requests import Request
-from utils.utils import fix_tag, db_client, upload_to_cdn, config
+from utils.utils import db_client, config
 
 router = APIRouter(prefix="/ticketing", include_in_schema=False)
 templates = Jinja2Templates(directory="templates")

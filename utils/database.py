@@ -3,10 +3,11 @@ from .config import Config
 
 config = Config()
 
+from redis import asyncio as redis
 
 class MongoClient:
     looper_db = motor.motor_asyncio.AsyncIOMotorClient(
-        config.stats_mongodb, compressors='snappy' if not config.is_local else 'zlib'
+        config.stats_mongodb, compressors=['snappy', 'zlib']
     )
     db_client = motor.motor_asyncio.AsyncIOMotorClient(
         config.static_mongodb, compressors='snappy' if not config.is_local else 'zlib'
@@ -37,6 +38,7 @@ class MongoClient:
     cwl_groups = looper.get_collection('cwl_group')
     basic_clan = looper.get_collection('clan_tags')
     war_timers = looper.get_collection('war_timer')
+    new_player_stats = looper.get_collection('player_stats')
 
     # Collections (ClashKing)
     excel_templates = clashking.get_collection('excel_templates')
@@ -47,6 +49,8 @@ class MongoClient:
     bot_stats = clashking.get_collection('bot_stats')
     autoboards = clashking.get_collection('autoboards')
     number_emojis = clashking.get_collection('number_emojis')
+    groups = clashking.get_collection('groups')
+
 
     # Collections (Stats & New Looper)
     base_player = stats.get_collection('base_player')
@@ -105,3 +109,20 @@ class MongoClient:
     trials = bot_settings.get_collection('trials')
     autoboard_db = bot_settings.get_collection('autoboard_db')
     player_search = bot_settings.get_collection('player_search')
+
+
+cache = redis.Redis(
+        host=config.redis_ip,
+        port=6379,
+        db=0,
+        password=config.redis_pw,
+        decode_responses=False,
+        max_connections=50,
+        health_check_interval=10,
+        socket_connect_timeout=5,
+        retry_on_timeout=True,
+        socket_keepalive=True,
+    )
+
+
+

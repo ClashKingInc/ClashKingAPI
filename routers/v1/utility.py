@@ -1,8 +1,6 @@
 import pandas as pd
 import io
 from dotenv import load_dotenv
-import os
-import asyncio
 import uuid
 load_dotenv()
 import aiohttp
@@ -11,8 +9,6 @@ from fastapi import Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 from typing import Dict
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from utils.utils import db_client, download_image, config, upload_to_cdn
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -20,11 +16,6 @@ from typing import List
 from fastapi.responses import HTMLResponse
 from coc.ext import discordlinks
 
-from PIL import Image, ImageDraw, ImageFont
-import pandas as pd
-import io
-from fastapi import Request, Response
-import numpy as np
 
 router = APIRouter(tags=["Utility"])
 

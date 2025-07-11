@@ -2,9 +2,7 @@ import pendulum as pend
 
 from fastapi import  Request, Response, HTTPException, APIRouter, Query
 from fastapi_cache.decorator import cache
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_ipaddr
-from utils.utils import fix_tag, db_client, leagues
+from utils.utils import db_client, leagues
 
 
 
@@ -25,7 +23,7 @@ async def leaderboard_players_capital(
 
     weekend_to_iso = pend.parse(weekend, strict=False)
     if (pend.now(tz=pend.UTC) - weekend_to_iso).total_seconds() <= 273600:
-        raise HTTPException(status_code=404, detail=f"Please wait until 4 hours after Raid Weekend is completed to collect stats")
+        raise HTTPException(status_code=404, detail="Please wait until 4 hours after Raid Weekend is completed to collect stats")
 
     results = await db_client.player_capital_lb.find({
         "$and" : [
@@ -55,7 +53,7 @@ async def leaderboard_clans_capital(
 
     weekend_to_iso = pend.parse(weekend, strict=False)
     if (pend.now(tz=pend.UTC) - weekend_to_iso).total_seconds() <= 273600:
-        raise HTTPException(status_code=404, detail=f"Please wait until 4 hours after Raid Weekend is completed to collect stats")
+        raise HTTPException(status_code=404, detail="Please wait until 4 hours after Raid Weekend is completed to collect stats")
 
     results = await db_client.clan_capital_lb.find({
         "$and": [

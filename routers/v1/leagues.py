@@ -1,13 +1,9 @@
-import os
 import ujson
 
-from fastapi import FastAPI, Request, Response, Query, HTTPException
+from fastapi import Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_ipaddr
-from slowapi.errors import RateLimitExceeded
 
 
 router = APIRouter(tags=["Leagues"])

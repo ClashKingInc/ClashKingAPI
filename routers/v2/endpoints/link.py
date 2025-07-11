@@ -1,9 +1,6 @@
 
-import pendulum as pend
-from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request
-from typing import Annotated
-from utils.utils import fix_tag, remove_id_fields, check_authentication
+from fastapi import APIRouter, Request
+from utils.utils import remove_id_fields, check_authentication
 from utils.database import MongoClient as mongo
 
 

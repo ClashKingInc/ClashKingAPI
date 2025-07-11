@@ -1,14 +1,13 @@
-import operator
 
 import coc
+import re
 import pendulum as pend
-from collections import defaultdict
-from fastapi import HTTPException
-from fastapi import APIRouter, Query, Request, Depends
-from utils.utils import fix_tag, remove_id_fields, coc_client
-from utils.time import gen_season_date, gen_raid_date
+
+from fastapi import APIRouter, Query, Request, Depends, HTTPException
+from utils.utils import fix_tag, check_authentication
 from utils.database import MongoClient as mongo
-from routers.v2.player.models import PlayerTagsRequest
+from utils.dependencies import get_coc_client
+from hashids import Hashids
 
 router = APIRouter(prefix="/v2",tags=["Search"], include_in_schema=True)
 
@@ -21,6 +20,7 @@ async def search_clan(
         request: Request = Request,
         user_id: int = 0,
         guild_id: int = 0,
+        coc_client: coc.Client = Depends(get_coc_client)
 ):
 
     recent_tags = []
@@ -160,9 +160,34 @@ async def search_clan(
     return {"items" : final_data}
 
 
+@router.get("/search/{guild_id}/banned-players",
+         name="Search for a banned player")
+@check_authentication
+async def search_banned_players(
+        query: str = Query(default=""),
+        guild_id: int = 0,
+        request: Request = Request,
+):
+    query: str = re.escape(query)
+    if query == '':
+        docs = await mongo.banlist.find({'server': guild_id}, limit=25).to_list(length=25)
+    else:
+        docs = await mongo.banlist.find(
+            {
+                '$and': [
+                    {'server': guild_id},
+                    {'VillageName': {'$regex': f'^(?i).*{query}.*$'}},
+                ]
+            },
+            limit=25,
+        ).to_list(length=25)
+
+    return {"items" : [{"tag": doc["VillageTag"], "name": doc.get("VillageName", "Missing")} for doc in docs]}
+
 
 @router.post("/search/bookmark/{user_id}/{type}/{tag}",
          name="Add a bookmark for a clan or player for a user")
+@check_authentication
 async def bookmark_search(
         user_id: int,
         type: int,
@@ -170,6 +195,10 @@ async def bookmark_search(
         request: Request = Request,
 ):
     tag = fix_tag(tag)
+    type_field = {
+        0: "player",
+        1: "clan"
+    }
     # First, remove the tag if it exists
     await mongo.user_settings.update_one(
         {"discord_user": user_id},
@@ -186,6 +215,7 @@ async def bookmark_search(
 
 @router.post("/search/recent/{user_id}/{type}/{tag}",
          name="Add a recent search for a clan or player for a user")
+@check_authentication
 async def recent_search(
         user_id: int,
         type: int,
@@ -197,6 +227,7 @@ async def recent_search(
         0: "player",
         1: "clan"
     }
+
     tag = fix_tag(tag)
     # First, remove the tag if it exists
     await mongo.user_settings.update_one(
@@ -209,4 +240,101 @@ async def recent_search(
         {"discord_user": user_id},
         {"$push": {f"search.{type_field.get(type)}.recent": {"$each": [tag], "$position": 0, "$slice": 20}}}
     )
+    return {"success": True}
+
+@router.post("/search/groups/create/{user_id}/{name}/{type}",
+         name="Create a player or clan group")
+@check_authentication
+async def group_create(
+        user_id: int,
+        name: str,
+        type: int,
+        request: Request = Request,
+):
+    type_field = {
+        0: "player",
+        1: "clan"
+    }
+    group = await mongo.groups.find_one(
+        {"$and" : [
+            {"user_id": user_id},
+            {"type": type_field.get(type)},
+            {"name": name}
+        ]},
+        {"_id": 0}
+    )
+    if group:
+        raise HTTPException(status_code=400, detail="Group already exists")
+    hashids = Hashids(min_length=7)
+    custom_id = hashids.encode(user_id + pend.now("UTC").int_timestamp)
+
+    await mongo.groups.insert_one({
+        "group_id" : custom_id,
+        "user_id": user_id,
+        "type" : type_field.get(type),
+        "tags" : []
+    })
+    return {"success": True}
+
+
+@router.post("/search/groups/{group_id}/add/{tag}",
+         name="Add a player or clan to a group")
+@check_authentication
+async def group_add(
+        group_id: str,
+        tag: str,
+        request: Request = Request,
+):
+    await mongo.groups.update_one(
+        {"group_id": group_id},
+        {"$addToSet": {"tags": fix_tag(tag)}}
+    )
+    return {"success": True}
+
+@router.post("/search/groups/{group_id}/remove/{tag}",
+         name="Remove a player or clan from a group")
+@check_authentication
+async def group_remove(
+        group_id: str,
+        tag: str,
+        request: Request = Request,
+):
+    await mongo.groups.update_one(
+        {"group_id": group_id},
+        {"$pull": {"tags": fix_tag(tag)}}
+    )
+    return {"success": True}
+
+@router.get("/search/groups/{group_id}",
+         name="Get a specific group")
+@check_authentication
+async def group_get(
+        group_id: str,
+        request: Request = Request,
+):
+    group = await mongo.groups.find_one({"group_id": group_id}, {"_id" : 0})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return group
+
+
+@router.get("/search/groups/{user_id}/list",
+         name="List groups for a user")
+@check_authentication
+async def group_list(
+        user_id: int,
+        request: Request = Request,
+):
+    groups = await mongo.groups.find({"user_id": user_id}, {"_id" : 0}).to_list(length=None)
+    return {"items" : groups}
+
+
+@router.delete("/search/groups/{group_id}",
+         name="Delete a specific group")
+@check_authentication
+async def group_delete(
+        group_id: int,
+        request: Request = Request,
+):
+    await mongo.groups.delete_one({"group_id": group_id})
     return {"success": True}

@@ -1,13 +1,10 @@
 
 import coc
 
-from collections import defaultdict
-from fastapi import  Request, Response, HTTPException
+from fastapi import  Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from typing import List
-from datetime import datetime
-from utils.utils import  db_client, limiter
+from utils.utils import  db_client
 from pytz import utc
 import dateutil.relativedelta
 

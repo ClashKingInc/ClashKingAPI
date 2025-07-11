@@ -2,9 +2,10 @@ import os
 import logging
 import uvicorn
 import importlib.util
-import time
+from contextlib import asynccontextmanager
+import coc
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -18,7 +19,7 @@ from slowapi.util import get_ipaddr
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
-from utils.utils import config, coc_client
+from utils.utils import config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,44 +38,64 @@ middleware = [
     )
 ]
 
-app = FastAPI(middleware=middleware)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    coc_client = coc.Client(
+        base_url='https://proxy.clashk.ing/v1',
+        key_count=10,
+        key_names='test',
+        throttle_limit=500,
+        cache_max_size=10_000,
+        load_game_data=coc.LoadGameData(default=False),
+        raw_attribute=True,
+        stats_max_size=10_000,
+    )
+    await coc_client.login_with_tokens('')
+    app.state.coc_client = coc_client
+    yield
+
+app = FastAPI(middleware=middleware, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
+def include_routers(app: FastAPI, directory: str):
+    """Recursively include all FastAPI routers from Python files under the given directory."""
 
-def include_routers(app, directory, recursive=False):
-    """Include routers from a given directory. If recursive is True, search for 'endpoints.py' in subdirectories."""
-    for root, _, files in os.walk(directory) if recursive else [(directory, [], os.listdir(directory))]:
+    for root, _, files in os.walk(directory):
         for filename in files:
-            if filename == "endpoints.py" if recursive else filename.endswith(".py") and not filename.startswith("__"):
-                module_name = os.path.relpath(os.path.join(root, filename), start=directory).replace(os.sep, ".")[:-3]
+            if filename.endswith(".py") and not filename.startswith("__"):
                 file_path = os.path.join(root, filename)
 
+                # Generate a fake module name (e.g. 'v2.endpoints.clan')
+                module_path = os.path.relpath(file_path, start=os.getcwd()).replace(os.sep, ".")
+                module_name = module_path[:-3]  # remove .py
+
+                # Load module dynamically
                 spec = importlib.util.spec_from_file_location(module_name, file_path)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
+                # Include the router if present
                 router = getattr(module, "router", None)
                 if router:
                     app.include_router(router)
 
 # Include routers from public (v1) and private (v2 with subfolders)
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
 
 
 @app.on_event("startup")
 async def startup_event():
     FastAPICache.init(InMemoryBackend())
-    await coc_client.login_with_tokens('')
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)
 async def docs():
     if config.is_local:
-        return RedirectResponse(f"http://localhost:8000/docs")
-    return RedirectResponse(f"https://api.clashk.ing/docs")
+        return RedirectResponse("http://localhost:8000/docs")
+    return RedirectResponse("https://api.clashk.ing/docs")
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():

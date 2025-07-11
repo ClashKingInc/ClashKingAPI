@@ -1,4 +1,3 @@
-import datetime
 import aiohttp
 import json
 import re
@@ -10,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from starlette.requests import Request
-from utils.utils import fix_tag, db_client, upload_to_cdn
+from utils.utils import db_client, upload_to_cdn
 
 router = APIRouter(prefix="/roster", include_in_schema=False)
 

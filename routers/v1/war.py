@@ -6,8 +6,6 @@ from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from utils.utils import fix_tag, db_client, gen_season_date
 from datetime import datetime, timedelta
 

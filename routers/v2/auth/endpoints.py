@@ -3,7 +3,7 @@ import httpx
 import pendulum as pend
 import sentry_sdk
 from fastapi import Header, HTTPException, Request, APIRouter, Depends
-from routers.v2.auth.utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
+from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
     generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
     generate_verification_code
 from utils.email_service import send_verification_email, send_password_reset_email_with_code
@@ -846,10 +846,11 @@ async def forgot_password(req: ForgotPasswordRequest):
             }
         
         # Check for existing unused reset token
+        current_time = pend.now()
         existing_reset = await db_client.app_password_reset_tokens.find_one({
             "email_hash": email_hash,
             "used": False,
-            "expires_at": {"$gt": pend.now()}
+            "expires_at": {"$gt": current_time}
         })
         
         if existing_reset:
@@ -860,23 +861,34 @@ async def forgot_password(req: ForgotPasswordRequest):
         reset_code = generate_verification_code()
         
         # Store password reset code
-        reset_record = {
-            "_id": generate_custom_id(),
-            "user_id": user["user_id"],
-            "email_hash": email_hash,
-            "reset_code": reset_code,
-            "expires_at": pend.now().add(hours=1),  # 1 hour expiration
-            "created_at": pend.now(),
-            "used": False
-        }
+        expires_at = pend.now().add(hours=1)
+        created_at = pend.now()
         
-        await db_client.app_password_reset_tokens.insert_one(reset_record)
+        try:
+            reset_record = {
+                "_id": generate_custom_id(),
+                "user_id": user["user_id"],
+                "email_hash": email_hash,
+                "reset_code": reset_code,
+                "expires_at": expires_at,
+                "created_at": created_at,
+                "used": False
+            }
+            
+            await db_client.app_password_reset_tokens.insert_one(reset_record)
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"function": "password_reset_token_insert", "user_id": user["user_id"]})
+            raise HTTPException(status_code=500, detail="Failed to create password reset request")
         
         # Decrypt email for sending
         try:
             decrypted_email = await decrypt_data(user["email_encrypted"])
+            if not decrypted_email:
+                raise ValueError("Decrypted email is empty")
         except Exception as e:
             sentry_sdk.capture_exception(e, tags={"function": "decrypt_email_for_password_reset", "user_id": user["user_id"]})
+            # Clean up reset token if decryption fails
+            await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
             raise HTTPException(status_code=500, detail="Failed to process password reset request")
         
         # Send password reset email with code
@@ -886,11 +898,11 @@ async def forgot_password(req: ForgotPasswordRequest):
         except Exception as e:
             # Clean up reset token if email fails
             await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
-            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email, "decrypted_email": decrypted_email})
             raise HTTPException(status_code=500, detail="Failed to send password reset email")
         
         return {
-            "message": "If an account with this email exists, you will receive a password reset link shortly."
+            "message": "If an account with this email exists, you will receive a password reset code shortly."
         }
         
     except HTTPException:

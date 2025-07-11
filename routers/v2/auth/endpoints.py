@@ -570,7 +570,16 @@ async def resend_verification_email(request: Request):
         if isinstance(expires_at, str):
             expires_at = pend.parse(expires_at)
         
-        if pend.now() > expires_at:
+        # Ensure both datetimes have timezone info for comparison
+        current_time = pend.now()
+        if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
+            # expires_at is naive, make it UTC aware
+            expires_at = pend.instance(expires_at, tz='UTC')
+        elif not hasattr(expires_at, 'tzinfo'):
+            # Handle case where expires_at might be a different type
+            expires_at = pend.parse(str(expires_at)).in_timezone('UTC')
+        
+        if current_time > expires_at:
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
             raise HTTPException(status_code=410, detail="Verification expired. Please register again.")
         

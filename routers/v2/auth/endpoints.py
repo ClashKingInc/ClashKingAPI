@@ -938,7 +938,20 @@ async def reset_password(req: ResetPasswordRequest):
             raise HTTPException(status_code=400, detail="Invalid or expired reset code")
         
         # Check if code has expired
-        if pend.now() > reset_record["expires_at"]:
+        expires_at = reset_record["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = pend.parse(expires_at)
+        
+        # Ensure both datetimes have timezone info for comparison
+        current_time = pend.now()
+        if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
+            # expires_at is naive, make it UTC aware
+            expires_at = pend.instance(expires_at, tz='UTC')
+        elif not hasattr(expires_at, 'tzinfo'):
+            # Handle case where expires_at might be a different type
+            expires_at = pend.parse(str(expires_at)).in_timezone('UTC')
+        
+        if current_time > expires_at:
             # Clean up expired code
             await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
             raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")

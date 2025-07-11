@@ -3,7 +3,7 @@ import httpx
 import pendulum as pend
 import sentry_sdk
 from fastapi import Header, HTTPException, Request, APIRouter, Depends
-from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
+from routers.v2.auth.utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
     generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
     generate_verification_code
 from utils.email_service import send_verification_email, send_password_reset_email_with_code

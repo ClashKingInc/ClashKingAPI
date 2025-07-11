@@ -3,14 +3,14 @@ import httpx
 import pendulum as pend
 import sentry_sdk
 from fastapi import Header, HTTPException, Request, APIRouter, Depends
-from utils.auth_utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
+from routers.v2.auth.utils import get_valid_discord_access_token, decode_jwt, decode_refresh_token, encrypt_data, generate_jwt, \
     generate_refresh_token, verify_password, hash_password, hash_email, prepare_email_for_storage, decrypt_data, \
     generate_verification_code
-from utils.email_service import send_verification_email
+from utils.email_service import send_verification_email, send_password_reset_email_with_code
 from utils.utils import db_client, generate_custom_id, config
 from utils.password_validator import PasswordValidator
 from utils.security_middleware import get_current_user_id
-from routers.v2.auth.models import AuthResponse, UserInfo, RefreshTokenRequest, EmailRegisterRequest, EmailAuthRequest
+from routers.v2.auth.models import AuthResponse, UserInfo, RefreshTokenRequest, EmailRegisterRequest, EmailAuthRequest, ForgotPasswordRequest, ResetPasswordRequest
 
 
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
@@ -822,4 +822,182 @@ async def link_email_account(req: EmailRegisterRequest, user_id: str = Depends(g
         raise
     except Exception as e:
         sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/link-email", "user_id": user_id, "email": req.email})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/auth/forgot-password", name="Request password reset")
+async def forgot_password(req: ForgotPasswordRequest):
+    try:
+        # Validate email format
+        try:
+            PasswordValidator.validate_email(req.email)
+        except HTTPException as e:
+            sentry_sdk.capture_message(f"Invalid email format in forgot password: {req.email}", level="warning")
+            raise e
+        
+        # Check if user exists with this email
+        email_hash = hash_email(req.email)
+        user = await db_client.app_users.find_one({"email_hash": email_hash})
+        
+        if not user or "email" not in user.get("auth_methods", []):
+            # Return success regardless to prevent email enumeration
+            return {
+                "message": "If an account with this email exists, you will receive a password reset link shortly."
+            }
+        
+        # Check for existing unused reset token
+        existing_reset = await db_client.app_password_reset_tokens.find_one({
+            "email_hash": email_hash,
+            "used": False,
+            "expires_at": {"$gt": pend.now()}
+        })
+        
+        if existing_reset:
+            # Clean up old token and create new one
+            await db_client.app_password_reset_tokens.delete_one({"_id": existing_reset["_id"]})
+        
+        # Generate 6-digit password reset code
+        reset_code = generate_verification_code()
+        
+        # Store password reset code
+        reset_record = {
+            "_id": generate_custom_id(),
+            "user_id": user["user_id"],
+            "email_hash": email_hash,
+            "reset_code": reset_code,
+            "expires_at": pend.now().add(hours=1),  # 1 hour expiration
+            "created_at": pend.now(),
+            "used": False
+        }
+        
+        await db_client.app_password_reset_tokens.insert_one(reset_record)
+        
+        # Decrypt email for sending
+        try:
+            decrypted_email = await decrypt_data(user["email_encrypted"])
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"function": "decrypt_email_for_password_reset", "user_id": user["user_id"]})
+            raise HTTPException(status_code=500, detail="Failed to process password reset request")
+        
+        # Send password reset email with code
+        try:
+            username = user.get("username", "User")
+            await send_password_reset_email_with_code(decrypted_email, username, reset_code)
+        except Exception as e:
+            # Clean up reset token if email fails
+            await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email})
+            raise HTTPException(status_code=500, detail="Failed to send password reset email")
+        
+        return {
+            "message": "If an account with this email exists, you will receive a password reset link shortly."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email})
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/auth/reset-password", response_model=AuthResponse, name="Reset password with token")
+async def reset_password(req: ResetPasswordRequest):
+    try:
+        # Validate new password
+        try:
+            PasswordValidator.validate_password(req.new_password)
+        except HTTPException as e:
+            sentry_sdk.capture_message(f"Invalid password format in reset password", level="warning")
+            raise e
+        
+        # Validate code format
+        if not req.reset_code.isdigit() or len(req.reset_code) != 6:
+            raise HTTPException(status_code=400, detail="Invalid reset code format")
+        
+        # Find and validate reset code
+        email_hash = hash_email(req.email)
+        reset_record = await db_client.app_password_reset_tokens.find_one({
+            "email_hash": email_hash,
+            "reset_code": req.reset_code,
+            "used": False
+        })
+        
+        if not reset_record:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+        
+        # Check if code has expired
+        if pend.now() > reset_record["expires_at"]:
+            # Clean up expired code
+            await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
+            raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")
+        
+        # Get user
+        user = await db_client.app_users.find_one({"user_id": reset_record["user_id"]})
+        if not user:
+            sentry_sdk.capture_message(f"User not found for password reset: {reset_record['user_id']}", level="error")
+            raise HTTPException(status_code=400, detail="Invalid reset code")
+        
+        # Update password
+        new_password_hash = hash_password(req.new_password)
+        await db_client.app_users.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": {"password": new_password_hash}}
+        )
+        
+        # Mark reset code as used
+        await db_client.app_password_reset_tokens.update_one(
+            {"_id": reset_record["_id"]},
+            {"$set": {"used": True}}
+        )
+        
+        # Generate new auth tokens
+        access_token = generate_jwt(str(user["user_id"]), req.device_id)
+        refresh_token = generate_refresh_token(str(user["user_id"]))
+        
+        # Store refresh token
+        try:
+            user_id_raw = user["user_id"]
+            user_id = str(user_id_raw)
+            
+            # Convert user_id to int for ID generation
+            try:
+                if isinstance(user_id_raw, int):
+                    user_id_int = user_id_raw
+                elif isinstance(user_id_raw, str) and user_id_raw.isdigit():
+                    user_id_int = int(user_id_raw)
+                else:
+                    user_id_int = int(user_id)
+            except (ValueError, TypeError):
+                user_id_int = generate_custom_id()
+                sentry_sdk.capture_message(f"Invalid user_id format in password reset, using fallback: {user_id}", level="warning")
+            
+            await db_client.app_refresh_tokens.update_one(
+                {"user_id": user_id},
+                {
+                    "$setOnInsert": {"_id": generate_custom_id(user_id_int)},
+                    "$set": {
+                        "refresh_token": refresh_token,
+                        "expires_at": pend.now().add(days=30)
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"function": "refresh_token_storage_password_reset", "user_id": str(user["user_id"])})
+            raise HTTPException(status_code=500, detail="Failed to store authentication tokens")
+        
+        return AuthResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserInfo(
+                user_id=str(user["user_id"]),
+                username=user["username"],
+                avatar_url=user.get("avatar_url", "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png")
+            )
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/reset-password"})
         raise HTTPException(status_code=500, detail="Internal server error")

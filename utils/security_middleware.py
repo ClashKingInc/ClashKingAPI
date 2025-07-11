@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from utils.auth_utils import decode_jwt
+from routers.v2.auth.utils import decode_jwt
 from utils.utils import db_client
 
 security = HTTPBearer()

@@ -31,3 +31,13 @@ class EmailRegisterRequest(BaseModel):
     username: str
     device_id: str
     device_name: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    reset_code: str
+    new_password: str
+    device_id: str
+    device_name: str

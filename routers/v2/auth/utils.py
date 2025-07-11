@@ -181,3 +181,7 @@ def generate_email_verification_token() -> str:
 def generate_verification_code() -> str:
     """Generate a 6-digit verification code."""
     return f"{secrets.randbelow(900000) + 100000:06d}"
+
+def generate_reset_token() -> str:
+    """Generate a secure password reset token."""
+    return secrets.token_urlsafe(32)

@@ -347,8 +347,10 @@ async def fetch_full_player_data(session, tag: str, mongo_data: dict, clan_tag: 
     raid_data = await fetch_raid_data(session, tag, clan_tag) if is_raids() else {}
     war_timer = await mongo.war_timers.find_one({"_id": tag}, {"_id": 0}) or {}
     if clan_tag not in war_timer.get("clans", []):
-        war_clan_tag = war_timer.get("clans", [])[0] if war_timer.get("clans") else None
-        war_data = await fetch_current_war_info_bypass(war_clan_tag, session)
+        clans_list = war_timer.get("clans", [])
+        war_clan_tag = clans_list[0] if clans_list else None
+        if war_clan_tag:  # Only fetch war data if we have a valid clan tag
+            war_data = await fetch_current_war_info_bypass(war_clan_tag, session)
     return tag, raid_data, war_data, mongo_data
 
 

@@ -477,7 +477,16 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
             if isinstance(expires_at, str):
                 expires_at = pend.parse(expires_at)
             
-            if pend.now() > expires_at:
+            # Ensure both datetimes have timezone info for comparison
+            current_time = pend.now()
+            if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
+                # expires_at is naive, make it UTC aware
+                expires_at = pend.instance(expires_at, tz='UTC')
+            elif not hasattr(expires_at, 'tzinfo'):
+                # Handle case where expires_at might be a different type
+                expires_at = pend.parse(str(expires_at)).in_timezone('UTC')
+            
+            if current_time > expires_at:
                 # Clean up expired verification and allow new registration
                 await db_client.app_email_verifications.delete_one({"_id": existing_verification["_id"]})
             else:
@@ -521,7 +530,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         except Exception as e:
             # Clean up pending verification if email fails
             await db_client.app_email_verifications.delete_one({"_id": pending_verification["_id"]})
-            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": req.email})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": safe_email_log(req.email)})
             raise HTTPException(status_code=500, detail="Failed to send verification email")
         
         return {
@@ -532,7 +541,7 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": req.email})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/register", "email": safe_email_log(req.email)})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -549,7 +558,7 @@ async def resend_verification_email(request: Request):
         try:
             PasswordValidator.validate_email(email)
         except HTTPException as e:
-            sentry_sdk.capture_message(f"Invalid email format in resend verification: {email}", level="warning")
+            sentry_sdk.capture_message(f"Invalid email format in resend verification: {safe_email_log(email)}", level="warning")
             raise e
         
         email_hash = hash_email(email)
@@ -603,7 +612,7 @@ async def resend_verification_email(request: Request):
         try:
             await send_verification_email(email, username, verification_code)
         except Exception as e:
-            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/resend-verification", "email": email})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/resend-verification", "email": safe_email_log(email)})
             raise HTTPException(status_code=500, detail="Failed to send verification email")
         
         return {
@@ -621,7 +630,6 @@ async def resend_verification_email(request: Request):
 @router.post("/auth/email", response_model=AuthResponse)
 async def login_with_email(req: EmailAuthRequest, request: Request):
     try:
-        sentry_sdk.capture_message(f"Email login attempt for: {safe_email_log(req.email)}", level="info")
         
         # Add small delay to prevent timing attacks
         await asyncio.sleep(0.1)
@@ -630,7 +638,7 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         email_hash = hash_email(req.email)
         user = await db_client.app_users.find_one({"email_hash": email_hash})
         if not user or not verify_password(req.password, user.get("password", "")):
-            sentry_sdk.capture_message(f"Failed email login attempt for: {req.email}", level="warning")
+            sentry_sdk.capture_message(f"Failed email login attempt for: {safe_email_log(req.email)}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid email or password")
         
         # Validate user record structure
@@ -809,7 +817,7 @@ async def link_email_account(req: EmailRegisterRequest, user_id: str = Depends(g
         email_hash = hash_email(req.email)
         email_conflict = await db_client.app_users.find_one({"email_hash": email_hash})
         if email_conflict and email_conflict["user_id"] != user_id:
-            sentry_sdk.capture_message(f"Email {req.email} already linked to user {email_conflict['user_id']}, attempted by {user_id}", level="warning")
+            sentry_sdk.capture_message(f"Email {safe_email_log(req.email)} already linked to user {email_conflict['user_id']}, attempted by {user_id}", level="warning")
             raise HTTPException(status_code=400, detail="Email already linked to another account")
 
         # Prepare encrypted email data
@@ -830,7 +838,7 @@ async def link_email_account(req: EmailRegisterRequest, user_id: str = Depends(g
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/link-email", "user_id": user_id, "email": req.email})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/link-email", "user_id": user_id, "email": safe_email_log(req.email)})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -841,7 +849,7 @@ async def forgot_password(req: ForgotPasswordRequest):
         try:
             PasswordValidator.validate_email(req.email)
         except HTTPException as e:
-            sentry_sdk.capture_message(f"Invalid email format in forgot password: {req.email}", level="warning")
+            sentry_sdk.capture_message(f"Invalid email format in forgot password: {safe_email_log(req.email)}", level="warning")
             raise e
         
         # Check if user exists with this email
@@ -907,7 +915,7 @@ async def forgot_password(req: ForgotPasswordRequest):
         except Exception as e:
             # Clean up reset token if email fails
             await db_client.app_password_reset_tokens.delete_one({"_id": reset_record["_id"]})
-            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email, "decrypted_email": decrypted_email})
+            sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": safe_email_log(req.email), "decrypted_email": safe_email_log(decrypted_email)})
             raise HTTPException(status_code=500, detail="Failed to send password reset email")
         
         return {
@@ -917,7 +925,7 @@ async def forgot_password(req: ForgotPasswordRequest):
     except HTTPException:
         raise
     except Exception as e:
-        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": req.email})
+        sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/forgot-password", "email": safe_email_log(req.email)})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

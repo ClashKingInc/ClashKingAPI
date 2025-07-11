@@ -273,15 +273,16 @@ async def create_verification_indexes():
         # Index for fast lookup by email hash (allow duplicates since we clean up manually)
         try:
             await db_client.app_email_verifications.create_index("email_hash")
-        except Exception as e:
+        except Exception:
             # Index might already exist, that's okay
-            sentry_sdk.capture_message(f"Email hash index creation: {str(e)}", level="debug")
+            pass
         
         # Index for fast lookup by verification token
         try:
             await db_client.app_email_verifications.create_index("verification_token")
-        except Exception as e:
-            sentry_sdk.capture_message(f"Verification token index creation: {str(e)}", level="debug")
+        except Exception:
+            # Index might already exist, that's okay
+            pass
         
         # TTL index for automatic cleanup of expired documents
         try:
@@ -289,10 +290,9 @@ async def create_verification_indexes():
                 "expires_at", 
                 expireAfterSeconds=0  # MongoDB will delete when expires_at < current time
             )
-        except Exception as e:
-            sentry_sdk.capture_message(f"TTL index creation: {str(e)}", level="debug")
-        
-        sentry_sdk.capture_message("Email verification indexes initialization completed", level="info")
+        except Exception:
+            # Index might already exist, that's okay
+            pass
     except Exception as e:
         # Don't fail startup if index creation fails
         sentry_sdk.capture_exception(e, tags={"function": "create_verification_indexes"})

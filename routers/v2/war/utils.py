@@ -91,24 +91,12 @@ async def fetch_current_war_info(clan_tag, bypass=False):
     return {"state": "notInWar"}
 
 
-async def fetch_opponent_tag(clan_tag):
-    tag_clean = clan_tag.lstrip("#")
-    url = f"https://proxy.clashk.ing/v1/war/{tag_clean}/basic"
-    res = requests.get(url)
-
-    if res.status_code == 200:
-        data = res.json()
-        if "clans" in data and isinstance(data["clans"], list):
-            for tag in data["clans"]:
-                if tag != clan_tag:
-                    return tag
-    return None
 
 
 async def fetch_current_war_info_bypass(clan_tag, session):
     war = await fetch_current_war_info(clan_tag)
     if war and war.get("state") == "accessDenied":
-        opponent_tag = await fetch_opponent_tag(clan_tag)
+        opponent_tag = await fetch_opponent_tag(clan_tag, session)
         if opponent_tag:
             return await fetch_current_war_info(opponent_tag, bypass=True)
     return war

@@ -483,7 +483,7 @@ async def enrich_league_info(league_info, war_league_infos, session):
                     ),
                     "attackUpperTHLevel": sum(
                         1 for own_th, enemy_th in
-                        zip(stats.get("own_th_level_list_attack", []), stats.get("opponent_th_level_list", []))
+                        zip(stats.get("own_th_level_list_attack", []), stats.get("opponent_th_level_list_attack", []))
                         if enemy_th > own_th
                     ),
                     "defenseLowerTHLevel": sum(
@@ -493,7 +493,7 @@ async def enrich_league_info(league_info, war_league_infos, session):
                     ),
                     "defenseUpperTHLevel": sum(
                         1 for own_th, enemy_th in
-                        zip(stats.get("own_th_level_list_defense", []), stats.get("attacker_th_level_list", []))
+                        zip(stats.get("own_th_level_list_defense", []), stats.get("attacker_th_level_list_defense", []))
                         if enemy_th > own_th
                     ),
 
@@ -787,7 +787,11 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
 
     for war_doc in wars_docs:
         war_raw = war_doc["data"]
-        war = coc.ClanWar(data=war_raw, client=client)
+        try:
+            war = coc.ClanWar(data=war_raw, client=client)
+        except (ValueError, KeyError, TypeError) as e:
+            # Skip malformed war data
+            continue
         war_id = "-".join(
             sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
         if war_id in seen_wars:
@@ -813,10 +817,17 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
                 # Use coc.utils functions to get the actual season start and end timestamps
                 season_start = coc.utils.get_season_start(month=month - 1, year=year)
                 season_end = coc.utils.get_season_end(month=month - 1, year=year)
-                war_start_time = war.preparation_start_time.time
+                # Safely get war start time with null checking
+                if war.preparation_start_time and hasattr(war.preparation_start_time, 'time'):
+                    war_start_time = war.preparation_start_time.time
+                    # Convert war_start_time to timestamp for comparison
+                    war_start_timestamp = war_start_time.timestamp()
+                else:
+                    # If preparation_start_time is None or doesn't have time, skip season filtering
+                    continue
                 
                 # Check if the war falls within the season
-                if war_start_time < season_start.timestamp() or war_start_time >= season_end.timestamp():
+                if war_start_timestamp < season_start.timestamp() or war_start_timestamp >= season_end.timestamp():
                     continue
             except (ValueError, AttributeError):
                 # If season format is invalid or war doesn't have timestamp, skip season filtering

@@ -572,7 +572,7 @@ async def export_cwl_summary_to_excel(tag: str):
                     defense_count,
                     missed_defenses,
                     stars_total,
-                    round(stars_total / war_participated * 100 if defense_count > 0 else 0, 2),
+                    round(stars_total / war_participated * 100 if war_participated > 0 else 0, 2),
                     three_stars,
                     two_stars,
                     one_star,
@@ -625,10 +625,10 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
                     {"data.preparationStartTime": {"$lte": END}}
                 ]
             }},
-            {"$unset": ["_id"]},
-            {"$project": {"data": "$data"}},
             {"$sort": {"data.preparationStartTime": -1}},
             {"$limit": filter.limit or 50},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
         ]
 
         wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)

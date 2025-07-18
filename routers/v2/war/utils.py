@@ -555,18 +555,41 @@ def compute_warhit_stats(
             return False
         if filter.max_stars is not None and hit["stars"] > filter.max_stars:
             return False
+        
+        # Handle specific stars filtering (new field)
+        if filter.stars is not None and hit["stars"] not in filter.stars:
+            return False
+            
         if filter.min_destruction is not None and hit["destructionPercentage"] < filter.min_destruction:
             return False
         if filter.max_destruction is not None and hit["destructionPercentage"] > filter.max_destruction:
             return False
-        if filter.enemy_th is not None and hit[th_key].get("townhallLevel") != filter.enemy_th:
-            return False
+        
+        # Handle enemy_th - support both single int and list
+        if filter.enemy_th is not None:
+            enemy_th_level = hit[th_key].get("townhallLevel")
+            if isinstance(filter.enemy_th, list):
+                if enemy_th_level not in filter.enemy_th:
+                    return False
+            else:
+                if enemy_th_level != filter.enemy_th:
+                    return False
+                    
         if filter.map_position_min is not None and hit[th_key].get("mapPosition") < filter.map_position_min:
             return False
         if filter.map_position_max is not None and hit[th_key].get("mapPosition") > filter.map_position_max:
             return False
-        if filter.own_th is not None and hit["attacker"].get("townhallLevel") != filter.own_th:
-            return False
+        
+        # Handle own_th - support both single int and list
+        if filter.own_th is not None:
+            own_th_level = hit["attacker"].get("townhallLevel")
+            if isinstance(filter.own_th, list):
+                if own_th_level not in filter.own_th:
+                    return False
+            else:
+                if own_th_level != filter.own_th:
+                    return False
+                    
         return True
 
     filtered_attacks = [a for a in attacks if filter_hit(a, is_attack=True)]
@@ -656,8 +679,25 @@ def group_attacks_by_type(attacks, defenses, wars):
 def attack_passes_filters(atk, member, filter):
     if not filter:
         return True
-    if filter.enemy_th and atk.defender.town_hall != filter.enemy_th:
-        return False
+    
+    # Handle enemy_th - support both single int and list
+    if filter.enemy_th is not None:
+        if isinstance(filter.enemy_th, list):
+            if atk.defender.town_hall not in filter.enemy_th:
+                return False
+        else:
+            if atk.defender.town_hall != filter.enemy_th:
+                return False
+    
+    # Handle own_th - support both single int and list
+    if filter.own_th is not None:
+        if isinstance(filter.own_th, list):
+            if member.town_hall not in filter.own_th:
+                return False
+        else:
+            if member.town_hall != filter.own_th:
+                return False
+    
     if filter.same_th and atk.defender.town_hall != member.town_hall:
         return False
     if filter.fresh_only and not atk.is_fresh_attack:
@@ -666,6 +706,11 @@ def attack_passes_filters(atk, member, filter):
         return False
     if filter.max_stars and atk.stars > filter.max_stars:
         return False
+    
+    # Handle specific stars filtering (new field)
+    if filter.stars is not None and atk.stars not in filter.stars:
+        return False
+        
     if filter.min_destruction and atk.destruction < filter.min_destruction:
         return False
     if filter.max_destruction and atk.destruction > filter.max_destruction:
@@ -682,8 +727,25 @@ def defense_passes_filters(dfn, member, filter):
         return True
     if not dfn.attacker:
         return False
-    if filter.enemy_th and dfn.attacker.town_hall != filter.enemy_th:
-        return False
+    
+    # Handle enemy_th - support both single int and list (enemy is the attacker in defense)
+    if filter.enemy_th is not None:
+        if isinstance(filter.enemy_th, list):
+            if dfn.attacker.town_hall not in filter.enemy_th:
+                return False
+        else:
+            if dfn.attacker.town_hall != filter.enemy_th:
+                return False
+    
+    # Handle own_th - support both single int and list (own is the defender in defense)
+    if filter.own_th is not None:
+        if isinstance(filter.own_th, list):
+            if member.town_hall not in filter.own_th:
+                return False
+        else:
+            if member.town_hall != filter.own_th:
+                return False
+    
     if filter.same_th and dfn.defender.town_hall != member.town_hall:
         return False
     if filter.fresh_only and not dfn.is_fresh_attack:
@@ -692,6 +754,11 @@ def defense_passes_filters(dfn, member, filter):
         return False
     if filter.max_stars and dfn.stars > filter.max_stars:
         return False
+    
+    # Handle specific stars filtering (new field)
+    if filter.stars is not None and dfn.stars not in filter.stars:
+        return False
+        
     if filter.min_destruction and dfn.destruction < filter.min_destruction:
         return False
     if filter.max_destruction and dfn.destruction > filter.max_destruction:
@@ -727,8 +794,33 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
             continue
         seen_wars.add(war_id)
 
-        if filter and filter.type != "all" and war.type.lower() != filter.type.lower():
-            continue
+        # Handle war type filtering - support both single string and list
+        if filter and filter.type != "all":
+            if isinstance(filter.type, list):
+                if war.type.lower() not in [t.lower() for t in filter.type]:
+                    continue
+            else:
+                if war.type.lower() != filter.type.lower():
+                    continue
+
+        # Handle season filtering
+        if filter and filter.season:
+            try:
+                # Parse season string (format: "YYYY-MM")
+                year = int(filter.season[:4])
+                month = int(filter.season[-2:])
+                
+                # Use coc.utils functions to get the actual season start and end timestamps
+                season_start = coc.utils.get_season_start(month=month - 1, year=year)
+                season_end = coc.utils.get_season_end(month=month - 1, year=year)
+                war_start_time = war.preparation_start_time.time
+                
+                # Check if the war falls within the season
+                if war_start_time < season_start.timestamp() or war_start_time >= season_end.timestamp():
+                    continue
+            except (ValueError, AttributeError):
+                # If season format is invalid or war doesn't have timestamp, skip season filtering
+                pass
 
         for side in [war.clan, war.opponent]:
             if clan_tags and side.tag not in clan_tags:

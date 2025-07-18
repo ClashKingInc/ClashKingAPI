@@ -214,7 +214,7 @@ def generate_raids_clan_stats(history: list):
         "avgLootPerWeek": round(avg_loot_per_week, 2),
         "avgAttacksPerWeek": round(avg_attacks_per_week, 2),
         "avgAttacksPerRaid": round(avg_attacks_per_raid, 2),
-        "avgAttacksPerDistrict": round(total_attacks / total_districts_destroyed, 2) if total_districts_destroyed else 0,
+        "avgAttacksPerDistrict": round(total_attacks / max(total_districts_destroyed, 1), 2) if total_districts_destroyed else 0,
         "avgOffensiveRewards": round(avg_offensive_rewards, 2),
         "avgDefensiveRewards": round(avg_defensive_rewards, 2),
         "bestRaid": {
@@ -224,8 +224,8 @@ def generate_raids_clan_stats(history: list):
             "raidsCompleted": best_raid.get("raidsCompleted"),
             "totalAttacks": best_raid.get("totalAttacks"),
             "enemyDistrictsDestroyed": best_raid.get("enemyDistrictsDestroyed"),
-            "avgAttacksPerRaid": round(best_raid.get("totalAttacks", 0) / best_raid.get("raidsCompleted", 1), 2),
-            "avgAttacksPerDistrict": round(best_raid.get("totalAttacks", 0) / best_raid.get("enemyDistrictsDestroyed", 1), 2),
+            "avgAttacksPerRaid": round(best_raid.get("totalAttacks", 0) / max(best_raid.get("raidsCompleted", 0), 1), 2),
+            "avgAttacksPerDistrict": round(best_raid.get("totalAttacks", 0) / max(best_raid.get("enemyDistrictsDestroyed", 0), 1), 2),
         } if best_raid else None,
         "worstRaid": {
             "startTime": worst_raid.get("startTime"),
@@ -234,8 +234,8 @@ def generate_raids_clan_stats(history: list):
             "raidsCompleted": worst_raid.get("raidsCompleted"),
             "totalAttacks": worst_raid.get("totalAttacks"),
             "enemyDistrictsDestroyed": worst_raid.get("enemyDistrictsDestroyed"),
-            "avgAttacksPerRaid": round(worst_raid.get("totalAttacks", 0) / worst_raid.get("raidsCompleted", 1), 2),
-            "avgAttacksPerDistrict": round(worst_raid.get("totalAttacks", 0) / worst_raid.get("enemyDistrictsDestroyed", 1), 2),
+            "avgAttacksPerRaid": round(worst_raid.get("totalAttacks", 0) / max(worst_raid.get("raidsCompleted", 0), 1), 2),
+            "avgAttacksPerDistrict": round(worst_raid.get("totalAttacks", 0) / max(worst_raid.get("enemyDistrictsDestroyed", 0), 1), 2),
         } if worst_raid else None,
     }
 

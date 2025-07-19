@@ -844,22 +844,22 @@ async def export_player_war_stats(
     for hit in war_hits:
         row = ws.max_row + 1
         ws.append([
-            hit.get("attacker_name", ""),
-            hit.get("attacker_tag", ""),
-            hit.get("attacker_townhall", ""),
-            hit.get("war_date", ""),
-            hit.get("war_type", ""),
-            hit.get("attacker_map_position", ""),
-            hit.get("defender_name", ""),
-            hit.get("defender_tag", ""),
-            hit.get("defender_townhall", ""),
-            hit.get("defender_map_position", ""),
-            hit.get("stars", 0),
-            hit.get("destruction_percentage", 0),
-            hit.get("order", ""),
+            str(hit.get("attacker_name", "")),
+            str(hit.get("attacker_tag", "")),
+            str(hit.get("attacker_townhall", "")),
+            str(hit.get("war_date", "")),
+            str(hit.get("war_type", "")),
+            str(hit.get("attacker_map_position", "")),
+            str(hit.get("defender_name", "")),
+            str(hit.get("defender_tag", "")),
+            str(hit.get("defender_townhall", "")),
+            str(hit.get("defender_map_position", "")),
+            hit.get("stars", 0) or 0,
+            hit.get("destruction_percentage", 0) or 0,
+            str(hit.get("order", "")),
             "Yes" if hit.get("fresh_attack", False) else "No",
-            hit.get("war_tag", ""),
-            hit.get("war_state", "")
+            str(hit.get("war_tag", "")),
+            str(hit.get("war_state", ""))
         ])
 
     end_row = ws.max_row
@@ -909,7 +909,7 @@ async def export_player_war_stats(
     start_summary_row = ws_summary.max_row
     
     for stat_name, stat_value in summary_data:
-        ws_summary.append([stat_name, stat_value])
+        ws_summary.append([str(stat_name), str(stat_value)])
     
     end_summary_row = ws_summary.max_row
     format_table(ws_summary, start_summary_row, end_summary_row, "Summary")
@@ -920,8 +920,11 @@ async def export_player_war_stats(
     tmp.seek(0)
 
     # Generate filename
-    player_name = war_hits[0].get("attacker_name", "player") if war_hits else "player"
-    filename = f"war_stats_{player_name}_{tag.replace('#', '')}.xlsx"
+    player_name = str(war_hits[0].get("attacker_name", "player")) if war_hits else "player"
+    # Clean player name for filename
+    clean_player_name = "".join(c for c in player_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    clean_tag = tag.replace('#', '')
+    filename = f"war_stats_{clean_player_name}_{clean_tag}.xlsx"
     
     return FileResponse(
         path=tmp.name,

@@ -649,6 +649,287 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request):
     return {"items": results}
 
 
+@router.get("/war/players/warhits/export", name="Export player war statistics to Excel")
+async def export_player_war_stats(
+    tag: str,
+    timestamp_start: int = 0,
+    timestamp_end: int = 9999999999,
+    season: str = None,
+    type: str = None,
+    own_th: str = None,
+    enemy_th: str = None,
+    stars: str = None,
+    min_destruction: int = None,
+    max_destruction: int = None,
+    map_position_min: int = None,
+    map_position_max: int = None,
+    fresh_only: bool = False,
+    limit: int = 500
+):
+    def format_table(sheet, start_row, end_row, table_name_hint):
+        table_name = f"{table_name_hint}_{uuid.uuid4().hex[:8]}"[:31]
+
+        thin_border = Border(
+            left=Side(style='thin', color="000000"),
+            right=Side(style='thin', color="000000"),
+            top=Side(style='thin', color="000000"),
+            bottom=Side(style='thin', color="000000")
+        )
+
+        for cell in sheet[start_row]:
+            cell.alignment = Alignment(horizontal="center")
+            cell.fill = clashking_theme["header_fill_red"]
+            cell.font = clashking_theme["header_font_white"]
+            cell.border = thin_border
+
+        for row in sheet.iter_rows(min_row=start_row + 1, max_row=end_row):
+            for cell in row:
+                cell.alignment = Alignment(horizontal="center")
+                cell.fill = clashking_theme["data_fill_white"]
+                cell.border = thin_border
+
+        for column_cells in sheet.columns:
+            first_real_cell = next((cell for cell in column_cells if isinstance(cell, Cell)), None)
+            if not first_real_cell:
+                continue
+            length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
+            col_letter = first_real_cell.column_letter
+            sheet.column_dimensions[col_letter].width = length + 2
+
+        last_col_letter = sheet[end_row][len(sheet[end_row]) - 1].column_letter
+        table_range = f"A{start_row}:{last_col_letter}{end_row}"
+        table = Table(displayName=table_name, ref=table_range)
+        style = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
+        )
+        table.tableStyleInfo = style
+        sheet.add_table(table)
+
+    async def insert_logo_from_cdn(sheet, image_url: str, anchor_cell="A1", height=80):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Failed to download logo from CDN: {resp.status}")
+                image_data = await resp.read()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_img:
+            tmp_img.write(image_data)
+            tmp_img_path = tmp_img.name
+
+        logo = OpenpyxlImage(tmp_img_path)
+        logo.height = height
+        logo.width = int(height * 3)
+        sheet.add_image(logo, anchor_cell)
+
+    clashking_theme = {
+        "header_fill_red": PatternFill(start_color="D00000", end_color="D00000", fill_type="solid"),
+        "header_fill_black": PatternFill(start_color="000000", end_color="000000", fill_type="solid"),
+        "header_font_white": Font(color="FFFFFF", bold=True),
+        "data_font_black": Font(color="000000"),
+        "title_fill": PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid"),
+        "data_fill_white": PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"),
+    }
+
+    # Create filter from parameters
+    from routers.v2.war.models import PlayerWarhitsFilter
+    filter_data = {
+        "player_tags": [fix_tag(tag)],
+        "timestamp_start": timestamp_start,
+        "timestamp_end": timestamp_end,
+        "limit": limit
+    }
+    
+    if season:
+        filter_data["season"] = season
+    if type:
+        filter_data["type"] = [type]
+    if own_th:
+        filter_data["own_th"] = [int(x) for x in own_th.split(',')]
+    if enemy_th:
+        filter_data["enemy_th"] = [int(x) for x in enemy_th.split(',')]
+    if stars:
+        filter_data["stars"] = [int(x) for x in stars.split(',')]
+    if min_destruction is not None:
+        filter_data["min_destruction"] = min_destruction
+    if max_destruction is not None:
+        filter_data["max_destruction"] = max_destruction
+    if map_position_min is not None:
+        filter_data["map_position_min"] = map_position_min
+    if map_position_max is not None:
+        filter_data["map_position_max"] = map_position_max
+    if fresh_only:
+        filter_data["fresh_only"] = fresh_only
+
+    filter = PlayerWarhitsFilter(**filter_data)
+
+    # Get war hits data using existing logic
+    client = coc.Client(raw_attribute=True)
+    START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+
+    player_tag = fix_tag(tag)
+    pipeline = [
+        {"$match": {
+            "$and": [
+                {"$or": [
+                    {"data.clan.members.tag": player_tag},
+                    {"data.opponent.members.tag": player_tag}
+                ]},
+                {"data.preparationStartTime": {"$gte": START}},
+                {"data.preparationStartTime": {"$lte": END}}
+            ]
+        }},
+        {"$sort": {"data.preparationStartTime": -1}},
+        {"$limit": limit},
+        {"$unset": ["_id"]},
+        {"$project": {"data": "$data"}},
+    ]
+
+    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+    result = await collect_player_hits_from_wars(
+        wars_docs,
+        tags_to_include=[player_tag],
+        clan_tags=None,
+        filter=filter,
+        client=client
+    )
+    
+    war_hits = result["items"]
+    
+    if not war_hits:
+        raise HTTPException(status_code=404, detail="No war hits found for the specified player and filters")
+
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "War Statistics"
+
+    # Add logo
+    await insert_logo_from_cdn(
+        ws,
+        image_url="https://assets.clashk.ing/logos/crown-text-white-bg/BqlEp974170917vB1qK0zunfANJCGi0W031dTksEq7KQ9LoXWMFk0u77unHJa.png",
+        anchor_cell="A1",
+        height=50
+    )
+
+    # Title
+    row = ws.max_row + 3
+    ws.merge_cells(f"A{row}:P{row}")
+    cell = ws.cell(row=row, column=1)
+    cell.value = f"War Statistics for {tag}"
+    cell.alignment = Alignment(horizontal="center")
+    cell.fill = clashking_theme["title_fill"]
+    cell.font = Font(bold=True, size=14)
+
+    # Headers
+    row = ws.max_row + 2
+    headers = [
+        "Player Name", "Player Tag", "TH Level", "War Date", "War Type",
+        "Map Position", "Enemy Name", "Enemy Tag", "Enemy TH", "Enemy Map Position",
+        "Stars", "Destruction %", "Attack Order", "Fresh Attack", "War Tag", "War State"
+    ]
+    
+    for i, header in enumerate(headers, 1):
+        cell = ws.cell(row=row, column=i)
+        cell.value = header
+    
+    start_row = row
+
+    # Add data rows
+    for hit in war_hits:
+        row = ws.max_row + 1
+        ws.append([
+            hit.get("attacker_name", ""),
+            hit.get("attacker_tag", ""),
+            hit.get("attacker_townhall", ""),
+            hit.get("war_date", ""),
+            hit.get("war_type", ""),
+            hit.get("attacker_map_position", ""),
+            hit.get("defender_name", ""),
+            hit.get("defender_tag", ""),
+            hit.get("defender_townhall", ""),
+            hit.get("defender_map_position", ""),
+            hit.get("stars", 0),
+            hit.get("destruction_percentage", 0),
+            hit.get("order", ""),
+            "Yes" if hit.get("fresh_attack", False) else "No",
+            hit.get("war_tag", ""),
+            hit.get("war_state", "")
+        ])
+
+    end_row = ws.max_row
+    format_table(ws, start_row, end_row, "WarStats")
+
+    # Create summary sheet
+    ws_summary = wb.create_sheet(title="Summary")
+    
+    await insert_logo_from_cdn(
+        ws_summary,
+        image_url="https://assets.clashk.ing/logos/crown-text-white-bg/BqlEp974170917vB1qK0zunfANJCGi0W031dTksEq7KQ9LoXWMFk0u77unHJa.png",
+        anchor_cell="A1",
+        height=50
+    )
+
+    # Summary statistics
+    total_attacks = len(war_hits)
+    total_stars = sum(hit.get("stars", 0) for hit in war_hits)
+    total_destruction = sum(hit.get("destruction_percentage", 0) for hit in war_hits)
+    three_stars = sum(1 for hit in war_hits if hit.get("stars") == 3)
+    two_stars = sum(1 for hit in war_hits if hit.get("stars") == 2)
+    one_star = sum(1 for hit in war_hits if hit.get("stars") == 1)
+    zero_stars = sum(1 for hit in war_hits if hit.get("stars") == 0)
+
+    row = ws_summary.max_row + 3
+    ws_summary.merge_cells(f"A{row}:D{row}")
+    cell = ws_summary.cell(row=row, column=1)
+    cell.value = f"War Statistics Summary for {tag}"
+    cell.alignment = Alignment(horizontal="center")
+    cell.fill = clashking_theme["title_fill"]
+    cell.font = Font(bold=True, size=14)
+
+    summary_data = [
+        ["Total Attacks", total_attacks],
+        ["Total Stars", total_stars],
+        ["Average Stars", round(total_stars / total_attacks, 2) if total_attacks > 0 else 0],
+        ["Average Destruction", round(total_destruction / total_attacks, 2) if total_attacks > 0 else 0],
+        ["3 Star Attacks", three_stars],
+        ["2 Star Attacks", two_stars],
+        ["1 Star Attacks", one_star],
+        ["0 Star Attacks", zero_stars],
+        ["3 Star Rate", f"{round(three_stars / total_attacks * 100, 2)}%" if total_attacks > 0 else "0%"]
+    ]
+
+    row = ws_summary.max_row + 2
+    ws_summary.append(["Statistic", "Value"])
+    start_summary_row = ws_summary.max_row
+    
+    for stat_name, stat_value in summary_data:
+        ws_summary.append([stat_name, stat_value])
+    
+    end_summary_row = ws_summary.max_row
+    format_table(ws_summary, start_summary_row, end_summary_row, "Summary")
+
+    # Save to temporary file
+    tmp = NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.seek(0)
+
+    # Generate filename
+    player_name = war_hits[0].get("attacker_name", "player") if war_hits else "player"
+    filename = f"war_stats_{player_name}_{tag.replace('#', '')}.xlsx"
+    
+    return FileResponse(
+        path=tmp.name,
+        filename=filename,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
 @router.post("/war/clans/warhits")
 async def clan_warhits_stats(filter: ClanWarHitsFilter):
     client = coc.Client(raw_attribute=True)

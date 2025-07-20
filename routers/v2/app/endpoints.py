@@ -86,7 +86,7 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
             timestamp_end=int(pend.now().timestamp()),
             limit=50
         )
-        return await clan_warhits_stats(mongo_filter)
+        return await clan_warhits_stats(mongo_filter, request)
     
     # Get both basic and extended player data
     async def fetch_players_basic_and_extended():

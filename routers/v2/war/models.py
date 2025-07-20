@@ -5,7 +5,7 @@ class ClanWarHitsFilter(BaseModel):
     clan_tags: List[str]
     timestamp_start: int = 0
     timestamp_end: int = 2527625513
-    limit: Optional[int] = 50
+    limit: Optional[int] = None
     own_th: Optional[Union[int, List[int]]] = None
     enemy_th: Optional[Union[int, List[int]]] = None
     same_th: bool = False
@@ -24,7 +24,7 @@ class PlayerWarhitsFilter(BaseModel):
     player_tags: List[str]
     timestamp_start: int = 0
     timestamp_end: int = 2527625513
-    limit: Optional[int] = 50
+    limit: Optional[int] = None
     own_th: Optional[Union[int, List[int]]] = None
     enemy_th: Optional[Union[int, List[int]]] = None
     same_th: bool = False

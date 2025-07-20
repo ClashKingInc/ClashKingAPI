@@ -769,7 +769,6 @@ def defense_passes_filters(dfn, member, filter):
         return False
     return True
 
-
 async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_tags=None, filter=None, client=None):
 
     players_data = defaultdict(lambda: {

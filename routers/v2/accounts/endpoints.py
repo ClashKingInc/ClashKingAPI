@@ -4,7 +4,7 @@ from fastapi import HTTPException, Header, APIRouter, Depends
 
 from routers.v2.accounts.utils import fetch_coc_account_data, is_coc_account_linked, verify_coc_ownership
 from routers.v2.auth.models import CocAccountRequest
-from utils.utils import db_client, generate_custom_id
+from utils.utils import db_client, generate_custom_id, fix_tag
 from utils.security_middleware import get_current_user_id
 
 router = APIRouter(prefix="/v2", tags=["Coc Accounts"], include_in_schema=True)
@@ -13,19 +13,27 @@ router = APIRouter(prefix="/v2", tags=["Coc Accounts"], include_in_schema=True)
 @router.post("/users/add-coc-account", name="Link a Clash of Clans account to a user")
 async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Associate a Clash of Clans account (tag) with a user WITHOUT ownership verification."""
-    player_tag = request.player_tag
+    # Normalize the tag (converts lowercase to uppercase and fixes format)
+    player_tag = fix_tag(request.player_tag)
 
-    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
+    if not re.match(r"^#[A-Z0-9]{5,12}$", player_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
-
-    if not player_tag.startswith("#"):
-        player_tag = f"#{player_tag}"
 
     # Fetch account details from the API
     coc_account_data = await fetch_coc_account_data(player_tag)
 
     if await is_coc_account_linked(player_tag):
-        raise HTTPException(status_code=409, detail="This Clash of Clans account is already linked to another user")
+        raise HTTPException(
+            status_code=409, 
+            detail={
+                "message": "This Clash of Clans account is already linked to another user",
+                "account": {
+                    "tag": coc_account_data["tag"],
+                    "name": coc_account_data["name"],
+                    "townHallLevel": coc_account_data["townHallLevel"]
+                }
+            }
+        )
 
     # Get the order index for the new account
     existing_accounts = await db_client.coc_accounts.count_documents({"user_id": user_id})
@@ -48,6 +56,7 @@ async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get
             "tag": coc_account_data["tag"],
             "name": coc_account_data["name"],
             "townHallLevel": coc_account_data["townHallLevel"],
+            "is_verified": False  # Account is not verified when added without token
         }
     }
 
@@ -56,14 +65,12 @@ async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get
              name="Link a Clash of Clans account to a user with a token verification")
 async def add_coc_account_with_verification(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Associate a Clash of Clans account with a user WITH ownership verification."""
-    player_tag = request.player_tag
+    # Normalize the tag (converts lowercase to uppercase and fixes format)
+    player_tag = fix_tag(request.player_tag)
     player_token = request.player_token
 
-    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
+    if not re.match(r"^#[A-Z0-9]{5,12}$", player_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
-
-    if not player_tag.startswith("#"):
-        player_tag = f"#{player_tag}"
 
     if not await verify_coc_ownership(player_tag, player_token):
         raise HTTPException(status_code=403,
@@ -111,6 +118,7 @@ async def add_coc_account_with_verification(request: CocAccountRequest, user_id:
             "tag": coc_account_data["tag"],
             "name": coc_account_data["name"],
             "townHallLevel": coc_account_data["townHallLevel"],
+            "is_verified": True  # Account is verified when added with token
         }
     }
 
@@ -127,10 +135,8 @@ async def get_coc_accounts(user_id: str = Depends(get_current_user_id)):
 @router.delete("/users/remove-coc-account", name="Remove a Clash of Clans account linked to a user")
 async def remove_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Remove a specific Clash of Clans account linked to a user."""
-    player_tag = request.player_tag
-
-    if not player_tag.startswith("#"):
-        player_tag = f"#{player_tag}"
+    # Normalize the tag (converts lowercase to uppercase and fixes format)
+    player_tag = fix_tag(request.player_tag)
 
     result = await db_client.coc_accounts.delete_one({"user_id": user_id, "player_tag": player_tag})
 
@@ -153,9 +159,9 @@ async def remove_coc_account(request: CocAccountRequest, user_id: str = Depends(
 @router.get("/users/check-coc-account", name="Check if a Clash of Clans account is linked to any user")
 async def check_coc_account(player_tag: str):
     """Check if a Clash of Clans account is linked to any user."""
-
-    if not player_tag.startswith("#"):
-        player_tag = f"#{player_tag}"
+    
+    # Normalize the tag (converts lowercase to uppercase and fixes format)
+    player_tag = fix_tag(player_tag)
 
     existing_account = await db_client.coc_accounts.find_one({"player_tag": player_tag})
 
@@ -197,14 +203,12 @@ async def reorder_coc_accounts(request: dict, user_id: str = Depends(get_current
 @router.post("/users/verify-coc-account", name="Verify ownership of an existing linked Clash of Clans account")
 async def verify_coc_account(request: CocAccountRequest, user_id: str = Depends(get_current_user_id)):
     """Verify ownership of an existing linked Clash of Clans account using API token."""
-    player_tag = request.player_tag
+    # Normalize the tag (converts lowercase to uppercase and fixes format)
+    player_tag = fix_tag(request.player_tag)
     player_token = request.player_token
 
-    if not re.match(r"^#?[A-Z0-9]{5,12}$", player_tag):
+    if not re.match(r"^#[A-Z0-9]{5,12}$", player_tag):
         raise HTTPException(status_code=400, detail="Invalid Clash of Clans tag format")
-
-    if not player_tag.startswith("#"):
-        player_tag = f"#{player_tag}"
 
     if not player_token:
         raise HTTPException(status_code=400, detail="Player token is required for verification")

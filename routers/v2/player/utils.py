@@ -124,17 +124,17 @@ def group_legends_by_season(legends: dict) -> dict:
             all_events = sorted(new_attacks + new_defenses, key=lambda x: x.get("time", 0))
 
             if all_events and "trophies" in all_events[-1]:
-                end_trophies = all_events[-1]["trophies"]
-                trophies_gained = sum(e.get("change", 0) for e in new_attacks)
-                trophies_lost = sum(e.get("change", 0) for e in new_defenses)
-                trophies_total = trophies_gained - trophies_lost
-                start_trophies = all_events[0]["trophies"]
-
-                day_data["start_trophies"] = start_trophies
-                day_data["end_trophies"] = end_trophies
-                day_data["trophies_gained_total"] = trophies_gained
-                day_data["trophies_lost_total"] = trophies_lost
-                day_data["trophies_total"] = trophies_total
+                # Only calculate if not already set by process_legend_stats
+                if "end_trophies" not in day_data:
+                    day_data["end_trophies"] = all_events[-1]["trophies"]
+                if "trophies_gained_total" not in day_data:
+                    day_data["trophies_gained_total"] = sum(e.get("change", 0) for e in new_attacks)
+                if "trophies_lost_total" not in day_data:
+                    day_data["trophies_lost_total"] = sum(e.get("change", 0) for e in new_defenses)
+                if "trophies_total" not in day_data:
+                    day_data["trophies_total"] = day_data["trophies_gained_total"] - day_data["trophies_lost_total"]
+                if "start_trophies" not in day_data:
+                    day_data["start_trophies"] = all_events[0]["trophies"]
         else:
             attacks = day_data.get("attacks", [])
             defenses = day_data.get("defenses", [])
@@ -270,12 +270,23 @@ async def process_legend_stats(raw_legends: dict) -> dict:
         new_defenses = data.get("new_defenses", [])
 
         all_events = sorted(new_attacks + new_defenses, key=lambda x: x.get("time", 0))
-        if all_events and "trophies" in all_events[-1]:
-            end_trophies = all_events[-1]["trophies"]
+        if all_events:
+            # Get actual start and end trophies from the chronological events
+            first_event = all_events[0]
+            last_event = all_events[-1]
+            
+            end_trophies = last_event.get("trophies", 0)
             trophies_gained = sum(entry.get("change", 0) for entry in new_attacks)
             trophies_lost = sum(entry.get("change", 0) for entry in new_defenses)
             trophies_total = trophies_gained - trophies_lost
-            start_trophies = end_trophies - trophies_total
+            
+            # Calculate start_trophies by working backwards from the first event
+            # If first event is defense: before_trophies = after_trophies + change
+            # If first event is attack: before_trophies = after_trophies - change
+            if first_event in new_defenses:
+                start_trophies = first_event.get("trophies", 0) + first_event.get("change", 0)
+            else:  # attack
+                start_trophies = first_event.get("trophies", 0) - first_event.get("change", 0)
 
             data["start_trophies"] = start_trophies
             data["end_trophies"] = end_trophies

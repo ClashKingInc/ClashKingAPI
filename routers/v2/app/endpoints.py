@@ -78,7 +78,7 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
         async with aiohttp.ClientSession() as war_session:
             return await asyncio.gather(*(fetch_clan_war_log(war_session, tag) for tag in input_clan_tags))
     
-    async def fetch_clan_war_stats(input_clan_request: ClanTagsRequest) -> Dict[str, Any]:
+    async def fetch_clan_war_stats(input_clan_request: ClanTagsRequest, req: Request) -> Dict[str, Any]:
         """Fetch clan war stats using existing endpoint"""
         mongo_filter = ClanWarHitsFilter(
             clan_tags=input_clan_request.clan_tags,
@@ -86,7 +86,7 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
             timestamp_end=int(pend.now().timestamp()),
             limit=50
         )
-        return await clan_warhits_stats(mongo_filter, request)
+        return await clan_warhits_stats(mongo_filter, req)
     
     # Get both basic and extended player data
     async def fetch_players_basic_and_extended():
@@ -221,7 +221,7 @@ async def app_initialization(body: PlayerTagsRequest, request: Request) -> Dict[
         fetch_clan_join_leave_data(clan_tags_list),
         get_clans_capital_raids(request, raids_request),
         get_multiple_clan_war_summary(clan_request, request),
-        fetch_clan_war_stats(clan_request)
+        fetch_clan_war_stats(clan_request, request)
     )
     
     # Execute call that returns List[Dict[str, Any]]

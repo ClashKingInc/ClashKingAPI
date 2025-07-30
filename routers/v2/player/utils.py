@@ -274,7 +274,7 @@ async def process_legend_stats(raw_legends: dict) -> dict:
             end_trophies = all_events[-1]["trophies"]
             trophies_gained = sum(entry.get("change", 0) for entry in new_attacks)
             trophies_lost = sum(entry.get("change", 0) for entry in new_defenses)
-            trophies_total = trophies_gained + trophies_lost
+            trophies_total = trophies_gained - trophies_lost
             start_trophies = end_trophies - trophies_total
 
             data["start_trophies"] = start_trophies

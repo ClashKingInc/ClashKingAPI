@@ -162,27 +162,67 @@ def group_legends_by_season(legends: dict) -> dict:
         season["season_total_attacks"] += attacks
         season["season_total_defenses"] += defenses
 
-        for trophies in day_data.get("attacks", []):
-            if 5 <= trophies <= 15:
-                season["season_stars_distribution_attacks"][1] += 1
-            elif 16 <= trophies <= 32:
-                season["season_stars_distribution_attacks"][2] += 1
-            elif trophies == 40:
-                season["season_stars_distribution_attacks"][3] += 1
-            else:
-                season["season_stars_distribution_attacks"][2] += 1
+        # Use individual events and unstack values for accurate star distribution (ClashKingBot approach)
+        new_attacks = day_data.get("new_attacks", [])
+        new_defenses = day_data.get("new_defenses", [])
+        
+        if new_attacks:  # Use new format if available
+            for attack in new_attacks:
+                stacked_value = attack.get("change", 0)
+                # Unstack the value to get individual attacks
+                individual_attacks = estimate_individual_attacks_from_stacked(stacked_value)
+                for trophies in individual_attacks:
+                    if 5 <= trophies <= 15:
+                        season["season_stars_distribution_attacks"][1] += 1
+                    elif 16 <= trophies <= 32:
+                        season["season_stars_distribution_attacks"][2] += 1
+                    elif trophies == 40:
+                        season["season_stars_distribution_attacks"][3] += 1
+                    else:
+                        season["season_stars_distribution_attacks"][2] += 1
+        else:  # Fallback to old format for backwards compatibility
+            for stacked_value in day_data.get("attacks", []):
+                individual_attacks = estimate_individual_attacks_from_stacked(stacked_value)
+                for trophies in individual_attacks:
+                    if 5 <= trophies <= 15:
+                        season["season_stars_distribution_attacks"][1] += 1
+                    elif 16 <= trophies <= 32:
+                        season["season_stars_distribution_attacks"][2] += 1
+                    elif trophies == 40:
+                        season["season_stars_distribution_attacks"][3] += 1
+                    else:
+                        season["season_stars_distribution_attacks"][2] += 1
 
-        for trophies in day_data.get("defenses", []):
-            if 0 <= trophies <= 4:
-                season["season_stars_distribution_defenses"][0] += 1
-            elif 5 <= trophies <= 15:
-                season["season_stars_distribution_defenses"][1] += 1
-            elif 16 <= trophies <= 32:
-                season["season_stars_distribution_defenses"][2] += 1
-            elif trophies == 40:
-                season["season_stars_distribution_defenses"][3] += 1
-            else:
-                season["season_stars_distribution_defenses"][2] += 1
+        if new_defenses:  # Use new format if available
+            for defense in new_defenses:
+                stacked_value = defense.get("change", 0)
+                # Unstack the value to get individual defenses
+                individual_defenses = estimate_individual_defenses_from_stacked(stacked_value)
+                for trophies in individual_defenses:
+                    if 0 <= trophies <= 4:
+                        season["season_stars_distribution_defenses"][0] += 1
+                    elif 5 <= trophies <= 15:
+                        season["season_stars_distribution_defenses"][1] += 1
+                    elif 16 <= trophies <= 32:
+                        season["season_stars_distribution_defenses"][2] += 1
+                    elif trophies == 40:
+                        season["season_stars_distribution_defenses"][3] += 1
+                    else:
+                        season["season_stars_distribution_defenses"][2] += 1
+        else:  # Fallback to old format for backwards compatibility
+            for stacked_value in day_data.get("defenses", []):
+                individual_defenses = estimate_individual_defenses_from_stacked(stacked_value)
+                for trophies in individual_defenses:
+                    if 0 <= trophies <= 4:
+                        season["season_stars_distribution_defenses"][0] += 1
+                    elif 5 <= trophies <= 15:
+                        season["season_stars_distribution_defenses"][1] += 1
+                    elif 16 <= trophies <= 32:
+                        season["season_stars_distribution_defenses"][2] += 1
+                    elif trophies == 40:
+                        season["season_stars_distribution_defenses"][3] += 1
+                    else:
+                        season["season_stars_distribution_defenses"][2] += 1
 
         total_possible = len(season["days"]) * 8
         season["season_total_attacks_defenses_possible"] = total_possible
@@ -258,6 +298,66 @@ def count_number_of_attacks_from_list(attacks: list[int]) -> int:
         else:
             count += 1
     return count
+
+
+def estimate_individual_attacks_from_stacked(stacked_value: int) -> list[int]:
+    """Unstack a stacked trophy value into individual attack trophy values."""
+    individual_attacks = []
+    remaining = stacked_value
+    
+    # Work backwards from the highest possible values
+    while remaining > 0:
+        if remaining >= 40:
+            individual_attacks.append(40)  # 3-star attack
+            remaining -= 40
+        elif remaining >= 32:
+            individual_attacks.append(32)  # 2-star attack
+            remaining -= 32
+        elif remaining >= 16:
+            individual_attacks.append(16)  # 2-star attack (low end)
+            remaining -= 16
+        elif remaining >= 15:
+            individual_attacks.append(15)  # 1-star attack
+            remaining -= 15
+        elif remaining >= 5:
+            individual_attacks.append(remaining)  # 1-star attack (variable)
+            remaining = 0
+        else:
+            # Handle edge cases - assume minimum attack value
+            individual_attacks.append(max(remaining, 5))
+            remaining = 0
+    
+    return individual_attacks
+
+
+def estimate_individual_defenses_from_stacked(stacked_value: int) -> list[int]:
+    """Unstack a stacked trophy value into individual defense trophy values."""
+    individual_defenses = []
+    remaining = abs(stacked_value)  # Defense values are typically negative, make positive
+    
+    # Work backwards from the highest possible values
+    while remaining > 0:
+        if remaining >= 40:
+            individual_defenses.append(40)  # 3-star defense
+            remaining -= 40
+        elif remaining >= 32:
+            individual_defenses.append(32)  # 2-star defense
+            remaining -= 32
+        elif remaining >= 16:
+            individual_defenses.append(16)  # 2-star defense (low end)
+            remaining -= 16
+        elif remaining >= 15:
+            individual_defenses.append(15)  # 1-star defense
+            remaining -= 15
+        elif remaining >= 5:
+            individual_defenses.append(remaining)  # 1-star defense (variable)
+            remaining = 0
+        elif remaining > 0:
+            # 0-star defense (0-4 trophies)
+            individual_defenses.append(remaining)
+            remaining = 0
+    
+    return individual_defenses
 
 
 async def process_legend_stats(raw_legends: dict) -> dict:

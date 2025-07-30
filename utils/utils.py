@@ -1,25 +1,25 @@
+import random
+
 import motor.motor_asyncio
 from redis import asyncio as aioredis
 import redis
 import re
 from dotenv import load_dotenv
 import coc
-import os
 
 import pendulum as pend
-from datetime import datetime, timedelta
+from datetime import timedelta
 import io
 import asyncio
 import aiohttp
-from fastapi import HTTPException
-from base64 import b64decode as base64_b64decode
+import orjson
 from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
 from .config import Config
-from collections import deque
 from datetime import datetime
 import pytz
+from bson import json_util
 
 
 config = Config()
@@ -32,13 +32,24 @@ def dynamic_limit(key: str):
         return "1000/second"
     return "30/second"
 
-
 load_dotenv()
 client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")
 other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
 
 redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True,
                        max_connections=25, retry_on_error=[redis.ConnectionError])
+
+coc_client = coc.Client(
+    base_url='https://proxy.clashk.ing/v1',
+    key_count=10,
+    key_names='test',
+    throttle_limit=500,
+    cache_max_size=10_000,
+    load_game_data=coc.LoadGameData(default=False),
+    raw_attribute=True,
+    stats_max_size=10_000,
+)
+
 
 
 class DBClient():
@@ -101,6 +112,13 @@ class DBClient():
         self.player_capital_lb: collection_class = self.leaderboards.capital_player
         self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
 
+        self.app = client.get_database("auth")
+        self.app_users: collection_class = self.app.users
+        self.app_discord_tokens: collection_class = self.app.discord_tokens
+        self.app_refresh_tokens: collection_class = self.app.refresh_tokens
+        self.app_email_verifications: collection_class = self.app.email_verifications
+        self.app_password_reset_tokens: collection_class = self.app.password_reset_tokens
+        self.coc_accounts: collection_class = client.clashking.coc_accounts
 
 db_client = DBClient()
 
@@ -284,6 +302,8 @@ async def delete_from_cdn(image_url: str):
 
 
 def remove_id_fields(data):
+    return json_loads(json_util.dumps(data))
+
     if isinstance(data, list):
         for item in data:
             remove_id_fields(item)
@@ -354,3 +374,35 @@ def utc_to_local(utc_time: datetime, timezone: str = "Europe/Paris") -> str:
     utc_dt = utc_time.replace(tzinfo=pytz.utc)
     local_dt = utc_dt.astimezone(local_tz)
     return local_dt.strftime("%Y-%m-%d %H:%M")  # Format for display
+
+
+async def bulk_requests(urls: list[str]):
+
+    async def fetch_function(session: aiohttp.ClientSession, url: str):
+        url = url.replace("#", '%23')
+        async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
+            if response.status != 200:
+                return None
+            item_bytes = await response.read()
+            return orjson.loads(item_bytes)
+
+    tasks = []
+    async with aiohttp.ClientSession() as session:
+        for url in urls:
+            tasks.append(asyncio.create_task(fetch_function(session, url)))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    return [r for r in results if r is not None and not isinstance(r, Exception)]
+
+def generate_custom_id(input_number: int = None):
+    # Use input_number if provided, otherwise generate a random number
+    base_input = input_number or random.randint(1000000000, 9999999999)
+
+    # Combine with current UTC timestamp to get a unique ID
+    base_number = (
+        base_input
+        + int(pend.now(tz=pend.UTC).timestamp())
+        + random.randint(1000000000, 9999999999)
+    )
+
+    return base_number

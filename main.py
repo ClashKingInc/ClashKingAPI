@@ -2,9 +2,9 @@ import os
 import logging
 import uvicorn
 import importlib.util
-import time
-
-from fastapi import FastAPI, Request, HTTPException
+import sentry_sdk
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -12,24 +12,28 @@ from fastapi.openapi.utils import get_openapi
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-
-from slowapi import Limiter
-from slowapi.util import get_ipaddr
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
+from utils.utils import config, coc_client
+from utils.email_service import create_verification_indexes
 
-from utils.utils import config
+# Initialize Sentry SDK
+sentry_sdk.init(
+    dsn=config.SENTRY_DSN,
+    send_default_pii=True,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_ipaddr)
 middleware = [
     Middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["*"],  # Support mobile apps, web browsers, and bots
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"],
+        allow_credentials=True,  # Enable for web browsers and potential cookie-based auth
+        expose_headers=["*"],
     ),
     Middleware(
         GZipMiddleware,
@@ -37,40 +41,64 @@ middleware = [
     )
 ]
 
-app = FastAPI(middleware=middleware)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup and shutdown tasks."""
+    # Startup
+    try:
+        FastAPICache.init(InMemoryBackend())
+        
+        # Login COC client with tokens
+        await coc_client.login_with_tokens('')
+        
+        # Create email verification indexes for performance
+        await create_verification_indexes()
+        
+        print("✅ Startup tasks completed successfully")
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+        sentry_sdk.capture_exception(e, tags={"startup": "failed"})
+    
+    yield
+    
+    # Shutdown (if needed in the future)
+    print("🔄 Application shutting down...")
+
+
+app = FastAPI(middleware=middleware, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+def include_routers(app, directory, recursive=False):
+    """Include routers from a given directory. If recursive is True, search for 'endpoints.py' in subdirectories."""
+    for root, _, files in os.walk(directory) if recursive else [(directory, [], os.listdir(directory))]:
+        for filename in files:
+            if filename == "endpoints.py" if recursive else filename.endswith(".py") and not filename.startswith("__"):
+                module_name = os.path.relpath(os.path.join(root, filename), start=directory).replace(os.sep, ".")[:-3]
+                file_path = os.path.join(root, filename)
 
-def include_routers(app, directory):
-    for filename in os.listdir(directory):
-        if filename.endswith(".py") and not filename.startswith("__"):
-            module_name = filename[:-3]
-            file_path = os.path.join(directory, filename)
+                spec = importlib.util.spec_from_file_location(module_name, file_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
 
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+                router = getattr(module, "router", None)
+                if router:
+                    app.include_router(router)
 
-            router = getattr(module, "router", None)
-            if router:
-                app.include_router(router)
-
-# Include routers from public and private directories
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
-
-
-@app.on_event("startup")
-async def startup_event():
-    FastAPICache.init(InMemoryBackend())
+# Include routers from public (v1) and private (v2 with subfolders)
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
+include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)
 async def docs():
-    if config.is_local:
-        return RedirectResponse(f"http://localhost/docs")
+    if config.IS_LOCAL:
+        return RedirectResponse(f"http://localhost:8000/docs")
+    if config.IS_DEV:
+        return RedirectResponse(f"https://dev.api.clashk.ing/docs")
     return RedirectResponse(f"https://api.clashk.ing/docs")
+
 
 @app.get("/openapi/private", include_in_schema=False)
 async def get_private_openapi():
@@ -121,10 +149,6 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == "__main__":
-    if config.is_local:
-        uvicorn.run("main:app", host="localhost", port=8000, reload=True)
-    else:
-        uvicorn.run("main:app", host="0.0.0.0", port=8010)
-
+    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=config.RELOAD)
 
 

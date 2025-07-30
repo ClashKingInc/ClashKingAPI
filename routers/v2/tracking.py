@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Annotated, List
 from fastapi_cache.decorator import cache
 from datetime import datetime
-from utils.utils import fix_tag, db_client, token_verify, limiter, remove_id_fields, check_authentication
+from utils.utils import fix_tag, db_client, check_authentication
 
 
 router = APIRouter(prefix="/v2",tags=["Tracking Endpoints"], include_in_schema=False)

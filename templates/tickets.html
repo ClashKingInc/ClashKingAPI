@@ -1,514 +1,407 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Light Mode -->
-    <link rel="icon" type="image/png" href="/static/favicon-light.png" media="(prefers-color-scheme: light)">
-    <!-- Dark Mode -->
-    <link rel="icon" type="image/png" href="/static/favicon-dark.png" media="(prefers-color-scheme: dark)">
-    <title>Ticketing Settings</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
-    <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-        }
-
-        .bg-dark {
-            background-color: #1e1e1e;
-        }
-
-        .bg-dark-light {
-            background-color: #252525;
-        }
-
-        .text-dark {
-            color: #ffffff;
-        }
-
-        .text-dark-light {
-            color: #cccccc;
-        }
-
-        .border-dark {
-            border-color: #333333;
-        }
-
-        .focus\:ring-dark-light:focus {
-            outline: none;
-            ring: 2px solid #444444;
-        }
-
-        .form-checkbox {
-            background-color: #1e1e1e;
-            border-color: #444444;
-        }
-
-        .form-checkbox:checked {
-            background-color: #3b82f6;
-        }
-
-        /* Custom styles for Select2 */
-        .select2-container .select2-selection--single,
-        .select2-container .select2-selection--multiple {
-            background-color: #1e1e1e;
-            border: 1px solid #444444;
-            border-radius: 0.25rem;
-            color: #ffffff;
-        }
-
-        .select2-container--default .select2-selection--single .select2-selection__rendered,
-        .select2-container--default .select2-selection--multiple .select2-selection__rendered {
-            color: #ffffff;
-        }
-
-        .select2-container--default .select2-selection--single .select2-selection__arrow,
-        .select2-container--default .select2-selection--multiple .select2-selection__arrow {
-            height: 100%;
-            color: #ffffff;
-        }
-
-        .select2-dropdown {
-            background-color: #252525;
-            border: 1px solid #444444;
-            color: #ffffff;
-        }
-
-        .select2-results__option {
-            padding: 0.5rem;
-            background-color: #252525;
-            color: #ffffff;
-        }
-
-        .select2-results__option--highlighted {
-            background-color: #3b82f6;
-            color: #ffffff;
-        }
-
-        .select2-search--dropdown .select2-search__field {
-            background-color: #1e1e1e;
-            border: 1px solid #444444;
-            color: #ffffff;
-        }
-
-        .select2-selection__choice {
-            background-color: #333333 !important;
-            color: #ffffff !important;
-        }
-
-        .move-buttons {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            margin-right: 10px;
-        }
-
-        .move-button {
-            cursor: pointer;
-        }
-
-        .error-message {
-            color: #ff6b6b;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-        }
-
-        .success-message {
-            color: #4caf50;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-        }
-    </style>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ticketing Settings</title>
+  <!-- Using Tailwind CSS via CDN (v3) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+  <style>
+    /* Modern flat design styling */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #f7f7f7;
+    }
+    .container {
+      background-color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+    .btn {
+      transition: background-color 0.2s ease;
+    }
+    .btn:hover {
+      filter: brightness(0.95);
+    }
+    .debug {
+      font-size: 0.875rem;
+      color: #555;
+    }
+    /* Minimal flat input styling */
+    input, select {
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 8px;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 1px #3b82f6;
+    }
+    .button-config {
+      background-color: #fafafa;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+    }
+  </style>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 </head>
-<body class="bg-dark p-6">
-<div class="max-w-4xl mx-auto bg-dark-light p-8 rounded-lg shadow-lg">
-    <h1 class="text-2xl font-bold mb-6 text-white">Ticketing Settings</h1>
-
+<body class="p-8">
+  <div class="container max-w-4xl mx-auto p-8">
+    <h1 class="text-3xl font-bold mb-6 text-gray-800">Ticketing Settings</h1>
+    <!-- Debug area to display backend components JSON -->
+    <div id="debug-area" class="debug mb-4"></div>
     <form id="settings-form" data-token="{{ token }}">
-        <!-- Embed Selection -->
-        <div class="mb-4">
-            <label class="block text-white">Embed Selection</label>
-            <select name="embed_name"
-                    class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light">
-                {% for embed in embeds %}
-                    <option {% if embed == embed_name %}selected{% endif %}>{{ embed }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <!-- Category Selection -->
-        <div class="mb-4">
-            <label class="block text-white">Category Selection</label>
-            <select name="open_category"
-                    class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light">
-                <option value="">Clear</option>
-                {% for category in categories %}
-                    <option value="{{ category.id }}"
-                            {% if category.id == open_category %}selected{% endif %}>{{ category.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <!-- Logs Selection -->
-        <div class="mb-4">
-            <label class="block text-white">Log Channel (Button Click)</label>
-            <select name="log_channel_click"
-                    class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light log-select">
-                <option value="">Clear</option>
-                {% for log in logs %}
-                    <option value="{{ log.id }}"
-                            {% if log.id == log_channel_click %}selected{% endif %}>{{ log.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="mb-4">
-            <label class="block text-white">Log Channel (Ticket Close)</label>
-            <select name="log_channel_close"
-                    class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light log-select">
-                <option value="">Clear</option>
-                {% for log in logs %}
-                    <option value="{{ log.id }}"
-                            {% if log.id == log_channel_close %}selected{% endif %}>{{ log.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="mb-4">
-            <label class="block text-white">Log Channel (Status Change)</label>
-            <select name="log_channel_status"
-                    class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light log-select">
-                <option value="">Clear</option>
-                {% for log in logs %}
-                    <option value="{{ log.id }}"
-                            {% if log.id == log_channel_status %}selected{% endif %}>{{ log.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <!-- Buttons Configuration -->
-        <div class="mb-4">
-            <label class="block text-white">Buttons</label>
-            <div id="buttons-container" class="space-y-4 mt-2"></div>
-            <button type="button" class="mt-4 bg-green-500 text-white px-4 py-2 rounded" id="add-button">Add Button
-            </button>
-        </div>
-
-        <div class="mt-4">
-            <button type="submit" class="w-full bg-blue-500 text-white px-4 py-2 rounded">Save Settings</button>
-            <div id="form-message" class="mt-2"></div>
-        </div>
+      <!-- Embed Selection -->
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Embed Selection</label>
+        <select name="embed_name" class="w-full p-2">
+          {% for embed in embeds %}
+            <option {% if embed == embed_name %}selected{% endif %}>{{ embed }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <!-- Category Selection -->
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Category Selection</label>
+        <select name="open_category" class="w-full p-2">
+          <option value="">Clear</option>
+          {% for category in categories %}
+            <option value="{{ category.id }}" {% if category.id == open_category %}selected{% endif %}>{{ category.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <!-- Log Channels -->
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Log Channel (Button Click)</label>
+        <select name="log_channel_click" class="w-full p-2 log-select">
+          <option value="">Clear</option>
+          {% for log in logs %}
+            <option value="{{ log.id }}" {% if log.id == log_channel_click %}selected{% endif %}>{{ log.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Log Channel (Ticket Close)</label>
+        <select name="log_channel_close" class="w-full p-2 log-select">
+          <option value="">Clear</option>
+          {% for log in logs %}
+            <option value="{{ log.id }}" {% if log.id == log_channel_close %}selected{% endif %}>{{ log.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Log Channel (Status Change)</label>
+        <select name="log_channel_status" class="w-full p-2 log-select">
+          <option value="">Clear</option>
+          {% for log in logs %}
+            <option value="{{ log.id }}" {% if log.id == log_channel_status %}selected{% endif %}>{{ log.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <!-- Buttons Configuration -->
+      <div class="mb-4">
+        <label class="block font-medium text-gray-700 mb-1">Buttons</label>
+        <div id="buttons-container" class="space-y-4 mt-2"></div>
+        <button type="button" class="mt-4 btn bg-green-600 text-white px-4 py-2 rounded" id="add-button">Add Button</button>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="w-full btn bg-blue-600 text-white px-4 py-2 rounded">Save Settings</button>
+        <div id="form-message" class="mt-2"></div>
+      </div>
     </form>
-</div>
+  </div>
 
-<script>
+  <script>
     $(document).ready(function () {
-        const emojis = {{ emojis|tojson }};
-        const roles = {{ roles|tojson }};
-        const components = {{ components|tojson }};
-        const settings = {{ settings|tojson }};
-        const token = $('#settings-form').data('token');
+      const emojis = {{ emojis|tojson }};
+      const roles = {{ roles|tojson }};
+      const components = {{ components|tojson }};
+      const settings = {{ settings|tojson }};
+      const token = $('#settings-form').data('token');
 
-        function createButtonConfig(label = '', style = 2, emojiValue = '', accountApply = false, privateThread = false, thMin = 1, numApply = 1, modRole = [], noPingModRole = [], questions = [], naming = '', roles = []) {
-            modRole = modRole || [];
-            noPingModRole = noPingModRole || [];
+      // Debug: log and display components data
+      console.log("DEBUG: components from backend:", components);
+      $('#debug-area').text("DEBUG: components from backend: " + JSON.stringify(components));
 
-            const emoji = emojis.find(e => e.id === emojiValue);
+      // Generate a temporary unique ID for new buttons
+      function generateTempId() {
+        return 'temp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      }
 
-            return `
-                    <div class="p-4 border rounded-lg bg-dark-light button-config">
-                        <div class="flex justify-between items-center cursor-pointer toggle-header">
-                            <div class="move-buttons">
-                                <svg class="move-button w-4 h-4 text-white mb-1 up-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                                </svg>
-                                <svg class="move-button w-4 h-4 text-white down-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </div>
-                            <span class="button-text text-white">${label}</span>
-                            <svg class="w-5 h-5 transform rotate-0 transition-transform duration-200 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </div>
-                        <div class="button-details mt-2 hidden">
-                            <div class="flex justify-between items-center mb-2">
-                                <input type="text" placeholder="Button Text" value="${label}" class="w-full p-2 border rounded mr-2 button-text-input bg-dark text-white border-dark focus:ring-dark-light">
-                                <select class="w-20 p-2 border rounded mr-2 bg-dark text-white border-dark focus:ring-dark-light">
-                                    <option value="red" ${style == 1 ? 'selected' : ''}>Red</option>
-                                    <option value="green" ${style == 3 ? 'selected' : ''}>Green</option>
-                                    <option value="blue" ${style == 2 ? 'selected' : ''}>Blue</option>
-                                    <option value="gray" ${style == 4 ? 'selected' : ''}>Gray</option>
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Emoji</label>
-                                <select class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light emoji-select">
-                                    <option value="">Clear</option>
-                                    ${emojis.map(emoji => `<option value="${emoji.id}" data-animated="${emoji.animated}" ${emoji.id == emojiValue ? 'selected' : ''}>${emoji.name}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="inline-flex items-center text-white">
-                                    <input type="checkbox" class="form-checkbox" ${accountApply ? 'checked' : ''}>
-                                    <span class="ml-2">Account Apply</span>
-                                </label>
-                                <label class="inline-flex items-center ml-4 text-white">
-                                    <input type="checkbox" class="form-checkbox" ${privateThread ? 'checked' : ''}>
-                                    <span class="ml-2">Private Thread</span>
-                                </label>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Min Townhall Restriction</label>
-                                <select class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light">
-                                    ${[...Array(16).keys()].map(i => `<option value="${i + 1}" ${i + 1 == thMin ? 'selected' : ''}>${i + 1}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Number of Accounts that can Apply</label>
-                                <select class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light">
-                                    ${[...Array(25).keys()].map(i => `<option value="${i + 1}" ${i + 1 == numApply ? 'selected' : ''}>${i + 1}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Pingable Staff</label>
-                                <select class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light select2" multiple="multiple" data-max-options="10">
-                                    ${roles.map(role => `<option value="${role.id}" ${modRole.includes(role.id) ? 'selected' : ''}>${role.name}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Non-Pingable Staff</label>
-                                <select class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light select2" multiple="multiple" data-max-options="10">
-                                    ${roles.map(role => `<option value="${role.id}" ${noPingModRole.includes(role.id) ? 'selected' : ''}>${role.name}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div class="mt-2">
-                                <label class="inline-flex items-center text-white">
-                                    <input type="checkbox" class="form-checkbox questionnaire-toggle" ${questions.length > 0 ? 'checked' : ''}>
-                                    <span class="ml-2">Questionnaire</span>
-                                </label>
-                                <div class="questionnaire-fields mt-2 ${questions.length == 0 ? 'hidden' : ''}">
-                                    ${questions.map((question, index) => `<input type="text" placeholder="Question ${index + 1}" value="${question}" class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light">`).join('')}
-                                </div>
-                            </div>
-                            <div class="mt-2">
-                                <label class="block text-white">Naming Convention</label>
-                                <input type="text" maxlength="100" value="${naming}" class="w-full mt-2 p-2 border rounded bg-dark text-white border-dark focus:ring-dark-light naming-convention-input">
-                            </div>
-                            <div class="mt-4 flex justify-end space-x-2">
-                                <button type="button" class="bg-red-500 text-white px-4 py-2 rounded delete-button">Delete</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
+      // Create a button configuration element
+      function createButtonConfig(custom_id = '', label = '', style = 2, emojiValue = '', accountApply = false, privateThread = false, thMin = 1, numApply = 1, modRole = [], noPingModRole = [], questions = [], naming = '') {
+        if (!custom_id) {
+          custom_id = generateTempId();
         }
+        const emoji = emojis.find(e => e.id === emojiValue);
+        return `
+          <div class="button-config" data-custom-id="${custom_id}">
+            <div class="flex justify-between items-center cursor-pointer toggle-header">
+              <div class="flex flex-col items-center mr-3">
+                <svg class="move-button w-5 h-5 text-gray-600 mb-1 up-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                </svg>
+                <svg class="move-button w-5 h-5 text-gray-600 down-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+              <span class="button-text text-xl font-medium">${label || 'New Button'}</span>
+              <svg class="w-6 h-6 transform transition-transform duration-200 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
+            <div class="button-details mt-4 hidden">
+              <div class="flex flex-col sm:flex-row sm:items-center mb-3">
+                <input type="text" placeholder="Button Text" value="${label}" class="w-full p-2 mr-2 button-text-input">
+                <select class="w-32 p-2">
+                  <option value="red" ${style == 1 ? 'selected' : ''}>Red</option>
+                  <option value="green" ${style == 3 ? 'selected' : ''}>Green</option>
+                  <option value="blue" ${style == 2 ? 'selected' : ''}>Blue</option>
+                  <option value="gray" ${style == 4 ? 'selected' : ''}>Gray</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Emoji</label>
+                <select class="w-full p-2 emoji-select">
+                  <option value="">Clear</option>
+                  ${emojis.map(emoji => `<option value="${emoji.id}" data-animated="${emoji.animated}" ${emoji.id == emojiValue ? 'selected' : ''}>${emoji.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-3 flex items-center space-x-4">
+                <label class="inline-flex items-center">
+                  <input type="checkbox" class="form-checkbox" ${accountApply ? 'checked' : ''}>
+                  <span class="ml-2">Account Apply</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="checkbox" class="form-checkbox" ${privateThread ? 'checked' : ''}>
+                  <span class="ml-2">Private Thread</span>
+                </label>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Min Townhall Restriction</label>
+                <select class="w-full p-2">
+                  ${[...Array(16).keys()].map(i => `<option value="${i + 1}" ${i + 1 == thMin ? 'selected' : ''}>${i + 1}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Number of Accounts that can Apply</label>
+                <select class="w-full p-2">
+                  ${[...Array(25).keys()].map(i => `<option value="${i + 1}" ${i + 1 == numApply ? 'selected' : ''}>${i + 1}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Pingable Staff</label>
+                <select class="w-full p-2 select2" multiple="multiple" data-max-options="10">
+                  ${roles.map(role => `<option value="${role.id}" ${modRole.includes(role.id) ? 'selected' : ''}>${role.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Non-Pingable Staff</label>
+                <select class="w-full p-2 select2" multiple="multiple" data-max-options="10">
+                  ${roles.map(role => `<option value="${role.id}" ${noPingModRole.includes(role.id) ? 'selected' : ''}>${role.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="inline-flex items-center">
+                  <input type="checkbox" class="form-checkbox questionnaire-toggle" ${questions.length > 0 ? 'checked' : ''}>
+                  <span class="ml-2">Questionnaire</span>
+                </label>
+                <div class="questionnaire-fields mt-2 ${questions.length == 0 ? 'hidden' : ''}">
+                  ${questions.map((question, index) => `<input type="text" placeholder="Question ${index + 1}" value="${question}" class="w-full p-2 mt-2">`).join('')}
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="block mb-1">Naming Convention</label>
+                <input type="text" maxlength="100" value="${naming}" class="w-full p-2 naming-convention-input">
+              </div>
+              <div class="flex justify-end">
+                <button type="button" class="bg-red-600 text-white px-4 py-2 rounded delete-button">Delete</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
 
-        // Initialize Select2 on role select elements
-        function initializeSelect2(element) {
-            element.find('.select2').select2({
-                maximumSelectionLength: 10,
-                width: '100%'
-            });
+      // Initialize Select2 on elements within the provided element
+      function initializeSelect2(element) {
+        element.find('.select2').select2({
+          maximumSelectionLength: 10,
+          width: '100%'
+        });
+        element.find('.emoji-select').select2({
+          templateResult: formatEmojiOption,
+          templateSelection: formatEmojiSelection,
+          width: '100%',
+          allowClear: true,
+          placeholder: "Select an emoji"
+        });
+        element.find('.log-select').select2({
+          width: '100%',
+          allowClear: true,
+          placeholder: "Select a log channel"
+        });
+      }
 
-            element.find('.emoji-select').select2({
-                templateResult: formatEmojiOption,
-                templateSelection: formatEmojiSelection,
-                width: '100%',
-                allowClear: true,
-                placeholder: "Select an emoji"
-            });
+      function formatEmojiOption(emoji) {
+        if (!emoji.id) return emoji.text;
+        var imgUrl = `https://cdn.discordapp.com/emojis/${emoji.element.value}${$(emoji.element).data('animated') ? '.gif' : '.png'}`;
+        return $(`<span><img src="${imgUrl}" class="inline-block w-5 h-5 mr-2" />${emoji.text}</span>`);
+      }
 
-            element.find('.log-select').select2({
-                width: '100%',
-                allowClear: true,
-                placeholder: "Select a log channel"
-            });
-        }
+      function formatEmojiSelection(emoji) {
+        if (!emoji.id) return emoji.text;
+        var imgUrl = `https://cdn.discordapp.com/emojis/${emoji.element.value}${$(emoji.element).data('animated') ? '.gif' : '.png'}`;
+        return $(`<span><img src="${imgUrl}" class="inline-block w-5 h-5 mr-2" />${emoji.text}</span>`);
+      }
 
-        function formatEmojiOption(emoji) {
-            if (!emoji.id) {
-                return emoji.text;
-            }
-            var imgUrl = `https://cdn.discordapp.com/emojis/${emoji.element.value}${$(emoji.element).data('animated') ? '.gif' : '.png'}`;
-            var $emoji = $(
-                `<span><img src="${imgUrl}" class="inline-block w-4 h-4 mr-1" />${emoji.text}</span>`
-            );
-            return $emoji;
-        }
-
-        function formatEmojiSelection(emoji) {
-            if (!emoji.id) {
-                return emoji.text;
-            }
-            var imgUrl = `https://cdn.discordapp.com/emojis/${emoji.element.value}${$(emoji.element).data('animated') ? '.gif' : '.png'}`;
-            var $emoji = $(
-                `<span><img src="${imgUrl}" class="inline-block w-4 h-4 mr-1" />${emoji.text}</span>`
-            );
-            return $emoji;
-        }
-
-        // Load existing button configurations
-        function loadButtons() {
-            const addedButtons = new Set();
-
-            components.forEach(component => {
-                const configKey = component.custom_id + '_settings';
-                if (settings[configKey] && !addedButtons.has(component.custom_id)) {
-                    const config = settings[configKey];
-                    const newButtonConfig = $(createButtonConfig(
-                        component.label,
-                        component.style,
-                        component.emoji.id,
-                        config.account_apply,
-                        config.private_thread,
-                        config.th_min,
-                        config.num_apply,
-                        config.mod_role,
-                        config.no_ping_mod_role,
-                        config.questions,
-                        config.naming,
-                        roles
-                    ));
-                    $('#buttons-container').append(newButtonConfig);
-                    initializeSelect2(newButtonConfig);
-                    addedButtons.add(component.custom_id);
-                }
-            });
-
-            // Initialize Select2 for log channels
-            $('.log-select').each(function () {
-                $(this).select2({
-                    width: '100%',
-                    allowClear: true,
-                    placeholder: "Select a log channel"
-                });
-            });
-        }
-
-        // Add button click handler
-        $('#add-button').click(function () {
-            const newButtonConfig = $(createButtonConfig('', 2, '', false, false, 1, 1, [], [], [], '', roles));
+      // Load existing button configurations
+      function loadButtons() {
+        const addedButtons = new Set();
+        components.forEach(component => {
+          const configKey = component.custom_id + '_settings';
+          if (settings[configKey] && !addedButtons.has(component.custom_id)) {
+            const config = settings[configKey];
+            console.log("DEBUG: loading component", component);
+            const newButtonConfig = $(createButtonConfig(
+              component.custom_id,
+              component.label,
+              component.style,
+              component.emoji.id,
+              config.account_apply,
+              config.private_thread,
+              config.th_min,
+              config.num_apply,
+              config.mod_role,
+              config.no_ping_mod_role,
+              config.questions,
+              config.naming
+            ));
             $('#buttons-container').append(newButtonConfig);
             initializeSelect2(newButtonConfig);
+            addedButtons.add(component.custom_id);
+          }
         });
-
-        // Expand/collapse button details
-        $(document).on('click', '.toggle-header', function () {
-            const details = $(this).siblings('.button-details');
-            const arrow = $(this).find('svg').last();
-            details.toggleClass('hidden');
-            arrow.toggleClass('rotate-180');
+        $('.log-select').select2({
+          width: '100%',
+          allowClear: true,
+          placeholder: "Select a log channel"
         });
+      }
 
-        // Show/hide questionnaire fields
-        $(document).on('change', '.questionnaire-toggle', function () {
-            const fields = $(this).closest('.button-config').find('.questionnaire-fields');
-            fields.toggleClass('hidden', !this.checked);
+      // Add new button handler
+      $('#add-button').click(function () {
+        const newButtonConfig = $(createButtonConfig());
+        $('#buttons-container').append(newButtonConfig);
+        initializeSelect2(newButtonConfig);
+        console.log("DEBUG: Added new button with ID", newButtonConfig.data('custom-id'));
+      });
+
+      // Toggle button details
+      $(document).on('click', '.toggle-header', function () {
+        const details = $(this).siblings('.button-details');
+        const arrow = $(this).find('svg').last();
+        details.toggleClass('hidden');
+        arrow.toggleClass('rotate-180');
+      });
+
+      // Toggle questionnaire fields
+      $(document).on('change', '.questionnaire-toggle', function () {
+        const fields = $(this).closest('.button-config').find('.questionnaire-fields');
+        fields.toggleClass('hidden', !this.checked);
+      });
+
+      // Delete button handler
+      $(document).on('click', '.delete-button', function () {
+        $(this).closest('.button-config').remove();
+      });
+
+      // Update button text live
+      $(document).on('input', '.button-text-input', function () {
+        const text = $(this).val();
+        $(this).closest('.button-config').find('.button-text').text(text || 'New Button');
+      });
+
+      // Move button up
+      $(document).on('click', '.up-arrow', function () {
+        const buttonConfig = $(this).closest('.button-config');
+        buttonConfig.insertBefore(buttonConfig.prev());
+      });
+
+      // Move button down
+      $(document).on('click', '.down-arrow', function () {
+        const buttonConfig = $(this).closest('.button-config');
+        buttonConfig.insertAfter(buttonConfig.next());
+      });
+
+      // Form submission handler
+      $('#settings-form').submit(function (event) {
+        event.preventDefault();
+        let errorMessage = '';
+        const buttons = [];
+        $('.button-config').each(function () {
+          const button = $(this);
+          const custom_id = button.data('custom-id');
+          const label = button.find('.button-text-input').val();
+          if (!label) { errorMessage = 'All buttons must have a label.'; return false; }
+          const emojiValue = button.find('.emoji-select').val();
+          const emojiOption = button.find(`.emoji-select option[value="${emojiValue}"]`);
+          const emoji = emojiValue ? {
+            id: emojiValue,
+            name: emojiOption.text(),
+            animated: emojiOption.data('animated')
+          } : null;
+          buttons.push({
+            custom_id: custom_id,
+            label: label,
+            style: button.find('select').eq(0).val(),
+            emoji: emoji,
+            account_apply: button.find('input[type="checkbox"]').eq(0).prop('checked'),
+            private_thread: button.find('input[type="checkbox"]').eq(1).prop('checked'),
+            th_min: button.find('select').eq(2).val(),
+            num_apply: button.find('select').eq(3).val(),
+            mod_role: button.find('select').eq(4).val(),
+            no_ping_mod_role: button.find('select').eq(5).val(),
+            questions: button.find('.questionnaire-fields input').map(function () {
+              return $(this).val();
+            }).get(),
+            naming: button.find('.naming-convention-input').val()
+          });
         });
-
-        // Delete button handler
-        $(document).on('click', '.delete-button', function () {
-            $(this).closest('.button-config').remove();
+        if (errorMessage) {
+          $('#form-message').html(`<div class="text-red-500">${errorMessage}</div>`);
+          return;
+        }
+        const data = {
+          embed_name: $('select[name="embed_name"]').val(),
+          open_category: $('select[name="open_category"]').val(),
+          log_channel_click: $('select[name="log_channel_click"]').val(),
+          log_channel_close: $('select[name="log_channel_close"]').val(),
+          log_channel_status: $('select[name="log_channel_status"]').val(),
+          components: buttons,
+          token: token
+        };
+        $.ajax({
+          type: 'POST',
+          url: '/ticketing/save-settings',
+          contentType: 'application/json',
+          data: JSON.stringify(data),
+          success: function (response) {
+            $('#form-message').html(`<div class="text-green-500">Settings saved successfully!</div>`);
+          },
+          error: function (error) {
+            $('#form-message').html(`<div class="text-red-500">Failed to save settings. Please try again.</div>`);
+          }
         });
+      });
 
-        // Update button text handler
-        $(document).on('input', '.button-text-input', function () {
-            const text = $(this).val();
-            $(this).closest('.button-config').find('.button-text').text(text);
-        });
-
-        // Move button up handler
-        $(document).on('click', '.up-arrow', function () {
-            const buttonConfig = $(this).closest('.button-config');
-            buttonConfig.insertBefore(buttonConfig.prev());
-        });
-
-        // Move button down handler
-        $(document).on('click', '.down-arrow', function () {
-            const buttonConfig = $(this).closest('.button-config');
-            buttonConfig.insertAfter(buttonConfig.next());
-        });
-
-        // Form submit handler
-        $('#settings-form').submit(function (event) {
-            event.preventDefault();
-
-            let errorMessage = '';
-            let successMessage = '';
-
-            const buttons = [];
-            $('.button-config').each(function () {
-                const button = $(this);
-                const label = button.find('.button-text-input').val();
-                if (!label) {
-                    errorMessage = 'All buttons must have a label.';
-                    return false;
-                }
-                const emojiValue = button.find('.emoji-select').val();
-                const emojiOption = button.find(`.emoji-select option[value="${emojiValue}"]`);
-                const emoji = emojiValue ? {
-                    id: emojiValue,
-                    name: emojiOption.text(),
-                    animated: emojiOption.data('animated')
-                } : null;
-                buttons.push({
-                    label: label,
-                    style: button.find('select').eq(0).val(),
-                    emoji: emoji,
-                    account_apply: button.find('input[type="checkbox"]').eq(0).prop('checked'),
-                    private_thread: button.find('input[type="checkbox"]').eq(1).prop('checked'),
-                    th_min: button.find('select').eq(2).val(),
-                    num_apply: button.find('select').eq(3).val(),
-                    mod_role: button.find('select').eq(4).val(),
-                    no_ping_mod_role: button.find('select').eq(5).val(),
-                    questions: button.find('.questionnaire-fields input').map(function () {
-                        return $(this).val();
-                    }).get(),
-                    naming: button.find('.naming-convention-input').val()
-                });
-            });
-
-            if (errorMessage) {
-                $('#form-message').html(`<div class="error-message">${errorMessage}</div>`);
-                return;
-            }
-
-            const data = {
-                embed_name: $('select[name="embed_name"]').val(),
-                open_category: $('select[name="open_category"]').val(),
-                log_channel_click: $('select[name="log_channel_click"]').val(),
-                log_channel_close: $('select[name="log_channel_close"]').val(),
-                log_channel_status: $('select[name="log_channel_status"]').val(),
-                components: buttons,
-                token: token
-            };
-
-            $.ajax({
-                type: 'POST',
-                url: '/ticketing/save-settings',
-                contentType: 'application/json',
-                data: JSON.stringify(data),
-                success: function (response) {
-                    successMessage = 'Settings saved successfully!';
-                    $('#form-message').html(`<div class="success-message">${successMessage}</div>`);
-                },
-                error: function (error) {
-                    errorMessage = 'Failed to save settings. Please try again.';
-                    $('#form-message').html(`<div class="error-message">${errorMessage}</div>`);
-                }
-            });
-        });
-
-        // Initialize draggable buttons
-        $('#buttons-container').sortable();
-
-        // Load buttons on page load
-        loadButtons();
+      $('#buttons-container').sortable();
+      loadButtons();
     });
-</script>
+  </script>
 </body>
 </html>

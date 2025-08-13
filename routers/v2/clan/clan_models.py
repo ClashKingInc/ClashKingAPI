@@ -11,3 +11,6 @@ class JoinLeaveEntry(BaseModel):
 
 class JoinLeaveList(BaseModel):
     items: list[JoinLeaveEntry]
+
+class PlayerTagsRequest(BaseModel):
+    player_tags: list[str]

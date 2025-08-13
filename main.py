@@ -82,7 +82,7 @@ def include_routers(app: FastAPI, directory: str):
                     app.include_router(router)
 
 # Include routers from public (v1) and private (v2 with subfolders)
-include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
+#include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v1"))
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
 
 

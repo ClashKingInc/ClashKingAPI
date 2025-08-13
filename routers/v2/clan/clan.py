@@ -9,7 +9,7 @@ from utils.dependencies import get_coc_client
 
 from utils.time import gen_season_date, gen_raid_date
 from utils.database import MongoClient as mongo
-from routers.v2.models.player import PlayerTagsRequest
+from routers.v2.clan.clan_models import PlayerTagsRequest
 
 router = APIRouter(prefix="/v2",tags=["Clan"], include_in_schema=True)
 

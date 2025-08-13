@@ -4,7 +4,7 @@ from bson.objectid import ObjectId
 from fastapi import  Request, Response
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
-from routers.v2.models.clan import JoinLeaveList
+from routers.v2.models.models import JoinLeaveList
 from utils.utils import fix_tag, db_client
 
 

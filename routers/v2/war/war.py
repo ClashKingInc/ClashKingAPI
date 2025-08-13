@@ -7,10 +7,9 @@ from fastapi import APIRouter, Query, Request
 from utils.utils import fix_tag, remove_id_fields
 from utils.database import MongoClient as mongo
 
-from routers.v2.utils.war import calculate_war_stats, deconstruct_type
+from routers.v2.war.war_utils import calculate_war_stats, deconstruct_type
 
 router = APIRouter(prefix="/v2",tags=["War"], include_in_schema=True)
-
 
 
 @router.get("/war/{clan_tag}/previous",

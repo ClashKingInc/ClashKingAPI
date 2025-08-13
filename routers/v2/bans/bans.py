@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from fastapi import APIRouter, Request
 from utils.utils import remove_id_fields, check_authentication
 from utils.database import MongoClient as mongo
-from routers.v2.models.bans import BanRequest
+from routers.v2.bans.ban_models import BanRequest
 
 router = APIRouter(prefix="/v2",tags=["Bans"], include_in_schema=True)
 

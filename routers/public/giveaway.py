@@ -37,7 +37,6 @@ async def giveaway_dashboard(request: Request, token: str, message: str = None):
 
     server_id = token_data["server_id"]
     channels = await get_channels(guild_id=server_id)
-    print(channels)
 
     # Fetch all giveaways for the server
     giveaways = await db_client.giveaways.find({"server_id": server_id}).to_list(length=None)

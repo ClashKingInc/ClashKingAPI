@@ -62,6 +62,7 @@ class MongoClient:
     clan_leaderboard_db = new_looper.get_collection('clan_leaderboard_db')
     clan_stats = new_looper.get_collection('clan_stats')
     legend_rankings = new_looper.get_collection('legend_rankings')
+    roster_templates = looper.get_collection('roster_templates')
 
     # Collections (Bot Settings)
     clan_db = bot_settings.get_collection('clans')

@@ -4,7 +4,7 @@ from fastapi import HTTPException, Header, APIRouter, Depends
 
 from routers.v2.accounts.utils import fetch_coc_account_data, is_coc_account_linked, verify_coc_ownership
 from routers.v2.auth.models import CocAccountRequest
-from utils.utils import db_client, generate_custom_id, fix_tag
+from utils.utils import db_client, generate_custom_id, fix_tag, remove_id_fields
 from utils.security_middleware import get_current_user_id
 
 router = APIRouter(prefix="/v2", tags=["Coc Accounts"], include_in_schema=True)
@@ -41,7 +41,6 @@ async def add_coc_account(request: CocAccountRequest, user_id: str = Depends(get
 
     # Store in the database
     await db_client.coc_accounts.insert_one({
-        "_id": generate_custom_id(int(user_id)),
         "user_id": user_id,
         "player_tag": coc_account_data["tag"],
         "order_index": order_index,
@@ -129,7 +128,7 @@ async def get_coc_accounts(user_id: str = Depends(get_current_user_id)):
 
     accounts = await db_client.coc_accounts.find({"user_id": user_id}).sort("order_index", 1).to_list(length=None)
 
-    return {"coc_accounts": accounts}
+    return remove_id_fields({"coc_accounts": accounts})
 
 
 @router.delete("/users/remove-coc-account", name="Remove a Clash of Clans account linked to a user")

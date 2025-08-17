@@ -628,7 +628,7 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
             if pending_verification:
                 # Email exists but is not verified
                 sentry_sdk.capture_message(f"Login attempt for unverified email: {safe_email_log(req.email)}", level="warning")
-                raise HTTPException(status_code=422, detail="Email not verified. Please check your email and enter the verification code.")
+                raise HTTPException(status_code=409, detail="Email not verified. Please check your email and enter the verification code.")
             else:
                 # Email doesn't exist at all
                 sentry_sdk.capture_message(f"Failed email login attempt for: {safe_email_log(req.email)}", level="warning")

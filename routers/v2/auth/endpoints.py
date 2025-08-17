@@ -134,7 +134,6 @@ async def verify_email_with_code(request: Request):
             
             try:
                 await db_client.app_users.insert_one({
-                    "_id": user_id_raw,
                     "user_id": user_id,
                     "email_encrypted": user_data["email_encrypted"],
                     "email_hash": user_data["email_hash"],
@@ -156,22 +155,10 @@ async def verify_email_with_code(request: Request):
         refresh_token = generate_refresh_token(str(user_id))
         
         # Store refresh token
-        # Convert user_id_raw to int for generate_custom_id
-        try:
-            user_id_for_custom_id = int(user_id_raw)
-        except (ValueError, TypeError) as e:
-            # Fallback for string user IDs (like Discord IDs)
-            user_id_for_custom_id = hash(str(user_id_raw)) % (10**10)
-        
-        try:
-            custom_id = generate_custom_id(user_id_for_custom_id)
-        except Exception as e:
-            raise
         
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": custom_id},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)
@@ -349,7 +336,6 @@ async def auth_discord(request: Request):
         else:
             user_id = discord_user_id
             insert_data = {
-                "_id": generate_custom_id(int(user_id)),
                 "user_id": user_id,
                 "auth_methods": ["discord"],
                 "username": user_data["username"],
@@ -369,7 +355,6 @@ async def auth_discord(request: Request):
         await db_client.app_discord_tokens.update_one(
             {"user_id": user_id, "device_id": device_id, "device_name": device_name},
             {
-                "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
                 "$set": {
                     "discord_access_token": encrypted_discord_access,
                     "discord_refresh_token": encrypted_discord_refresh,
@@ -385,7 +370,6 @@ async def auth_discord(request: Request):
         await db_client.app_refresh_tokens.update_one(
             {"user_id": str(user_id)},
             {
-                "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
                 "$set": {
                     "refresh_token": refresh_token,
                     "expires_at": pend.now().add(days=30)
@@ -504,7 +488,6 @@ async def register_email_user(req: EmailRegisterRequest, request: Request):
         
         # Store pending verification with user data
         pending_verification = {
-            "_id": generate_custom_id(),
             "email_hash": email_hash,
             "verification_code": verification_code,
             "user_data": {
@@ -637,8 +620,22 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
         # Look up user by email hash
         email_hash = hash_email(req.email)
         user = await db_client.app_users.find_one({"email_hash": email_hash})
-        if not user or not verify_password(req.password, user.get("password", "")):
-            sentry_sdk.capture_message(f"Failed email login attempt for: {safe_email_log(req.email)}", level="warning")
+        
+        if not user:
+            # Check if email exists but is not verified yet
+            pending_verification = await db_client.app_email_verifications.find_one({"email_hash": email_hash})
+            
+            if pending_verification:
+                # Email exists but is not verified
+                sentry_sdk.capture_message(f"Login attempt for unverified email: {safe_email_log(req.email)}", level="warning")
+                raise HTTPException(status_code=401, detail="Email not verified. Please check your email and enter the verification code.")
+            else:
+                # Email doesn't exist at all
+                sentry_sdk.capture_message(f"Failed email login attempt for: {safe_email_log(req.email)}", level="warning")
+                raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        if not verify_password(req.password, user.get("password", "")):
+            sentry_sdk.capture_message(f"Failed password verification for: {safe_email_log(req.email)}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid email or password")
         
         # Validate user record structure
@@ -662,24 +659,9 @@ async def login_with_email(req: EmailAuthRequest, request: Request):
             user_id_raw = user["user_id"]
             user_id = str(user_id_raw)
             
-            # Safely convert user_id to int for ID generation
-            try:
-                if isinstance(user_id_raw, int):
-                    user_id_int = user_id_raw
-                elif isinstance(user_id_raw, str) and user_id_raw.isdigit():
-                    user_id_int = int(user_id_raw)
-                else:
-                    # Try to convert the string version
-                    user_id_int = int(user_id)
-            except (ValueError, TypeError):
-                # Fallback: generate a new ID if conversion fails
-                user_id_int = generate_custom_id()
-                sentry_sdk.capture_message(f"Invalid user_id format, using fallback: {user_id}", level="warning")
-            
             await db_client.app_refresh_tokens.update_one(
                 {"user_id": user_id},
                 {
-                    "$setOnInsert": {"_id": generate_custom_id(user_id_int)},
                     "$set": {
                         "refresh_token": refresh_token,
                         "expires_at": pend.now().add(days=30)
@@ -778,7 +760,6 @@ async def link_discord_account(request: Request, authorization: str = Header(Non
             await db_client.app_discord_tokens.update_one(
                 {"user_id": user_id, "device_id": device_id, "device_name": device_name},
                 {
-                    "$setOnInsert": {"_id": generate_custom_id(int(user_id))},
                     "$set": {
                         "discord_access_token": encrypted_discord_access,
                         "discord_refresh_token": encrypted_discord_refresh,
@@ -883,7 +864,6 @@ async def forgot_password(req: ForgotPasswordRequest):
         
         try:
             reset_record = {
-                "_id": generate_custom_id(),
                 "user_id": user["user_id"],
                 "email_hash": email_hash,
                 "reset_code": reset_code,
@@ -892,7 +872,8 @@ async def forgot_password(req: ForgotPasswordRequest):
                 "used": False
             }
             
-            await db_client.app_password_reset_tokens.insert_one(reset_record)
+            result = await db_client.app_password_reset_tokens.insert_one(reset_record)
+            reset_record["_id"] = result.inserted_id  # Store the generated _id for cleanup
         except Exception as e:
             sentry_sdk.capture_exception(e, tags={"function": "password_reset_token_insert", "user_id": user["user_id"]})
             raise HTTPException(status_code=500, detail="Failed to create password reset request")
@@ -998,25 +979,11 @@ async def reset_password(req: ResetPasswordRequest):
         
         # Store refresh token
         try:
-            user_id_raw = user["user_id"]
-            user_id = str(user_id_raw)
-            
-            # Convert user_id to int for ID generation
-            try:
-                if isinstance(user_id_raw, int):
-                    user_id_int = user_id_raw
-                elif isinstance(user_id_raw, str) and user_id_raw.isdigit():
-                    user_id_int = int(user_id_raw)
-                else:
-                    user_id_int = int(user_id)
-            except (ValueError, TypeError):
-                user_id_int = generate_custom_id()
-                sentry_sdk.capture_message(f"Invalid user_id format in password reset, using fallback: {user_id}", level="warning")
+            user_id = str(user["user_id"])
             
             await db_client.app_refresh_tokens.update_one(
                 {"user_id": user_id},
                 {
-                    "$setOnInsert": {"_id": generate_custom_id(user_id_int)},
                     "$set": {
                         "refresh_token": refresh_token,
                         "expires_at": pend.now().add(days=30)

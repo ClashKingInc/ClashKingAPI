@@ -202,7 +202,8 @@ async def verify_email_with_code(
 async def get_current_user_info(
         user_id: str = None,
         *,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> UserInfo:
     try:
         # Try both string and int formats for user_id lookup (consistency with security middleware)
@@ -233,21 +234,16 @@ async def get_current_user_info(
 
         if "discord" in current_user.get("auth_methods", []):
             try:
-                discord_access = await get_valid_discord_access_token(current_user["user_id"])
-                async with aiohttp.ClientSession() as session:
-                    async with session.get("https://discord.com/api/users/@me",
-                            headers={"Authorization": f"Bearer {discord_access}"}) as response:
-                        if response.status == 200:
-                            discord_data = await response.json()
-                            username = discord_data.get("global_name") or discord_data.get("username") or username
-                            avatar = discord_data.get("avatar")
-                            avatar_url = (
-                                f"https://cdn.discordapp.com/avatars/{discord_data['id']}/{avatar}.png"
-                                if avatar else avatar_url
-                            )
-                        else:
-                            sentry_sdk.capture_message(
-                                f"Discord API error in /auth/me: {response.status} - {response.text}", level="warning")
+                discord_access = await get_valid_discord_access_token(current_user["user_id"], rest, mongo)
+                async with rest.acquire(token=discord_access, token_type=hikari.TokenType.BEARER) as client:
+                    try:
+                        user = await client.fetch_my_user()
+                        username = user.global_name or user.username or username
+                        avatar_url = user.avatar_url.url if user.avatar_url else avatar_url
+                    except hikari.UnauthorizedError:
+                        sentry_sdk.capture_message(
+                            f"Discord API error in /auth/me: Invalid Token", level="warning")
+
             except Exception as e:
                 sentry_sdk.capture_exception(e, tags={"endpoint": "/auth/me", "user_id": user_id})
 
@@ -394,7 +390,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
             user=UserInfo(
                 user_id=str(user_id),
                 username=user.username,
-                avatar_url=user.avatar_url.url or user.default_avatar_url
+                avatar_url=user.avatar_url.url if user.avatar_url else user.default_avatar_url,
             )
         )
     except HTTPException:

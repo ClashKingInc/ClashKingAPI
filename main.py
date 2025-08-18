@@ -43,7 +43,6 @@ registry.register_value(hikari.RESTApp, rest)
 
 @contextlib.asynccontextmanager
 async def lifespan(_: fastapi.FastAPI) -> t.AsyncGenerator[None, t.Any]:
-    print("here")
     await coc_client.login_with_tokens('')
     await rest.start()
     yield

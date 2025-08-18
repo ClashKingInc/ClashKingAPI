@@ -1,6 +1,9 @@
 from os import getenv
 from dotenv import load_dotenv
 from dataclasses import dataclass
+from cryptography.fernet import Fernet
+from passlib.context import CryptContext
+
 load_dotenv()
 
 @dataclass(frozen=True, slots=True)
@@ -30,9 +33,18 @@ class Config:
     client_secret = getenv("CLIENT_SECRET")
     bot_token = getenv("BOT_TOKEN")
 
+    encryption_key = getenv('ENCRYPTION_KEY')
+    secret_key = getenv('SECRET_KEY')
+    refresh_secret = getenv('REFRESH_SECRET')
+    algorithm = 'HS256'
+
     discord_redirect_uri = getenv('DISCORD_REDIRECT_URI')
     discord_client_id = getenv('DISCORD_CLIENT_ID')
     discord_client_secret = getenv('DISCORD_CLIENT_SECRET')
+
+    cipher = Fernet(encryption_key)
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 
 

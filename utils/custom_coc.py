@@ -5,9 +5,6 @@ import pendulum as pend
 from aiocache import SimpleMemoryCache, cached
 from coc import Clan, ClanWar, Location, Player, WarRound
 
-from utils.database import MongoClient as mongo
-
-
 
 class CustomClashClient(coc.Client):
     def __init__(self, **kwargs):

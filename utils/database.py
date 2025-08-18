@@ -1,16 +1,33 @@
-import motor.motor_asyncio
+import pymongo
 from .config import Config
 
 config = Config()
 
 from redis import asyncio as redis
 
-class MongoClient:
-    looper_db = motor.motor_asyncio.AsyncIOMotorClient(
+from pymongo import AsyncMongoClient
+
+
+class MongoClient(AsyncMongoClient):
+    def __init__(self, uri: str, **kwargs):
+        super().__init__(host=uri, **kwargs)
+
+        self.__clashking = self.get_database('clashking')
+        self.button_store = self.__clashking.get_collection('button_store')
+        self.coc_accounts = self.__clashking.get_collection('coc_accounts')
+
+        self.__auth = self.get_database('auth')
+        self.app_users = self.__auth.get_collection('users')
+
+
+
+
+class OldMongoClient:
+    looper_db = pymongo.AsyncMongoClient(
         config.stats_mongodb, compressors=['snappy', 'zlib']
     )
-    db_client = motor.motor_asyncio.AsyncIOMotorClient(
-        config.static_mongodb, compressors='snappy' if not config.is_local else 'zlib'
+    db_client = pymongo.AsyncMongoClient(
+        config.static_mongodb, compressors=['snappy', 'zlib']
     )
 
     # Databases
@@ -19,6 +36,7 @@ class MongoClient:
     cache = looper_db.get_database('cache')
     looper = looper_db.get_database('looper')
     clashking = looper_db.get_database('clashking')
+    auth = looper_db.get_database('auth')
     bot_settings = db_client.get_database('usafam')
 
     # Collections (Looper)
@@ -50,6 +68,10 @@ class MongoClient:
     autoboards = clashking.get_collection('autoboards')
     number_emojis = clashking.get_collection('number_emojis')
     groups = clashking.get_collection('groups')
+    coc_accounts = clashking.get_collection('coc_accounts')
+
+    # Collections (Auth)
+    app_users = auth.get_collection('users')
 
 
     # Collections (Stats & New Looper)

@@ -1,4 +1,3 @@
-import motor.motor_asyncio
 from redis import asyncio as aioredis
 import redis
 import re
@@ -17,12 +16,11 @@ from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
 
-from .config import Config
 import pytz
 from bson import json_util
+import random
 
-
-config = Config()
+load_dotenv()
 
 limiter = Limiter(key_func=get_ipaddr, key_style="endpoint")
 
@@ -33,78 +31,6 @@ def dynamic_limit(key: str):
     return "30/second"
 
 
-load_dotenv()
-client = motor.motor_asyncio.AsyncIOMotorClient(config.stats_mongodb, compressors="snappy")
-other_client = motor.motor_asyncio.AsyncIOMotorClient(config.static_mongodb)
-
-redis = aioredis.Redis(host=config.redis_ip, port=6379, db=1, password=config.redis_pw, retry_on_timeout=True,
-                       max_connections=25, retry_on_error=[redis.ConnectionError])
-
-
-
-
-class DBClient():
-    def __init__(self):
-        self.usafam = other_client.get_database("usafam")
-        self.clans_db = self.usafam.get_collection("clans")
-        self.server_db = self.usafam.server
-        self.bot_db = other_client.get_database("bot")
-
-        collection_class = self.clans_db.__class__
-
-        self.server_db: collection_class = self.usafam.server
-        self.clans_db: collection_class = self.usafam.get_collection("clans")
-        self.banlist: collection_class = self.usafam.banlist
-        self.rosters: collection_class = self.usafam.rosters
-        self.ticketing: collection_class = self.usafam.tickets
-        self.player_search: collection_class = self.usafam.player_search
-        self.embeds: collection_class = self.usafam.custom_embeds
-        self.bot_settings: collection_class = self.bot_db.settings
-        self.custom_bots: collection_class = self.usafam.custom_bots
-        self.open_tickets: collection_class = self.usafam.open_tickets
-
-        self.looper = client.looper
-        self.new_looper = client.new_looper
-        self.leaderboards = client.get_database("leaderboards")
-
-        self.legends_stats = self.new_looper.legends_stats
-        self.legend_rankings: collection_class = self.new_looper.legend_rankings
-        self.war_logs_db: collection_class = self.looper.war_logs
-        self.player_stats_db: collection_class = self.new_looper.player_stats
-        self.attack_db: collection_class = self.looper.warhits
-        self.war_timer: collection_class = self.looper.war_timer
-        self.join_leave_history: collection_class = self.looper.join_leave_history
-        self.player_leaderboard_db: collection_class = self.new_looper.leaderboard_db
-        self.player_history: collection_class = self.new_looper.get_collection("player_history")
-        self.link_shortner: collection_class = client.clashking.short_links
-        self.api_users: collection_class = client.clashking.api_users
-        self.tokens: collection_class = client.clashking.tokens
-        self.giveaways: collection_class = client.clashking.giveaways
-
-        self.clan_cache_db: collection_class = self.new_looper.clan_cache
-        self.clan_wars: collection_class = self.looper.clan_war
-        self.legend_history: collection_class = self.looper.legend_history
-        self.base_stats: collection_class = self.looper.base_stats
-        self.capital: collection_class = self.looper.raid_weekends
-        self.clan_stats: collection_class = self.new_looper.clan_stats
-        self.rankings: collection_class = self.new_looper.rankings
-        self.cwl_groups: collection_class = self.looper.cwl_group
-
-        self.clan_history: collection_class = self.new_looper.clan_history
-        self.ranking_history: collection_class = client.ranking_history
-        self.player_trophies: collection_class = self.ranking_history.player_trophies
-        self.player_versus_trophies: collection_class = self.ranking_history.player_versus_trophies
-        self.clan_trophies: collection_class = self.ranking_history.clan_trophies
-        self.clan_versus_trophies: collection_class = self.ranking_history.clan_versus_trophies
-        self.capital_trophies: collection_class = self.ranking_history.capital
-        self.basic_clan: collection_class = self.looper.clan_tags
-        self.global_clans: collection_class = self.looper.global_clans
-
-        self.player_capital_lb: collection_class = self.leaderboards.capital_player
-        self.clan_capital_lb: collection_class = self.leaderboards.capital_clan
-
-
-db_client = DBClient()
 
 
 async def download_image(url: str):
@@ -114,12 +40,6 @@ async def download_image(url: str):
         await session.close()
     image_bytes: bytes = image_data
     return io.BytesIO(image_bytes)
-
-
-def fix_tag(tag: str):
-    tag = tag.replace('%23', '')
-    tag = "#" + re.sub(r"[^A-Z0-9]+", "", tag.upper()).replace("O", "0")
-    return tag
 
 
 def gen_season_date():
@@ -232,38 +152,6 @@ async def delete_from_cdn(image_url: str):
 def remove_id_fields(data):
     return json_loads(json_util.dumps(data))
 
-    if isinstance(data, list):
-        for item in data:
-            remove_id_fields(item)
-    elif isinstance(data, dict):
-        data.pop('_id', None)
-        for key, value in data.items():
-            remove_id_fields(value)
-    return data
-
-
-from fastapi import Request
-from functools import wraps
-
-
-def check_authentication(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        request: Request = kwargs.get("request")
-        auth_header = request.headers.get("Authorization")
-
-        if not auth_header:
-            raise HTTPException(status_code=403, detail="Authentication token missing")
-
-        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
-        expected_token = os.getenv("AUTH_TOKEN")
-
-        if token != expected_token:
-            raise HTTPException(status_code=403, detail="Invalid authentication token")
-
-        return await func(*args, **kwargs)
-
-    return wrapper
 
 
 async def validate_token(token, expected_type=None):
@@ -320,3 +208,16 @@ async def bulk_requests(urls: list[str]):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
+
+def generate_custom_id(input_number: int = None):
+    # Use input_number if provided, otherwise generate a random number
+    base_input = input_number or random.randint(1000000000, 9999999999)
+
+    # Combine with current UTC timestamp to get a unique ID
+    base_number = (
+        base_input
+        + int(pend.now(tz=pend.UTC).timestamp())
+        + random.randint(1000000000, 9999999999)
+    )
+
+    return base_number

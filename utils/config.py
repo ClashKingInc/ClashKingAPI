@@ -30,3 +30,8 @@ class Config:
     client_secret = getenv("CLIENT_SECRET")
     bot_token = getenv("BOT_TOKEN")
 
+    discord_redirect_uri = getenv('DISCORD_REDIRECT_URI')
+    discord_client_id = getenv('DISCORD_CLIENT_ID')
+
+
+

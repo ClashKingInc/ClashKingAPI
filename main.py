@@ -2,6 +2,7 @@ import uvicorn
 import contextlib
 import coc
 import linkd
+import hikari
 import typing as t
 
 from startup import define_app
@@ -36,10 +37,15 @@ registry.register_value(Config, config)
 mongo_client = MongoClient(uri=config.stats_mongodb, compressors=['snappy', 'zlib'])
 registry.register_value(MongoClient, mongo_client)
 
+rest = hikari.RESTApp()
+registry.register_value(hikari.RESTApp, rest)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_: fastapi.FastAPI) -> t.AsyncGenerator[None, t.Any]:
     print("here")
     await coc_client.login_with_tokens('')
+    await rest.start()
     yield
     await manager.close()
 

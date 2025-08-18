@@ -48,8 +48,8 @@ def generate_jwt(user_id: str, device_id: str) -> str:
     payload = {
         "sub": user_id,
         "device": device_id,
-        "iat": pend.now().int_timestamp,
-        "exp": pend.now().add(hours=24).int_timestamp
+        "iat": pend.now(tz=pend.UTC).int_timestamp,
+        "exp": pend.now(tz=pend.UTC).add(hours=24).int_timestamp
     }
     return jwt.encode(payload, config.SECRET_KEY, algorithm=config.ALGORITHM)
 

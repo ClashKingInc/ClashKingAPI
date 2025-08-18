@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import hikari
 import linkd
 import pendulum as pend
 import sentry_sdk
@@ -24,8 +25,6 @@ from routers.v2.auth.auth_models import (
 )
 
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
-
-
 
 @router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
 @linkd.ext.fastapi.inject
@@ -264,7 +263,7 @@ async def get_current_user_info(
 
 @router.post("/auth/discord", name="Authenticate with Discord")
 @linkd.ext.fastapi.inject
-async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) -> AuthResponse:
+async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, rest: hikari.RESTApp) -> AuthResponse:
     try:
         # Handle both JSON and form data for backward compatibility
         content_type = request.headers.get("content-type", "")
@@ -275,72 +274,52 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
             data = dict(form)
 
         code = data.get("code")
-        code_verifier = data.get("code_verifier")
         device_id = data.get("device_id")
         device_name = data.get("device_name")
         redirect_uri = data.get("redirect_uri") or config.discord_redirect_uri
 
-        if not code or not code_verifier:
+        if not code:
             sentry_sdk.capture_message(
-                f"Missing Discord auth parameters: code={bool(code)}, code_verifier={bool(code_verifier)}",
+                f"Missing Discord auth parameters: code={bool(code)}",
                 level="warning")
-            raise HTTPException(status_code=400, detail="Missing Discord code or code_verifier")
+            raise HTTPException(status_code=400, detail="Missing Discord code")
 
-        token_url = "https://discord.com/api/oauth2/token"
-        token_data = {
-            "client_id": config.discord_client_id,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-            "code_verifier": code_verifier
-        }
+        async with rest.acquire(None) as client:
+            try:
+                auth = await client.authorize_access_token(
+                    client=config.discord_client_id,
+                    client_secret=config.discord_client_secret,
+                    code=code,
+                    redirect_uri=redirect_uri,
+                )
+            except hikari.errors.UnauthorizedError:
+                sentry_sdk.capture_message(
+                    f"Incorrect client or client secret passed",
+                    level="error",
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Discord token error: Incorrect client or client secret passed",
+                )
+            except hikari.errors.BadRequestError:
+                sentry_sdk.capture_message(
+                    f"Invalid redirect uri or code passed",
+                    level="error",
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Discord token error: Invalid redirect uri or code passed",
+                )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                    token_url,
-                    data=token_data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-            ) as token_response:
-                if token_response.status != 200:
-                    text = await token_response.text()
-                    sentry_sdk.capture_message(
-                        f"Discord token exchange failed: {token_response.status} - {text}",
-                        level="error",
-                    )
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Discord token error: {token_response.status} - {text}",
-                    )
 
-            discord_data = token_response.json()
-            access_token_discord = discord_data["access_token"]
-            refresh_token_discord = discord_data["refresh_token"]
-            expires_in = discord_data["expires_in"]
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                    "https://discord.com/api/users/@me",
-                    headers={"Authorization": f"Bearer {access_token_discord}"},
-            ) as user_response:
-                if user_response.status != 200:
-                    text = await user_response.text()
-                    sentry_sdk.capture_message(
-                        f"Discord user info retrieval failed: {user_response.status} - {text}",
-                        level="error",
-                    )
-                    raise HTTPException(status_code=500, detail="Error retrieving user info")
-
-                user_data = await user_response.json()
-
-        discord_user_id = user_data["id"]
-        email = user_data.get("email")
+        async with rest.acquire(token=auth.access_token, token_type=hikari.TokenType.BEARER) as client:
+            user = await client.fetch_my_user()
 
         # Prepare email encryption if email exists
-        email_conditions = [{"user_id": discord_user_id}]
-        if email:
-            email_hash = hash_email(email)
+        email_conditions = [{"user_id": user.id}]
+        if user.email:
+            email_hash = hash_email(user.email)
             email_conditions.append({"email_hash": email_hash})
-
         existing_user = await mongo.app_users.find_one({"$or": email_conditions})
 
         if existing_user:
@@ -351,11 +330,11 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
             # Prepare email data for update
             update_data = {
                 "auth_methods": list(auth_methods),
-                "username": user_data["username"]
+                "username": user.username
             }
 
-            if email:
-                email_data = await prepare_email_for_storage(email)
+            if user.email:
+                email_data = await prepare_email_for_storage(user.email)
                 update_data.update(email_data)
 
             await mongo.app_users.update_one(
@@ -363,23 +342,23 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
                 {"$set": update_data}
             )
         else:
-            user_id = discord_user_id
+            user_id = user.id
             insert_data = {
                 "user_id": user_id,
                 "auth_methods": ["discord"],
-                "username": user_data["username"],
-                "created_at": pend.now()
+                "username": user.username,
+                "created_at": pend.now(tz=pend.UTC)
             }
 
             # Add encrypted email if available
-            if email:
-                email_data = await prepare_email_for_storage(email)
+            if user.email:
+                email_data = await prepare_email_for_storage(user.email)
                 insert_data.update(email_data)
 
             await mongo.app_users.insert_one(insert_data)
 
-        encrypted_discord_access = await encrypt_data(access_token_discord)
-        encrypted_discord_refresh = await encrypt_data(refresh_token_discord)
+        encrypted_discord_access = await encrypt_data(auth.access_token)
+        encrypted_discord_refresh = await encrypt_data(str(auth.refresh_token))
 
         await mongo.app_discord_tokens.update_one(
             {"user_id": user_id, "device_id": device_id, "device_name": device_name},
@@ -387,7 +366,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
                 "$set": {
                     "discord_access_token": encrypted_discord_access,
                     "discord_refresh_token": encrypted_discord_refresh,
-                    "expires_at": pend.now().add(seconds=expires_in)
+                    "expires_at": pend.now(tz=pend.UTC).add(seconds=auth.expires_in.seconds)
                 }
             },
             upsert=True
@@ -401,7 +380,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
             {
                 "$set": {
                     "refresh_token": refresh_token,
-                    "expires_at": pend.now().add(days=30)
+                    "expires_at": pend.now(tz=pend.UTC).add(days=30)
                 }
             },
             upsert=True
@@ -412,8 +391,8 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
             refresh_token=refresh_token,
             user=UserInfo(
                 user_id=str(user_id),
-                username=user_data["username"],
-                avatar_url=f"https://cdn.discordapp.com/avatars/{discord_user_id}/{user_data['avatar']}.png"
+                username=user.username,
+                avatar_url=user.avatar_url.url or user.default_avatar_url
             )
         )
     except HTTPException:
@@ -424,7 +403,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient) 
 
 
 @router.post("/auth/refresh", name="Refresh the access token")
-async def refresh_access_token(request: RefreshTokenRequest) -> dict:
+async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClient) -> dict:
     try:
         # First validate the refresh token JWT signature
         try:
@@ -435,7 +414,7 @@ async def refresh_access_token(request: RefreshTokenRequest) -> dict:
             raise HTTPException(status_code=401, detail="Invalid refresh token signature.")
 
         # Then check if it exists in database
-        stored_refresh_token = await db_client.app_refresh_tokens.find_one({"refresh_token": request.refresh_token})
+        stored_refresh_token = await mongo.app_refresh_tokens.find_one({"refresh_token": request.refresh_token})
 
         if not stored_refresh_token:
             sentry_sdk.capture_message(f"Refresh token not found in database for user: {user_id_from_token}",

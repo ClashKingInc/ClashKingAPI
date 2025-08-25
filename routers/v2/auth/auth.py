@@ -1,5 +1,4 @@
 import asyncio
-import aiohttp
 import hikari
 import linkd
 import pendulum as pend

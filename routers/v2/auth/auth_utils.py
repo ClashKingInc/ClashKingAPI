@@ -1,13 +1,11 @@
 import hikari
 import jwt
-import requests
 import pendulum as pend
 import hashlib
 import secrets
 from fastapi import HTTPException
 import base64
 from utils.config import Config
-import linkd
 from utils.database import MongoClient
 config = Config()
 ############################

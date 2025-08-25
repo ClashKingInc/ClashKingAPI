@@ -165,13 +165,16 @@ async def remove_coc_account(
         raise HTTPException(status_code=404, detail="Clash of Clans account not found or not linked to your profile")
 
     # Reorder the remaining accounts
-    remaining_accounts = await mongo.coc_accounts.find({"user_id": user_id}).sort("order_index", 1).to_list(length=None)
+    results = await mongo.coc_accounts.find({"user_id": user_id}).sort("order_index", 1)
+    remaining_accounts = await results.to_list(length=None)
 
+    updates = []
     for index, account in enumerate(remaining_accounts):
-        await mongo.coc_accounts.update_one(
+        updates.append(UpdateOne(
             {"_id": account["_id"]},
             {"$set": {"order_index": index}}
-        )
+        ))
+    await mongo.coc_accounts.bulk_write(updates, ordered=False)
 
     return {"message": "Clash of Clans account unlinked successfully"}
 
@@ -209,11 +212,13 @@ async def remove_coc_account_no_auth(
     result = await mongo.coc_accounts.find({"user_id": user_id}).sort("order_index", 1)
     remaining_accounts = await result.to_list(length=None)
 
+    updates = []
     for index, account in enumerate(remaining_accounts):
-        await mongo.coc_accounts.update_one(
+        updates.append(UpdateOne(
             {"_id": account["_id"]},
             {"$set": {"order_index": index}}
-        )
+        ))
+    await mongo.coc_accounts.bulk_write(updates, ordered=False)
 
     return {"message": "Clash of Clans account unlinked successfully"}
 

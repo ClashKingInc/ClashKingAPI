@@ -1,10 +1,8 @@
-import hikari
 import jwt
 import os
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from functools import wraps
-import linkd
 import hikari
 
 rest = hikari.RESTApp()

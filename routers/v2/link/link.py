@@ -1,4 +1,3 @@
-import hikari
 import pendulum as pend
 import linkd
 
@@ -6,7 +5,6 @@ from fastapi import HTTPException, APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from coc.utils import correct_tag
 from routers.v2.auth.auth_models import CocAccountRequest
-from utils.config import Config
 from utils.database import MongoClient
 from utils.custom_coc import CustomClashClient
 from utils.security import check_authentication

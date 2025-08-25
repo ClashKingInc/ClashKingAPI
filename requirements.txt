@@ -1,4 +1,3 @@
-aiohttp
 aiocache==0.12.2
 coc.py @ git+https://github.com/mathsman5133/coc.py.git@march-update
 expiring-dict==1.1.0

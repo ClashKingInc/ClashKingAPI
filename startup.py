@@ -5,6 +5,7 @@ import textwrap
 from routers.v2.link.link import router as accounts_router
 from routers.v2.auth.auth import router as auth_router
 from routers.v2.rosters.rosters import router as rosters_router
+from routers.v2.dates.dates import router as dates_router
 from fastapi.openapi.utils import get_openapi
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ def define_app(app: FastAPI):
     app.include_router(rosters_router)
     app.include_router(accounts_router)
     app.include_router(auth_router)
+    app.include_router(dates_router)
 
     description = textwrap.dedent("""
     ### Clash of Clans Based API 👑

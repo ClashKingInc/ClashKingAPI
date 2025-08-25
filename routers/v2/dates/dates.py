@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Request
 from utils.time import (
-    gen_season_date, gen_raid_date, gen_legend_date,
-    gen_games_season, season_start_end, get_season_raid_weeks
+    gen_season_date,
+    gen_raid_date,
+    gen_legend_date,
+    gen_games_season,
+    season_start_end,
+    get_season_raid_weeks
 )
 
 

@@ -1,7 +1,6 @@
 aiohttp==3.9.3
 aiocache==0.12.2
 coc.py @ git+https://github.com/mathsman5133/coc.py.git@march-update
-diskcache==5.6.3
 expiring-dict==1.1.0
 fastapi==0.116.1
 fastapi-analytics==1.2.1

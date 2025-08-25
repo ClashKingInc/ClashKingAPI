@@ -5,6 +5,7 @@ from fastapi import HTTPException, APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from coc.utils import correct_tag
 from routers.v2.auth.auth_models import CocAccountRequest
+from pymongo import UpdateOne
 from utils.database import MongoClient
 from utils.custom_coc import CustomClashClient
 from utils.security import check_authentication
@@ -240,11 +241,13 @@ async def reorder_coc_accounts(
         raise HTTPException(status_code=400, detail="Invalid account tags provided")
 
     # Update the order index for each account
+    updates = []
     for index, tag in enumerate(new_order):
-        await mongo.coc_accounts.update_one(
+        updates.append(UpdateOne(
             {"user_id": user_id, "player_tag": tag},
             {"$set": {"order_index": index}}
-        )
+        ))
+    await mongo.coc_accounts.bulk_write(updates, ordered=False)
 
     return {"message": "Accounts reordered successfully"}
 

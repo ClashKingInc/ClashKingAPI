@@ -206,7 +206,8 @@ async def remove_coc_account_no_auth(
 
     user_id = result.get("user_id")
     # Reorder the remaining accounts
-    remaining_accounts = await mongo.coc_accounts.find({"user_id": user_id}).sort("order_index", 1).to_list(length=None)
+    result = await mongo.coc_accounts.find({"user_id": user_id}).sort("order_index", 1)
+    remaining_accounts = await result.to_list(length=None)
 
     for index, account in enumerate(remaining_accounts):
         await mongo.coc_accounts.update_one(

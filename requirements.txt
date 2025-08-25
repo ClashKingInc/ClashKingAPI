@@ -1,5 +1,6 @@
 aiocache==0.12.2
 coc.py @ git+https://github.com/mathsman5133/coc.py.git@march-update
+cryptography==45.0.6
 expiring-dict==1.1.0
 fastapi==0.116.1
 fastapi_mail==1.5.0

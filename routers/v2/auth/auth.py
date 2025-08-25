@@ -402,6 +402,20 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/auth/discord-exchange", name="Authenticate with Discord")
+@linkd.ext.fastapi.inject
+async def auth_discord_exchange(request: Request, *, config: Config, mongo: MongoClient, rest: hikari.RESTApp):
+    #just sudo code, so do as u need
+
+    async with rest.acquire(token=None) as client:
+        token_response = await client.authorize_access_token(
+            client=config.discord_client_id,
+            client_secret=config.discord_client_secret,
+            code="code u get from i guess this request being passed in",
+            redirect_uri=config.discord_redirect_uri #right?
+        )
+
+
 @router.post("/auth/refresh", name="Refresh the access token")
 @linkd.ext.fastapi.inject
 async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClient) -> dict:

@@ -3,29 +3,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 import pendulum as pend
 from utils.database import MongoClient as mongo
-from utils.utils import fix_tag
-
-CLASH_API = "https://proxy.clashk.ing"
-
-async def fetch_clan_and_badge(clan_tag: str) -> dict:
-    """Fetch clan and return {'name': ..., 'badge': ...}. Raise on 4xx/5xx."""
-    encoded = clan_tag.replace("#", "%23")
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{CLASH_API}/v1/clans/{encoded}") as resp:
-                if resp.status != 200:
-                    raise HTTPException(status_code=400, detail="Clan not found")
-                data = await resp.json()
-    except aiohttp.ClientError:
-        raise HTTPException(status_code=502, detail="Error reaching Clash API")
-
-    badge = (
-        data.get("badgeUrls", {}).get("large")
-        or data.get("badgeUrls", {}).get("medium")
-        or data.get("badgeUrls", {}).get("small")
-        or ""
-    )
-    return {"name": data.get("name", "Unknown"), "badge": badge}
+from coc.utils import correct_tag
 
 
 async def calculate_player_hitrate(player_tag: str, days: int = 30) -> float:
@@ -37,7 +15,7 @@ async def calculate_player_hitrate(player_tag: str, days: int = 30) -> float:
     START = start_time.strftime('%Y%m%dT%H%M%S.000Z')
     END = end_time.strftime('%Y%m%dT%H%M%S.000Z')
 
-    player_tag = fix_tag(player_tag)
+    player_tag = correct_tag(player_tag)
 
     pipeline = [
         {"$match": {
@@ -83,7 +61,7 @@ async def calculate_player_hitrate(player_tag: str, days: int = 30) -> float:
 async def get_player_last_online(player_tag: str) -> int:
     """Get player's last online timestamp from player_stats database."""
     try:
-        player_tag = fix_tag(player_tag)
+        player_tag = correct_tag(player_tag)
         result = await mongo.player_stats.find_one(
             {"tag": player_tag},
             {"last_online": 1}
@@ -96,7 +74,7 @@ async def get_player_last_online(player_tag: str) -> int:
 async def calculate_player_activity(player_tag: str, days: int = 30) -> int:
     """Calculate player's activity based on player_history collection."""
     try:
-        player_tag = fix_tag(player_tag)
+        player_tag = correct_tag(player_tag)
 
         # Calculate timestamp X days ago
         days_ago = int(pend.now("UTC").subtract(days=days).timestamp())

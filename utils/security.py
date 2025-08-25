@@ -1,9 +1,13 @@
+import hikari
 import jwt
 import os
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from functools import wraps
+import linkd
+import hikari
 
+rest = hikari.RESTApp()
 
 def check_authentication(func):
     @wraps(func)
@@ -38,6 +42,13 @@ def check_authentication(func):
 
             if not user:
                 raise HTTPException(status_code=401, detail="User not found")
+
+            if "server_id" in kwargs:
+                async with rest.acquire(token=token, token_type=hikari.TokenType.BEARER) as client:
+                    try:
+                        await client.fetch_guild(kwargs["server_id"])
+                    except hikari.errors.ClientHTTPResponseError:
+                        raise HTTPException(status_code=401, detail="This user is not a member of this guild")
 
             kwargs["user_id"] = user_id
             return await func(*args, **kwargs)

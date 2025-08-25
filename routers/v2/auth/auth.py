@@ -18,12 +18,14 @@ from utils.utils import generate_custom_id
 from utils.config import Config
 from utils.database import MongoClient
 from utils.password_validator import PasswordValidator
-from utils.security_middleware import get_current_user_id
 from routers.v2.auth.auth_models import (
     AuthResponse, UserInfo, RefreshTokenRequest,
     EmailRegisterRequest, EmailAuthRequest,
     ForgotPasswordRequest, ResetPasswordRequest
 )
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+security = HTTPBearer()
+
 
 router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
 
@@ -201,6 +203,7 @@ async def verify_email_with_code(
 @check_authentication
 async def get_current_user_info(
         user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
         mongo: MongoClient,
         rest: hikari.RESTApp
@@ -815,6 +818,7 @@ async def link_discord_account(
 async def link_email_account(
         req: EmailRegisterRequest,
         user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
         mongo: MongoClient
 ):

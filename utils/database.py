@@ -15,6 +15,7 @@ class MongoClient(AsyncMongoClient):
         self.__clashking = self.get_database('clashking')
         self.button_store = self.__clashking.get_collection('button_store')
         self.coc_accounts = self.__clashking.get_collection('coc_accounts')
+        self.rosters = self.__clashking.get_collection('rosters')
 
         self.__auth = self.get_database('auth')
         self.app_users = self.__auth.get_collection('users')

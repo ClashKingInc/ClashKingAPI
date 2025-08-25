@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from json import loads as json_loads
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
+from hashids import Hashids
 
 import pytz
 from bson import json_util
@@ -31,6 +32,10 @@ def dynamic_limit(key: str):
     return "30/second"
 
 
+def gen_clean_custom_id():
+    hashids = Hashids(min_length=7)
+    custom_id = hashids.encode(pend.now(tz=pend.UTC).int_timestamp + random.randint(1000000000, 9999999999))
+    return custom_id
 
 
 async def download_image(url: str):

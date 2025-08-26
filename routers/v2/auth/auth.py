@@ -405,7 +405,6 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
 
 
 
-
 @router.post("/auth/refresh", name="Refresh the access token")
 @linkd.ext.fastapi.inject
 async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClient) -> dict:

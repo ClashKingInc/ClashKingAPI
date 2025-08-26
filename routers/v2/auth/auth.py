@@ -274,11 +274,12 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
             data = dict(form)
 
         code = data.get("code")
+        code_verifier = data.get("code_verifier")
         device_id = data.get("device_id")
         device_name = data.get("device_name")
         redirect_uri = data.get("redirect_uri") or config.discord_redirect_uri
 
-        if not code:
+        if not code or not code_verifier:
             sentry_sdk.capture_message(
                 f"Missing Discord auth parameters: code={bool(code)}",
                 level="warning")
@@ -291,6 +292,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
                     client_secret=config.discord_client_secret,
                     code=code,
                     redirect_uri=redirect_uri,
+                    code_verifier=code_verifier
                 )
             except hikari.errors.UnauthorizedError:
                 sentry_sdk.capture_message(
@@ -402,18 +404,6 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/discord-exchange", name="Authenticate with Discord")
-@linkd.ext.fastapi.inject
-async def auth_discord_exchange(request: Request, *, config: Config, mongo: MongoClient, rest: hikari.RESTApp):
-    #just sudo code, so do as u need
-
-    async with rest.acquire(token=None) as client:
-        token_response = await client.authorize_access_token(
-            client=config.discord_client_id,
-            client_secret=config.discord_client_secret,
-            code="code u get from i guess this request being passed in",
-            redirect_uri=config.discord_redirect_uri #right?
-        )
 
 
 @router.post("/auth/refresh", name="Refresh the access token")

@@ -26,9 +26,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 security = HTTPBearer()
 
 
-router = APIRouter(prefix="/v2", tags=["App Authentication"], include_in_schema=True)
+router = APIRouter(prefix="/v2/auth", tags=["App Authentication"], include_in_schema=True)
 
-@router.post("/auth/verify-email-code", name="Verify email address with 6-digit code")
+@router.post("/verify-email-code", name="Verify email address with 6-digit code")
 @linkd.ext.fastapi.inject
 async def verify_email_with_code(
         request: Request,
@@ -197,7 +197,7 @@ async def verify_email_with_code(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/auth/me", name="Get current user information")
+@router.get("/me", name="Get current user information")
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_current_user_info(
@@ -261,7 +261,7 @@ async def get_current_user_info(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/discord", name="Authenticate with Discord")
+@router.post("/discord", name="Authenticate with Discord")
 @linkd.ext.fastapi.inject
 async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, rest: hikari.RESTApp) -> AuthResponse:
     try:
@@ -405,7 +405,7 @@ async def auth_discord(request: Request, *, config: Config, mongo: MongoClient, 
 
 
 
-@router.post("/auth/refresh", name="Refresh the access token")
+@router.post("/refresh", name="Refresh the access token")
 @linkd.ext.fastapi.inject
 async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClient) -> dict:
     try:
@@ -446,7 +446,7 @@ async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClie
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/register", name="Register with email (sends verification email)")
+@router.post("/register", name="Register with email (sends verification email)")
 @linkd.ext.fastapi.inject
 async def register_email_user(req: EmailRegisterRequest, *, mongo: MongoClient, config: Config) -> dict:
     try:
@@ -543,7 +543,7 @@ async def register_email_user(req: EmailRegisterRequest, *, mongo: MongoClient, 
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/resend-verification", name="Resend verification email")
+@router.post("/resend-verification", name="Resend verification email")
 @linkd.ext.fastapi.inject
 async def resend_verification_email(request: Request, *, mongo: MongoClient) -> dict:
     try:
@@ -630,7 +630,7 @@ async def resend_verification_email(request: Request, *, mongo: MongoClient) -> 
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/email")
+@router.post("/email")
 @linkd.ext.fastapi.inject
 async def login_with_email(req: EmailAuthRequest, *, mongo: MongoClient) -> AuthResponse:
     try:
@@ -719,7 +719,7 @@ async def login_with_email(req: EmailAuthRequest, *, mongo: MongoClient) -> Auth
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/link-discord", name="Link Discord to an existing account")
+@router.post("/link-discord", name="Link Discord to an existing account")
 @linkd.ext.fastapi.inject
 async def link_discord_account(
         request: Request,
@@ -814,7 +814,7 @@ async def link_discord_account(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/link-email", name="Link Email to an existing Discord account")
+@router.post("/link-email", name="Link Email to an existing Discord account")
 @linkd.ext.fastapi.inject
 @check_authentication
 async def link_email_account(
@@ -872,7 +872,7 @@ async def link_email_account(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/forgot-password", name="Request password reset")
+@router.post("/forgot-password", name="Request password reset")
 @linkd.ext.fastapi.inject
 async def forgot_password(req: ForgotPasswordRequest, *, mongo: MongoClient):
     try:
@@ -965,7 +965,7 @@ async def forgot_password(req: ForgotPasswordRequest, *, mongo: MongoClient):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/auth/reset-password", response_model=AuthResponse, name="Reset password with token")
+@router.post("/reset-password", response_model=AuthResponse, name="Reset password with token")
 @linkd.ext.fastapi.inject
 async def reset_password(req: ResetPasswordRequest, *, mongo: MongoClient):
     try:

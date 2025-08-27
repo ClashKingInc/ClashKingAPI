@@ -30,7 +30,7 @@ async def get_public_config() -> Dict[str, Any]:
     No authentication required - only returns safe, public config values.
     """
     return {
-        "sentry_dsn": Config.APP_SENTRY_DSN,
+        "sentry_dsn": Config.sentry_dsn_mobile,
     }
 
 

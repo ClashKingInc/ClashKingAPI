@@ -192,6 +192,7 @@ async def add_members_to_roster(
 
     async for player in coc_client.get_players(player_tags=player_tags):
         if isinstance(player, coc.errors.NotFound):
+            #get the player tag out of the error message
             tag  = player.message.split(" ")[-1]
             await mongo.rosters.update_one(
                 {"custom_id": roster_id},

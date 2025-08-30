@@ -179,13 +179,13 @@ async def add_members_to_roster(
         {"$match" : {"player_tag" : {"$in" : list(existing_tags)}}},
         {"$group" : {"_id": "user_id", "count": {"$sum" : 1}}},
     ]
-    cursor = await mongo.rosters.aggregate(pipeline)
+    cursor = await mongo.coc_accounts.aggregate(pipeline)
     result = await cursor.to_list(length=None)
     user_to_num_accounts = {d.get("user_id"): d.get("count") for d in result}
 
     payload_mapping = {m.tag: m for m in payload.members if m not in existing_tags}
     player_tags = list(payload_mapping.keys())
-    cursor = await mongo.rosters.find({"player_tag" : {"$in" : player_tags}})
+    cursor = await mongo.coc_accounts.find({"player_tag" : {"$in" : player_tags}})
     result = await cursor.to_list(length=None)
     tag_to_user_id = {d.get("player_tag") : d.get("user_id") for d in result}
 

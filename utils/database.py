@@ -18,9 +18,11 @@ class MongoClient(AsyncMongoClient):
         self.rosters = self.__clashking.get_collection('rosters')
 
         self.__auth = self.get_database('auth')
-        self.app_users = self.__auth.get_collection('users')
-
-
+        self.auth_users = self.__auth.get_collection('users')
+        self.auth_discord_tokens = self.__auth.get_collection('discord_tokens')
+        self.auth_refresh_tokens = self.__auth.get_collection('refresh_tokens')
+        self.auth_email_verifications = self.__auth.get_collection('email_verifications')
+        self.auth_password_reset_tokens = self.__auth.get_collection('password_reset_tokens')
 
 
 class OldMongoClient:

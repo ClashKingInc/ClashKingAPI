@@ -42,6 +42,9 @@ class Config:
     discord_client_id = getenv('DISCORD_CLIENT_ID')
     discord_client_secret = getenv('DISCORD_CLIENT_SECRET')
 
+    sentry_dsn = getenv("SENTRY_DSN")
+    sentry_dsn_mobile = getenv("APP_SENTRY_DSN")
+
     cipher = Fernet(encryption_key)
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

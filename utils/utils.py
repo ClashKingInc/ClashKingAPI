@@ -56,7 +56,7 @@ def gen_season_date():
 
 
 def gen_games_season():
-    now = datetime.utcnow()
+    now = pend.now(tz=pend.UTC)
     month = now.month
     if month <= 9:
         month = f"0{month}"

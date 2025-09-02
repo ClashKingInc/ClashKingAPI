@@ -1,11 +1,13 @@
 
 import coc
+import linkd
+from coc.utils import correct_tag
 import pendulum as pend
 from collections import defaultdict
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
-from utils.utils import fix_tag, remove_id_fields
-from utils.database import MongoClient as mongo
+from utils.utils import remove_id_fields
+from utils.database import MongoClient
 
 from routers.v2.war.war_utils import calculate_war_stats, deconstruct_type
 
@@ -15,6 +17,7 @@ router = APIRouter(prefix="/v2",tags=["War"], include_in_schema=True)
 @router.get("/war/{clan_tag}/previous",
          tags=["War Endpoints"],
          name="Previous Wars for a clan")
+@linkd.ext.fastapi.inject
 async def war_previous(
         clan_tag: str,
         request: Request = Request,
@@ -22,8 +25,10 @@ async def war_previous(
         timestamp_end: int = 9999999999,
         include_cwl: bool = False,
         limit: int = 50,
+        *,
+        mongo: MongoClient
 ):
-    clan_tag = fix_tag(clan_tag)
+    clan_tag = correct_tag(clan_tag)
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
 
@@ -55,9 +60,16 @@ async def war_previous(
 
 
 
-@router.get("/cwl/{clan_tag}/ranking-history", name="CWL ranking history for a clan")
-async def cwl_ranking_history(clan_tag: str, request: Request):
-    clan_tag = fix_tag(clan_tag)
+@router.get("/cwl/{clan_tag}/ranking-history",
+            name="CWL ranking history for a clan")
+@linkd.ext.fastapi.inject
+async def cwl_ranking_history(
+        clan_tag: str,
+        request: Request,
+        *,
+        mongo: MongoClient
+):
+    clan_tag = correct_tag(clan_tag)
 
     # Fetch all CWL group documents containing the clan
     results = await mongo.cwl_groups.find({"data.clans.tag": clan_tag}, {"data.clans" : 0}).to_list(length=None)
@@ -134,8 +146,11 @@ async def cwl_ranking_history(clan_tag: str, request: Request):
     return {"items": sorted(ranking_results, key=lambda x: x["season"], reverse=True)}
 
 
-@router.get("/cwl/league-thresholds", name="Promo and demotion thresholds for CWL leagues")
-async def cwl_league_thresholds(request: Request):
+@router.get("/cwl/league-thresholds",
+            name="Promo and demotion thresholds for CWL leagues")
+async def cwl_league_thresholds(
+        request: Request
+):
     return {
       "items": [
         {
@@ -310,6 +325,7 @@ def ranking_create(data: dict):
 
 
 @router.get("/war/clan/stats")
+@linkd.ext.fastapi.inject
 async def clan_war_stats(
         request: Request,
         clan_tags: list[str] = Query(..., min_length=1),
@@ -317,9 +333,11 @@ async def clan_war_stats(
         timestamp_end: int = 9999999999,
         war_types: int = 7,
         townhall_filter: str = "all",
-        limit: int = 1000
+        limit: int = 1000,
+        *,
+        mongo: MongoClient
 ):
-    clan_tags = [fix_tag(tag=tag) for tag in clan_tags]
+    clan_tags = [correct_tag(tag=tag) for tag in clan_tags]
 
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')

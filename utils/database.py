@@ -1,11 +1,11 @@
 import pymongo
+
 from .config import Config
 
 config = Config()
 
-from redis import asyncio as redis
-
 from pymongo import AsyncMongoClient
+from redis import asyncio as redis
 
 
 class MongoClient(AsyncMongoClient):
@@ -16,13 +16,24 @@ class MongoClient(AsyncMongoClient):
         self.button_store = self.__clashking.get_collection('button_store')
         self.coc_accounts = self.__clashking.get_collection('coc_accounts')
         self.rosters = self.__clashking.get_collection('rosters')
+        self.roster_groups = self.__clashking.get_collection('roster_groups')
+        self.roster_signup_categories = self.__clashking.get_collection(
+            'roster_signup_categories'
+        )
+        self.roster_automation = self.__clashking.get_collection(
+            'roster_automation'
+        )
 
         self.__auth = self.get_database('auth')
         self.auth_users = self.__auth.get_collection('users')
         self.auth_discord_tokens = self.__auth.get_collection('discord_tokens')
         self.auth_refresh_tokens = self.__auth.get_collection('refresh_tokens')
-        self.auth_email_verifications = self.__auth.get_collection('email_verifications')
-        self.auth_password_reset_tokens = self.__auth.get_collection('password_reset_tokens')
+        self.auth_email_verifications = self.__auth.get_collection(
+            'email_verifications'
+        )
+        self.auth_password_reset_tokens = self.__auth.get_collection(
+            'password_reset_tokens'
+        )
 
 
 class OldMongoClient:
@@ -76,7 +87,6 @@ class OldMongoClient:
     # Collections (Auth)
     app_users = auth.get_collection('users')
 
-
     # Collections (Stats & New Looper)
     base_player = stats.get_collection('base_player')
     legends_stats = stats.get_collection('legends_stats')
@@ -95,7 +105,9 @@ class OldMongoClient:
     profile_db = bot_settings.get_collection('profile_db')
     ignored_roles = bot_settings.get_collection('evalignore')
     general_family_roles = bot_settings.get_collection('generalrole')
-    family_exclusive_roles = bot_settings.get_collection('familyexclusiveroles')
+    family_exclusive_roles = bot_settings.get_collection(
+        'familyexclusiveroles'
+    )
     family_position_roles = bot_settings.get_collection('family_roles')
     not_family_roles = bot_settings.get_collection('linkrole')
     townhall_roles = bot_settings.get_collection('townhallroles')
@@ -137,17 +149,14 @@ class OldMongoClient:
 
 
 cache = redis.Redis(
-        host=config.redis_ip,
-        port=6379,
-        db=0,
-        password=config.redis_pw,
-        decode_responses=False,
-        max_connections=50,
-        health_check_interval=10,
-        socket_connect_timeout=5,
-        retry_on_timeout=True,
-        socket_keepalive=True,
-    )
-
-
-
+    host=config.redis_ip,
+    port=6379,
+    db=0,
+    password=config.redis_pw,
+    decode_responses=False,
+    max_connections=50,
+    health_check_interval=10,
+    socket_connect_timeout=5,
+    retry_on_timeout=True,
+    socket_keepalive=True,
+)

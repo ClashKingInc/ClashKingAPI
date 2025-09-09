@@ -4,15 +4,30 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from functools import wraps
 import hikari
+from utils.config import Config
 
 rest = hikari.RESTApp()
+config = Config()
 
 def check_authentication(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
+        # Check if running in local development mode
+        if config.is_local:
+            # Local development - bypass authentication
+            # Only inject user_id if the function accepts it
+            import inspect
+            sig = inspect.signature(func)
+            if "user_id" in sig.parameters:
+                kwargs["user_id"] = os.getenv("DEV_USER_ID")
+            return await func(*args, **kwargs)
+        
         mongo = kwargs.get('mongo')
 
         credentials: HTTPAuthorizationCredentials = kwargs.get("credentials")
+        if not credentials:
+            raise HTTPException(status_code=403, detail="Authentication token missing")
+            
         auth_header = credentials.credentials
 
         if not auth_header:
@@ -48,7 +63,11 @@ def check_authentication(func):
                     except hikari.errors.ClientHTTPResponseError:
                         raise HTTPException(status_code=401, detail="This user is not a member of this guild")
 
-            kwargs["user_id"] = user_id
+            # Only inject user_id if the function accepts it
+            import inspect
+            sig = inspect.signature(func)
+            if "user_id" in sig.parameters:
+                kwargs["user_id"] = user_id
             return await func(*args, **kwargs)
 
         except Exception as e:

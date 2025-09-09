@@ -8,38 +8,6 @@ class CreateRosterModel(BaseModel):
     )
     alias: str = Field(..., max_length=64)
 
-    th_restriction: str = Field(..., description='e.g. "1-max" or "15-17"')
-
-    description: Optional[str] = None
-
-    recurrent: bool = Field(False)
-    frequency: Optional[Literal['weekly', 'monthly']] = None
-
-    # Template timing configuration (for recurrent=True)
-    event_start_time: Optional[int] = Field(
-        None, description='Actual event time start (war start, etc.)'
-    )
-
-    signup_publish_time: Optional[int] = Field(
-        None, description='When to open roster signups (timestamp)'
-    )
-    registration_close_time: Optional[int] = Field(
-        None, description='When to close registrations (timestamp)'
-    )
-    result_publish_time: Optional[int] = Field(
-        None, description='When to publish results (timestamp)'
-    )
-
-    max_accounts_per_user: Optional[int] = Field(
-        None,
-        description='Maximum accounts per Discord user (None = unlimited)',
-    )
-
-    allowed_signup_groups: List[str] = Field(
-        default=[],
-        description='List of roster_signup_categories.custom_id allowed for this roster',
-    )
-
 
 class RosterUpdateModel(BaseModel):
     model_config = ConfigDict(extra='forbid')  # reject unknown fields

@@ -29,14 +29,15 @@ from utils.custom_coc import CustomClashClient
 from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.utils import gen_clean_custom_id, generate_access_token
+import os
 
 router = APIRouter(prefix='/v2', tags=['Rosters'], include_in_schema=True)
 security = HTTPBearer()
 
 
 @router.post('/roster', name='Create a roster')
-@linkd.ext.fastapi.inject
 @check_authentication
+@linkd.ext.fastapi.inject
 async def create_roster(
     server_id: int,
     roster_data: CreateRosterModel,
@@ -55,11 +56,11 @@ async def create_roster(
         'clan_tag': clan.tag,
         'clan_badge': clan.badge.large,
         'members': [],
-        'created_at': pend.now(tz=pend.UTC),
-        'updated_at': pend.now(tz=pend.UTC),
         # Display defaults
         'columns': ['Townhall Level', 'Name', '30 Day Hitrate', 'Clan Tag'],
         'sort': [],
+        'created_at': pend.now(tz=pend.UTC),
+        'updated_at': pend.now(tz=pend.UTC),
     }
     roster_doc.update(ext_data)
     await mongo.rosters.insert_one(roster_doc)

@@ -276,10 +276,16 @@ async def generate_access_token(
     # Save to database
     await mongo_client.tokens_db.insert_one(token_data)
 
-    # Generate dashboard URL based on token type
-    dashboard_url = (
-        f'https://api.clashk.ing/{token_type}/dashboard?token={token}'
-    )
+    # Generate dashboard URL based on token type and environment
+    from utils.config import Config
+    config = Config()
+    
+    if config.is_local:
+        base_url = 'http://localhost:8000'
+    else:
+        base_url = 'https://api.clashk.ing'
+    
+    dashboard_url = f'{base_url}/ui/{token_type}/dashboard?token={token}'
 
     return {
         'token': token,

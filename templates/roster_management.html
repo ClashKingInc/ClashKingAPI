@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/favicon-dark.png">
+    <title>Roster Management Dashboard</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#0a0a0b',
+                        foreground: '#fafafa',
+                        muted: '#171717',
+                        'muted-foreground': '#a1a1aa',
+                        popover: '#0a0a0b',
+                        'popover-foreground': '#fafafa',
+                        card: '#0a0a0b',
+                        'card-foreground': '#fafafa',
+                        border: '#27272a',
+                        input: '#27272a',
+                        primary: '#3b82f6',
+                        'primary-foreground': '#f8fafc',
+                        secondary: '#27272a',
+                        'secondary-foreground': '#fafafa',
+                        accent: '#27272a',
+                        'accent-foreground': '#fafafa',
+                        destructive: '#dc2626',
+                        'destructive-foreground': '#fafafa',
+                        ring: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-active {
+            @apply bg-primary text-primary-foreground;
+        }
+
+        .tab-inactive {
+            @apply text-muted-foreground hover:text-foreground hover:bg-accent;
+        }
+    </style>
+</head>
+
+<body class="bg-background text-foreground min-h-screen">
+<div class="flex h-[calc(100vh-80px)]">
+    <!-- Sidebar -->
+    <div class="w-80 border-r border-border bg-card p-6 space-y-6">
+        <!-- Sidebar Header with Logo -->
+        <div class="flex items-center gap-3 pb-4 border-b border-border">
+            <div class="w-10 h-10 rounded-lg border border-border bg-muted flex items-center justify-center">
+                <img src="/static/favicon-dark.png" alt="ClashKing Logo" class="w-6 h-6"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                <i data-lucide="shield" class="w-5 h-5 text-muted-foreground" style="display: none;"></i>
+            </div>
+            <div>
+                <h2 class="font-semibold">Roster Management</h2>
+                <p class="text-xs text-muted-foreground">Configure your rosters</p>
+            </div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alerts" class="space-y-3"></div>
+
+        <!-- Roster Selection -->
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <label class="text-sm font-medium">Active Roster</label>
+                <button onclick="showCreateRosterModal()"
+                        class="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground"
+                        title="Create New Roster">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <select id="roster-selector" onchange="selectRoster()"
+                    class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                <option value="">Choose a roster...</option>
+                {% for roster in all_rosters %}
+                    <option value="{{ roster.custom_id }}"
+                            {% if roster.custom_id == current_roster.custom_id %}selected{% endif %}>
+                        {{ roster.alias }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="space-y-1">
+            <!-- Roster Specific Tabs -->
+            <div id="roster-tabs" class="space-y-1" {% if not current_roster %}style="display: none"{% endif %}>
+                <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2 py-1">
+                    Roster Management
+                </div>
+
+                <button onclick="showTab('settings')" id="tab-settings"
+                        class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-active">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                    <span>Settings</span>
+                </button>
+
+                <button onclick="showTab('members')" id="tab-members"
+                        class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+                    <i data-lucide="users" class="w-4 h-4"></i>
+                    <span>Members</span>
+                    <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs"
+                          id="sidebar-member-count">{{ (current_roster.members|length) if current_roster.members else 0 }}</span>
+                </button>
+            </div>
+
+            <!-- Global Management Section -->
+            <div class="pt-4 space-y-1">
+                <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2 py-1">
+                    Global Management
+                </div>
+
+                <button onclick="showTab('groups')" id="tab-groups"
+                        class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+                    <i data-lucide="folder" class="w-4 h-4"></i>
+                    <span>Groups</span>
+                    <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs">{{ groups|length }}</span>
+                </button>
+
+                <button onclick="showTab('categories')" id="tab-categories"
+                        class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+                    <i data-lucide="tags" class="w-4 h-4"></i>
+                    <span>Categories</span>
+                    <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs">{{ categories|length }}</span>
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 overflow-auto">
+        <div class="p-8">
+
+            <!-- Welcome/No Selection State -->
+            <div id="welcome-content" {% if current_roster %}style="display: none"{% endif %}>
+                <div class="text-center py-16">
+                    <i data-lucide="arrow-left" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                    <h2 class="text-xl font-semibold mb-2">Select a Roster</h2>
+                    <p class="text-muted-foreground mb-6">Choose a roster from the sidebar to start managing it</p>
+                    <button onclick="showCreateRosterModal()"
+                            class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 mx-auto">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Create Your First Roster
+                    </button>
+                </div>
+            </div>
+
+            <!-- Settings Tab Content -->
+            <div id="content-settings" class="tab-content" {% if not current_roster %}style="display: none"{% endif %}>
+                <div class="max-w-4xl">
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-semibold mb-2">Roster Settings</h2>
+                        <p class="text-muted-foreground">Configure your roster properties and requirements</p>
+                    </div>
+
+                    <div class="bg-card border border-border rounded-lg">
+                        <form id="roster-form" class="p-6 space-y-8">
+                            <!-- Basic Information -->
+                            <div class="space-y-4">
+                                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Basic
+                                    Information</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Roster Name</label>
+                                        <input type="text" name="alias"
+                                               value="{{ current_roster.alias if current_roster else '' }}"
+                                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                               required>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Roster Size</label>
+                                        <input type="number" name="roster_size"
+                                               value="{{ current_roster.roster_size or '' if current_roster else '' }}"
+                                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                               min="1">
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="text-sm font-medium">Description</label>
+                                    <textarea name="description" rows="3"
+                                              class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none">{{ current_roster.description or '' if current_roster else '' }}</textarea>
+                                </div>
+                            </div>
+
+                            <!-- Group Assignment -->
+                            <div class="space-y-4">
+                                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Group
+                                    Assignment</h3>
+                                <div class="space-y-2">
+                                    <label class="text-sm font-medium">Roster Group</label>
+                                    <select name="group_id"
+                                            class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                        <option value="">No group assigned</option>
+                                        {% for group in groups %}
+                                            <option value="{{ group._id }}"
+                                                    {% if current_roster and current_roster.group_id == group._id %}selected{% endif %}>
+                                                {{ group.alias }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                    <p class="text-xs text-muted-foreground">Groups help organize rosters for bulk
+                                        operations</p>
+                                </div>
+                            </div>
+
+                            <!-- Organization & Permissions -->
+                            <div class="space-y-4">
+                                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                                    Organization & Permissions</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Organization Type</label>
+                                        <select name="roster_type" onchange="toggleClanSelection()"
+                                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option value="clan"
+                                                    {% if current_roster and current_roster.roster_type == 'clan' %}selected{% endif %}>
+                                                Clan-specific
+                                            </option>
+                                            <option value="family"
+                                                    {% if current_roster and current_roster.roster_type == 'family' %}selected{% endif %}>
+                                                Family-wide
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Signup Permissions</label>
+                                        <select name="signup_scope"
+                                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option value="clan-only"
+                                                    {% if current_roster and current_roster.signup_scope == 'clan-only' %}selected{% endif %}>
+                                                Clan members only
+                                            </option>
+                                            <option value="family-wide"
+                                                    {% if current_roster and current_roster.signup_scope == 'family-wide' %}selected{% endif %}>
+                                                Family members
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div id="clan-selection" class="space-y-2">
+                                    <label class="text-sm font-medium">Associated Clan</label>
+                                    <select name="clan_tag" id="clan-select"
+                                            class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                        <option value="">Select a clan...</option>
+                                        {% for clan in server_clans %}
+                                            <option value="{{ clan.tag }}"
+                                                    {% if current_roster and current_roster.clan_tag == clan.tag %}selected{% endif %}>
+                                                {{ clan.name }} ({{ clan.tag }})
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Requirements -->
+                            <div class="space-y-4">
+                                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                                    Requirements</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Min Town Hall</label>
+                                        <select name="min_th"
+                                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option value="">No minimum</option>
+                                            {% for th in range(1, 18) %}
+                                                <option value="{{ th }}"
+                                                        {% if current_roster and current_roster.min_th == th %}selected{% endif %}>
+                                                    TH {{ th }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Max Town Hall</label>
+                                        <select name="max_th"
+                                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                            <option value="">No maximum</option>
+                                            {% for th in range(1, 18) %}
+                                                <option value="{{ th }}"
+                                                        {% if current_roster and current_roster.max_th == th %}selected{% endif %}>
+                                                    TH {{ th }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-sm font-medium">Max Accounts/User</label>
+                                        <input type="number" name="max_accounts_per_user"
+                                               value="{{ current_roster.max_accounts_per_user or '' if current_roster else '' }}"
+                                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                               min="1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Allowed Categories -->
+                            <div class="space-y-4">
+                                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Allowed
+                                    Categories</h3>
+                                <div class="space-y-2">
+                                    <label class="text-sm font-medium">Member Categories</label>
+                                    <div id="categories-checkboxes">
+                                        {% if categories %}
+                                            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                {% for category in categories %}
+                                                    <label class="flex items-center gap-2 p-2 border border-border rounded cursor-pointer hover:bg-accent">
+                                                        <input type="checkbox" name="allowed_signup_categories"
+                                                               value="{{ category.custom_id }}"
+                                                               {% if current_roster and current_roster.allowed_signup_categories and category.custom_id in current_roster.allowed_signup_categories %}checked{% endif %}
+                                                               class="rounded border-border text-primary focus:ring-primary">
+                                                        <span class="text-sm">{{ category.alias }}</span>
+                                                    </label>
+                                                {% endfor %}
+                                            </div>
+                                        {% else %}
+                                            <div class="p-4 border border-border rounded-md text-center">
+                                                <p class="text-sm text-muted-foreground mb-2">No categories available</p>
+                                                <button type="button" onclick="showTab('categories')"
+                                                        class="text-sm text-primary hover:underline">
+                                                    Create categories in Global Management
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex justify-end pt-6 border-t border-border">
+                                <button type="submit"
+                                        class="px-6 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
+                                    <i data-lucide="save" class="w-4 h-4"></i>
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Members Tab Content -->
+            <div id="content-members" class="tab-content hidden">
+                <div class="max-w-6xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-2xl font-semibold mb-2">Members</h2>
+                            <p class="text-muted-foreground">Manage roster members and their data</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="refreshMembers()"
+                                    class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors flex items-center gap-2">
+                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                Refresh
+                            </button>
+                            <button onclick="showAddMemberModal()"
+                                    class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                                Add Members
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-card border border-border rounded-lg">
+                        <div id="members-content">
+                            {% if current_roster and current_roster.members %}
+                                <div class="overflow-x-auto">
+                                    <table class="w-full">
+                                        <thead class="border-b border-border">
+                                        <tr class="text-left">
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Player
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Tag
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                TH
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Heroes
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Trophies
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Group
+                                            </th>
+                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                                Actions
+                                            </th>
+                                        </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border">
+                                        {% for member in current_roster.members %}
+                                            <tr class="hover:bg-muted/30">
+                                                <td class="px-6 py-4 font-medium">{{ member.name }}</td>
+                                                <td class="px-6 py-4 font-mono text-sm text-muted-foreground">{{ member.tag }}</td>
+                                                <td class="px-6 py-4">
+                                                    <span class="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">{{ member.townhall }}</span>
+                                                </td>
+                                                <td class="px-6 py-4 text-sm">{{ member.hero_lvs }}</td>
+                                                <td class="px-6 py-4 text-sm">{{ member.trophies }}</td>
+                                                <td class="px-6 py-4">
+                                                    {% if member.signup_group %}
+                                                        <span class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">{{ member.signup_group }}</span>
+                                                    {% else %}
+                                                        <span class="text-muted-foreground text-sm">None</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="px-6 py-4">
+                                                    <button onclick="removeMember('{{ member.tag }}')"
+                                                            class="px-2 py-1 bg-destructive/10 text-destructive rounded text-xs hover:bg-destructive/20 transition-colors">
+                                                        Remove
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="p-12 text-center">
+                                    <i data-lucide="user-plus" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                                    <h3 class="text-lg font-medium text-muted-foreground mb-2">No members yet</h3>
+                                    <p class="text-sm text-muted-foreground mb-6">Start building your roster by adding
+                                        members</p>
+                                    <button onclick="showAddMemberModal()"
+                                            class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                                        Add First Member
+                                    </button>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Groups Tab Content -->
+            <div id="content-groups" class="tab-content hidden">
+                <div class="max-w-4xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-2xl font-semibold mb-2">Roster Groups</h2>
+                            <p class="text-muted-foreground">Organize rosters into groups for bulk operations</p>
+                        </div>
+                        <button onclick="showCreateGroupModal()"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            New Group
+                        </button>
+                    </div>
+
+                    {% if groups %}
+                        <div class="space-y-3">
+                            {% for group in groups %}
+                                <div class="bg-card border border-border rounded-lg p-6">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h3 class="font-semibold text-lg">{{ group.alias }}</h3>
+                                            <p class="text-sm text-muted-foreground mt-1">
+                                                Max accounts per user: {{ group.max_accounts_per_user or 'No limit' }}
+                                            </p>
+                                        </div>
+                                        <button onclick="deleteGroup('{{ group._id }}')"
+                                                class="px-3 py-1.5 bg-destructive/10 text-destructive rounded-md text-sm hover:bg-destructive/20 transition-colors">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="bg-card border border-border rounded-lg p-12 text-center">
+                            <i data-lucide="folder" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                            <h3 class="text-lg font-medium text-muted-foreground mb-2">No groups created</h3>
+                            <p class="text-sm text-muted-foreground mb-6">Create groups to organize your rosters for
+                                bulk operations</p>
+                            <button onclick="showCreateGroupModal()"
+                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                                Create First Group
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Categories Tab Content -->
+            <div id="content-categories" class="tab-content hidden">
+                <div class="max-w-4xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-2xl font-semibold mb-2">Signup Categories</h2>
+                            <p class="text-muted-foreground">Define member signup categories for rosters</p>
+                        </div>
+                        <button onclick="showCreateCategoryModal()"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            New Category
+                        </button>
+                    </div>
+
+                    {% if categories %}
+                        <div class="space-y-3">
+                            {% for category in categories %}
+                                <div class="bg-card border border-border rounded-lg p-6">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h3 class="font-semibold text-lg">{{ category.alias }}</h3>
+                                            <p class="text-sm text-muted-foreground font-mono mt-1">{{ category.custom_id }}</p>
+                                        </div>
+                                        <button onclick="deleteCategory('{{ category.custom_id }}')"
+                                                class="px-3 py-1.5 bg-destructive/10 text-destructive rounded-md text-sm hover:bg-destructive/20 transition-colors">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="bg-card border border-border rounded-lg p-12 text-center">
+                            <i data-lucide="tags" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                            <h3 class="text-lg font-medium text-muted-foreground mb-2">No categories created</h3>
+                            <p class="text-sm text-muted-foreground mb-6">Create categories to organize member signups
+                                across your rosters</p>
+                            <button onclick="showCreateCategoryModal()"
+                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                                Create First Category
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<div id="modal-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden" onclick="closeModals()">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-card border border-border rounded-lg max-w-md w-full p-6" onclick="event.stopPropagation()">
+
+            <!-- Add Member Modal -->
+            <div id="add-member-modal" class="hidden">
+                <div class="flex items-center gap-2 mb-4">
+                    <i data-lucide="user-plus" class="w-5 h-5"></i>
+                    <h3 class="font-semibold">Add Members</h3>
+                </div>
+                <form id="add-member-form" class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Player Tags</label>
+                        <textarea name="tags" rows="5" placeholder="#ABC123XYZ&#10;#DEF456UVW" required
+                                  class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none"></textarea>
+                        <p class="text-xs text-muted-foreground">One tag per line</p>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeModals()"
+                                class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
+                            Add Members
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Create Group Modal -->
+            <div id="create-group-modal" class="hidden">
+                <div class="flex items-center gap-2 mb-4">
+                    <i data-lucide="folder-plus" class="w-5 h-5"></i>
+                    <h3 class="font-semibold">Create Group</h3>
+                </div>
+                <form id="create-group-form" class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Group Name</label>
+                        <input type="text" name="alias" required maxlength="64" placeholder="Enter group name"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeModals()"
+                                class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
+                            Create
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Create Category Modal -->
+            <div id="create-category-modal" class="hidden">
+                <div class="flex items-center gap-2 mb-4">
+                    <i data-lucide="tag" class="w-5 h-5"></i>
+                    <h3 class="font-semibold">Create Category</h3>
+                </div>
+                <form id="create-category-form" class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Category Name</label>
+                        <input type="text" name="alias" required maxlength="32"
+                               placeholder="e.g., Main Roster, Backup, TH15+"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                        <p class="text-xs text-muted-foreground">The system will automatically generate a unique ID</p>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeModals()"
+                                class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
+                            Create
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Create Roster Modal -->
+            <div id="create-roster-modal" class="hidden">
+                <div class="flex items-center gap-2 mb-4">
+                    <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                    <h3 class="font-semibold">Create Roster</h3>
+                </div>
+                <form id="create-roster-form" class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Roster Name</label>
+                        <input type="text" name="alias" required maxlength="64"
+                               placeholder="e.g., CWL Main, War Backup, Push Team"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Organization Type</label>
+                        <select name="roster_type" onchange="toggleCreateClanSelection()" required
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="clan">Clan-specific</option>
+                            <option value="family">Family-wide</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Signup Permissions</label>
+                        <select name="signup_scope" required
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="clan-only">Clan members only</option>
+                            <option value="family-wide">Family members</option>
+                        </select>
+                    </div>
+
+                    <div id="create-clan-selection" class="space-y-2">
+                        <label class="text-sm font-medium">Associated Clan</label>
+                        <select name="clan_tag" id="create-clan-select" required
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="">Select a clan...</option>
+                            {% for clan in server_clans %}
+                                <option value="{{ clan.tag }}">{{ clan.name }} ({{ clan.tag }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeModals()"
+                                class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
+                            Create Roster
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+
+    const API_BASE = '/v2';
+    const ROSTER_TOKEN = new URLSearchParams(window.location.search).get('token');
+    let currentRosterId = '{{ current_roster.custom_id if current_roster else '' }}';
+    const serverId = '{{ server_id }}';
+
+    // Tab navigation
+    function showTab(tabName) {
+        // Update sidebar tabs
+        document.querySelectorAll('[id^="tab-"]').forEach(tab => {
+            tab.classList.remove('tab-active');
+            tab.classList.add('tab-inactive');
+        });
+
+        // Update content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+
+        // Show selected tab
+        document.getElementById('tab-' + tabName).classList.remove('tab-inactive');
+        document.getElementById('tab-' + tabName).classList.add('tab-active');
+        document.getElementById('content-' + tabName).classList.remove('hidden');
+    }
+
+    // Roster selection
+    async function selectRoster() {
+        const selectedId = document.getElementById('roster-selector').value;
+
+        if (!selectedId) {
+            // Update URL to remove roster_id
+            const url = new URL(window.location);
+            url.searchParams.delete('roster_id');
+            window.history.pushState({}, '', url);
+
+            document.getElementById('roster-tabs').style.display = 'none';
+            document.getElementById('welcome-content').style.display = 'block';
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            currentRosterId = '';
+            return;
+        }
+
+        // If it's the same roster, just show the UI
+        if (selectedId === currentRosterId) {
+            showRosterUI();
+            return;
+        }
+
+        // Update URL with new roster_id
+        const url = new URL(window.location);
+        url.searchParams.set('roster_id', selectedId);
+        window.history.pushState({}, '', url);
+
+        // Load new roster data
+        try {
+            const response = await apiCall(`${API_BASE}/roster/${selectedId}?server_id=${serverId}`, 'GET');
+            const roster = response.roster;
+
+            // Update current roster ID
+            currentRosterId = selectedId;
+
+            // Update UI with new roster data
+            updateRosterUI(roster);
+            showRosterUI();
+        } catch (error) {
+            showAlert('Failed to load roster data', 'error');
+            // Reset selector to previous value
+            document.getElementById('roster-selector').value = currentRosterId;
+            // Revert URL
+            const url = new URL(window.location);
+            if (currentRosterId) url.searchParams.set('roster_id', currentRosterId);
+            else url.searchParams.delete('roster_id');
+            window.history.pushState({}, '', url);
+        }
+
+
+    }
+
+    function showRosterUI() {
+        document.getElementById('roster-tabs').style.display = 'block';
+        document.getElementById('welcome-content').style.display = 'none';
+
+        // Show default settings tab
+        showTab('settings');
+    }
+
+    function updateRosterUI(roster) {
+        try {
+
+            // Update form fields in settings
+            updateSettingsForm(roster);
+
+            // Update members table
+            updateMembersTable(roster);
+        } catch (error) {
+            console.error('Error updating roster UI:', error);
+        }
+    }
+
+    function updateSettingsForm(roster) {
+        const form = document.getElementById('roster-form');
+        if (!form) return;
+
+        // Update form fields
+        form.elements['alias'].value = roster.alias || '';
+        form.elements['roster_size'].value = roster.roster_size || '';
+        form.elements['description'].value = roster.description || '';
+        form.elements['roster_type'].value = roster.roster_type || 'clan';
+        form.elements['signup_scope'].value = roster.signup_scope || 'clan-only';
+        form.elements['clan_tag'].value = roster.clan_tag || '';
+        form.elements['min_th'].value = roster.min_th || '';
+        form.elements['max_th'].value = roster.max_th || '';
+        form.elements['max_accounts_per_user'].value = roster.max_accounts_per_user || '';
+        form.elements['group_id'].value = roster.group_id || '';
+
+        // Update allowed categories checkboxes
+        const categoryCheckboxes = form.querySelectorAll('input[name="allowed_signup_categories"]');
+        categoryCheckboxes.forEach(cb => {
+            cb.checked = roster.allowed_signup_categories && roster.allowed_signup_categories.includes(cb.value);
+        });
+
+        // Update clan selection requirements
+        toggleClanSelection();
+    }
+
+    function updateMembersTable(roster) {
+        const membersContent = document.getElementById('members-content');
+        if (!membersContent) return;
+
+        // Update members count in header
+        const membersCountEl = document.getElementById('members-count');
+        if (membersCountEl) {
+            membersCountEl.textContent = `(${roster.members?.length || 0})`;
+        }
+
+        if (!roster.members || roster.members.length === 0) {
+            // Show empty state
+            membersContent.innerHTML = `
+                    <div class="p-12 text-center">
+                        <i data-lucide="user-plus" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                        <h3 class="text-lg font-medium text-muted-foreground mb-2">No members yet</h3>
+                        <p class="text-sm text-muted-foreground mb-6">Start building your roster by adding members</p>
+                        <button onclick="showAddMemberModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                            Add First Member
+                        </button>
+                    </div>
+                `;
+            lucide.createIcons();
+            return;
+        }
+
+        // Build members table
+        let tableHTML = `
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="border-b border-border">
+                            <tr class="text-left">
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Player</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Tag</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">TH</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Heroes</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Trophies</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Group</th>
+                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border">
+            `;
+
+        roster.members.forEach(member => {
+            const groupBadge = member.signup_group
+                ? `<span class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">${member.signup_group}</span>`
+                : `<span class="text-muted-foreground text-sm">None</span>`;
+
+            tableHTML += `
+                    <tr class="hover:bg-muted/30">
+                        <td class="px-6 py-4 font-medium">${member.name}</td>
+                        <td class="px-6 py-4 font-mono text-sm text-muted-foreground">${member.tag}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">${member.townhall}</span>
+                        </td>
+                        <td class="px-6 py-4 text-sm">${member.hero_lvs}</td>
+                        <td class="px-6 py-4 text-sm">${member.trophies}</td>
+                        <td class="px-6 py-4">${groupBadge}</td>
+                        <td class="px-6 py-4">
+                            <button onclick="removeMember('${member.tag}')" class="px-2 py-1 bg-destructive/10 text-destructive rounded text-xs hover:bg-destructive/20 transition-colors">
+                                Remove
+                            </button>
+                        </td>
+                    </tr>
+                `;
+        });
+
+        tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+        membersContent.innerHTML = tableHTML;
+    }
+
+    // Clan selection toggle
+    function toggleClanSelection() {
+        const rosterType = document.querySelector('select[name="roster_type"]').value;
+        const clanSelect = document.getElementById('clan-select');
+        const label = document.querySelector('#clan-selection label');
+
+        if (rosterType === 'family') {
+            clanSelect.removeAttribute('required');
+            label.textContent = 'Reference Clan (optional)';
+        } else {
+            clanSelect.setAttribute('required', 'required');
+            label.textContent = 'Associated Clan';
+        }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async function () {
+        lucide.createIcons();
+        toggleClanSelection();
+
+        // Show appropriate initial state
+        if (currentRosterId) {
+            selectRoster();
+        }
+    });
+
+    // Alerts
+    function showAlert(message, type = 'success') {
+        const alertsContainer = document.getElementById('alerts');
+        const alertDiv = document.createElement('div');
+
+        let bgColor, icon;
+        switch (type) {
+            case 'error':
+                bgColor = 'bg-destructive/10 border-destructive/20 text-destructive';
+                icon = 'alert-circle';
+                break;
+            case 'info':
+                bgColor = 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+                icon = 'info';
+                break;
+            default:
+                bgColor = 'bg-primary/10 border-primary/20 text-primary';
+                icon = 'check-circle';
+        }
+
+        alertDiv.className = `flex items-center gap-2 p-3 rounded-lg border ${bgColor}`;
+        alertDiv.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4"></i><span class="text-sm font-medium">${message}</span>`;
+
+        alertsContainer.appendChild(alertDiv);
+        lucide.createIcons();
+
+        // Auto-remove after 5 seconds, except for info messages which remove after 3 seconds
+        const timeout = type === 'info' ? 3000 : 5000;
+        setTimeout(() => alertDiv.remove(), timeout);
+    }
+
+    // API calls
+    async function apiCall(endpoint, method = 'GET', data = null) {
+
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${ROSTER_TOKEN}`
+            }
+        };
+
+        if (data) options.body = JSON.stringify(data);
+
+        try {
+            const response = await fetch(endpoint, options);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
+
+    // Refresh functions
+    async function refreshCategoriesList() {
+        try {
+            // Get updated categories from API
+            const response = await apiCall(`${API_BASE}/roster-signup-category/list?server_id=${serverId}`, 'GET');
+            const categories = response.items || [];
+            
+            // Update categories tab content
+            updateCategoriesTab(categories);
+            
+            // Update the categories checkboxes in roster settings if they exist
+            updateCategoriesCheckboxes(categories);
+            
+            // Update the tab counter
+            const tabCounter = document.querySelector('#tab-categories .ml-auto');
+            if (tabCounter) {
+                tabCounter.textContent = categories.length;
+            }
+            
+        } catch (error) {
+            console.error('Failed to refresh categories:', error);
+        }
+    }
+    
+    function updateCategoriesTab(categories) {
+        const contentCategories = document.getElementById('content-categories');
+        if (!contentCategories) return;
+        
+        const categoriesContainer = contentCategories.querySelector('.max-w-4xl > div:last-child');
+        if (!categoriesContainer) return;
+        
+        if (categories.length === 0) {
+            // Show empty state
+            categoriesContainer.innerHTML = `
+                <div class="bg-card border border-border rounded-lg p-12 text-center">
+                    <i data-lucide="tags" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                    <h3 class="text-lg font-medium text-muted-foreground mb-2">No categories created</h3>
+                    <p class="text-sm text-muted-foreground mb-6">Create categories to organize member signups across your rosters</p>
+                    <button onclick="showCreateCategoryModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                        Create First Category
+                    </button>
+                </div>
+            `;
+        } else {
+            // Show categories list
+            let categoriesHTML = '<div class="space-y-3">';
+            categories.forEach(category => {
+                categoriesHTML += `
+                    <div class="bg-card border border-border rounded-lg p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-semibold text-lg">${category.alias}</h3>
+                                <p class="text-sm text-muted-foreground font-mono mt-1">${category.custom_id}</p>
+                            </div>
+                            <button onclick="deleteCategory('${category.custom_id}')" class="px-3 py-1.5 bg-destructive/10 text-destructive rounded-md text-sm hover:bg-destructive/20 transition-colors">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            categoriesHTML += '</div>';
+            categoriesContainer.innerHTML = categoriesHTML;
+        }
+        
+        // Recreate icons
+        lucide.createIcons();
+    }
+    
+    function updateCategoriesCheckboxes(categories) {
+        const checkboxContainer = document.querySelector('#categories-checkboxes');
+        if (!checkboxContainer) return;
+        
+        if (categories.length === 0) {
+            checkboxContainer.innerHTML = `
+                <div class="p-4 border border-border rounded-md text-center">
+                    <p class="text-sm text-muted-foreground mb-2">No categories available</p>
+                    <button type="button" onclick="showTab('categories')" class="text-sm text-primary hover:underline">
+                        Create categories in Global Management
+                    </button>
+                </div>
+            `;
+        } else {
+            let checkboxesHTML = '<div class="grid grid-cols-2 md:grid-cols-3 gap-2">';
+            categories.forEach(category => {
+                checkboxesHTML += `
+                    <label class="flex items-center gap-2 p-2 border border-border rounded cursor-pointer hover:bg-accent">
+                        <input type="checkbox" name="allowed_signup_categories" value="${category.custom_id}" 
+                               class="rounded border-border text-primary focus:ring-primary">
+                        <span class="text-sm">${category.alias}</span>
+                    </label>
+                `;
+            });
+            checkboxesHTML += '</div>';
+            checkboxContainer.innerHTML = checkboxesHTML;
+        }
+    }
+
+    // Modals
+    function showAddMemberModal() {
+        if (!currentRosterId) {
+            showAlert('Please select a roster first', 'error');
+            return;
+        }
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        document.querySelectorAll('#modal-overlay [id$="-modal"]').forEach(m => m.classList.add('hidden'));
+        document.getElementById('add-member-modal').classList.remove('hidden');
+    }
+
+    function showCreateGroupModal() {
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        document.querySelectorAll('#modal-overlay [id$="-modal"]').forEach(m => m.classList.add('hidden'));
+        document.getElementById('create-group-modal').classList.remove('hidden');
+    }
+
+    function showCreateCategoryModal() {
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        document.querySelectorAll('#modal-overlay [id$="-modal"]').forEach(m => m.classList.add('hidden'));
+        document.getElementById('create-category-modal').classList.remove('hidden');
+    }
+
+    function showCreateRosterModal() {
+        document.getElementById('modal-overlay').classList.remove('hidden');
+        document.querySelectorAll('#modal-overlay [id$="-modal"]').forEach(m => m.classList.add('hidden'));
+        document.getElementById('create-roster-modal').classList.remove('hidden');
+
+        // Initialize clan selection toggle
+        toggleCreateClanSelection();
+    }
+
+    // Clan selection toggle for create modal
+    function toggleCreateClanSelection() {
+        const rosterType = document.querySelector('#create-roster-modal select[name="roster_type"]').value;
+        const clanSelect = document.getElementById('create-clan-select');
+        const label = document.querySelector('#create-clan-selection label');
+
+        if (rosterType === 'family') {
+            clanSelect.removeAttribute('required');
+            label.textContent = 'Reference Clan (optional)';
+        } else {
+            clanSelect.setAttribute('required', 'required');
+            label.textContent = 'Associated Clan';
+        }
+    }
+
+    function closeModals() {
+        document.getElementById('modal-overlay').classList.add('hidden');
+    }
+
+    // Forms
+    document.getElementById('roster-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!currentRosterId) {
+            showAlert('Please select a roster first', 'error');
+            return;
+        }
+
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+
+        // Process allowed_signup_categories checkboxes
+        const categoryCheckboxes = e.target.querySelectorAll('input[name="allowed_signup_categories"]:checked');
+        data.allowed_signup_categories = Array.from(categoryCheckboxes).map(cb => cb.value);
+
+        // Clean data
+        ['min_th', 'max_th', 'clan_tag', 'max_accounts_per_user', 'roster_size', 'group_id'].forEach(field => {
+            if (data[field] === '') data[field] = null;
+        });
+
+        // Validate
+        if (data.roster_type === 'clan' && !data.clan_tag) {
+            showAlert('Clan selection is required for clan-specific rosters', 'error');
+            return;
+        }
+
+        if (data.min_th && data.max_th && parseInt(data.min_th) > parseInt(data.max_th)) {
+            showAlert('Minimum TH cannot be greater than Maximum TH', 'error');
+            return;
+        }
+
+        try {
+            await apiCall(`${API_BASE}/roster/${currentRosterId}?server_id=${serverId}`, 'PATCH', data);
+            showAlert('Settings updated successfully!');
+        } catch (error) {
+            showAlert('Failed to update settings', 'error');
+        }
+    });
+
+    document.getElementById('add-member-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const tags = formData.get('tags').split('\n').filter(tag => tag.trim());
+        const members = tags.map(tag => ({tag: tag.trim()}));
+
+        try {
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members`, 'POST', {add: members});
+            showAlert('Members added successfully!');
+            closeModals();
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to add members', 'error');
+        }
+    });
+
+    document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+
+        try {
+            await apiCall(`${API_BASE}/roster-group?server_id=${serverId}`, 'POST', data);
+            showAlert('Group created successfully!');
+            closeModals();
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to create group', 'error');
+        }
+    });
+
+    document.getElementById('create-category-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+        data.server_id = serverId;
+
+        // Remove custom_id field if it exists - let API generate it
+        delete data.custom_id;
+
+        try {
+            await apiCall(`${API_BASE}/roster-signup-category?server_id=${serverId}`, 'POST', data);
+            showAlert('Category created successfully!');
+            closeModals();
+            
+            // Refresh categories list dynamically
+            await refreshCategoriesList();
+            
+            // Reset form
+            e.target.reset();
+        } catch (error) {
+            showAlert('Failed to create category', 'error');
+        }
+    });
+
+    document.getElementById('create-roster-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData);
+
+        // Clean clan_tag if empty
+        if (data.clan_tag === '') {
+            data.clan_tag = null;
+        }
+
+        // Validate clan requirement for clan-specific rosters
+        if (data.roster_type === 'clan' && !data.clan_tag) {
+            showAlert('Clan selection is required for clan-specific rosters', 'error');
+            return;
+        }
+
+        try {
+            await apiCall(`${API_BASE}/roster?server_id=${serverId}`, 'POST', data);
+            showAlert('Roster created successfully!');
+            closeModals();
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to create roster', 'error');
+        }
+    });
+
+    // Actions
+    async function removeMember(playerTag) {
+        if (!confirm('Remove this member from the roster?')) return;
+
+        try {
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members/${encodeURIComponent(playerTag)}`, 'DELETE');
+            showAlert('Member removed successfully!');
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to remove member', 'error');
+        }
+    }
+
+    async function refreshMembers() {
+        if (!currentRosterId) {
+            showAlert('Please select a roster first', 'error');
+            return;
+        }
+
+        try {
+            showAlert('Refreshing member data...');
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/refresh`, 'POST');
+            showAlert('Member data refreshed successfully!');
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to refresh member data', 'error');
+        }
+    }
+
+    async function deleteGroup(groupId) {
+        if (!confirm('Delete this group? This cannot be undone.')) return;
+
+        try {
+            await apiCall(`${API_BASE}/roster-group/${groupId}?server_id=${serverId}`, 'DELETE');
+            showAlert('Group deleted successfully!');
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to delete group', 'error');
+        }
+    }
+
+    async function deleteCategory(customId) {
+        if (!confirm('Delete this category? This cannot be undone.')) return;
+
+        try {
+            await apiCall(`${API_BASE}/roster-signup-category/${customId}?server_id=${serverId}`, 'DELETE');
+            showAlert('Category deleted successfully!');
+            location.reload();
+        } catch (error) {
+            showAlert('Failed to delete category', 'error');
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,11 +1,13 @@
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreateRosterModel(BaseModel):
-    clan_tag: str = Field(
-        ..., description='Clan tag with or without leading #'
+    clan_tag: Optional[str] = Field(
+        None, description='Clan tag (required for clan type, optional for family type)'
     )
+    roster_type: Literal['clan', 'family'] = Field('clan', description='Organization: clan-specific or family-wide')
+    signup_scope: Literal['clan-only', 'family-wide'] = Field('clan-only', description='Who can signup: clan members only or entire family')
     alias: str = Field(..., max_length=64)
 
 
@@ -16,29 +18,19 @@ class RosterUpdateModel(BaseModel):
     alias: Optional[str] = Field(None, max_length=64)
 
     clan_tag: Optional[str] = None
-    th_restriction: Optional[str] = None
+    min_th: Optional[int] = Field(None, ge=1, le=17, description="Minimum town hall level")
+    max_th: Optional[int] = Field(None, ge=1, le=17, description="Maximum town hall level")
     description: Optional[str] = None
     roster_type: Optional[Literal['clan', 'family']] = None
+    signup_scope: Optional[Literal['clan-only', 'family-wide']] = None
     max_accounts_per_user: Optional[int] = None
     event_start_time: Optional[int] = None
 
-    recurrent: bool = Field(False)
-    frequency: Optional[Literal['weekly', 'monthly']] = None
-
-    # Phase timing
-    signup_publish_time: Optional[int] = None
-    registration_close_time: Optional[int] = None
-    result_publish_time: Optional[int] = None
-
-    # Auto-phase control
-    auto_signup_publish: Optional[bool] = None
-    auto_registration_close: Optional[bool] = None
-    auto_result_publish: Optional[bool] = None
-
-    allowed_signup_groups: Optional[List[str]] = Field(
+    allowed_signup_categories: Optional[List[str]] = Field(
         None,
         description='List of roster_signup_categories.custom_id allowed for this roster',
     )
+    group_id: Optional[str] = None  # Move roster to different group
 
     # Display and UI configuration
     roster_size: Optional[int] = None
@@ -48,13 +40,16 @@ class RosterUpdateModel(BaseModel):
     sort: Optional[list] = None
 
 
+
 class TemplateUpdateModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     alias: Optional[str] = Field(None, max_length=64)
     server_id: Optional[int] = None
     clan_tag: Optional[str] = None
-    th_restriction: Optional[str] = None
+    min_th: Optional[int] = Field(None, ge=1, le=17, description="Minimum town hall level")
+    max_th: Optional[int] = Field(None, ge=1, le=17, description="Maximum town hall level")
+    th_restriction: Optional[str] = Field(None, description="Legacy TH restriction format (will be overridden by min_th/max_th)")
     active: Optional[bool] = None
     frequency: Optional[Literal['weekly', 'monthly', 'cwl_season']] = None
 
@@ -62,20 +57,6 @@ class TemplateUpdateModel(BaseModel):
     event_time: Optional[int] = Field(
         None, description='Actual event timestamp'
     )
-    signup_publish_time: Optional[int] = Field(
-        None, description='When to open roster signups (timestamp)'
-    )
-    registration_close_time: Optional[int] = Field(
-        None, description='When to close registrations (timestamp)'
-    )
-    result_publish_time: Optional[int] = Field(
-        None, description='When to publish results (timestamp)'
-    )
-
-    # Auto-phase control
-    auto_signup_publish: Optional[bool] = None
-    auto_registration_close: Optional[bool] = None
-    auto_result_publish: Optional[bool] = None
 
     # Event system for templates
     event_type: Optional[
@@ -188,16 +169,6 @@ class CreateRosterGroupModel(BaseModel):
     alias: str = Field(
         ..., max_length=64, description='Changeable group name/alias'
     )
-    server_id: int = Field(..., description='Discord server ID')
-
-    # Group-level settings that override individual roster settings
-    max_accounts_per_user: Optional[int] = Field(
-        None, description='Max accounts per user across entire group'
-    )
-    auto_signup_publish: Optional[bool] = None
-    auto_registration_close: Optional[bool] = None
-    auto_result_publish: Optional[bool] = None
-
 
 class UpdateRosterGroupModel(BaseModel):
     """Model for updating roster group settings"""
@@ -217,8 +188,8 @@ class UpdateRosterGroupModel(BaseModel):
 class CreateRosterSignupCategoryModel(BaseModel):
     """Model for creating roster signup category categories"""
 
-    server_id: int = Field(..., description='Discord server ID')
-    custom_id: str = Field(..., description='Custom signup category ID')
+    server_id: Union[int, str] = Field(..., description='Discord server ID')
+    custom_id: Optional[str] = Field(None, description='Custom signup category ID (auto-generated if not provided)')
     alias: str = Field(
         ..., max_length=32, description='Display name for signup category'
     )

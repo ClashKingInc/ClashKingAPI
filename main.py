@@ -6,6 +6,7 @@ import coc
 import linkd
 import hikari
 import typing as t
+import pendulum as pend
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from startup import define_app

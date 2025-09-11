@@ -57,6 +57,70 @@
         .tab-inactive {
             @apply text-muted-foreground hover:text-foreground hover:bg-accent;
         }
+
+        .member-card {
+            @apply bg-background border border-border rounded-md p-3 cursor-move select-none transition-all duration-200;
+        }
+
+        .member-card:hover {
+            @apply border-primary shadow-md;
+        }
+
+        .member-card.dragging {
+            @apply opacity-50 scale-95;
+        }
+
+        .drop-zone.drag-over {
+            @apply border-primary border-solid bg-primary/5;
+        }
+
+        .autocomplete-item {
+            @apply px-3 py-2 hover:bg-accent cursor-pointer transition-colors;
+        }
+
+        .autocomplete-item:hover {
+            @apply bg-accent text-accent-foreground;
+        }
+
+        /* Table-specific styles */
+        .member-table {
+            @apply w-full border-collapse;
+            min-width: 100%;
+        }
+        
+        .member-table th,
+        .member-table td {
+            @apply whitespace-nowrap text-center;
+            min-width: 120px;
+        }
+
+        .member-row.dragging {
+            @apply opacity-50;
+        }
+
+        .group-separator td {
+            @apply bg-muted/30 border-y border-border;
+        }
+
+        .member-table th {
+            @apply text-left text-xs font-medium text-muted-foreground px-3 py-2 bg-muted/20;
+        }
+
+        .member-table tbody td {
+            @apply border-b border-border/50;
+        }
+        
+        .member-table tbody td:not([class*="px-"]) {
+            @apply px-3 py-2 text-xs;
+        }
+
+        .empty-drop-row {
+            @apply min-h-16;
+        }
+
+        .empty-drop-row.drag-over {
+            @apply border-primary bg-primary/10;
+        }
     </style>
 </head>
 
@@ -333,7 +397,8 @@
                                             </div>
                                         {% else %}
                                             <div class="p-4 border border-border rounded-md text-center">
-                                                <p class="text-sm text-muted-foreground mb-2">No categories available</p>
+                                                <p class="text-sm text-muted-foreground mb-2">No categories
+                                                    available</p>
                                                 <button type="button" onclick="showTab('categories')"
                                                         class="text-sm text-primary hover:underline">
                                                     Create categories in Global Management
@@ -359,11 +424,11 @@
 
             <!-- Members Tab Content -->
             <div id="content-members" class="tab-content hidden">
-                <div class="max-w-6xl">
+                <div class="max-w-7xl">
                     <div class="flex items-center justify-between mb-6">
                         <div>
                             <h2 class="text-2xl font-semibold mb-2">Members</h2>
-                            <p class="text-muted-foreground">Manage roster members and their data</p>
+                            <p class="text-muted-foreground">Manage roster members with drag & drop categorization</p>
                         </div>
                         <div class="flex gap-2">
                             <button onclick="refreshMembers()"
@@ -371,84 +436,285 @@
                                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                                 Refresh
                             </button>
-                            <button onclick="showAddMemberModal()"
-                                    class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
-                                <i data-lucide="user-plus" class="w-4 h-4"></i>
-                                Add Members
-                            </button>
                         </div>
                     </div>
 
-                    <div class="bg-card border border-border rounded-lg">
-                        <div id="members-content">
-                            {% if current_roster and current_roster.members %}
-                                <div class="overflow-x-auto">
-                                    <table class="w-full">
-                                        <thead class="border-b border-border">
-                                        <tr class="text-left">
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Player
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Tag
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                TH
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Heroes
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Trophies
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Group
-                                            </th>
-                                            <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-border">
-                                        {% for member in current_roster.members %}
-                                            <tr class="hover:bg-muted/30">
-                                                <td class="px-6 py-4 font-medium">{{ member.name }}</td>
-                                                <td class="px-6 py-4 font-mono text-sm text-muted-foreground">{{ member.tag }}</td>
-                                                <td class="px-6 py-4">
-                                                    <span class="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">{{ member.townhall }}</span>
-                                                </td>
-                                                <td class="px-6 py-4 text-sm">{{ member.hero_lvs }}</td>
-                                                <td class="px-6 py-4 text-sm">{{ member.trophies }}</td>
-                                                <td class="px-6 py-4">
-                                                    {% if member.signup_group %}
-                                                        <span class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">{{ member.signup_group }}</span>
-                                                    {% else %}
-                                                        <span class="text-muted-foreground text-sm">None</span>
-                                                    {% endif %}
-                                                </td>
-                                                <td class="px-6 py-4">
-                                                    <button onclick="removeMember('{{ member.tag }}')"
-                                                            class="px-2 py-1 bg-destructive/10 text-destructive rounded text-xs hover:bg-destructive/20 transition-colors">
-                                                        Remove
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                        </tbody>
-                                    </table>
+                    <!-- Column Configuration -->
+                    <div class="bg-card border border-border rounded-lg mb-6">
+                        <button type="button" onclick="toggleDisplayConfig()" class="w-full p-6 text-left flex items-center justify-between hover:bg-accent/50 transition-colors">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="settings" class="w-4 h-4"></i>
+                                <h3 class="font-medium">Display Configuration</h3>
+                            </div>
+                            <i data-lucide="chevron-down" class="w-4 h-4 transform transition-transform" id="display-config-chevron"></i>
+                        </button>
+                        <div id="display-config-content" class="hidden px-6 pb-6">
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Column Selection -->
+                            <div>
+                                <label class="text-sm font-medium mb-2 block">Display Columns (in order)</label>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">Column 1</label>
+                                        <select id="column-1" name="column-1" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="discord">Discord User</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="war_pref">War Opt Status</option>
+                                            <option value="trophies">Trophies</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">Column 2</label>
+                                        <select id="column-2" name="column-2" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="discord">Discord User</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="war_pref">War Opt Status</option>
+                                            <option value="trophies">Trophies</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">Column 3</label>
+                                        <select id="column-3" name="column-3" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="discord">Discord User</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="war_pref">War Opt Status</option>
+                                            <option value="trophies">Trophies</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">Column 4</label>
+                                        <select id="column-4" name="column-4" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="discord">Discord User</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="war_pref">War Opt Status</option>
+                                            <option value="trophies">Trophies</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            {% else %}
-                                <div class="p-12 text-center">
-                                    <i data-lucide="user-plus" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
-                                    <h3 class="text-lg font-medium text-muted-foreground mb-2">No members yet</h3>
-                                    <p class="text-sm text-muted-foreground mb-6">Start building your roster by adding
-                                        members</p>
-                                    <button onclick="showAddMemberModal()"
-                                            class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
-                                        Add First Member
-                                    </button>
+                                <p class="text-xs text-muted-foreground mt-2">Choose up to 4 columns in display order</p>
+                            </div>
+                            
+                            <!-- Sort Configuration -->
+                            <div>
+                                <label class="text-sm font-medium mb-2 block">Member Sort Order (by preference, all ascending)</label>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">1st Priority</label>
+                                        <select id="sort-1" name="sort-1" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="trophies">Trophies</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="added_at">Date Added</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">2nd Priority</label>
+                                        <select id="sort-2" name="sort-2" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="trophies">Trophies</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="added_at">Date Added</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">3rd Priority</label>
+                                        <select id="sort-3" name="sort-3" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="trophies">Trophies</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="added_at">Date Added</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-muted-foreground">4th Priority</label>
+                                        <select id="sort-4" name="sort-4" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                            <option value="">None</option>
+                                            <option value="name">Name</option>
+                                            <option value="tag">Player Tag</option>
+                                            <option value="townhall">Townhall Level</option>
+                                            <option value="hero_lvs">Heroes</option>
+                                            <option value="trophies">Trophies</option>
+                                            <option value="hitrate">30 Day Hitrate</option>
+                                            <option value="current_clan_tag">Clan Tag</option>
+                                            <option value="added_at">Date Added</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end mt-4 pt-4 border-t border-border">
+                            <button onclick="saveDisplayConfiguration()" 
+                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                                <i data-lucide="save" class="w-4 h-4"></i>
+                                Save Configuration
+                            </button>
+                        </div>
+                        </div>
+                    </div>
+
+                    <!-- Add Member Search -->
+                    <div class="bg-card border border-border rounded-lg p-6 mb-6">
+                        <h3 class="font-medium mb-4 flex items-center gap-2">
+                            <i data-lucide="search" class="w-4 h-4"></i>
+                            Add Members
+                        </h3>
+
+                        <!-- Search Input -->
+                        <div class="flex gap-4 mb-4">
+                            <div class="flex-1 relative">
+                                <input type="text" id="member-search"
+                                       placeholder="Search by name or enter player tag..."
+                                       class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                       oninput="searchMembers(this.value)" onkeypress="handleSearchKeypress(event)">
+                                <div id="member-suggestions"
+                                     class="absolute top-full left-0 right-0 bg-card border border-border rounded-md mt-1 max-h-60 overflow-y-auto z-10 hidden">
+                                    <!-- Autocomplete suggestions will appear here -->
+                                </div>
+                            </div>
+                            <div class="w-48">
+                                <select id="category-selector"
+                                        class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                    <option value="">No category</option>
+                                    {% for category in categories %}
+                                        <option value="{{ category.custom_id }}">{{ category.alias }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button onclick="addMemberDirectly()"
+                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                                Add Member
+                            </button>
+                        </div>
+
+                        <!-- Bulk Add Section -->
+                        <div class="mb-4">
+                            <button onclick="toggleBulkAdd()" id="bulk-add-toggle"
+                                    class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 mb-2">
+                                <i data-lucide="copy" class="w-4 h-4"></i>
+                                Bulk add multiple tags
+                                <i data-lucide="chevron-down" class="w-4 h-4" id="bulk-add-chevron"></i>
+                            </button>
+                            <div id="bulk-add-section" class="hidden">
+                                <div class="border border-border rounded-md p-3 bg-muted/30">
+                                    <textarea id="bulk-tags-input"
+                                              placeholder="Paste player tags here, one per line or separated by commas/spaces:&#10;#ABC123&#10;#DEF456&#10;#GHI789"
+                                              class="w-full h-24 px-3 py-2 bg-background border border-input rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                              oninput="validateBulkTags()"></textarea>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <span id="bulk-tags-count" class="text-sm text-muted-foreground">0 tags detected</span>
+                                        <div class="flex gap-2">
+                                            <button onclick="clearBulkTags()"
+                                                    class="px-3 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                                Clear
+                                            </button>
+                                            <button onclick="addBulkMembers()"
+                                                    id="bulk-add-button"
+                                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    disabled>
+                                                <i data-lucide="users" class="w-4 h-4"></i>
+                                                Add All
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Category-specific members -->
+                    <div id="category-sections">
+                        {% for category in categories %}
+                            <div class="bg-card border border-border rounded-lg"
+                                 data-category="{{ category.custom_id }}">
+                                <div class="p-4 border-b border-border">
+                                    <h3 class="font-medium flex items-center gap-2">
+                                        <i data-lucide="tag" class="w-4 h-4"></i>
+                                        {{ category.alias }}
+                                        <span class="ml-auto bg-primary/10 text-primary px-2 py-1 rounded text-xs category-count"
+                                              id="count-{{ category.custom_id }}">0</span>
+                                    </h3>
+                                </div>
+                                <div class="p-4">
+                                    <div id="category-{{ category.custom_id }}"
+                                         class="drop-zone grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 min-h-[100px] border-2 border-dashed border-muted rounded-lg p-3"
+                                         ondrop="drop(event, '{{ category.custom_id }}')" ondragover="allowDrop(event)">
+                                        <!-- Member cards will appear here -->
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Members by Category -->
+                    <div class="grid gap-6" id="member-categories">
+                        <!-- Uncategorized Members -->
+                        <div class="bg-card border border-border rounded-lg">
+                            <div class="p-4 border-b border-border">
+                                <h3 class="font-medium text-muted-foreground flex items-center gap-2">
+                                    <i data-lucide="users" class="w-4 h-4"></i>
+                                    Uncategorized
+                                    <span class="ml-auto bg-muted text-muted-foreground px-2 py-1 rounded text-xs"
+                                          id="uncategorized-count">0</span>
+                                </h3>
+                            </div>
+                            <div class="p-4">
+                                <div id="uncategorized-members"
+                                     class="drop-zone grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 min-h-[100px] border-2 border-dashed border-muted rounded-lg p-3"
+                                     ondrop="drop(event, null)" ondragover="allowDrop(event)">
+                                    <!-- Member cards will appear here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty state -->
+                        <div id="members-empty-state" class="bg-card border border-border rounded-lg p-12 text-center"
+                             style="display: none;">
+                            <i data-lucide="user-plus" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+                            <h3 class="text-lg font-medium text-muted-foreground mb-2">No members yet</h3>
+                            <p class="text-sm text-muted-foreground mb-6">Start building your roster by searching and
+                                adding members above</p>
                         </div>
                     </div>
                 </div>
@@ -558,31 +824,6 @@
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-card border border-border rounded-lg max-w-md w-full p-6" onclick="event.stopPropagation()">
 
-            <!-- Add Member Modal -->
-            <div id="add-member-modal" class="hidden">
-                <div class="flex items-center gap-2 mb-4">
-                    <i data-lucide="user-plus" class="w-5 h-5"></i>
-                    <h3 class="font-semibold">Add Members</h3>
-                </div>
-                <form id="add-member-form" class="space-y-4">
-                    <div class="space-y-2">
-                        <label class="text-sm font-medium">Player Tags</label>
-                        <textarea name="tags" rows="5" placeholder="#ABC123XYZ&#10;#DEF456UVW" required
-                                  class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none"></textarea>
-                        <p class="text-xs text-muted-foreground">One tag per line</p>
-                    </div>
-                    <div class="flex justify-end gap-2">
-                        <button type="button" onclick="closeModals()"
-                                class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
-                            Cancel
-                        </button>
-                        <button type="submit"
-                                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90">
-                            Add Members
-                        </button>
-                    </div>
-                </form>
-            </div>
 
             <!-- Create Group Modal -->
             <div id="create-group-modal" class="hidden">
@@ -702,7 +943,9 @@
     const API_BASE = '/v2';
     const ROSTER_TOKEN = new URLSearchParams(window.location.search).get('token');
     let currentRosterId = '{{ current_roster.custom_id if current_roster else '' }}';
+    let currentRosterData = {{ current_roster_json | safe }};
     const serverId = '{{ server_id }}';
+    const categoriesData = {{ categories_json | safe }};
 
     // Tab navigation
     function showTab(tabName) {
@@ -721,6 +964,18 @@
         document.getElementById('tab-' + tabName).classList.remove('tab-inactive');
         document.getElementById('tab-' + tabName).classList.add('tab-active');
         document.getElementById('content-' + tabName).classList.remove('hidden');
+        
+        // Save current tab to localStorage
+        localStorage.setItem('roster-current-tab', tabName);
+        
+        // If switching to members tab, reload the form data to populate dropdowns
+        if (tabName === 'members' && currentRosterData) {
+            console.log('Switching to members tab, reloading form data...');
+            setTimeout(() => {
+                updateSettingsForm(currentRosterData);
+                populateCategoryDropdown(); // Ensure category dropdown is populated
+            }, 100);
+        }
     }
 
     // Roster selection
@@ -758,8 +1013,9 @@
             const response = await apiCall(`${API_BASE}/roster/${selectedId}?server_id=${serverId}`, 'GET');
             const roster = response.roster;
 
-            // Update current roster ID
+            // Update current roster ID and data
             currentRosterId = selectedId;
+            currentRosterData = roster;
 
             // Update UI with new roster data
             updateRosterUI(roster);
@@ -782,8 +1038,9 @@
         document.getElementById('roster-tabs').style.display = 'block';
         document.getElementById('welcome-content').style.display = 'none';
 
-        // Show default settings tab
-        showTab('settings');
+        // Show last active tab or default to settings
+        const savedTab = localStorage.getItem('roster-current-tab') || 'settings';
+        showTab(savedTab);
     }
 
     function updateRosterUI(roster) {
@@ -794,6 +1051,9 @@
 
             // Update members table
             updateMembersTable(roster);
+
+            // Load members display for drag & drop interface
+            loadMembersDisplay();
         } catch (error) {
             console.error('Error updating roster UI:', error);
         }
@@ -802,6 +1062,8 @@
     function updateSettingsForm(roster) {
         const form = document.getElementById('roster-form');
         if (!form) return;
+        
+        console.log('updateSettingsForm called with roster:', roster);
 
         // Update form fields
         form.elements['alias'].value = roster.alias || '';
@@ -821,85 +1083,78 @@
             cb.checked = roster.allowed_signup_categories && roster.allowed_signup_categories.includes(cb.value);
         });
 
+        // Update display columns dropdowns
+        const displayColumns = roster.columns || ['Name', 'Player Tag', 'Townhall Level', '30 Day Hitrate'];
+        
+        console.log('Loading roster columns:', displayColumns);
+        
+        // Convert display names back to values
+        const reverseColumnMapping = {
+            'Townhall Level': 'townhall',
+            'Name': 'name',
+            'Player Tag': 'tag',
+            '30 Day Hitrate': 'hitrate',
+            'Clan Tag': 'current_clan_tag',
+            'Discord User': 'discord',
+            'Heroes': 'hero_lvs',
+            'War Opt Status': 'war_pref',
+            'Trophies': 'trophies'
+        };
+        
+        // Populate column selectors
+        for (let i = 1; i <= 4; i++) {
+            const element = form.elements[`column-${i}`] || document.getElementById(`column-${i}`);
+            if (element) {
+                const displayName = displayColumns[i - 1] || '';
+                const mappedValue = reverseColumnMapping[displayName] || '';
+                element.value = mappedValue;
+            } else {
+                console.warn(`Element column-${i} not found!`);
+            }
+        }
+
+        // Update sort configuration
+        const sortConfig = roster.sort || ['Name', 'Player Tag', 'Heroes', 'Townhall Level'];
+        
+        console.log('Loading roster sort:', sortConfig);
+        
+        // Convert sort display names back to values
+        const reverseSortMapping = {
+            'Name': 'name',
+            'Player Tag': 'tag',
+            'Townhall Level': 'townhall',
+            'Heroes': 'hero_lvs',
+            'Trophies': 'trophies',
+            '30 Day Hitrate': 'hitrate',
+            'Clan Tag': 'current_clan_tag',
+            'Date Added': 'added_at'
+        };
+        
+        // Update sort selectors
+        for (let i = 1; i <= 4; i++) {
+            const element = form.elements[`sort-${i}`] || document.getElementById(`sort-${i}`);
+            if (element) {
+                const displayName = sortConfig[i - 1] || '';
+                const mappedValue = reverseSortMapping[displayName] || '';
+                element.value = mappedValue;
+            } else {
+                console.warn(`Element sort-${i} not found!`);
+            }
+        }
+
         // Update clan selection requirements
         toggleClanSelection();
     }
 
     function updateMembersTable(roster) {
-        const membersContent = document.getElementById('members-content');
-        if (!membersContent) return;
-
-        // Update members count in header
-        const membersCountEl = document.getElementById('members-count');
-        if (membersCountEl) {
-            membersCountEl.textContent = `(${roster.members?.length || 0})`;
+        // Update sidebar member count
+        const sidebarCount = document.getElementById('sidebar-member-count');
+        if (sidebarCount) {
+            sidebarCount.textContent = roster.members?.length || 0;
         }
 
-        if (!roster.members || roster.members.length === 0) {
-            // Show empty state
-            membersContent.innerHTML = `
-                    <div class="p-12 text-center">
-                        <i data-lucide="user-plus" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
-                        <h3 class="text-lg font-medium text-muted-foreground mb-2">No members yet</h3>
-                        <p class="text-sm text-muted-foreground mb-6">Start building your roster by adding members</p>
-                        <button onclick="showAddMemberModal()" class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
-                            Add First Member
-                        </button>
-                    </div>
-                `;
-            lucide.createIcons();
-            return;
-        }
-
-        // Build members table
-        let tableHTML = `
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead class="border-b border-border">
-                            <tr class="text-left">
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Player</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Tag</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">TH</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Heroes</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Trophies</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Group</th>
-                                <th class="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border">
-            `;
-
-        roster.members.forEach(member => {
-            const groupBadge = member.signup_group
-                ? `<span class="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">${member.signup_group}</span>`
-                : `<span class="text-muted-foreground text-sm">None</span>`;
-
-            tableHTML += `
-                    <tr class="hover:bg-muted/30">
-                        <td class="px-6 py-4 font-medium">${member.name}</td>
-                        <td class="px-6 py-4 font-mono text-sm text-muted-foreground">${member.tag}</td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">${member.townhall}</span>
-                        </td>
-                        <td class="px-6 py-4 text-sm">${member.hero_lvs}</td>
-                        <td class="px-6 py-4 text-sm">${member.trophies}</td>
-                        <td class="px-6 py-4">${groupBadge}</td>
-                        <td class="px-6 py-4">
-                            <button onclick="removeMember('${member.tag}')" class="px-2 py-1 bg-destructive/10 text-destructive rounded text-xs hover:bg-destructive/20 transition-colors">
-                                Remove
-                            </button>
-                        </td>
-                    </tr>
-                `;
-        });
-
-        tableHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-
-        membersContent.innerHTML = tableHTML;
+        // Load the new drag & drop interface
+        loadMembersDisplay();
     }
 
     // Clan selection toggle
@@ -922,11 +1177,54 @@
         lucide.createIcons();
         toggleClanSelection();
 
+        // Ensure category dropdown is populated
+        
+        // Populate dropdown with JavaScript if needed
+        populateCategoryDropdown();
+
+        // Load clan members for autocomplete
+        await loadClanMembers();
+
+        // Add event listeners for column selection
+        ['column-1', 'column-2', 'column-3', 'column-4'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('change', function(event) {
+                    event.preventDefault();
+                    handleColumnChange(event);
+                    return false;
+                });
+            }
+        });
+
+        // Add event listeners for sort configuration changes
+        ['sort-1', 'sort-2', 'sort-3', 'sort-4'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('change', function(event) {
+                    event.preventDefault();
+                    updateMemberCardsPreview();
+                    return false;
+                });
+            }
+        });
+
         // Show appropriate initial state
+        
         if (currentRosterId) {
             selectRoster();
+            // Also load members display for initial roster
+            setTimeout(() => loadMembersDisplay(), 100);
+        } else if (currentRosterData) {
+            // If we have roster data but no ID (shouldn't happen), still try to populate
+            updateSettingsForm(currentRosterData);
         }
     });
+
+    // Notifications (alias for showAlert)
+    function showNotification(message, type = 'success') {
+        showAlert(message, type);
+    }
 
     // Alerts
     function showAlert(message, type = 'success') {
@@ -988,31 +1286,31 @@
             // Get updated categories from API
             const response = await apiCall(`${API_BASE}/roster-signup-category/list?server_id=${serverId}`, 'GET');
             const categories = response.items || [];
-            
+
             // Update categories tab content
             updateCategoriesTab(categories);
-            
+
             // Update the categories checkboxes in roster settings if they exist
             updateCategoriesCheckboxes(categories);
-            
+
             // Update the tab counter
             const tabCounter = document.querySelector('#tab-categories .ml-auto');
             if (tabCounter) {
                 tabCounter.textContent = categories.length;
             }
-            
+
         } catch (error) {
             console.error('Failed to refresh categories:', error);
         }
     }
-    
+
     function updateCategoriesTab(categories) {
         const contentCategories = document.getElementById('content-categories');
         if (!contentCategories) return;
-        
+
         const categoriesContainer = contentCategories.querySelector('.max-w-4xl > div:last-child');
         if (!categoriesContainer) return;
-        
+
         if (categories.length === 0) {
             // Show empty state
             categoriesContainer.innerHTML = `
@@ -1046,15 +1344,15 @@
             categoriesHTML += '</div>';
             categoriesContainer.innerHTML = categoriesHTML;
         }
-        
+
         // Recreate icons
         lucide.createIcons();
     }
-    
+
     function updateCategoriesCheckboxes(categories) {
         const checkboxContainer = document.querySelector('#categories-checkboxes');
         if (!checkboxContainer) return;
-        
+
         if (categories.length === 0) {
             checkboxContainer.innerHTML = `
                 <div class="p-4 border border-border rounded-md text-center">
@@ -1081,15 +1379,6 @@
     }
 
     // Modals
-    function showAddMemberModal() {
-        if (!currentRosterId) {
-            showAlert('Please select a roster first', 'error');
-            return;
-        }
-        document.getElementById('modal-overlay').classList.remove('hidden');
-        document.querySelectorAll('#modal-overlay [id$="-modal"]').forEach(m => m.classList.add('hidden'));
-        document.getElementById('add-member-modal').classList.remove('hidden');
-    }
 
     function showCreateGroupModal() {
         document.getElementById('modal-overlay').classList.remove('hidden');
@@ -1147,6 +1436,47 @@
         const categoryCheckboxes = e.target.querySelectorAll('input[name="allowed_signup_categories"]:checked');
         data.allowed_signup_categories = Array.from(categoryCheckboxes).map(cb => cb.value);
 
+        // Process display columns dropdowns - convert to display names
+        const columnMapping = {
+            'townhall': 'Townhall Level',
+            'name': 'Name',
+            'tag': 'Player Tag',
+            'hitrate': '30 Day Hitrate',
+            'current_clan_tag': 'Clan Tag',
+            'discord': 'Discord User',
+            'hero_lvs': 'Heroes',
+            'war_pref': 'War Opt Status',
+            'trophies': 'Trophies'
+        };
+        
+        data.columns = [];
+        for (let i = 1; i <= 4; i++) {
+            const columnField = e.target.elements[`column-${i}`]?.value;
+            if (columnField && columnField.trim() !== '') {
+                data.columns.push(columnMapping[columnField] || columnField);
+            }
+        }
+
+        // Process sort configuration - convert to display names
+        const sortMapping = {
+            'name': 'Name',
+            'tag': 'Player Tag',
+            'townhall': 'Townhall Level',
+            'hero_lvs': 'Heroes',
+            'trophies': 'Trophies',
+            'hitrate': '30 Day Hitrate',
+            'current_clan_tag': 'Clan Tag',
+            'added_at': 'Date Added'
+        };
+        
+        data.sort = [];
+        for (let i = 1; i <= 4; i++) {
+            const sortField = e.target.elements[`sort-${i}`]?.value;
+            if (sortField && sortField.trim() !== '') {
+                data.sort.push(sortMapping[sortField] || sortField);
+            }
+        }
+
         // Clean data
         ['min_th', 'max_th', 'clan_tag', 'max_accounts_per_user', 'roster_size', 'group_id'].forEach(field => {
             if (data[field] === '') data[field] = null;
@@ -1171,21 +1501,6 @@
         }
     });
 
-    document.getElementById('add-member-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const tags = formData.get('tags').split('\n').filter(tag => tag.trim());
-        const members = tags.map(tag => ({tag: tag.trim()}));
-
-        try {
-            await apiCall(`${API_BASE}/roster/${currentRosterId}/members`, 'POST', {add: members});
-            showAlert('Members added successfully!');
-            closeModals();
-            location.reload();
-        } catch (error) {
-            showAlert('Failed to add members', 'error');
-        }
-    });
 
     document.getElementById('create-group-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1215,10 +1530,10 @@
             await apiCall(`${API_BASE}/roster-signup-category?server_id=${serverId}`, 'POST', data);
             showAlert('Category created successfully!');
             closeModals();
-            
+
             // Refresh categories list dynamically
             await refreshCategoriesList();
-            
+
             // Reset form
             e.target.reset();
         } catch (error) {
@@ -1257,9 +1572,11 @@
         if (!confirm('Remove this member from the roster?')) return;
 
         try {
-            await apiCall(`${API_BASE}/roster/${currentRosterId}/members/${encodeURIComponent(playerTag)}`, 'DELETE');
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members?server_id=${serverId}`, 'POST', {
+                remove: [playerTag]
+            });
             showAlert('Member removed successfully!');
-            location.reload();
+            await loadMembersDisplay();
         } catch (error) {
             showAlert('Failed to remove member', 'error');
         }
@@ -1304,6 +1621,1235 @@
             showAlert('Failed to delete category', 'error');
         }
     }
+
+    // ============= MEMBER SEARCH AND AUTOCOMPLETE =============
+
+    let clanMembers = [];
+    let searchTimeout;
+
+    // Populate category dropdown (defensive function)
+    function populateCategoryDropdown() {
+        const categoryDropdown = document.getElementById('category-selector');
+        if (!categoryDropdown)
+        {
+            console.warn('Category dropdown not found!');
+            return;
+        }
+        
+        // Check if dropdown needs populating by comparing expected vs actual option count
+        const currentOptionCount = categoryDropdown.children.length;
+        const expectedOptionCount = categoriesData ? categoriesData.length + 1 : 1; // +1 for "No category"
+        const needsPopulating = categoriesData && categoriesData.length > 0 && currentOptionCount !== expectedOptionCount;
+        
+        if (needsPopulating) {
+            console.log(`Populating category dropdown. Current: ${currentOptionCount}, Expected: ${expectedOptionCount}`);
+            let options = '<option value="">No category</option>';
+            categoriesData.forEach(category => {
+                options += `<option value="${category.custom_id}">${category.alias}</option>`;
+            });
+            categoryDropdown.innerHTML = options;
+        }
+    }
+
+    // Load clan members for autocomplete
+    async function loadClanMembers() {
+        try {
+            const response = await apiCall(`${API_BASE}/roster/server/${serverId}/members`, 'GET');
+            clanMembers = response.members || [];
+        } catch (error) {
+            console.error('Failed to load clan members:', error);
+        }
+    }
+
+    // Search members for autocomplete
+    function searchMembers(query) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            const suggestions = document.getElementById('member-suggestions');
+
+            if (!query || query.length < 2) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+
+            // Get list of already added member tags to exclude them
+            const existingMemberTags = new Set();
+            if (currentRosterData && currentRosterData.members) {
+                currentRosterData.members.forEach(member => {
+                    existingMemberTags.add(member.tag.toLowerCase());
+                });
+            }
+
+            const matches = clanMembers.filter(member => {
+                // Exclude members already in the roster
+                if (existingMemberTags.has(member.tag.toLowerCase())) {
+                    return false;
+                }
+                
+                // Filter by query
+                return member.name.toLowerCase().includes(query.toLowerCase()) ||
+                       member.tag.toLowerCase().includes(query.toLowerCase());
+            }).slice(0, 10); // Limit to 10 results
+
+            if (matches.length === 0) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+
+            suggestions.innerHTML = matches.map(member => `
+                <div class="autocomplete-item flex items-center gap-3" onclick="selectMember('${member.tag}', '${member.name.replace("'", "\\'")}')">
+                    <div class="flex-1">
+                        <div class="font-medium">${member.name}</div>
+                        <div class="text-xs text-muted-foreground">${member.tag} • TH${member.townhall} • ${member.clan_name}</div>
+                    </div>
+                    <div class="px-2 py-1 bg-primary/10 text-primary rounded text-xs">TH${member.townhall}</div>
+                </div>
+            `).join('');
+
+            suggestions.classList.remove('hidden');
+        }, 300);
+    }
+
+    // Select member from autocomplete
+    function selectMember(tag, name) {
+        document.getElementById('member-search').value = `${name} (${tag})`;
+        document.getElementById('member-suggestions').classList.add('hidden');
+        // Don't add immediately, just populate the search field
+    }
+
+    // Handle Enter key in search
+    function handleSearchKeypress(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            addMemberDirectly();
+        }
+    }
+
+    // Add selected members to pending list
+    function addSelectedMembersToList() {
+        const input = document.getElementById('member-search');
+        const categorySelect = document.getElementById('category-selector');
+        let searchValue = input.value.trim();
+
+        if (!searchValue) {
+            showAlert('Please enter a player name or tag', 'error');
+            return;
+        }
+
+        // Extract tag and name if format is "Name (Tag)"
+        const tagMatch = searchValue.match(/^(.+?)\s*\((#[A-Z0-9]+)\)$/);
+        let playerTag, playerName;
+
+        if (tagMatch) {
+            playerName = tagMatch[1];
+            playerTag = tagMatch[2];
+        } else {
+            playerTag = searchValue.startsWith('#') ? searchValue : `#${searchValue.toUpperCase()}`;
+            playerName = searchValue;
+        }
+
+        // Check if already in pending list
+        if (pendingMembers.some(m => m.tag === playerTag)) {
+            showAlert('Player already in the pending list', 'error');
+            return;
+        }
+
+        // Get selected category
+        const selectedCategory = categorySelect.value || null;
+        const categoryName = categorySelect.selectedOptions[0].text;
+
+        // Find member details from clan members if available
+        const clanMember = clanMembers.find(m => m.tag === playerTag);
+        const memberData = {
+            tag: playerTag,
+            name: clanMember ? clanMember.name : playerName,
+            townhall: clanMember ? clanMember.townhall : '?',
+            clan_name: clanMember ? clanMember.clan_name : 'External',
+            signup_group: selectedCategory,
+            category_name: selectedCategory ? categoryName : 'No category',
+            is_in_family: !!clanMember
+        };
+
+        // Add to pending list
+        pendingMembers.push(memberData);
+
+        // Clear input
+        input.value = '';
+
+        // Update UI
+        updatePendingMembersList();
+        showAlert(`Added ${memberData.name} to pending list`, 'info');
+    }
+
+    // Update pending members display
+    function updatePendingMembersList() {
+        const container = document.getElementById('pending-members-container');
+        const list = document.getElementById('pending-members-list');
+        const count = document.getElementById('pending-count');
+
+        if (pendingMembers.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+        count.textContent = `${pendingMembers.length} member${pendingMembers.length > 1 ? 's' : ''} selected`;
+
+        list.innerHTML = pendingMembers.map((member, index) => {
+            const familyBadge = member.is_in_family ? '' : ' <span class="text-xs bg-yellow-500/10 text-yellow-600 px-1 py-0.5 rounded">Ext</span>';
+            return `
+                <div class="flex items-center gap-2 bg-background border border-border rounded px-3 py-2 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium">${member.name}</span>
+                        <span class="text-muted-foreground">${member.tag}</span>
+                        <span class="px-2 py-1 bg-primary/10 text-primary rounded text-xs">TH${member.townhall}</span>
+                        ${familyBadge}
+                    </div>
+                    <div class="text-xs text-muted-foreground">→ ${member.category_name}</div>
+                    <button onclick="removePendingMember(${index})" 
+                            class="w-4 h-4 flex items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        // Recreate icons
+        lucide.createIcons();
+    }
+
+    // Remove member from pending list
+    function removePendingMember(index) {
+        pendingMembers.splice(index, 1);
+        updatePendingMembersList();
+    }
+
+    // Clear all pending members
+    function clearPendingMembers() {
+        pendingMembers = [];
+        updatePendingMembersList();
+    }
+
+    // Add all pending members to roster
+    async function addAllPendingMembers() {
+        if (pendingMembers.length === 0) {
+            showAlert('No members to add', 'error');
+            return;
+        }
+
+        if (!currentRosterId) {
+            showAlert('Please select a roster first', 'error');
+            return;
+        }
+
+        try {
+            showAlert(`Adding ${pendingMembers.length} members...`, 'info');
+
+            const membersToAdd = pendingMembers.map(member => ({
+                tag: member.tag,
+                signup_group: member.signup_group
+            }));
+
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members?server_id=${serverId}`, 'POST', {
+                add: membersToAdd
+            });
+
+            showAlert(`Successfully added ${pendingMembers.length} members!`);
+
+            // Clear pending list and refresh display
+            clearPendingMembers();
+            await loadMembersDisplay();
+        } catch (error) {
+            console.error('Error adding pending members:', error);
+            const attemptedTags = pendingMembers.map(m => m.tag);
+            handleMemberAddError(error, attemptedTags);
+        }
+    }
+
+    // ============= MEMBER ADDITION =============
+
+    // Add member directly without going through pending list
+    async function addMemberDirectly() {
+        const input = document.getElementById('member-search');
+        const categorySelect = document.getElementById('category-selector');
+        let searchValue = input.value.trim();
+
+        if (!searchValue) {
+            showAlert('Please enter a player name or tag', 'error');
+            return;
+        }
+
+        // Extract tag from input
+        const tagMatch = searchValue.match(/^(.+?)\s*\((#[A-Z0-9]+)\)$/);
+        let playerTag;
+
+        if (tagMatch) {
+            playerTag = tagMatch[2];
+        } else {
+            playerTag = searchValue.startsWith('#') ? searchValue : `#${searchValue.toUpperCase()}`;
+        }
+
+        const selectedCategory = categorySelect.value || null;
+
+        try {
+            const membersToAdd = [{
+                tag: playerTag,
+                signup_group: selectedCategory
+            }];
+
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members?server_id=${serverId}`, 'POST', {
+                add: membersToAdd
+            });
+
+            showAlert(`Successfully added ${playerTag}!`);
+            
+            // Clear input and refresh display
+            input.value = '';
+            await loadMembersDisplay();
+        } catch (error) {
+            console.error('Error adding member:', error);
+            handleMemberAddError(error, [playerTag]);
+        }
+    }
+
+    // Toggle bulk add section
+    function toggleBulkAdd() {
+        const section = document.getElementById('bulk-add-section');
+        const chevron = document.getElementById('bulk-add-chevron');
+        
+        if (section.classList.contains('hidden')) {
+            section.classList.remove('hidden');
+            chevron.style.transform = 'rotate(180deg)';
+        } else {
+            section.classList.add('hidden');
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    // Validate and count bulk tags
+    function validateBulkTags() {
+        const textarea = document.getElementById('bulk-tags-input');
+        const countSpan = document.getElementById('bulk-tags-count');
+        const addButton = document.getElementById('bulk-add-button');
+        
+        const text = textarea.value.trim();
+        if (!text) {
+            countSpan.textContent = '0 tags detected';
+            addButton.disabled = true;
+            return;
+        }
+
+        // Extract tags from text - support multiple formats
+        const tags = extractTagsFromText(text);
+        const validTags = tags.filter(tag => /^#[A-Z0-9]{3,}$/.test(tag));
+        
+        countSpan.textContent = `${validTags.length} valid tags detected`;
+        if (tags.length > validTags.length) {
+            countSpan.textContent += ` (${tags.length - validTags.length} invalid)`;
+            countSpan.classList.add('text-yellow-600');
+        } else {
+            countSpan.classList.remove('text-yellow-600');
+        }
+        
+        addButton.disabled = validTags.length === 0;
+    }
+
+    // Extract player tags from text
+    function extractTagsFromText(text) {
+        // Split by common separators and extract tags
+        const lines = text.split(/[\n,;\s]+/);
+        const tags = [];
+        
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+            
+            // Try to extract tag from various formats
+            const tagMatch = line.match(/#[A-Z0-9]+/g);
+            if (tagMatch) {
+                tags.push(...tagMatch);
+            } else if (line.match(/^[A-Z0-9]+$/)) {
+                // Plain tag without #
+                tags.push('#' + line);
+            }
+        }
+        
+        // Remove duplicates and normalize
+        return [...new Set(tags.map(tag => tag.toUpperCase()))];
+    }
+
+    // Clear bulk tags input
+    function clearBulkTags() {
+        document.getElementById('bulk-tags-input').value = '';
+        validateBulkTags();
+    }
+
+    // Add all bulk members
+    async function addBulkMembers() {
+        const textarea = document.getElementById('bulk-tags-input');
+        const categorySelect = document.getElementById('category-selector');
+        
+        const text = textarea.value.trim();
+        const tags = extractTagsFromText(text);
+        const validTags = tags.filter(tag => /^#[A-Z0-9]{3,}$/.test(tag));
+        
+        if (validTags.length === 0) {
+            showAlert('No valid tags found', 'error');
+            return;
+        }
+
+        const selectedCategory = categorySelect.value || null;
+        
+        try {
+            const membersToAdd = validTags.map(tag => ({
+                tag: tag,
+                signup_group: selectedCategory
+            }));
+
+            const response = await apiCall(`${API_BASE}/roster/${currentRosterId}/members?server_id=${serverId}`, 'POST', {
+                add: membersToAdd
+            });
+
+            const successCount = membersToAdd.length;
+            showAlert(`Successfully processed ${successCount} members!`);
+            
+            // Clear input and refresh display
+            clearBulkTags();
+            toggleBulkAdd(); // Close bulk section
+            await loadMembersDisplay();
+            
+        } catch (error) {
+            console.error('Error adding bulk members:', error);
+            handleMemberAddError(error, validTags);
+        }
+    }
+
+    // Handle member addition errors with specific messages
+    function handleMemberAddError(error, attemptedTags) {
+        let errorMessage = 'Failed to add members. Please try again.';
+        
+        try {
+            if (error.response) {
+                const status = error.response.status;
+                const detail = error.response.data?.detail || '';
+                
+                switch (status) {
+                    case 400:
+                        if (detail.includes('Invalid signup_group')) {
+                            errorMessage = 'Invalid category selected. Please choose a valid category.';
+                        } else if (detail.includes('not allowed for this roster')) {
+                            errorMessage = 'The selected category is not allowed for this roster.';
+                        } else {
+                            errorMessage = detail || 'Invalid request. Please check your input.';
+                        }
+                        break;
+                        
+                    case 422:
+                        errorMessage = 'Invalid player tag format. Player tags should be like #ABC123.';
+                        break;
+                        
+                    case 404:
+                        if (attemptedTags.length === 1) {
+                            errorMessage = `Player ${attemptedTags[0]} was not found. Please check the tag.`;
+                        } else {
+                            errorMessage = 'Some players were not found. Please check the tags.';
+                        }
+                        break;
+                        
+                    default:
+                        errorMessage = detail || `Server error (${status}). Please try again.`;
+                }
+            } else if (error.message) {
+                if (error.message.includes('422')) {
+                    errorMessage = 'Invalid player tag format or player not found.';
+                } else if (error.message.includes('400')) {
+                    errorMessage = 'Invalid request. Please check the category and tags.';
+                } else if (error.message.includes('404')) {
+                    errorMessage = 'One or more players were not found.';
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+        } catch (parseError) {
+            console.error('Error parsing API error:', parseError);
+        }
+        
+        showAlert(errorMessage, 'error');
+        
+        // For bulk operations, also log the specific tags that failed
+        if (attemptedTags.length > 1) {
+            console.log('Failed tags:', attemptedTags);
+        }
+    }
+
+    // ============= DRAG AND DROP =============
+
+    function allowDrop(event) {
+        event.preventDefault();
+        event.currentTarget.classList.add('drag-over');
+    }
+
+    function drop(event, category) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('drag-over');
+
+        // Convert string "null" back to actual null
+        if (category === "null") {
+            category = null;
+        }
+
+        const memberTag = event.dataTransfer.getData('text/plain');
+        const memberCard = document.querySelector(`[data-member-tag="${memberTag}"]`);
+
+        if (memberCard) {
+            // Check if we're in table view (member is a tr) or card view (member is a div)
+            const isTableView = memberCard.tagName.toLowerCase() === 'tr';
+            
+            if (isTableView) {
+                // In table view, just update the database and reload the view
+                updateMemberCategory(memberTag, category);
+            } else {
+                // Card view logic (original code)
+                const targetContainer = category ?
+                    document.getElementById(`category-${category}`) :
+                    document.getElementById('uncategorized-members');
+                
+                if (!targetContainer) {
+                    console.error('Target container not found! Current view mode might be incorrect.');
+                    return;
+                }
+
+                targetContainer.appendChild(memberCard);
+                
+                // Update member category in database
+                updateMemberCategory(memberTag, category);
+
+                // Update counts
+                updateCategoryCounts();
+            }
+        }
+    }
+
+    // Update member category
+    async function updateMemberCategory(memberTag, category) {
+        try {
+            await apiCall(`${API_BASE}/roster/${currentRosterId}/members/${encodeURIComponent(memberTag)}?server_id=${serverId}`, 'PATCH', {
+                signup_group: category
+            });
+            
+            // Reload the members display to reflect the changes
+            await loadMembersDisplay();
+        } catch (error) {
+            showAlert('Failed to update member category', 'error');
+            console.error('Error updating member category:', error);
+        }
+    }
+
+    // Get current display columns from roster configuration or UI
+    function getCurrentDisplayColumns() {
+        // Try to get from UI first (for real-time preview)
+        const columnsFromUI = [];
+        for (let i = 1; i <= 4; i++) {
+            const select = document.getElementById(`column-${i}`);
+            if (select && select.value) {
+                columnsFromUI.push(select.value);
+            }
+        }
+        
+        // If we have UI values, use them, otherwise use saved data or defaults
+        if (columnsFromUI.length > 0) {
+            return columnsFromUI;
+        }
+        
+        if (!currentRosterData || !currentRosterData.columns) {
+            // Default columns if none configured
+            return ['name', 'tag', 'townhall', 'hitrate'];
+        }
+        
+        // Convert display names to values for internal use
+        const reverseColumnMapping = {
+            'Townhall Level': 'townhall',
+            'Name': 'name',
+            'Player Tag': 'tag',
+            '30 Day Hitrate': 'hitrate',
+            'Clan Tag': 'current_clan_tag',
+            'Discord User': 'discord',
+            'Heroes': 'hero_lvs',
+            'War Opt Status': 'war_pref',
+            'Trophies': 'trophies'
+        };
+        
+        return currentRosterData.columns.map(col => reverseColumnMapping[col] || col);
+    }
+
+    // Get current sort configuration  
+    function getCurrentSortConfig() {
+        if (!currentRosterData || !currentRosterData.sort) {
+            // Default sort configuration (all ascending as requested)
+            return ['name', 'tag', 'hero_lvs', 'townhall'];
+        }
+        
+        // Convert display names to values for internal use
+        const reverseSortMapping = {
+            'Name': 'name',
+            'Player Tag': 'tag',
+            'Townhall Level': 'townhall',
+            'Heroes': 'hero_lvs',
+            'Trophies': 'trophies',
+            '30 Day Hitrate': 'hitrate',
+            'Clan Tag': 'current_clan_tag',
+            'Date Added': 'added_at'
+        };
+        
+        return currentRosterData.sort.map(field => reverseSortMapping[field] || field);
+    }
+
+    // Handle column selection changes 
+    function handleColumnChange(event) {
+        // Prevent form submission
+        if (event && event.preventDefault) {
+            event.preventDefault();
+        }
+        
+        // Update preview immediately
+        updateMemberCardsPreview();
+        
+        // Return false to prevent any form submission
+        return false;
+    }
+
+    // Update member cards preview based on column selection
+    function updateMemberCardsPreview() {
+        if (currentRosterId) {
+            loadMembersDisplay();
+        }
+    }
+
+    // Toggle display configuration section
+    function toggleDisplayConfig() {
+        const content = document.getElementById('display-config-content');
+        const chevron = document.getElementById('display-config-chevron');
+        
+        if (content.classList.contains('hidden')) {
+            content.classList.remove('hidden');
+            chevron.style.transform = 'rotate(180deg)';
+        } else {
+            content.classList.add('hidden');
+            chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    // Save display configuration to database
+    async function saveDisplayConfiguration() {
+        console.log('saveDisplayConfiguration called');
+        
+        if (!currentRosterId) {
+            console.log('No currentRosterId');
+            showNotification('Please select a roster first', 'error');
+            return;
+        }
+
+        // Get column configuration (4 ordered columns) - convert to display names
+        const columnMapping = {
+            'townhall': 'Townhall Level',
+            'name': 'Name',
+            'tag': 'Player Tag',
+            'hitrate': '30 Day Hitrate',
+            'current_clan_tag': 'Clan Tag',
+            'discord': 'Discord User',
+            'hero_lvs': 'Heroes',
+            'war_pref': 'War Opt Status',
+            'trophies': 'Trophies'
+        };
+        
+        const selectedColumns = [];
+        for (let i = 1; i <= 4; i++) {
+            const columnField = document.getElementById(`column-${i}`).value;
+            if (columnField && columnField.trim() !== '') {
+                selectedColumns.push(columnMapping[columnField] || columnField);
+            }
+        }
+        
+        // Get sort configuration (4 priorities, all ascending) - convert to display names
+        const sortMapping = {
+            'name': 'Name',
+            'tag': 'Player Tag',
+            'townhall': 'Townhall Level',
+            'hero_lvs': 'Heroes',
+            'trophies': 'Trophies',
+            'hitrate': '30 Day Hitrate',
+            'current_clan_tag': 'Clan Tag',
+            'added_at': 'Date Added'
+        };
+        
+        const sortConfig = [];
+        for (let i = 1; i <= 4; i++) {
+            const sortField = document.getElementById(`sort-${i}`).value;
+            if (sortField && sortField.trim() !== '') {
+                sortConfig.push(sortMapping[sortField] || sortField);
+            }
+        }
+
+        try {
+            const payload = {
+                columns: selectedColumns,
+                sort: sortConfig
+            };
+
+            await apiCall(`${API_BASE}/roster/${currentRosterId}?server_id=${serverId}`, 'PATCH', payload);
+            
+            // Update local roster data
+            if (currentRosterData) {
+                currentRosterData.columns = selectedColumns;
+                currentRosterData.sort = sortConfig;
+            }
+
+            showNotification('Display configuration saved successfully', 'success');
+            updateMemberCardsPreview();
+        } catch (error) {
+            console.error('Failed to save display configuration:', error);
+            showNotification('Failed to save display configuration', 'error');
+        }
+    }
+
+    // Create table headers for member display
+    function createTableHeaders() {
+        const displayColumns = getCurrentDisplayColumns();
+        
+        const columnLabels = {
+            'townhall': 'TH',
+            'name': 'Name',
+            'tag': 'Player Tag',
+            'hitrate': 'Hit Rate',
+            'current_clan_tag': 'Clan Tag',
+            'discord': 'Discord',
+            'hero_lvs': 'Heroes',
+            'war_pref': 'War Status',
+            'trophies': 'Trophies'
+        };
+        
+        const headers = displayColumns.map(column => 
+            `<th>${columnLabels[column] || column}</th>`
+        ).join('');
+        
+        return `
+            <table class="member-table">
+                <thead>
+                    <tr>
+                        ${headers}
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+    }
+    
+    function createTableFooter() {
+        return `
+                </tbody>
+            </table>
+        `;
+    }
+
+    // Create member table row with configurable columns
+    function createMemberCard(member) {
+        const isInFamily = clanMembers.some(cm => cm.tag === member.tag);
+        const familyBadge = isInFamily ? '' : '<span class="px-1 py-0.5 bg-yellow-500/10 text-yellow-600 rounded text-xs ml-2">External</span>';
+        
+        // Get current roster configuration for columns
+        const displayColumns = getCurrentDisplayColumns();
+        
+        // Build column data based on selected columns
+        const columnData = [];
+        
+        displayColumns.forEach(column => {
+            let cellContent = '<td class="px-3 py-2 text-xs text-muted-foreground text-center">-</td>';
+            
+            switch(column) {
+                case 'townhall':
+                    if (member.townhall !== undefined && member.townhall !== null) {
+                        cellContent = `<td class="px-3 py-2 text-xs text-orange-400 font-medium text-center">TH${member.townhall}</td>`;
+                    }
+                    break;
+                case 'name':
+                    if (member.name) {
+                        cellContent = `<td class="px-3 py-2 text-xs text-white font-medium text-center">${member.name}</td>`;
+                    }
+                    break;
+                case 'tag':
+                    if (member.tag) {
+                        cellContent = `<td class="px-3 py-2 text-xs text-muted-foreground font-mono text-center">${member.tag}</td>`;
+                    }
+                    break;
+                case 'hitrate':
+                    if (member.hitrate !== undefined && member.hitrate !== null) {
+                        const hitColor = member.hitrate >= 80 ? 'text-green-400' : member.hitrate >= 60 ? 'text-yellow-400' : 'text-red-400';
+                        cellContent = `<td class="px-3 py-2 text-xs ${hitColor} font-medium text-center">${member.hitrate}%</td>`;
+                    }
+                    break;
+                case 'current_clan_tag':
+                    if (member.current_clan_tag && member.current_clan_tag !== '#') {
+                        cellContent = `<td class="px-3 py-2 text-xs text-cyan-400 font-mono text-center">${member.current_clan_tag}</td>`;
+                    }
+                    break;
+                case 'discord':
+                    if (member.discord && member.discord !== 'No User') {
+                        cellContent = `<td class="px-3 py-2 text-xs text-blue-400 text-center">@${member.discord.replace(/[<>@!]/g, '')}</td>`;
+                    }
+                    break;
+                case 'hero_lvs':
+                    if (member.hero_lvs !== undefined && member.hero_lvs !== null) {
+                        cellContent = `<td class="px-3 py-2 text-xs text-purple-400 text-center">${member.hero_lvs}</td>`;
+                    }
+                    break;
+                case 'war_pref':
+                    const warStatus = member.war_pref ? '⚔️ In' : '🚫 Out';
+                    const warColor = member.war_pref ? 'text-green-400' : 'text-red-400';
+                    cellContent = `<td class="px-3 py-2 text-xs ${warColor} text-center">${warStatus}</td>`;
+                    break;
+                case 'trophies':
+                    if (member.trophies !== undefined && member.trophies !== null) {
+                        cellContent = `<td class="px-3 py-2 text-xs text-yellow-400 text-center">${member.trophies} 🏆</td>`;
+                    }
+                    break;
+            }
+            columnData.push(cellContent);
+        });
+        
+        return `
+            <tr class="member-row hover:bg-accent/50 transition-colors border-b border-border" 
+                draggable="true" data-member-tag="${member.tag}" 
+                ondragstart="dragStart(event)" ondragend="dragEnd(event)">
+                ${columnData.join('')}
+                <td class="px-3 py-2 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <button onclick="removeMember('${member.tag}')" 
+                                class="w-5 h-5 flex items-center justify-center rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
+                            <i data-lucide="x" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+    
+    // Create group separator row
+    function createGroupSeparator(categoryName, categoryCount) {
+        const displayColumns = getCurrentDisplayColumns();
+        const totalCols = displayColumns.length + 1; // +1 for actions column
+        
+        return `
+            <tr class="group-separator">
+                <td colspan="${totalCols}" class="px-3 py-3 bg-muted/30 border-y border-border">
+                    <div class="flex items-center justify-between">
+                        <div class="w-16"></div>
+                        <h4 class="font-medium text-sm text-center flex-1">${categoryName}</h4>
+                        <span class="text-xs text-muted-foreground">${categoryCount} member${categoryCount !== 1 ? 's' : ''}</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    // Create empty drop row for categories without members
+    function createEmptyDropRow(category) {
+        const displayColumns = getCurrentDisplayColumns();
+        const totalCols = displayColumns.length + 1; // +1 for actions column
+        
+        // Handle null category properly for JavaScript
+        const categoryParam = category === null || category === 'null' ? 'null' : `'${category}'`;
+        
+        return `
+            <tr class="empty-drop-row drop-zone border-2 border-dashed border-transparent hover:border-primary hover:bg-primary/5 transition-all hidden" 
+                ondrop="drop(event, ${categoryParam})" ondragover="allowDrop(event)">
+                <td colspan="${totalCols}" class="px-3 py-3 text-center text-muted-foreground text-sm">
+                    Drop members here
+                </td>
+            </tr>
+        `;
+    }
+
+    // Create roster info display (read-only)
+    function createRosterInfoDisplay(roster) {
+        const clanInfo = roster.clan_name ? `
+            <div class="flex items-center gap-2">
+                <img src="${roster.clan_badge || '/static/default-clan.png'}" alt="Clan Badge" class="w-6 h-6 rounded" onerror="this.style.display='none'">
+                <span class="font-medium">${roster.clan_name}</span>
+                <span class="text-xs text-muted-foreground">${roster.clan_tag || ''}</span>
+            </div>
+        ` : '<span class="text-muted-foreground">No clan assigned</span>';
+
+
+        const thRestriction = (roster.min_th !== null && roster.min_th !== undefined) || (roster.max_th !== null && roster.max_th !== undefined) ? 
+            (roster.min_th === roster.max_th ? `TH${roster.min_th}` : 
+             (roster.min_th !== null && roster.min_th !== undefined) && (roster.max_th !== null && roster.max_th !== undefined) ? `TH${roster.min_th}-${roster.max_th}` :
+             (roster.min_th !== null && roster.min_th !== undefined) ? `TH${roster.min_th}+` : `Up to TH${roster.max_th}`) : 'No restriction';
+
+        return `
+            <div class="bg-card border border-border rounded-lg">
+                <div class="p-4">
+                    <div class="flex items-start justify-between mb-3">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-1">${roster.alias}</h3>
+                            <p class="text-sm text-muted-foreground">${roster.description || 'No description'}</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-muted-foreground mb-1">Roster Type</div>
+                            <div class="text-sm capitalize">${roster.roster_type || 'clan'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <div class="text-xs text-muted-foreground mb-1">Associated Clan</div>
+                            ${clanInfo}
+                        </div>
+                        
+                        <div>
+                            <div class="text-xs text-muted-foreground mb-1">TH Restriction</div>
+                            <div class="font-medium text-orange-400">${thRestriction}</div>
+                        </div>
+                        
+                        <div>
+                            <div class="text-xs text-muted-foreground mb-1">Members</div>
+                            <div class="font-medium">${roster.members ? roster.members.length : 0}/${roster.roster_size || 'No limit'}</div>
+                        </div>
+                    </div>
+
+                    ${roster.event_start_time || roster.signup_close_time ? `
+                        <div class="mt-4 pt-3 border-t border-border">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                ${roster.event_start_time ? `
+                                    <div>
+                                        <div class="text-xs text-muted-foreground mb-1">Event Start</div>
+                                        <div class="font-medium">${new Date(roster.event_start_time * 1000).toLocaleString()}</div>
+                                    </div>
+                                ` : ''}
+                                ${roster.signup_close_time ? `
+                                    <div>
+                                        <div class="text-xs text-muted-foreground mb-1">Signup Closes</div>
+                                        <div class="font-medium">${new Date(roster.signup_close_time * 1000).toLocaleString()}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    function dragStart(event) {
+        console.log('=== DRAG START ===');
+        console.log('Drag started for:', event.currentTarget.dataset.memberTag);
+        console.log('Current element:', event.currentTarget);
+        console.log('Event target:', event.target);
+        console.log('dataTransfer available:', !!event.dataTransfer);
+        console.log('Element draggable:', event.currentTarget.draggable);
+        console.log('Element has data-member-tag:', !!event.currentTarget.dataset.memberTag);
+        
+        // Find which category this member belongs to (simplified)
+        const memberTag = event.currentTarget.dataset.memberTag;
+        const memberRow = event.currentTarget;
+        let categoryText = 'unknown';
+        let currentElement = memberRow.previousElementSibling;
+        
+        // Look backwards to find the group separator  
+        while (currentElement) {
+            if (currentElement.classList.contains('group-separator')) {
+                const categoryNameElement = currentElement.querySelector('h4');
+                categoryText = categoryNameElement ? categoryNameElement.textContent.trim() : 'unknown';
+                break;
+            }
+            currentElement = currentElement.previousElementSibling;
+        }
+        
+        console.log('🎯 MEMBER CATEGORY:', categoryText);
+        console.log('🎯 MEMBER TAG:', memberTag);
+        
+        // Find member's position in table
+        const allMemberRows = document.querySelectorAll('.member-row');
+        const memberIndex = Array.from(allMemberRows).indexOf(event.currentTarget);
+        console.log('🎯 MEMBER POSITION:', memberIndex + 1, 'of', allMemberRows.length);
+        
+        // Try to prevent any default behavior that might cancel drag
+        // event.stopPropagation(); // Let's try without this first
+        
+        try {
+            event.dataTransfer.setData('text/plain', event.currentTarget.dataset.memberTag);
+            event.dataTransfer.effectAllowed = 'move';
+        } catch (e) {
+            console.error('Error setting dataTransfer:', e);
+            return false;
+        }
+        
+        event.currentTarget.classList.add('dragging');
+        // Force CSS styles to make sure they apply
+        event.currentTarget.style.opacity = '0.5';
+        event.currentTarget.style.transform = 'scale(0.95)';
+
+        // Capture the dragging element reference before setTimeout
+        const draggingElement = event.currentTarget;
+        
+        // Use a small delay to ensure the drag has properly started
+        setTimeout(() => {
+            // Show all drop zones during drag
+            const dropRows = document.querySelectorAll('.empty-drop-row');
+            console.log('Found drop rows:', dropRows.length);
+            dropRows.forEach((dropRow, index) => {
+                console.log(`Drop row ${index}:`, dropRow);
+                console.log(`Before: hidden=${dropRow.classList.contains('hidden')}, border-muted=${dropRow.classList.contains('border-muted')}`);
+                dropRow.classList.remove('hidden');
+                dropRow.classList.add('border-muted'); // Make border visible
+                console.log(`After: hidden=${dropRow.classList.contains('hidden')}, border-muted=${dropRow.classList.contains('border-muted')}`);
+            });
+
+            // Also debug the dragging element
+            console.log('Dragging element classes:', draggingElement.className);
+
+            // Add drag-over class listeners
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.addEventListener('dragenter', handleDragEnter);
+                zone.addEventListener('dragleave', handleDragLeave);
+            });
+        }, 50); // Small delay to ensure drag has started properly
+        
+        // Alternative approach - also add a dragover listener to the table to make zones visible
+        const membersTable = document.getElementById('members-table');
+        if (membersTable && !membersTable.dragoverHandlerAdded) {
+            membersTable.addEventListener('dragover', function(e) {
+                e.preventDefault(); // Allow drop
+                // Make sure drop zones are visible during drag
+                const dropRows = document.querySelectorAll('.empty-drop-row');
+                dropRows.forEach(dropRow => {
+                    dropRow.classList.remove('hidden');
+                    dropRow.classList.add('border-muted');
+                });
+            });
+            membersTable.dragoverHandlerAdded = true;
+        }
+    }
+
+    function dragEnd(event) {
+        console.log('=== DRAG END ===');
+        console.log('Drag ended for:', event.currentTarget.dataset.memberTag);
+        console.log('Drop effect:', event.dataTransfer?.dropEffect);
+        console.log('Effective allowed:', event.dataTransfer?.effectAllowed);
+        
+        // Find which category this member belongs to for debugging
+        const memberTag = event.currentTarget.dataset.memberTag;
+        const memberRow = event.currentTarget;
+        let categoryText = 'unknown';
+        let currentElement = memberRow.previousElementSibling;
+        
+        // Look backwards to find the group separator  
+        while (currentElement) {
+            if (currentElement.classList.contains('group-separator')) {
+                const categoryNameElement = currentElement.querySelector('h4');
+                categoryText = categoryNameElement ? categoryNameElement.textContent.trim() : 'unknown';
+                break;
+            }
+            currentElement = currentElement.previousElementSibling;
+        }
+        
+        console.log('🎯 DRAG END CATEGORY:', categoryText);
+        
+        event.currentTarget.classList.remove('dragging');
+        // Remove forced CSS styles
+        event.currentTarget.style.opacity = '';
+        event.currentTarget.style.transform = '';
+
+        // Hide all drop zones after drag
+        document.querySelectorAll('.empty-drop-row').forEach(dropRow => {
+            dropRow.classList.add('hidden');
+            dropRow.classList.remove('border-muted'); // Remove visible border
+        });
+
+        // Remove drag-over classes and listeners
+        document.querySelectorAll('.drop-zone').forEach(zone => {
+            zone.classList.remove('drag-over');
+            zone.removeEventListener('dragenter', handleDragEnter);
+            zone.removeEventListener('dragleave', handleDragLeave);
+        });
+    }
+
+    function handleDragEnter(event) {
+        event.currentTarget.classList.add('drag-over');
+    }
+
+    function handleDragLeave(event) {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+    }
+
+    // Load and display members
+    async function loadMembersDisplay() {
+        if (!currentRosterId) return;
+
+        try {
+            const response = await apiCall(`${API_BASE}/roster/${currentRosterId}?server_id=${serverId}`, 'GET');
+            const roster = response.roster;
+            
+            // Update currentRosterData so search suggestions are updated
+            currentRosterData = roster;
+
+            if (!roster.members || roster.members.length === 0) {
+                const emptyState = document.getElementById('members-empty-state');
+                const memberCategories = document.getElementById('member-categories');
+                if (emptyState) emptyState.style.display = 'block';
+                if (memberCategories) memberCategories.style.display = 'none';
+                return;
+            }
+
+            const emptyState = document.getElementById('members-empty-state');
+            const memberCategories = document.getElementById('member-categories');
+            if (emptyState) emptyState.style.display = 'none';
+            if (memberCategories) memberCategories.style.display = 'block';
+
+            // Sort members based on configuration (all ascending)
+            const sortConfig = getCurrentSortConfig();
+            const sortedMembers = [...roster.members].sort((a, b) => {
+                for (const field of sortConfig) {
+                    if (!field) continue;
+                    
+                    let valueA = a[field];
+                    let valueB = b[field];
+                    
+                    // Handle null/undefined values
+                    if (valueA == null && valueB == null) continue;
+                    if (valueA == null) return 1;
+                    if (valueB == null) return -1;
+                    
+                    // Convert to numbers if applicable
+                    if (typeof valueA === 'string' && !isNaN(valueA)) valueA = Number(valueA);
+                    if (typeof valueB === 'string' && !isNaN(valueB)) valueB = Number(valueB);
+                    
+                    let comparison = 0;
+                    if (valueA < valueB) comparison = -1;
+                    else if (valueA > valueB) comparison = 1;
+                    
+                    if (comparison !== 0) {
+                        return comparison; // Always ascending
+                    }
+                }
+                return 0;
+            });
+
+            // Group members by category
+            const membersByCategory = {};
+            
+            // Initialize all categories (including empty ones)
+            if (categoriesData) {
+                categoriesData.forEach(category => {
+                    membersByCategory[category.custom_id] = [];
+                });
+            }
+            
+            // Always include uncategorized section
+            membersByCategory[null] = [];
+
+            // Populate with actual members
+            sortedMembers.forEach(member => {
+                const category = member.signup_group;
+                if (category && membersByCategory[category]) {
+                    // Categorized member
+                    membersByCategory[category].push(member);
+                } else {
+                    // Uncategorized member (signup_group is null/undefined or category doesn't exist)
+                    membersByCategory[null].push(member);
+                }
+            });
+
+            // Create a single table with all members grouped by category
+            let tableHTML = createTableHeaders();
+            
+            Object.entries(membersByCategory).forEach(([category, members]) => {
+                // Always show category separator (even for empty categories)
+                const categoryName = (category && category !== 'null') ? 
+                    categoriesData.find(cat => cat.custom_id === category)?.alias || category :
+                    'Uncategorized';
+                
+                const categoryCount = members.length;
+                
+                // Add group separator row
+                tableHTML += createGroupSeparator(categoryName, categoryCount);
+                
+                // Add member rows for this category
+                if (members.length > 0) {
+                    tableHTML += members.map(member => createMemberCard(member)).join('');
+                }
+                
+                // Always add empty row for drag and drop target (regardless of existing members)
+                tableHTML += createEmptyDropRow(category);
+            });
+            
+            // Close the table
+            tableHTML += createTableFooter();
+            
+            // Hide the old category sections and replace the member categories with our table
+            const categorySections = document.getElementById('category-sections');
+            if (categorySections) {
+                categorySections.style.display = 'none';
+            }
+            
+            const memberCategoriesSection = document.getElementById('member-categories');
+            if (memberCategoriesSection) {
+                // Create roster info display
+                const rosterInfoHTML = createRosterInfoDisplay(roster);
+                
+                memberCategoriesSection.innerHTML = `
+                    <div class="w-full space-y-4">
+                        ${rosterInfoHTML}
+                        <div class="bg-card border border-border rounded-lg w-full">
+                            <div class="p-4 w-full">
+                                <div class="w-full overflow-x-auto">
+                                    ${tableHTML}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Update counts and recreate icons
+            updateCategoryCounts();
+            lucide.createIcons();
+
+        } catch (error) {
+            console.error('Failed to load members:', error);
+        }
+    }
+
+    // Update category counts
+    function updateCategoryCounts() {
+        // Count total members by looking at member-row elements
+        const memberRows = document.querySelectorAll('.member-row');
+        const totalCount = memberRows.length;
+        
+        // Update total member count
+        const totalCounter = document.getElementById('total-member-count') || document.getElementById('uncategorized-count');
+        if (totalCounter) {
+            totalCounter.textContent = totalCount;
+        }
+
+        // Update individual category counts (still needed for hidden sections)
+        document.querySelectorAll('.category-count').forEach(counter => {
+            const categoryId = counter.id.replace('count-', '');
+            const container = document.getElementById(`category-${categoryId}`);
+            if (container) {
+                counter.textContent = container.children.length;
+            }
+        });
+    }
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', function (event) {
+        const searchContainer = document.getElementById('member-search').parentElement;
+        if (!searchContainer.contains(event.target)) {
+            document.getElementById('member-suggestions').classList.add('hidden');
+        }
+    });
 </script>
 </body>
 </html>

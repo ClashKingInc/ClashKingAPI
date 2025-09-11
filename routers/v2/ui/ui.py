@@ -3,11 +3,30 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 import linkd.ext.fastapi
+from bson import ObjectId
+import json
+from datetime import datetime
 
 from utils.database import MongoClient, OldMongoClient
 
 router = APIRouter(prefix='/ui', tags=['UI Pages'])
 templates = Jinja2Templates(directory="templates")
+
+
+def convert_objectids(obj):
+    """Convert MongoDB ObjectIds and datetime objects to strings for JSON serialization"""
+    if obj is None:
+        return None
+    elif isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, (datetime, pend.DateTime)):
+        return obj.isoformat() if hasattr(obj, 'isoformat') else str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectids(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectids(item) for item in obj]
+    else:
+        return obj
 
 
 @router.get("/roster/dashboard", response_class=HTMLResponse)
@@ -82,7 +101,8 @@ async def roster_dashboard(
                 return th, th
         
         # Process th_restriction for current roster
-        current_roster['min_th'], current_roster['max_th'] = parse_th_restriction(current_roster.get('th_restriction'))
+        if current_roster:
+            current_roster['min_th'], current_roster['max_th'] = parse_th_restriction(current_roster.get('th_restriction'))
         
         # Process th_restriction for all rosters
         for roster in all_rosters:
@@ -98,24 +118,33 @@ async def roster_dashboard(
             'server_id': {'$in': [server_id, str(server_id), int(server_id)]}
         }).to_list(length=None))
 
-        print("Categories loaded:", categories)
-        print("Server ID type:", type(server_id), "value:", server_id)
-        
-        # Debug: Check what's actually in the database
-        all_categories = list(await mongo.roster_signup_categories.find({}).to_list(length=None))
-        print("All categories in DB:", all_categories)
-        
         # Get clans linked to this server
         server_clans = list(await mongo.clans.find({
             'server': server_id
         }).to_list(length=None))
         
+        # Convert ObjectIds to strings for JSON serialization
+        current_roster = convert_objectids(current_roster)
+        all_rosters = convert_objectids(all_rosters)
+        groups = convert_objectids(groups)
+        categories = convert_objectids(categories)
+        server_clans = convert_objectids(server_clans)
+        
+        # Convert to JSON strings to handle None values properly
+        import json
+        current_roster_json = json.dumps(current_roster) if current_roster else 'null'
+        all_rosters_json = json.dumps(all_rosters)
+        categories_json = json.dumps(categories)
+        
         return templates.TemplateResponse("roster_management.html", {
             "request": request,
             "current_roster": current_roster,
+            "current_roster_json": current_roster_json,
             "all_rosters": all_rosters,
+            "all_rosters_json": all_rosters_json,
             "groups": groups,
             "categories": categories,
+            "categories_json": categories_json,
             "server_clans": server_clans,
             "server_id": server_id,
             "roster_id": roster_id

@@ -25,6 +25,7 @@ class RosterUpdateModel(BaseModel):
     signup_scope: Optional[Literal['clan-only', 'family-wide']] = None
     max_accounts_per_user: Optional[int] = None
     event_start_time: Optional[int] = None
+    signup_close_time: Optional[int] = None
 
     allowed_signup_categories: Optional[List[str]] = Field(
         None,
@@ -119,7 +120,7 @@ class AddMembersByTagModel(BaseModel):
         tag: str = Field(
             ..., description='Player tag with or without leading #'
         )
-        signup_group: str = Field(
+        signup_group: Optional[str] = Field(
             default=None,
             description='Reference to roster_signup_categories.custom_id',
         )

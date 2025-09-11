@@ -6,8 +6,7 @@ from coc.utils import correct_tag
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from routers.v2.rosters.roster_models import (AddMembersByTagModel,
-                                              CreateRosterAutomationModel,
+from routers.v2.rosters.roster_models import (CreateRosterAutomationModel,
                                               CreateRosterGroupModel,
                                               CreateRosterModel,
                                               CreateRosterSignupCategoryModel,
@@ -16,7 +15,7 @@ from routers.v2.rosters.roster_models import (AddMembersByTagModel,
                                               RosterUpdateModel,
                                               UpdateRosterAutomationModel,
                                               UpdateRosterGroupModel,
-                                              UpdateRosterSignupCategoryModel)
+                                              UpdateRosterSignupCategoryModel, UpdateMemberModel)
 from routers.v2.rosters.roster_utils import (calculate_player_hitrate,
                                              get_player_last_online,
                                              refresh_member_data)
@@ -259,6 +258,33 @@ async def get_roster(
     doc = await mongo.rosters.find_one({'custom_id': roster_id, 'server_id': server_id}, {'_id': 0})
     if not doc:
         raise HTTPException(status_code=404, detail='Roster not found')
+    
+    # Parse th_restriction to min_th/max_th for display
+    def parse_th_restriction(th_restriction):
+        """Parse th_restriction string to min_th and max_th values"""
+        if not th_restriction:
+            return None, None
+        
+        th_restriction = th_restriction.strip()
+        
+        if th_restriction.endswith('+'):
+            # Format: "12+" 
+            min_th = int(th_restriction[:-1])
+            return min_th, None
+        elif '-' in th_restriction:
+            # Format: "12-15" or "1-15"
+            parts = th_restriction.split('-')
+            min_th = int(parts[0]) if parts[0] != '1' else None
+            max_th = int(parts[1])
+            return min_th, max_th
+        else:
+            # Format: "12" (exact TH)
+            th = int(th_restriction)
+            return th, th
+    
+    # Add parsed th_restriction values
+    doc['min_th'], doc['max_th'] = parse_th_restriction(doc.get('th_restriction'))
+    
     return {'roster': doc}
 
 
@@ -277,160 +303,6 @@ async def delete_roster(
         raise HTTPException(status_code=404, detail='Roster not found')
     return {'message': 'Roster deleted successfully'}
 
-
-@router.post(
-    '/roster/{roster_id}/members', name='Add Members by Tags (Auto-Fetch Data)'
-)
-@linkd.ext.fastapi.inject
-@check_authentication
-async def add_members_to_roster(
-    server_id: int,
-    roster_id: str,
-    payload: AddMembersByTagModel,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    *,
-    mongo: MongoClient,
-    coc_client: CustomClashClient,
-):
-    roster = await mongo.rosters.find_one({'custom_id': roster_id})
-    if not roster:
-        raise HTTPException(status_code=404, detail='Roster not found')
-
-    # Get existing member tags to check for duplicates
-    existing_tags = {member['tag'] for member in roster.get('members', [])}
-
-    # Fetch player data for each tag
-    members_to_add = []
-    success_count = 0
-    removed_count = 0
-
-    pipeline = [
-        {'$match': {'player_tag': {'$in': list(existing_tags)}}},
-        {'$group': {'_id': 'user_id', 'count': {'$sum': 1}}},
-    ]
-    cursor = await mongo.coc_accounts.aggregate(pipeline)
-    result = await cursor.to_list(length=None)
-    user_to_num_accounts = {d.get('user_id'): d.get('count') for d in result}
-
-    payload_mapping = {
-        m.tag: m for m in payload.members if m not in existing_tags
-    }
-    player_tags = list(payload_mapping.keys())
-    cursor = await mongo.coc_accounts.find(
-        {'player_tag': {'$in': player_tags}}
-    )
-    result = await cursor.to_list(length=None)
-    tag_to_user_id = {d.get('player_tag'): d.get('user_id') for d in result}
-
-    # Validate signup_groups if they exist
-    signup_group_to_validate = set()
-    for member in payload.members:
-        if member.signup_group:
-            signup_group_to_validate.add(member.signup_group)
-
-    if signup_group_to_validate:
-        # Check if the signup_groups exist in roster_signup_categories
-        existing_categories = await mongo.roster_signup_categories.find(
-            {
-                'server_id': server_id,
-                'custom_id': {'$in': list(signup_group_to_validate)},
-            }
-        ).to_list(length=None)
-        existing_category_ids = {p['custom_id'] for p in existing_categories}
-
-        # Reject any signup_groups that don't exist in roster_signup_categories
-        invalid_groups = signup_group_to_validate - existing_category_ids
-        if invalid_groups:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid signup_group(s): {', '.join(invalid_groups)}",
-            )
-
-        # Check if the signup_groups are allowed for this specific roster
-        allowed_groups = set(roster.get('allowed_signup_categories', []))
-        if allowed_groups:  # Only validate if roster has specific restrictions
-            unauthorized_groups = signup_group_to_validate - allowed_groups
-            if unauthorized_groups:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Signup_group(s) not allowed for this roster: {', '.join(unauthorized_groups)}",
-                )
-
-    async for player in coc_client.get_players(player_tags=player_tags):
-        if isinstance(player, coc.errors.NotFound):
-            # get the player tag out of the error message
-            tag = player.message.split(' ')[-1]
-            await mongo.rosters.update_one(
-                {'custom_id': roster_id},
-                {
-                    '$pull': {'members': {'tag': tag}},
-                    '$set': {'updated_at': pend.now(tz=pend.UTC)},
-                },
-            )
-            removed_count += 1
-        elif isinstance(player, coc.Maintenance):
-            raise player
-
-        user_id = tag_to_user_id.get(player.tag)
-        alr_found_accounts = user_to_num_accounts.get(user_id, 0)
-        if alr_found_accounts > roster.get('max_accounts_per_user'):
-            continue
-        if user_id not in user_to_num_accounts:
-            user_to_num_accounts[user_id] = 0
-        user_to_num_accounts[user_id] += 1
-
-        hero_lvs = sum(
-            hero.level for hero in player.heroes if hero.is_home_base
-        )
-        current_clan = player.clan.name if player.clan else 'No Clan'
-        current_clan_tag = player.clan.tag if player.clan else '#'
-
-        # Calculate enhanced member data
-        hitrate = await calculate_player_hitrate(player.tag)
-        last_online = await get_player_last_online(player.tag)
-        current_league = player.league.name if player.league else 'Unranked'
-
-        member_data = {
-            'name': player.name,
-            'tag': player.tag,
-            'discord': user_id,
-            'townhall': player.town_hall,
-            'hero_lvs': hero_lvs,
-            'current_clan': current_clan,
-            'current_clan_tag': current_clan_tag,
-            'war_pref': player.war_opted_in,
-            'current_league': current_league,
-            'trophies': player.trophies,
-            'hitrate': hitrate,
-            'last_online': last_online,
-            'signup_group': payload_mapping.get(player.tag),
-            'last_updated': pend.now(tz=pend.UTC).int_timestamp,
-            'added_at': pend.now(tz=pend.UTC).int_timestamp,
-        }
-        members_to_add.append(member_data)
-
-    if not members_to_add:
-        return {
-            'message': 'No valid members to add',
-            'success_count': 0,
-            'removed_count': removed_count,
-        }
-
-    # Add members to roster
-    await mongo.rosters.update_one(
-        {'custom_id': roster_id},
-        {
-            '$push': {'members': {'$each': members_to_add}},
-            '$set': {'updated_at': pend.now(tz=pend.UTC)},
-        },
-    )
-
-    return {
-        'message': f'Added {len(members_to_add)} members to roster',
-        'items': members_to_add,
-        'success_count': success_count,
-        'removed_count': removed_count,
-    }
 
 
 @router.delete(
@@ -1128,7 +1000,7 @@ async def manage_roster_members(
         ]
 
         if add_tags:
-            cursor = await mongo.coc_accounts.find(
+            cursor = mongo.coc_accounts.find(
                 {'player_tag': {'$in': add_tags}}
             )
             tag_to_user_id = {
@@ -1235,6 +1107,67 @@ async def manage_roster_members(
         'success_count': success_count,
         'error_count': error_count,
     }
+
+
+@router.patch('/roster/{roster_id}/members/{member_tag}', name='Update Individual Member')
+@linkd.ext.fastapi.inject
+@check_authentication
+async def update_roster_member(
+    server_id: int,
+    roster_id: str,
+    member_tag: str,
+    payload: UpdateMemberModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+):
+    """Update an individual roster member's properties"""
+    
+    # Validate roster exists and belongs to server
+    roster = await mongo.rosters.find_one({
+        'custom_id': roster_id, 
+        'server_id': server_id
+    })
+    if not roster:
+        raise HTTPException(status_code=404, detail='Roster not found')
+    
+    # Validate signup_group if provided
+    if payload.signup_group:
+        category_exists = await mongo.roster_signup_categories.find_one({
+            'server_id': server_id,
+            'custom_id': payload.signup_group
+        })
+        if not category_exists:
+            raise HTTPException(status_code=400, detail='Invalid signup group')
+        
+        # Check if signup_group is allowed for this roster
+        allowed_groups = set(roster.get('allowed_signup_categories', []))
+        if allowed_groups and payload.signup_group not in allowed_groups:
+            raise HTTPException(
+                status_code=400, 
+                detail='Signup group not allowed for this roster'
+            )
+    
+    # Build update data - handle signup_group explicitly to allow None
+    update_data = payload.model_dump(exclude_none=True)
+    
+    # Special handling for signup_group - allow explicit None to remove category
+    if hasattr(payload, 'signup_group') and 'signup_group' in payload.model_fields_set:
+        update_data['signup_group'] = payload.signup_group
+    
+    if not update_data:
+        return {'message': 'Nothing to update'}
+    
+    # Update the member in the roster
+    result = await mongo.rosters.update_one(
+        {'custom_id': roster_id, 'server_id': server_id, 'members.tag': member_tag},
+        {'$set': {f'members.$.{k}': v for k, v in update_data.items()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail='Member not found in roster')
+    
+    return {'message': 'Member updated successfully'}
 
 
 # ======================== ROSTER AUTOMATION ENDPOINTS ========================
@@ -1506,6 +1439,51 @@ async def get_missing_members(
         'results': results,
         'total_rosters_checked': len(results),
     }
+
+
+@router.get('/roster/server/{server_id}/members', name='Get Server Clan Members')
+@linkd.ext.fastapi.inject
+@check_authentication
+async def get_server_clan_members(
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
+):
+    """Get all members from clans linked to this server for autocomplete"""
+    
+    # Get all clans linked to this server
+    server_clans = await mongo.clans.find({
+        'server': server_id
+    }).to_list(length=None)
+    
+    if not server_clans:
+        return {'members': []}
+    
+    all_members = []
+    
+    # Get members from each clan
+    for server_clan in server_clans:
+        try:
+            clan = await coc_client.get_clan(tag=server_clan['tag'])
+            for member in clan.members:
+                all_members.append({
+                    'name': member.name,
+                    'tag': member.tag,
+                    'townhall': member.town_hall,
+                    'clan_name': clan.name,
+                    'clan_tag': clan.tag,
+                    'role': member.role.name if member.role else 'Member'
+                })
+        except Exception as e:
+            print(f"Error fetching clan {server_clan['tag']}: {e}")
+            continue
+    
+    # Sort by name
+    all_members.sort(key=lambda x: x['name'].lower())
+    
+    return {'members': all_members}
 
 
 @router.post('/roster-token', name='Generate Server Roster Access Token')

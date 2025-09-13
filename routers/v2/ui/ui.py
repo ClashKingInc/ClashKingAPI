@@ -135,8 +135,10 @@ async def roster_dashboard(
         current_roster_json = json.dumps(current_roster) if current_roster else 'null'
         all_rosters_json = json.dumps(all_rosters)
         categories_json = json.dumps(categories)
+        server_clans_json = json.dumps(server_clans)
         
-        return templates.TemplateResponse("roster_management.html", {
+        import time
+        return templates.TemplateResponse("roster/dashboard.html", {
             "request": request,
             "current_roster": current_roster,
             "current_roster_json": current_roster_json,
@@ -146,8 +148,10 @@ async def roster_dashboard(
             "categories": categories,
             "categories_json": categories_json,
             "server_clans": server_clans,
+            "server_clans_json": server_clans_json,
             "server_id": server_id,
-            "roster_id": roster_id
+            "roster_id": roster_id,
+            "timestamp": int(time.time())
         })
         
     except Exception as e:

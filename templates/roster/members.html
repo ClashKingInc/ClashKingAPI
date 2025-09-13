@@ -1,0 +1,261 @@
+<div class="max-w-7xl">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-semibold mb-2">Members</h2>
+            <p class="text-muted-foreground">Manage roster members with drag & drop categorization</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="refreshMembers()"
+                    class="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors flex items-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Column Configuration -->
+    <div class="bg-card border border-border rounded-lg mb-6">
+        <button type="button" onclick="toggleDisplayConfig()" class="w-full p-6 text-left flex items-center justify-between hover:bg-accent/50 transition-colors">
+            <div class="flex items-center gap-2">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <h3 class="font-medium">Display Configuration</h3>
+            </div>
+            <i data-lucide="chevron-down" class="w-4 h-4 transform transition-transform" id="display-config-chevron"></i>
+        </button>
+        <div id="display-config-content" class="hidden px-6 pb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Column Selection -->
+                <div>
+                    <label class="text-sm font-medium mb-2 block">Display Columns (in order)</label>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-muted-foreground">Column 1</label>
+                            <select id="column-1" name="column-1" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="discord">Discord User</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="war_pref">War Opt Status</option>
+                                <option value="trophies">Trophies</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">Column 2</label>
+                            <select id="column-2" name="column-2" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="discord">Discord User</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="war_pref">War Opt Status</option>
+                                <option value="trophies">Trophies</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">Column 3</label>
+                            <select id="column-3" name="column-3" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="discord">Discord User</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="war_pref">War Opt Status</option>
+                                <option value="trophies">Trophies</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">Column 4</label>
+                            <select id="column-4" name="column-4" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="discord">Discord User</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="war_pref">War Opt Status</option>
+                                <option value="trophies">Trophies</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="text-xs text-muted-foreground mt-2">Choose up to 4 columns in display order</p>
+                </div>
+                
+                <!-- Sort Configuration -->
+                <div>
+                    <label class="text-sm font-medium mb-2 block">Member Sort Order (by preference)</label>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-muted-foreground">1st Priority</label>
+                            <select id="sort-1" name="sort-1" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="trophies">Trophies</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="added_at">Date Added</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">2nd Priority</label>
+                            <select id="sort-2" name="sort-2" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="trophies">Trophies</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="added_at">Date Added</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">3rd Priority</label>
+                            <select id="sort-3" name="sort-3" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="trophies">Trophies</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="added_at">Date Added</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">4th Priority</label>
+                            <select id="sort-4" name="sort-4" class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
+                                <option value="">None</option>
+                                <option value="name">Name</option>
+                                <option value="tag">Player Tag</option>
+                                <option value="townhall">Townhall Level</option>
+                                <option value="hero_lvs">Heroes</option>
+                                <option value="trophies">Trophies</option>
+                                <option value="hitrate">30 Day Hitrate</option>
+                                <option value="current_clan_tag">Clan Tag</option>
+                                <option value="added_at">Date Added</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end mt-4 pt-4 border-t border-border">
+                <button onclick="saveDisplayConfiguration()" 
+                        class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    Save Configuration
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Member Search -->
+    <div class="bg-card border border-border rounded-lg p-6 mb-6">
+        <h3 class="font-medium mb-4 flex items-center gap-2">
+            <i data-lucide="search" class="w-4 h-4"></i>
+            Add Members
+        </h3>
+
+        <!-- Search Input -->
+        <div class="flex gap-4 mb-4">
+            <div class="flex-1 relative">
+                <input type="text" id="member-search"
+                       placeholder="Search by name or enter player tag..."
+                       class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                       oninput="searchMembers(this.value)" onkeypress="handleSearchKeypress(event)">
+                <div id="member-suggestions"
+                     class="absolute top-full left-0 right-0 bg-card border border-border rounded-md mt-1 max-h-60 overflow-y-auto z-10 hidden">
+                    <!-- Autocomplete suggestions will appear here -->
+                </div>
+            </div>
+            <div class="w-48">
+                <select id="category-selector"
+                        class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                    <option value="">No category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.custom_id }}">{{ category.alias }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button onclick="addMemberDirectly()"
+                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                Add Member
+            </button>
+        </div>
+
+        <!-- Bulk Add Section -->
+        <div class="mb-4">
+            <button onclick="toggleBulkAdd()" id="bulk-add-toggle"
+                    class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 mb-2">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+                Bulk add multiple tags
+                <i data-lucide="chevron-down" class="w-4 h-4" id="bulk-add-chevron"></i>
+            </button>
+            <div id="bulk-add-section" class="hidden">
+                <div class="border border-border rounded-md p-3 bg-muted/30">
+                    <textarea id="bulk-tags-input"
+                              placeholder="Paste player tags here, one per line or separated by commas/spaces:&#10;#ABC123&#10;#DEF456&#10;#GHI789"
+                              class="w-full h-24 px-3 py-2 bg-background border border-input rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                              oninput="validateBulkTags()"></textarea>
+                    <div class="flex justify-between items-center mt-2">
+                        <span id="bulk-tags-count" class="text-sm text-muted-foreground">0 tags detected</span>
+                        <div class="flex gap-2">
+                            <select id="bulk-category-selector"
+                                    class="px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                                <option value="">No category</option>
+                                {% for category in categories %}
+                                    <option value="{{ category.custom_id }}">{{ category.alias }}</option>
+                                {% endfor %}
+                            </select>
+                            <button onclick="clearBulkTags()"
+                                    class="px-3 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                Clear
+                            </button>
+                            <button onclick="addBulkMembers()"
+                                    id="bulk-add-button"
+                                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled>
+                                <i data-lucide="users" class="w-4 h-4"></i>
+                                Add All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Members Display -->
+    <div id="members-empty-state" class="bg-card border border-border rounded-lg p-8 text-center hidden">
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                <i data-lucide="users" class="w-8 h-8 text-muted-foreground"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold mb-2">No members yet</h3>
+                <p class="text-muted-foreground mb-4">Start by adding members using the search above</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="member-categories" class="space-y-6">
+        <!-- Members will be dynamically loaded here -->
+    </div>
+</div>

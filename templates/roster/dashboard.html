@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/favicon-dark.png">
+    <title>Roster Management Dashboard</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#0a0a0b',
+                        foreground: '#fafafa',
+                        muted: '#171717',
+                        'muted-foreground': '#a1a1aa',
+                        popover: '#0a0a0b',
+                        'popover-foreground': '#fafafa',
+                        card: '#0a0a0b',
+                        'card-foreground': '#fafafa',
+                        border: '#27272a',
+                        input: '#27272a',
+                        primary: '#3b82f6',
+                        'primary-foreground': '#f8fafc',
+                        secondary: '#27272a',
+                        'secondary-foreground': '#fafafa',
+                        accent: '#27272a',
+                        'accent-foreground': '#fafafa',
+                        destructive: '#dc2626',
+                        'destructive-foreground': '#fafafa',
+                        ring: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        {% include 'roster/styles.css' %}
+    </style>
+</head>
+
+<body class="bg-background text-foreground min-h-screen">
+    <!-- Alerts Container -->
+    <div id="alerts" class="fixed top-4 right-4 z-50 space-y-3"></div>
+    
+    <div class="flex h-[calc(100vh-80px)]">
+        <!-- Sidebar -->
+        <div class="w-80 border-r border-border bg-card p-6 space-y-6">
+            {% include 'roster/sidebar.html' %}
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto">
+                    <!-- Welcome Content -->
+                    <div id="welcome-content" class="bg-card rounded-lg border border-border p-8 text-center" {{ 'style=display:none;' if current_roster else '' }}>
+                        {% include 'roster/welcome.html' %}
+                    </div>
+
+                    <!-- Roster Tabs -->
+                    <div id="roster-tabs" {{ 'style=display:none;' if not current_roster else '' }}>
+                        <!-- Tab Navigation -->
+                        <div class="bg-card rounded-t-lg border-x border-t border-border">
+                            <nav class="flex">
+                                <button id="tab-settings" onclick="showTab('settings')" class="px-4 py-3 text-sm font-medium rounded-tl-lg transition-colors tab-active">
+                                    Settings
+                                </button>
+                                <button id="tab-members" onclick="showTab('members')" class="px-4 py-3 text-sm font-medium transition-colors tab-inactive">
+                                    Members
+                                </button>
+                            </nav>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="bg-card rounded-b-lg border border-border">
+                            <!-- Settings Tab -->
+                            <div id="content-settings" class="tab-content p-6">
+                                {% include 'roster/settings.html' %}
+                            </div>
+
+                            <!-- Members Tab -->
+                            <div id="content-members" class="tab-content p-6 hidden">
+                                {% include 'roster/members.html' %}
+                            </div>
+
+                            <!-- Groups Tab -->
+                            <div id="content-groups" class="tab-content p-6 hidden">
+                                {% include 'roster/groups.html' %}
+                            </div>
+
+                            <!-- Categories Tab -->
+                            <div id="content-categories" class="tab-content p-6 hidden">
+                                {% include 'roster/categories.html' %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden" onclick="closeModals()">
+        <!-- Create Group Modal -->
+        <div id="create-group-modal" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-lg p-6 w-full max-w-md hidden" onclick="event.stopPropagation()">
+            <h3 class="text-lg font-semibold mb-4">Create New Group</h3>
+            <form onsubmit="createGroup(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Group Name</label>
+                        <input type="text" name="alias" required
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-6">
+                    <button type="button" onclick="closeModals()" class="flex-1 px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                        Create
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Create Category Modal -->
+        <div id="create-category-modal" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-lg p-6 w-full max-w-md hidden" onclick="event.stopPropagation()">
+            <h3 class="text-lg font-semibold mb-4">Create New Category</h3>
+            <form onsubmit="createCategory(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Category Name</label>
+                        <input type="text" name="alias" required
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-6">
+                    <button type="button" onclick="closeModals()" class="flex-1 px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                        Create
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Global variables
+        const API_BASE = '/v2';
+        const serverId = '{{ server_id }}';
+        const ROSTER_TOKEN = new URLSearchParams(window.location.search).get('token');
+        let currentRosterId = '{{ current_roster.custom_id if current_roster else "" }}';
+        let currentRosterData = {{ current_roster_json | safe }};
+        let searchTimeout;
+        let clanMembers = [];
+
+        const allRosters = {{ all_rosters_json | safe }};
+        const categories = {{ categories_json | safe }};
+        const serverClans = {{ server_clans_json | safe }};
+    </script>
+
+    <script src="/static/roster/api-utils.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/member-search.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/member-display.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/drag-drop.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/settings.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/roster-utils.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/groups-categories.js?v={{ timestamp }}"></script>
+    <script src="/static/roster/main.js?v={{ timestamp }}"></script>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+        });
+    </script>
+</body>
+</html>

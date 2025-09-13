@@ -1,0 +1,157 @@
+<div class="max-w-4xl">
+    <div class="mb-6">
+        <h2 class="text-2xl font-semibold mb-2">Roster Settings</h2>
+        <p class="text-muted-foreground">Configure your roster properties and requirements</p>
+    </div>
+
+    <div class="bg-card border border-border rounded-lg">
+        <form id="roster-form" class="p-6 space-y-8" onsubmit="saveRosterSettings(event)">
+            <!-- Basic Information -->
+            <div class="space-y-4">
+                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Basic Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Roster Name</label>
+                        <input type="text" name="alias"
+                               value="{{ current_roster.alias if current_roster else '' }}"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                               required>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Roster Size</label>
+                        <input type="number" name="roster_size"
+                               value="{{ current_roster.roster_size or '' if current_roster else '' }}"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                               min="1">
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">Description</label>
+                    <textarea name="description" rows="3"
+                              class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none">{{ current_roster.description or '' if current_roster else '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Organization & Permissions -->
+            <div class="space-y-4">
+                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Organization & Permissions</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Organization Type</label>
+                        <select name="roster_type"
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="clan" {% if current_roster and current_roster.roster_type == 'clan' %}selected{% endif %}>
+                                Clan-specific
+                            </option>
+                            <option value="family" {% if current_roster and current_roster.roster_type == 'family' %}selected{% endif %}>
+                                Family-wide
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Signup Permissions</label>
+                        <select name="signup_scope"
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="clan-only" {% if current_roster and current_roster.signup_scope == 'clan-only' %}selected{% endif %}>
+                                Clan members only
+                            </option>
+                            <option value="family-wide" {% if current_roster and current_roster.signup_scope == 'family-wide' %}selected{% endif %}>
+                                Family members
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">Associated Clan</label>
+                    <select name="clan_tag"
+                            class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                        <option value="">Select a clan...</option>
+                        {% for clan in server_clans %}
+                            <option value="{{ clan.tag }}" {% if current_roster and current_roster.clan_tag == clan.tag %}selected{% endif %}>
+                                {{ clan.name }} ({{ clan.tag }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Requirements -->
+            <div class="space-y-4">
+                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Requirements</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Min Town Hall</label>
+                        <select name="min_th"
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="">No minimum</option>
+                            {% for th in range(1, 18) %}
+                                <option value="{{ th }}" {% if current_roster and current_roster.min_th == th %}selected{% endif %}>
+                                    TH {{ th }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Max Town Hall</label>
+                        <select name="max_th"
+                                class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+                            <option value="">No maximum</option>
+                            {% for th in range(1, 18) %}
+                                <option value="{{ th }}" {% if current_roster and current_roster.max_th == th %}selected{% endif %}>
+                                    TH {{ th }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium">Max Accounts/User</label>
+                        <input type="number" name="max_accounts_per_user"
+                               value="{{ current_roster.max_accounts_per_user or '' if current_roster else '' }}"
+                               class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                               min="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Allowed Categories -->
+            <div class="space-y-4">
+                <h3 class="font-medium text-sm text-muted-foreground uppercase tracking-wide">Allowed Categories</h3>
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">Member Categories</label>
+                    <div id="categories-checkboxes">
+                        {% if categories %}
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {% for category in categories %}
+                                    <label class="flex items-center gap-2 p-2 border border-border rounded cursor-pointer hover:bg-accent">
+                                        <input type="checkbox" name="allowed_signup_categories"
+                                               value="{{ category.custom_id }}"
+                                               {% if current_roster and current_roster.allowed_signup_categories and category.custom_id in current_roster.allowed_signup_categories %}checked{% endif %}
+                                               class="rounded border-border text-primary focus:ring-primary">
+                                        <span class="text-sm">{{ category.alias }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="p-4 border border-border rounded-md text-center">
+                                <p class="text-sm text-muted-foreground mb-2">No categories available</p>
+                                <button type="button" onclick="showTab('categories')"
+                                        class="text-sm text-primary hover:underline">
+                                    Create categories in Global Management
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-end pt-6 border-t border-border">
+                <button type="submit"
+                        class="px-6 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

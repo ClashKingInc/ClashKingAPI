@@ -1,0 +1,93 @@
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.tab-active {
+    @apply bg-primary text-primary-foreground;
+}
+
+.tab-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-accent;
+}
+
+.member-card {
+    @apply bg-background border border-border rounded-md p-3 cursor-move select-none transition-all duration-200;
+}
+
+.member-card:hover {
+    @apply border-primary shadow-md;
+}
+
+.member-card.dragging {
+    @apply opacity-50 scale-95;
+}
+
+.drop-zone.drag-over {
+    @apply border-primary border-solid bg-primary/5;
+}
+
+.autocomplete-item {
+    @apply px-3 py-2 hover:bg-accent cursor-pointer transition-colors;
+}
+
+.autocomplete-item:hover {
+    @apply bg-accent text-accent-foreground;
+}
+
+/* Table-specific styles */
+.member-table {
+    @apply w-full border-collapse;
+    min-width: 100%;
+}
+
+.member-table th,
+.member-table td {
+    @apply whitespace-nowrap text-center;
+    min-width: 120px;
+}
+
+.member-row.dragging {
+    @apply opacity-50;
+}
+
+.group-separator {
+    @apply bg-muted/50;
+}
+
+.group-separator h4 {
+    @apply font-semibold text-sm;
+}
+
+.empty-drop-row {
+    @apply transition-all duration-200;
+}
+
+.empty-drop-row.border-muted {
+    @apply border-muted-foreground border-dashed;
+}
+
+.empty-drop-row.hidden {
+    display: none;
+}
+
+/* Improve drag appearance */
+tr.member-row {
+    @apply transition-all duration-200;
+}
+
+tr.member-row:hover {
+    @apply bg-accent/30;
+}
+
+.drop-zone {
+    @apply transition-all duration-200;
+}
+
+.drop-zone.drag-over {
+    @apply bg-primary/10 border-primary;
+}

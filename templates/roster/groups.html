@@ -1,0 +1,44 @@
+<div class="max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-2xl font-semibold mb-2">Roster Groups</h2>
+            <p class="text-muted-foreground">Organize rosters into groups for bulk operations</p>
+        </div>
+        <button onclick="showCreateGroupModal()"
+                class="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            New Group
+        </button>
+    </div>
+
+    {% if groups %}
+        <div class="space-y-3">
+            {% for group in groups %}
+                <div class="bg-card border border-border rounded-lg p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="font-semibold text-lg">{{ group.alias }}</h3>
+                            <p class="text-sm text-muted-foreground mt-1">
+                                Max accounts per user: {{ group.max_accounts_per_user or 'No limit' }}
+                            </p>
+                        </div>
+                        <button onclick="deleteGroup('{{ group._id }}')"
+                                class="px-3 py-1.5 bg-destructive/10 text-destructive rounded-md text-sm hover:bg-destructive/20 transition-colors">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="bg-card border border-border rounded-lg p-12 text-center">
+            <i data-lucide="folder" class="w-16 h-16 mx-auto text-muted-foreground mb-6"></i>
+            <h3 class="text-lg font-medium text-muted-foreground mb-2">No groups created</h3>
+            <p class="text-sm text-muted-foreground mb-6">Create groups to organize your rosters for bulk operations</p>
+            <button onclick="showCreateGroupModal()"
+                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                Create First Group
+            </button>
+        </div>
+    {% endif %}
+</div>

@@ -1,0 +1,79 @@
+<!-- Sidebar Header with Logo -->
+<div class="flex items-center gap-3 pb-4 border-b border-border mb-6">
+    <div class="w-10 h-10 rounded-lg border border-border bg-muted flex items-center justify-center">
+        <img src="/static/favicon-dark.png" alt="ClashKing Logo" class="w-6 h-6"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+        <i data-lucide="shield" class="w-5 h-5 text-muted-foreground" style="display: none;"></i>
+    </div>
+    <div>
+        <h2 class="font-semibold">Roster Management</h2>
+        <p class="text-xs text-muted-foreground">Configure your rosters</p>
+    </div>
+</div>
+
+<!-- Roster Selection -->
+<div class="space-y-3 mb-6">
+    <div class="flex items-center justify-between">
+        <label class="text-sm font-medium">Active Roster</label>
+        <button onclick="showCreateRosterModal()"
+                class="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground"
+                title="Create New Roster">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+        </button>
+    </div>
+    <select id="roster-selector" onchange="selectRoster()" 
+            class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent">
+        <option value="">Choose a roster...</option>
+        {% for roster in all_rosters %}
+            <option value="{{ roster.custom_id }}"
+                    {% if roster.custom_id == current_roster.custom_id %}selected{% endif %}>
+                {{ roster.alias }}
+            </option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Navigation Tabs -->
+<nav class="space-y-1">
+    <!-- Roster Specific Tabs -->
+    <div id="roster-tabs" class="space-y-1" {% if not current_roster %}style="display: none"{% endif %}>
+        <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2 py-1">
+            Roster Management
+        </div>
+
+        <button onclick="showTab('settings')" id="sidebar-tab-settings"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-active">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+            <span>Settings</span>
+        </button>
+
+        <button onclick="showTab('members')" id="sidebar-tab-members"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+            <i data-lucide="users" class="w-4 h-4"></i>
+            <span>Members</span>
+            <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs"
+                  id="sidebar-member-count">{{ (current_roster.members|length) if current_roster.members else 0 }}</span>
+        </button>
+    </div>
+
+    <!-- Global Management Section -->
+    <div class="pt-4 space-y-1">
+        <div class="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2 py-1">
+            Global Management
+        </div>
+
+        <button onclick="showTab('groups')" id="sidebar-tab-groups"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+            <i data-lucide="folder" class="w-4 h-4"></i>
+            <span>Groups</span>
+            <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs">{{ groups|length }}</span>
+        </button>
+
+        <button onclick="showTab('categories')" id="sidebar-tab-categories"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors tab-inactive">
+            <i data-lucide="tags" class="w-4 h-4"></i>
+            <span>Categories</span>
+            <span class="ml-auto bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-xs">{{ categories|length }}</span>
+        </button>
+    </div>
+</nav>

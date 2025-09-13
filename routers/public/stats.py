@@ -447,7 +447,7 @@ async def war_stats(request: Request, response: Response,
     if players:
         pipeline = [
             {"$match" : {"$and" : [{"$or" : [{"data.clan.members.tag" : {"$in" : players}}, {"data.opponent.members.tag" : {"$in" : players}}]},
-                        {"data.preparationStartTime" : {"$gte" : SEASON_START}}, {"data.preparationStartTime" : {"$lte" : SEASON_END}}]}},
+                        {"data.endTime" : {"$gte" : SEASON_START}}, {"data.endTime" : {"$lte" : SEASON_END}}]}},
             {"$unset": ["_id"]},
             {"$project": {"data" : "$data"}}
         ]
@@ -511,8 +511,8 @@ async def war_stats(request: Request, response: Response,
 
     elif clans:
         pipeline = [
-            {"$match": {"$and": [{"$or": [{"clan": {"$in": clans}}, {"opponent": {"$in": clans}}]},
-                                 {"data.preparationStartTime": {"$gte": SEASON_START}}, {"data.preparationStartTime": {"$lte": SEASON_END}}]}},
+            {"$match": {"$and": [{"$or": [{"data.clan.tag": {"$in": clans}}, {"data.opponent.tag": {"$in": clans}}]},
+                                 {"data.endTime": {"$gte": SEASON_START}}, {"data.endTime": {"$lte": SEASON_END}}]}},
             {"$unset": ["_id"]},
             {"$project": {"data": "$data"}}
         ]
@@ -522,67 +522,40 @@ async def war_stats(request: Request, response: Response,
             war = war.get("data")
             war = coc.ClanWar(data=war, client=coc_client)
             war_unique_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
-            if war_unique_id in found_wars:
+            if war_unique_id in found_wars or str(war.type) == "friendly":
                 continue
             found_wars.add(war_unique_id)
-            war_sides = []
-            if war.clan_tag in clans:
-                war_sides.append(war.clan)
-            if war.opponent.tag in clans:
-                war_sides.append(war.opponent)
-            for side in war_sides:
-                for attack in side.attacks:
-                    player_attacks[attack.attacker_tag].append({
-                        "tag": attack.attacker.tag,
-                        "name": attack.attacker.name,
-                        "townhall": attack.attacker.town_hall,
-                        "destruction": attack.destruction,
-                        "stars": attack.stars,
-                        "fresh": attack.is_fresh_attack,
-                        "_time": int(war.end_time.time.timestamp()),
-                        "war_start": int(war.preparation_start_time.time.timestamp()),
-                        "defender_tag": attack.defender.tag,
-                        "defender_name": attack.defender.name,
-                        "defender_townhall": attack.defender.town_hall,
-                        "war_type": str(war.type),
-                        "war_status": str(war.status),
-                        "attack_order": attack.order,
-                        "map_position": attack.attacker.map_position,
-                        "war_size": war.team_size,
-                        "clan": attack.attacker.clan.tag,
-                        "clan_name": attack.attacker.clan.name,
-                        "defending_clan": attack.defender.clan.tag,
-                        "defending_clan_name": attack.defender.clan.name,
-                    })
-                for attack in side.defenses:
-                    player_defenses[attack.defender_tag].append({
-                        "tag": attack.attacker.tag,
-                        "name": attack.attacker.name,
-                        "townhall": attack.attacker.town_hall,
-                        "destruction": attack.destruction,
-                        "stars": attack.stars,
-                        "fresh": attack.is_fresh_attack,
-                        "_time": int(war.end_time.time.timestamp()),
-                        "war_start": int(war.preparation_start_time.time.timestamp()),
-                        "defender_tag": attack.defender.tag,
-                        "defender_name": attack.defender.name,
-                        "defender_townhall": attack.defender.town_hall,
-                        "war_type": str(war.type),
-                        "war_status": str(war.status),
-                        "attack_order": attack.order,
-                        "map_position": attack.attacker.map_position,
-                        "war_size": war.team_size,
-                        "clan": attack.attacker.clan.tag,
-                        "clan_name": attack.attacker.clan.name,
-                        "defending_clan": attack.defender.clan.tag,
-                        "defending_clan_name": attack.defender.clan.name,
-                    })
+            for attack in war.attacks:
+                player_attacks[attack.attacker_tag].append({
+                    "tag": attack.attacker.tag,
+                    "name": attack.attacker.name,
+                    "townhall": attack.attacker.town_hall,
+                    "destruction": attack.destruction,
+                    "stars": attack.stars,
+                    "fresh": attack.is_fresh_attack,
+                    "_time": int(war.end_time.time.timestamp()),
+                    "war_start": int(war.preparation_start_time.time.timestamp()),
+                    "defender_tag": attack.defender.tag,
+                    "defender_name": attack.defender.name,
+                    "defender_townhall": attack.defender.town_hall,
+                    "war_type": str(war.type),
+                    "war_status": str(war.status),
+                    "attack_order": attack.order,
+                    "map_position": attack.attacker.map_position,
+                    "war_size": war.team_size,
+                    "clan": attack.attacker.clan.tag,
+                    "clan_name": attack.attacker.clan.name,
+                    "defending_clan": attack.defender.clan.tag,
+                    "defending_clan_name": attack.defender.clan.name,
+                })
 
         players = list(player_attacks.keys()) + list(player_defenses.keys())
 
 
     for tag in players:
         this_player_attacks = player_attacks.get(tag, [])
+        if len(this_player_attacks) <= 21:
+            continue
         this_player_defenses = player_defenses.get(tag, [])
         if not this_player_attacks and not this_player_defenses:
             continue

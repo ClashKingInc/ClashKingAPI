@@ -81,8 +81,8 @@ async def global_counts(request: Request, response: Response):
     timer_counts = await db_client.war_timer.estimated_document_count()
 
     # Measure war_counts
-    now = int(pend.now(tz=pend.UTC).timestamp())
-    war_counts = await db_client.clan_wars.count_documents({"endTime": {"$gte": now}})
+    now = pend.now(tz=pend.UTC).format('YYYYMMDDTHHmmss.000[Z]')
+    war_counts = await db_client.clan_wars.count_documents({"data.endTime": {"$gte": now}})
 
     # Measure legend_count
     legend_count = await db_client.legend_rankings.estimated_document_count({})

@@ -37,7 +37,19 @@ middleware = [
     )
 ]
 
-app = FastAPI(middleware=middleware)
+app = FastAPI(middleware=middleware, 
+              title='ClashKingAPI',
+              description="""### Clash of Clans Based API 👑
+- No Auth Required, Free to Use
+- Please credit if using these stats in your project, Creator Code: ClashKing
+- Ratelimit is largely 30 req/sec, 5 req/sec on post & large requests
+- Largely 300 second cache
+- Not perfect, stats are collected by polling the Official API
+- [ClashKing Discord](https://discord.gg/clashking) | [CoC API Developers](https://discord.gg/clashapi)
+
+This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it. 
+For more information see [Supercell’s Fan Content Policy](https://supercell.com/fan-content-policy)""",
+             version="0.1")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -90,35 +102,19 @@ async def get_private_openapi():
 
 @app.get("/private/docs", include_in_schema=False)
 async def get_private_docs():
-    return get_swagger_ui_html(openapi_url="/openapi/private", title="Private API Docs")
+    return get_swagger_ui_html(openapi_url="/openapi/private", title="Private API Docs", swagger_favicon_url="https://clashk.ing/assets/images/favicon.png")
 
+@app.get("/private/redoc", include_in_schema=False)
+async def get_private_redoc():
+    return get_redoc_html(openapi_url="/openapi/private", title="Private API Docs", redoc_favicon_url="https://clashk.ing/assets/images/favicon.png")
 
-description = """
-### Clash of Clans Based API 👑
-- No Auth Required, Free to Use
-- Please credit if using these stats in your project, Creator Code: ClashKing
-- Ratelimit is largely 30 req/sec, 5 req/sec on post & large requests
-- Largely 300 second cache
-- Not perfect, stats are collected by polling the Official API
-- [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
+@app.get("/docs", include_in_schema=False)
+async def override_docs():
+    return get_swagger_ui_html(openapi_url=app.openapi_url, title=app.title + " - Swagger UI", swagger_favicon_url="https://clashk.ing/assets/images/favicon.png")
 
-This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it. 
-For more information see [Supercell’s Fan Content Policy](https://supercell.com/fan-content-policy)
-"""
-
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title="ClashKingAPI",
-        version="0.1",
-        description=description,
-        routes=app.routes,
-    )
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-app.openapi = custom_openapi
+@app.get("/redoc", include_in_schema=False)
+async def override_redoc():
+    return get_redoc_html(openapi_url=app.openapi_url, title=app.title + " - Redoc", redoc_favicon_url="https://clashk.ing/assets/images/favicon.png")
 
 if __name__ == "__main__":
     if config.is_local:

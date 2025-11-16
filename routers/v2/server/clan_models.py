@@ -1,13 +1,34 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
-class MemberCountWarningUpdate(BaseModel):
+class MemberCountWarning(BaseModel):
     """Member count warning configuration"""
     channel: Optional[int] = None
     above: Optional[int] = None
     below: Optional[int] = None
     role: Optional[int] = None
+
+
+class MemberCountWarningUpdate(BaseModel):
+    """Member count warning configuration for updates"""
+    channel: Optional[int] = None
+    above: Optional[int] = None
+    below: Optional[int] = None
+    role: Optional[int] = None
+
+
+class LogButtonSettings(BaseModel):
+    """Log button configuration"""
+    profile_button: Optional[bool] = None
+    strike_button: Optional[bool] = None
+    ban_button: Optional[bool] = None
+
+
+class ClanLogSettings(BaseModel):
+    """Clan log settings"""
+    join_log: Optional[LogButtonSettings] = None
+    leave_log: Optional[LogButtonSettings] = None
 
 
 class ClanSettingsUpdate(BaseModel):
@@ -72,3 +93,50 @@ class RemoveClanResponse(BaseModel):
     server_id: int
     clan_tag: str
     deleted_count: int
+
+
+class ClanSettings(BaseModel):
+    """Clan settings for list response"""
+    generalRole: Optional[int] = None
+    leaderRole: Optional[int] = None
+    clanChannel: Optional[int] = None
+    category: Optional[str] = None
+    abbreviation: Optional[str] = None
+    greeting: Optional[str] = None
+    auto_greet_option: Optional[str] = None
+    leadership_eval: Optional[bool] = None
+    warCountdown: Optional[int] = None
+    warTimerCountdown: Optional[int] = None
+    ban_alert_channel: Optional[int] = None
+    member_count_warning: Optional[MemberCountWarning] = None
+    logs: Optional[ClanLogSettings] = None
+
+
+class ClanListItem(BaseModel):
+    """Single clan in the list response"""
+    tag: str
+    name: str
+    badge_url: Optional[str] = None
+    level: Optional[int] = None
+    member_count: Optional[int] = None
+    settings: ClanSettings
+
+
+class ClanSettingsDetail(BaseModel):
+    """Detailed clan settings response"""
+    tag: str
+    name: str
+    server: int
+    generalRole: Optional[int] = None
+    leaderRole: Optional[int] = None
+    clanChannel: Optional[int] = None
+    category: Optional[str] = None
+    abbreviation: Optional[str] = None
+    greeting: Optional[str] = None
+    auto_greet_option: Optional[str] = None
+    leadership_eval: Optional[bool] = None
+    warCountdown: Optional[int] = None
+    warTimerCountdown: Optional[int] = None
+    ban_alert_channel: Optional[int] = None
+    member_count_warning: Optional[MemberCountWarning] = None
+    logs: Optional[ClanLogSettings] = None

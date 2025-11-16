@@ -26,7 +26,8 @@ async def get_server_reminders(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> ServerRemindersResponse:
     """
     Get all reminders configured for a server.
@@ -97,7 +98,8 @@ async def create_reminder(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> dict:
     """
     Create a new reminder for a server.
@@ -158,7 +160,8 @@ async def update_reminder(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> dict:
     """
     Update an existing reminder.
@@ -230,7 +233,8 @@ async def delete_reminder(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> dict:
     """
     Delete a reminder.

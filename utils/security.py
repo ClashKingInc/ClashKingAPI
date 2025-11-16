@@ -15,7 +15,7 @@ def check_authentication(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
         mongo = kwargs.get('mongo')
-        rest = kwargs.get('rest')  # Get the injected REST instance
+        rest = kwargs.get('rest')  # Get injected REST (only needed if server_id in kwargs)
 
         credentials: HTTPAuthorizationCredentials = kwargs.get("credentials")
         if not credentials:
@@ -73,7 +73,8 @@ def check_authentication(func):
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
-        if "server_id" in kwargs:
+        # Only verify server membership if rest is available and server_id is in kwargs
+        if "server_id" in kwargs and rest:
             async with rest.acquire(token=config.bot_token, token_type=hikari.TokenType.BOT) as client:
                 try:
                     await client.fetch_member(kwargs["server_id"], user_id)

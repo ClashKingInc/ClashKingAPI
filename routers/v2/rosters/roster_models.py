@@ -9,6 +9,7 @@ class CreateRosterModel(BaseModel):
     roster_type: Literal['clan', 'family'] = Field('clan', description='Organization: clan-specific or family-wide')
     signup_scope: Literal['clan-only', 'family-wide'] = Field('clan-only', description='Who can signup: clan members only or entire family')
     alias: str = Field(..., max_length=64)
+    min_signups: Optional[int] = Field(None, ge=1, description='Minimum number of signups required (for automated stats/alerts)')
 
 
 class RosterUpdateModel(BaseModel):
@@ -25,7 +26,6 @@ class RosterUpdateModel(BaseModel):
     signup_scope: Optional[Literal['clan-only', 'family-wide']] = None
     max_accounts_per_user: Optional[int] = None
     event_start_time: Optional[int] = None
-    signup_close_time: Optional[int] = None
 
     allowed_signup_categories: Optional[List[str]] = Field(
         None,
@@ -35,40 +35,11 @@ class RosterUpdateModel(BaseModel):
 
     # Display and UI configuration
     roster_size: Optional[int] = None
+    min_signups: Optional[int] = Field(None, ge=1, description='Minimum number of signups required (for automated stats/alerts)')
     columns: Optional[List[str]] = None
     missing_text: Optional[str] = None
     image: Optional[str] = None
     sort: Optional[list] = None
-
-
-
-class TemplateUpdateModel(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-
-    alias: Optional[str] = Field(None, max_length=64)
-    server_id: Optional[int] = None
-    clan_tag: Optional[str] = None
-    min_th: Optional[int] = Field(None, ge=1, le=17, description="Minimum town hall level")
-    max_th: Optional[int] = Field(None, ge=1, le=17, description="Maximum town hall level")
-    th_restriction: Optional[str] = Field(None, description="Legacy TH restriction format (will be overridden by min_th/max_th)")
-    active: Optional[bool] = None
-    frequency: Optional[Literal['weekly', 'monthly', 'cwl_season']] = None
-
-    # Template timing fields
-    event_time: Optional[int] = Field(
-        None, description='Actual event timestamp'
-    )
-
-    # Event system for templates
-    event_type: Optional[
-        Literal['cwl', 'clan-games', 'raids', 'rush', 'tournament']
-    ] = None
-    custom_event: Optional[str] = None
-
-    # All roster fields (for complete template → roster generation)
-    description: Optional[str] = None
-    roster_type: Optional[Literal['clan', 'family']] = None
-    max_accounts_per_user: Optional[int] = None
 
 
 class RosterMemberModel(BaseModel):
@@ -219,13 +190,14 @@ class CreateRosterAutomationModel(BaseModel):
     )
 
     action_type: Literal[
-        'roster_delete',
-        'roster_clear',
-        'roster_post',
-        'roster_signup',
-        'roster_signup_close',
-        'roster_archive',
-        'roster_ping',
+        'roster_signup',         # Post signup - open registrations
+        'roster_signup_close',   # Close signup - close registrations
+        'roster_post',           # Post final list - publish final roster
+        'roster_ping',           # Send reminders - ping unregistered/wrong clan
+        'recurring_event',       # Recurring event - auto-update roster dates
+        'roster_delete',         # Legacy - delete roster
+        'roster_clear',          # Legacy - clear roster
+        'roster_archive',        # Legacy - archive roster
     ] = Field(..., description='Type of automation action')
 
     scheduled_time: int = Field(

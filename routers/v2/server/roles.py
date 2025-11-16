@@ -268,7 +268,7 @@ async def get_discord_roles(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     rest: hikari.RESTApp
 ) -> DiscordRolesResponse:
     """
@@ -278,7 +278,7 @@ async def get_discord_roles(
     that can be used for role management configuration.
     """
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -321,7 +321,7 @@ async def get_role_settings(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     rest: hikari.RESTApp
 ) -> RoleSettingsResponse:
     """
@@ -330,7 +330,7 @@ async def get_role_settings(
     Returns configuration for auto-eval, blacklisted roles, and role treatment rules.
     """
     # Fetch server settings
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -357,7 +357,7 @@ async def update_role_settings(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     rest: hikari.RESTApp
 ) -> RoleResponse:
     """
@@ -366,7 +366,7 @@ async def update_role_settings(
     Only provided fields will be updated. All fields are optional.
     """
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
@@ -390,7 +390,7 @@ async def update_role_settings(
         raise HTTPException(status_code=400, detail="No fields to update")
 
     # Update server settings
-    await mongo_client.server_db.update_one(
+    await mongo.server_db.update_one(
         {"server": server_id},
         {"$set": update_doc}
     )
@@ -413,7 +413,7 @@ async def get_all_roles(
     user_id: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     rest: hikari.RESTApp
 ) -> AllRolesResponse:
     """
@@ -422,12 +422,12 @@ async def get_all_roles(
     Returns a complete overview of all role configurations for the server.
     """
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Get database
-    db = mongo_client._MongoClient__static_client.get_database('usafam')
+    db = mongo._MongoClient__static_client.get_database('usafam')
 
     all_roles = {}
     total_count = 0

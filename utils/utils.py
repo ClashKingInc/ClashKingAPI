@@ -60,6 +60,7 @@ class DBClient():
         self.bot_settings: collection_class = self.bot_db.settings
         self.custom_bots: collection_class = self.usafam.custom_bots
         self.open_tickets: collection_class = self.usafam.open_tickets
+        self.reminders: collection_class = self.bot_db.reminders
 
         self.looper = client.looper
         self.new_looper = client.new_looper

@@ -613,7 +613,8 @@ async def delete_clan_logs(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> dict:
     """
     Delete clan logs configuration for specific log types.

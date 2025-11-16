@@ -309,8 +309,8 @@ async def get_server_channels(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        rest: hikari.RESTApp,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> List[ChannelInfo]:
     """
     Get all text channels for a Discord server.
@@ -368,8 +368,8 @@ async def get_server_threads(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        rest: hikari.RESTApp,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> List[ThreadInfo]:
     """
     Get all active threads for a Discord server.
@@ -401,8 +401,6 @@ async def get_server_threads(
             except hikari.NotFoundError:
                 raise HTTPException(status_code=404, detail="Server not found")
 
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch threads: {str(e)}")
 
@@ -613,7 +611,8 @@ async def delete_clan_logs(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> dict:
     """
     Delete clan logs configuration for specific log types.

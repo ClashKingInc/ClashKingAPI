@@ -40,6 +40,9 @@ class MongoClient(AsyncMongoClient):
             'password_reset_tokens'
         )
 
+        self.__new_looper = self.get_database('new_looper')
+        self.player_stats = self.__new_looper.get_collection('player_stats')
+
         # Second connection for static_mongodb (bot settings)
         self.__static_client = pymongo.AsyncMongoClient(
             config.static_mongodb, compressors=['snappy', 'zlib']

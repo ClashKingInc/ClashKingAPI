@@ -1,6 +1,3 @@
-
-
-
 import coc
 import hikari
 import linkd
@@ -10,7 +7,7 @@ from fastapi import APIRouter, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Annotated, List, Optional
 from datetime import timedelta, datetime
-from utils.utils import db_client, remove_id_fields
+from utils.utils import remove_id_fields
 from utils.database import MongoClient, OldMongoClient
 from utils.security import check_authentication
 from utils.config import Config
@@ -26,15 +23,23 @@ from .legends_models import (
 config = Config()
 security = HTTPBearer()
 
-
-
-router = APIRouter(prefix="/v2",tags=["Bot Legends Endpoints"], include_in_schema=False)
+router = APIRouter(prefix="/v2", tags=["Bot Legends Endpoints"], include_in_schema=False)
 
 
 @router.get("/legends/players/day/{day}",
-             name="Get legends stats for a specific day")
-async def legend_stats_day(day: str, request: Request, response: Response, players: Annotated[List[str], Query()]):
-    # Your logic here
+            name="Get legends stats for a specific day")
+@linkd.ext.fastapi.inject
+async def legend_stats_day(
+    day: str,
+    players: Annotated[List[str], Query()],
+    *,
+    mongo: MongoClient
+):
+    """
+    Get legends statistics for players on a specific day.
+
+    Public endpoint - no authentication required.
+    """
 
     pipeline = [
         {
@@ -87,14 +92,25 @@ async def legend_stats_day(day: str, request: Request, response: Response, playe
     ]
 
     # Execute the aggregation
-    combined_data = await db_client.player_stats_db.aggregate(pipeline).to_list(length=None)
+    combined_data = await mongo.player_stats.aggregate(pipeline).to_list(length=None)
 
     return remove_id_fields(combined_data)
 
 
 @router.get("/legends/players/season/{season}",
-             name="Get legends stats for a specific season")
-async def legend_stats_season(season: str, request: Request, response: Response, players: Annotated[List[str], Query()]):
+            name="Get legends stats for a specific season")
+@linkd.ext.fastapi.inject
+async def legend_stats_season(
+    season: str,
+    players: Annotated[List[str], Query()],
+    *,
+    mongo: MongoClient
+):
+    """
+    Get legends statistics for players for an entire season.
+
+    Public endpoint - no authentication required.
+    """
     pipeline = [
         {
             "$match": {"tag": {"$in": players}}
@@ -145,7 +161,7 @@ async def legend_stats_season(season: str, request: Request, response: Response,
     ]
 
     # Execute the aggregation
-    combined_data = await db_client.player_stats_db.aggregate(pipeline).to_list(length=None)
+    combined_data = await mongo.player_stats.aggregate(pipeline).to_list(length=None)
     year, month = season.split('-')
     season_start = coc.utils.get_season_start(month=int(month) - 1, year=int(year))
     season_end = coc.utils.get_season_end(month=int(month) - 1, year=int(year))
@@ -174,15 +190,15 @@ async def legend_stats_season(season: str, request: Request, response: Response,
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_guild_legends_stats(
-    guild_id: int,
-    season: Optional[str] = None,
-    limit_top_players: int = 10,
-    user_id: str = None,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    *,
-    mongo: MongoClient,
-    rest: hikari.RESTApp,
-    coc_client: CustomClashClient
+        guild_id: int,
+        season: Optional[str] = None,
+        limit_top_players: int = 10,
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp,
+        coc_client: CustomClashClient
 ) -> GuildLegendsStats:
     """
     Get aggregate legend statistics for a guild.
@@ -233,7 +249,8 @@ async def get_guild_legends_stats(
             clan = await coc_client.get_clan(clan_tag)
 
             # Filter players in legends league
-            legends_players = [member for member in clan.members if member.league and member.league.name == "Legend League"]
+            legends_players = [member for member in clan.members if
+                               member.league and member.league.name == "Legend League"]
 
             if not legends_players:
                 continue
@@ -349,17 +366,17 @@ async def get_guild_legends_stats(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_legends_daily_tracking(
-    guild_id: int,
-    start_date: str,
-    end_date: str,
-    clan_tag: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
-    user_id: str = None,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    *,
-    mongo: MongoClient,
-    rest: hikari.RESTApp
+        guild_id: int,
+        start_date: str,
+        end_date: str,
+        clan_tag: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> LegendsDailyTrackingResponse:
     """
     Get daily trophy progression for legends players.

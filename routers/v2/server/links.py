@@ -179,7 +179,8 @@ async def unlink_member_account(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> dict:
     """
     Unlink a specific CoC account from a Discord member.
@@ -236,7 +237,8 @@ async def bulk_unlink_accounts(
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
         *,
-        mongo: MongoClient
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> dict:
     """
     Unlink multiple CoC accounts from a Discord member at once.

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from utils.security import check_authentication
 from utils.database import MongoClient
+from utils.config import Config
 from .roles_models import (
     RoleType,
     TownhallRoleCreate,
@@ -13,11 +14,18 @@ from .roles_models import (
     FamilyPositionRoleCreate,
     RoleResponse,
     RolesListResponse,
+    DiscordRole,
+    DiscordRolesResponse,
+    RoleSettingsResponse,
+    RoleSettingsUpdate,
+    AllRolesResponse,
 )
 from typing import Union
 import linkd
+import hikari
 
 security = HTTPBearer()
+config = Config()
 router = APIRouter(prefix="/v2/server", tags=["Role Management"], include_in_schema=True)
 
 
@@ -247,4 +255,208 @@ async def delete_role(
         server_id=server_id,
         role_type=role_type,
         role_id=role_id
+    )
+
+
+@router.get("/{server_id}/discord-roles",
+            name="Get Discord roles",
+            response_model=DiscordRolesResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+async def get_discord_roles(
+    server_id: int,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo_client: MongoClient,
+    rest: hikari.RESTApp
+) -> DiscordRolesResponse:
+    """
+    Get all Discord roles available on the server.
+
+    Returns a list of all roles with their properties (name, color, position, etc.)
+    that can be used for role management configuration.
+    """
+    # Verify server exists
+    server = await mongo_client.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Fetch roles from Discord API
+    try:
+        async with rest.acquire(token=config.bot_token, token_type=hikari.TokenType.BOT) as client:
+            roles = await client.fetch_roles(server_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Discord roles: {str(e)}")
+
+    # Format roles
+    role_list = []
+    for role in roles:
+        role_list.append(DiscordRole(
+            id=str(role.id),
+            name=role.name,
+            color=role.color.raw_int if role.color else 0,
+            position=role.position,
+            managed=role.is_managed,
+            mentionable=role.is_mentionable
+        ))
+
+    # Sort by position (highest first)
+    role_list.sort(key=lambda r: r.position, reverse=True)
+
+    return DiscordRolesResponse(
+        server_id=server_id,
+        roles=role_list,
+        count=len(role_list)
+    )
+
+
+@router.get("/{server_id}/role-settings",
+            name="Get role settings",
+            response_model=RoleSettingsResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+async def get_role_settings(
+    server_id: int,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo_client: MongoClient,
+    rest: hikari.RESTApp
+) -> RoleSettingsResponse:
+    """
+    Get global role management settings for a server.
+
+    Returns configuration for auto-eval, blacklisted roles, and role treatment rules.
+    """
+    # Fetch server settings
+    server = await mongo_client.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    return RoleSettingsResponse(
+        server_id=server_id,
+        auto_eval_status=server.get("autoeval"),
+        auto_eval_nickname=server.get("auto_eval_nickname"),
+        autoeval_triggers=server.get("autoeval_triggers", []),
+        autoeval_log=server.get("autoeval_log"),
+        blacklisted_roles=server.get("blacklisted_roles", []),
+        role_treatment=server.get("role_treatment", []),
+        category_roles=server.get("category_roles", {})
+    )
+
+
+@router.patch("/{server_id}/role-settings",
+              name="Update role settings",
+              response_model=RoleResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+async def update_role_settings(
+    server_id: int,
+    settings: RoleSettingsUpdate,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo_client: MongoClient,
+    rest: hikari.RESTApp
+) -> RoleResponse:
+    """
+    Update global role management settings for a server.
+
+    Only provided fields will be updated. All fields are optional.
+    """
+    # Verify server exists
+    server = await mongo_client.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Build update document
+    update_doc = {}
+
+    if settings.auto_eval_status is not None:
+        update_doc["autoeval"] = settings.auto_eval_status
+    if settings.auto_eval_nickname is not None:
+        update_doc["auto_eval_nickname"] = settings.auto_eval_nickname
+    if settings.autoeval_triggers is not None:
+        update_doc["autoeval_triggers"] = settings.autoeval_triggers
+    if settings.autoeval_log is not None:
+        update_doc["autoeval_log"] = settings.autoeval_log
+    if settings.blacklisted_roles is not None:
+        update_doc["blacklisted_roles"] = settings.blacklisted_roles
+    if settings.role_treatment is not None:
+        update_doc["role_treatment"] = settings.role_treatment
+
+    if not update_doc:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Update server settings
+    await mongo_client.server_db.update_one(
+        {"server": server_id},
+        {"$set": update_doc}
+    )
+
+    return RoleResponse(
+        message="Role settings updated successfully",
+        server_id=server_id,
+        role_type="settings",
+        role_id=None
+    )
+
+
+@router.get("/{server_id}/roles/all",
+            name="Get all roles",
+            response_model=AllRolesResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+async def get_all_roles(
+    server_id: int,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo_client: MongoClient,
+    rest: hikari.RESTApp
+) -> AllRolesResponse:
+    """
+    Get all configured roles of all types in a single request.
+
+    Returns a complete overview of all role configurations for the server.
+    """
+    # Verify server exists
+    server = await mongo_client.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Get database
+    db = mongo_client._MongoClient__static_client.get_database('usafam')
+
+    all_roles = {}
+    total_count = 0
+
+    # Fetch roles for each type
+    for role_type, collection_name in ROLE_COLLECTIONS.items():
+        collection = db.get_collection(collection_name)
+
+        if role_type == "status":
+            # Status roles are stored differently
+            docs = await collection.find({"server": server_id}).to_list(length=None)
+            role_list = []
+            for doc in docs:
+                if "discord" in doc:
+                    role_list.extend(doc.get("discord", []))
+        else:
+            roles = await collection.find({"server": server_id}).to_list(length=None)
+            role_list = roles
+
+        # Remove _id fields
+        for role in role_list:
+            if "_id" in role:
+                role.pop("_id")
+
+        all_roles[role_type] = role_list
+        total_count += len(role_list)
+
+    return AllRolesResponse(
+        server_id=server_id,
+        roles=all_roles,
+        total_count=total_count
     )

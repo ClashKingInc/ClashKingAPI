@@ -81,3 +81,52 @@ class RolesListResponse(BaseModel):
     role_type: str
     roles: List[dict]
     count: int
+
+
+class DiscordRole(BaseModel):
+    """Discord role information"""
+    id: str
+    name: str
+    color: int
+    position: int
+    managed: bool
+    mentionable: bool
+
+
+class DiscordRolesResponse(BaseModel):
+    """Response for Discord roles list"""
+    server_id: int
+    roles: List[DiscordRole]
+    count: int
+
+
+class RoleSettingsResponse(BaseModel):
+    """Response for role settings"""
+    server_id: int
+    auto_eval_status: Optional[bool] = None
+    auto_eval_nickname: Optional[bool] = None
+    autoeval_triggers: Optional[List[str]] = None
+    autoeval_log: Optional[int] = None
+    blacklisted_roles: Optional[List[int]] = None
+    role_treatment: Optional[List[str]] = None
+    category_roles: Optional[dict] = None
+
+
+class RoleSettingsUpdate(BaseModel):
+    """Update role settings"""
+    auto_eval_status: Optional[bool] = Field(None, description="Enable/disable auto-eval", alias="autoeval")
+    auto_eval_nickname: Optional[bool] = Field(None, description="Enable/disable auto-eval for nicknames")
+    autoeval_triggers: Optional[List[str]] = Field(None, description="List of auto-eval triggers")
+    autoeval_log: Optional[int] = Field(None, description="Auto-eval log channel ID")
+    blacklisted_roles: Optional[List[int]] = Field(None, description="List of blacklisted role IDs")
+    role_treatment: Optional[List[str]] = Field(None, description="Role treatment types")
+
+    class Config:
+        populate_by_name = True
+
+
+class AllRolesResponse(BaseModel):
+    """Response for all roles"""
+    server_id: int
+    roles: dict
+    total_count: int

@@ -411,7 +411,7 @@ async def update_role_settings(
     )
 
 
-@router.get("/{server_id}/roles/all",
+@router.get("/{server_id}/all-roles",
             name="Get all roles",
             response_model=AllRolesResponse)
 @linkd.ext.fastapi.inject

@@ -353,7 +353,7 @@ async def get_discord_roles(
         role_list.append(DiscordRole(
             id=str(role.id),
             name=role.name,
-            color=role.color.raw_int if role.color else 0,
+            color=int(role.color) if role.color else 0,
             position=role.position,
             managed=role.is_managed,
             mentionable=role.is_mentionable

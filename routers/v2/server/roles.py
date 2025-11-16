@@ -55,6 +55,64 @@ def get_role_collection(mongo: MongoClient, role_type: str):
     return collection_map.get(role_type)
 
 
+@router.get("/{server_id}/roles/all",
+            name="Get all roles",
+            response_model=AllRolesResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+async def get_all_roles(
+    server_id: int,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    rest: hikari.RESTApp
+) -> AllRolesResponse:
+    """
+    Get all configured roles of all types in a single request.
+
+    Returns a complete overview of all role configurations for the server.
+    """
+    # Verify server exists
+    server = await mongo.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    all_roles = {}
+    total_count = 0
+
+    # Fetch roles for each type
+    role_types = ["townhall", "league", "builderhall", "builder_league", "achievement", "status", "family_position"]
+
+    for role_type in role_types:
+        collection = get_role_collection(mongo, role_type)
+
+        if role_type == "status":
+            # Status roles are stored differently
+            docs = await collection.find({"server": server_id}).to_list(length=None)
+            role_list = []
+            for doc in docs:
+                if "discord" in doc:
+                    role_list.extend(doc.get("discord", []))
+        else:
+            roles = await collection.find({"server": server_id}).to_list(length=None)
+            role_list = roles
+
+        # Remove _id fields
+        for role in role_list:
+            if "_id" in role:
+                role.pop("_id")
+
+        all_roles[role_type] = role_list
+        total_count += len(role_list)
+
+    return AllRolesResponse(
+        server_id=server_id,
+        roles=all_roles,
+        total_count=total_count
+    )
+
+
 @router.get("/{server_id}/roles/{role_type}",
             name="List roles by type",
             response_model=RolesListResponse)
@@ -400,62 +458,4 @@ async def update_role_settings(
         server_id=server_id,
         role_type="settings",
         role_id=None
-    )
-
-
-@router.get("/{server_id}/roles/all",
-            name="Get all roles",
-            response_model=AllRolesResponse)
-@linkd.ext.fastapi.inject
-@check_authentication
-async def get_all_roles(
-    server_id: int,
-    user_id: str = None,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    *,
-    mongo: MongoClient,
-    rest: hikari.RESTApp
-) -> AllRolesResponse:
-    """
-    Get all configured roles of all types in a single request.
-
-    Returns a complete overview of all role configurations for the server.
-    """
-    # Verify server exists
-    server = await mongo.server_db.find_one({"server": server_id})
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
-
-    all_roles = {}
-    total_count = 0
-
-    # Fetch roles for each type
-    role_types = ["townhall", "league", "builderhall", "builder_league", "achievement", "status", "family_position"]
-
-    for role_type in role_types:
-        collection = get_role_collection(mongo, role_type)
-
-        if role_type == "status":
-            # Status roles are stored differently
-            docs = await collection.find({"server": server_id}).to_list(length=None)
-            role_list = []
-            for doc in docs:
-                if "discord" in doc:
-                    role_list.extend(doc.get("discord", []))
-        else:
-            roles = await collection.find({"server": server_id}).to_list(length=None)
-            role_list = roles
-
-        # Remove _id fields
-        for role in role_list:
-            if "_id" in role:
-                role.pop("_id")
-
-        all_roles[role_type] = role_list
-        total_count += len(role_list)
-
-    return AllRolesResponse(
-        server_id=server_id,
-        roles=all_roles,
-        total_count=total_count
     )

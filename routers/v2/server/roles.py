@@ -450,7 +450,7 @@ async def get_all_roles(
                 role_list = []
         else:
             collection = get_role_collection(mongo, role_type)
-            if collection:
+            if collection is not None:
                 roles = await collection.find({"server": server_id}).to_list(length=None)
                 role_list = roles
             else:

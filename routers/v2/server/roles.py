@@ -87,7 +87,11 @@ async def list_roles(
         if not server:
             raise HTTPException(status_code=404, detail="Server not found")
 
-        role_list = server.get("status_roles", {}).get("discord", [])
+        status_roles_data = server.get("status_roles")
+        if status_roles_data and isinstance(status_roles_data, dict):
+            role_list = status_roles_data.get("discord", [])
+        else:
+            role_list = []
     else:
         # Get collection
         collection = get_role_collection(mongo, role_type)
@@ -99,7 +103,7 @@ async def list_roles(
 
     # Remove _id fields for JSON serialization
     for role in role_list:
-        if "_id" in role:
+        if isinstance(role, dict) and "_id" in role:
             role.pop("_id")
 
     return RolesListResponse(
@@ -439,7 +443,11 @@ async def get_all_roles(
     for role_type in role_types:
         if role_type == "status":
             # Status roles are in server_db
-            role_list = server.get("status_roles", {}).get("discord", [])
+            status_roles_data = server.get("status_roles")
+            if status_roles_data and isinstance(status_roles_data, dict):
+                role_list = status_roles_data.get("discord", [])
+            else:
+                role_list = []
         else:
             collection = get_role_collection(mongo, role_type)
             if collection:
@@ -450,7 +458,7 @@ async def get_all_roles(
 
         # Remove _id fields
         for role in role_list:
-            if "_id" in role:
+            if isinstance(role, dict) and "_id" in role:
                 role.pop("_id")
 
         all_roles[role_type] = role_list

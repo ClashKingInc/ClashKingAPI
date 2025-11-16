@@ -33,6 +33,40 @@ def dynamic_limit(key: str):
     return '30/second'
 
 
+def fix_tag(tag: str) -> str:
+    """
+    Normalize a Clash of Clans tag.
+
+    Args:
+        tag: Player or clan tag (with or without #)
+
+    Returns:
+        Normalized tag with # prefix and uppercase
+
+    Examples:
+        >>> fix_tag("2pp")
+        "#2PP"
+        >>> fix_tag("#abc123")
+        "#ABC123"
+        >>> fix_tag(" 2pp ")
+        "#2PP"
+    """
+    if not tag:
+        return tag
+
+    # Remove whitespace
+    tag = tag.strip()
+
+    # Add # prefix if missing
+    if not tag.startswith('#'):
+        tag = f'#{tag}'
+
+    # Convert to uppercase
+    tag = tag.upper()
+
+    return tag
+
+
 def gen_clean_custom_id():
     hashids = Hashids(min_length=7)
     custom_id = hashids.encode(

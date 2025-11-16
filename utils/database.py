@@ -53,6 +53,15 @@ class MongoClient(AsyncMongoClient):
         self.clan_db = self.__bot_settings.get_collection('clans')
         self.reminders = self.__bot_settings.get_collection('reminders')
 
+        # Role management collections
+        self.townhall_roles = self.__bot_settings.get_collection('townhallroles')
+        self.legend_league_roles = self.__bot_settings.get_collection('legendleagueroles')
+        self.builderhall_roles = self.__bot_settings.get_collection('builderhallroles')
+        self.builder_league_roles = self.__bot_settings.get_collection('builderleagueroles')
+        self.achievement_roles = self.__bot_settings.get_collection('achievementroles')
+        self.status_roles = self.__bot_settings.get_collection('statusroles')
+        self.family_roles = self.__bot_settings.get_collection('family_roles')
+
 
 class OldMongoClient:
     looper_db = pymongo.AsyncMongoClient(

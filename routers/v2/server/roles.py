@@ -29,18 +29,6 @@ config = Config()
 router = APIRouter(prefix="/v2/server", tags=["Role Management"], include_in_schema=True)
 
 
-# Mapping of role types to MongoDB collections
-ROLE_COLLECTIONS = {
-    "townhall": "townhallroles",
-    "league": "legendleagueroles",
-    "builderhall": "builderhallroles",
-    "builder_league": "builderleagueroles",
-    "achievement": "achievementroles",
-    "status": "statusroles",
-    "family_position": "family_roles",
-}
-
-
 # Mapping of role types to Pydantic models
 ROLE_MODELS = {
     "townhall": TownhallRoleCreate,
@@ -51,6 +39,20 @@ ROLE_MODELS = {
     "status": StatusRoleCreate,
     "family_position": FamilyPositionRoleCreate,
 }
+
+
+def get_role_collection(mongo: MongoClient, role_type: str):
+    """Get the collection object for a given role type."""
+    collection_map = {
+        "townhall": mongo.townhall_roles,
+        "league": mongo.legend_league_roles,
+        "builderhall": mongo.builderhall_roles,
+        "builder_league": mongo.builder_league_roles,
+        "achievement": mongo.achievement_roles,
+        "status": mongo.status_roles,
+        "family_position": mongo.family_roles,
+    }
+    return collection_map.get(role_type)
 
 
 @router.get("/{server_id}/roles/{role_type}",
@@ -65,7 +67,8 @@ async def list_roles(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> RolesListResponse:
     """
     List all roles of a specific type for a server.
@@ -79,13 +82,10 @@ async def list_roles(
     - status: Discord tenure/status roles
     - family_position: Family position roles (elder, co-leader, leader)
     """
-    # Get collection name
-    collection_name = ROLE_COLLECTIONS.get(role_type)
-    if not collection_name:
+    # Get collection
+    collection = get_role_collection(mongo, role_type)
+    if not collection:
         raise HTTPException(status_code=400, detail=f"Invalid role type: {role_type}")
-
-    # Get collection from the __bot_settings database
-    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
 
     # Query roles for this server
     if role_type == "status":
@@ -134,7 +134,8 @@ async def create_role(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> RoleResponse:
     """
     Create a new role for a server.
@@ -154,8 +155,7 @@ async def create_role(
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Get collection
-    collection_name = ROLE_COLLECTIONS.get(role_type)
-    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
+    collection = get_role_collection(mongo, role_type)
 
     # Build role document
     role_doc = role_data.model_dump(by_alias=True)
@@ -222,7 +222,8 @@ async def delete_role(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo: MongoClient
+    mongo: MongoClient,
+    rest: hikari.RESTApp
 ) -> RoleResponse:
     """
     Delete a role by its Discord role ID.
@@ -230,8 +231,7 @@ async def delete_role(
     This will remove the role configuration from the server.
     """
     # Get collection
-    collection_name = ROLE_COLLECTIONS.get(role_type)
-    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
+    collection = get_role_collection(mongo, role_type)
 
     # Special handling for status roles
     if role_type == "status":
@@ -426,15 +426,14 @@ async def get_all_roles(
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    # Get database
-    db = mongo._MongoClient__static_client.get_database('usafam')
-
     all_roles = {}
     total_count = 0
 
     # Fetch roles for each type
-    for role_type, collection_name in ROLE_COLLECTIONS.items():
-        collection = db.get_collection(collection_name)
+    role_types = ["townhall", "league", "builderhall", "builder_league", "achievement", "status", "family_position"]
+
+    for role_type in role_types:
+        collection = get_role_collection(mongo, role_type)
 
         if role_type == "status":
             # Status roles are stored differently

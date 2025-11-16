@@ -16,55 +16,48 @@ RoleType = Literal[
 
 class TownhallRoleCreate(BaseModel):
     """Create a townhall role"""
-    role_id: int = Field(..., description="Discord role ID")
+    role: int = Field(..., description="Discord role ID")
     th: int = Field(..., description="Townhall level", ge=1, le=17)
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
 
 
 class LeagueRoleCreate(BaseModel):
     """Create a league role"""
-    role_id: int = Field(..., description="Discord role ID")
-    league: str = Field(..., description="League name (e.g., 'Legend League', 'Titan League I')")
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
+    role: int = Field(..., description="Discord role ID")
+    type: str = Field(..., description="League type (e.g., 'Legend League', 'Titan League I')")
 
 
 class BuilderHallRoleCreate(BaseModel):
     """Create a builder hall role"""
-    role_id: int = Field(..., description="Discord role ID")
+    role: int = Field(..., description="Discord role ID")
     bh: int = Field(..., description="Builder hall level", ge=1, le=10)
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
 
 
 class BuilderLeagueRoleCreate(BaseModel):
     """Create a builder league role"""
-    role_id: int = Field(..., description="Discord role ID")
-    league: str = Field(..., description="Builder league name")
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
+    role: int = Field(..., description="Discord role ID")
+    type: str = Field(..., description="Builder league type")
 
 
 class AchievementRoleCreate(BaseModel):
     """Create an achievement role"""
-    role_id: int = Field(..., description="Discord role ID")
-    achievement: str = Field(..., description="Achievement name")
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
+    id: int = Field(..., description="Discord role ID")
+    type: str = Field(..., description="Achievement type")
+    season: str = Field(..., description="Season (e.g., '2024-01')")
+    amount: int = Field(..., description="Amount required")
 
 
 class StatusRoleCreate(BaseModel):
     """Create a status role (Discord tenure)"""
-    role_id: int = Field(..., description="Discord role ID", alias="id")
+    id: int = Field(..., description="Discord role ID")
     months: int = Field(..., description="Months in server required")
-
-    class Config:
-        populate_by_name = True
 
 
 class FamilyPositionRoleCreate(BaseModel):
     """Create a family position role"""
-    role_id: int = Field(..., description="Discord role ID")
+    role: int = Field(..., description="Discord role ID")
     type: Literal["family_elder_roles", "family_co-leader_roles", "family_leader_roles"] = Field(
         ..., description="Position type"
     )
-    toggle: Optional[bool] = Field(True, description="Enable/disable role")
 
 
 class RoleResponse(BaseModel):

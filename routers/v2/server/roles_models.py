@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 
 
 # Enum for role types
@@ -72,7 +72,7 @@ class RolesListResponse(BaseModel):
     """Response listing roles"""
     server_id: int
     role_type: str
-    roles: List[dict]
+    roles: List[Dict[str, Any]]
     count: int
 
 
@@ -121,5 +121,5 @@ class RoleSettingsUpdate(BaseModel):
 class AllRolesResponse(BaseModel):
     """Response for all roles"""
     server_id: int
-    roles: dict
+    roles: Dict[str, List[Dict[str, Any]]]
     total_count: int

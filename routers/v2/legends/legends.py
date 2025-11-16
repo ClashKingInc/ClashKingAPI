@@ -29,8 +29,17 @@ router = APIRouter(prefix="/v2", tags=["Bot Legends Endpoints"], include_in_sche
 @router.get("/legends/players/day/{day}",
             name="Get legends stats for a specific day")
 @linkd.ext.fastapi.inject
-async def legend_stats_day(day: str, request: Request, response: Response, players: Annotated[List[str], Query()], *, mongo: MongoClient):
-    # Your logic here
+async def legend_stats_day(
+    day: str,
+    players: Annotated[List[str], Query()],
+    *,
+    mongo: MongoClient
+):
+    """
+    Get legends statistics for players on a specific day.
+
+    Public endpoint - no authentication required.
+    """
 
     pipeline = [
         {
@@ -91,8 +100,17 @@ async def legend_stats_day(day: str, request: Request, response: Response, playe
 @router.get("/legends/players/season/{season}",
             name="Get legends stats for a specific season")
 @linkd.ext.fastapi.inject
-async def legend_stats_season(season: str, request: Request, response: Response,
-                              players: Annotated[List[str], Query()], *, mongo: MongoClient):
+async def legend_stats_season(
+    season: str,
+    players: Annotated[List[str], Query()],
+    *,
+    mongo: MongoClient
+):
+    """
+    Get legends statistics for players for an entire season.
+
+    Public endpoint - no authentication required.
+    """
     pipeline = [
         {
             "$match": {"tag": {"$in": players}}

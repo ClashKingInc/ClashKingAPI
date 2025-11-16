@@ -279,10 +279,10 @@ async def update_log_type(
     }
 
 
-@router.get("/{server_id}/clans", name="Get server clans")
+@router.get("/{server_id}/clans-basic", name="Get server clans (basic)")
 @linkd.ext.fastapi.inject
 @check_authentication
-async def get_server_clans(
+async def get_server_clans_basic(
         server_id: int,
         user_id: str = None,
         credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -292,7 +292,7 @@ async def get_server_clans(
 ) -> List[dict]:
     """
     Get all clans registered for a Discord server.
-    Returns basic clan information (tag and name).
+    Returns basic clan information (tag and name)
     """
     clans = await mongo.clan_db.find(
         {"server": server_id},

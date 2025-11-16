@@ -36,7 +36,7 @@ async def get_server_clans(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     coc_client: CustomClashClient,
     rest: hikari.RESTApp
 ) -> List[ClanListItem]:
@@ -47,15 +47,16 @@ async def get_server_clans(
     Includes live data from the Clash of Clans API (badge, level, member count).
     """
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Get all clans for this server
-    clans = await mongo_client.clan_db.find({"server": server_id}).to_list(length=None)
+    clans = await mongo.clan_db.find({"server": server_id}).to_list(length=None)
 
     result = []
     for clan_doc in clans:
+        print(clan_doc)
         # Fetch live clan data from CoC API
         clan_tag = clan_doc.get("tag")
         badge_url = None
@@ -139,7 +140,7 @@ async def get_clan_settings(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     rest: hikari.RESTApp
 ) -> ClanSettingsDetail:
     """
@@ -156,7 +157,7 @@ async def get_clan_settings(
         clan_tag = f'#{clan_tag}'
 
     # Find clan
-    clan_doc = await mongo_client.clan_db.find_one({
+    clan_doc = await mongo.clan_db.find_one({
         "$and": [{"tag": clan_tag}, {"server": server_id}]
     })
 
@@ -223,7 +224,7 @@ async def update_clan_settings(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient
+    mongo: MongoClient
 ) -> ClanSettingsResponse:
     """
     Update clan settings. Only provided fields will be updated.
@@ -235,7 +236,7 @@ async def update_clan_settings(
     - Log button configurations (profile, strike, ban buttons)
     """
     # Verify clan exists for this server
-    existing = await mongo_client.clan_db.find_one({
+    existing = await mongo.clan_db.find_one({
         "$and": [{"tag": clan_tag}, {"server": server_id}]
     })
     if not existing:
@@ -279,7 +280,7 @@ async def update_clan_settings(
         raise HTTPException(status_code=400, detail="No fields to update")
 
     # Update the clan
-    result = await mongo_client.clan_db.update_one(
+    result = await mongo.clan_db.update_one(
         {"$and": [{"tag": clan_tag}, {"server": server_id}]},
         {"$set": update_doc}
     )
@@ -307,7 +308,7 @@ async def add_clan(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient,
+    mongo: MongoClient,
     coc_client: CustomClashClient
 ) -> AddClanResponse:
     """
@@ -324,12 +325,12 @@ async def add_clan(
         clan_tag = f'#{clan_tag}'
 
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Check if clan already added to this server
-    existing = await mongo_client.clan_db.find_one({
+    existing = await mongo.clan_db.find_one({
         "$and": [{"tag": clan_tag}, {"server": server_id}]
     })
     if existing:
@@ -377,7 +378,7 @@ async def add_clan(
     }
 
     # Insert clan
-    result = await mongo_client.clan_db.insert_one(clan_doc)
+    result = await mongo.clan_db.insert_one(clan_doc)
 
     return AddClanResponse(
         message="Clan added successfully",
@@ -399,7 +400,7 @@ async def remove_clan(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient
+    mongo: MongoClient
 ) -> RemoveClanResponse:
     """
     Remove a clan from a server.
@@ -413,19 +414,19 @@ async def remove_clan(
         clan_tag = f'#{clan_tag}'
 
     # Check if clan exists
-    existing = await mongo_client.clan_db.find_one({
+    existing = await mongo.clan_db.find_one({
         "$and": [{"tag": clan_tag}, {"server": server_id}]
     })
     if not existing:
         raise HTTPException(status_code=404, detail="Clan not found on this server")
 
     # Delete clan document
-    result = await mongo_client.clan_db.delete_one({
+    result = await mongo.clan_db.delete_one({
         "$and": [{"tag": clan_tag}, {"server": server_id}]
     })
 
     # Also delete associated reminders
-    await mongo_client.reminders.delete_many({
+    await mongo.reminders.delete_many({
         "$and": [{"clan": clan_tag}, {"server": server_id}]
     })
 

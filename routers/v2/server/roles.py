@@ -65,7 +65,7 @@ async def list_roles(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient
+    mongo: MongoClient
 ) -> RolesListResponse:
     """
     List all roles of a specific type for a server.
@@ -85,7 +85,7 @@ async def list_roles(
         raise HTTPException(status_code=400, detail=f"Invalid role type: {role_type}")
 
     # Get collection from the __bot_settings database
-    collection = mongo_client._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
+    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
 
     # Query roles for this server
     if role_type == "status":
@@ -134,7 +134,7 @@ async def create_role(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient
+    mongo: MongoClient
 ) -> RoleResponse:
     """
     Create a new role for a server.
@@ -149,13 +149,13 @@ async def create_role(
     - family_position: {role_id, type, toggle}
     """
     # Verify server exists
-    server = await mongo_client.server_db.find_one({"server": server_id})
+    server = await mongo.server_db.find_one({"server": server_id})
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Get collection
     collection_name = ROLE_COLLECTIONS.get(role_type)
-    collection = mongo_client._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
+    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
 
     # Build role document
     role_doc = role_data.model_dump(by_alias=True)
@@ -222,7 +222,7 @@ async def delete_role(
     request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     *,
-    mongo_client: MongoClient
+    mongo: MongoClient
 ) -> RoleResponse:
     """
     Delete a role by its Discord role ID.
@@ -231,7 +231,7 @@ async def delete_role(
     """
     # Get collection
     collection_name = ROLE_COLLECTIONS.get(role_type)
-    collection = mongo_client._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
+    collection = mongo._MongoClient__static_client.get_database('usafam').get_collection(collection_name)
 
     # Special handling for status roles
     if role_type == "status":

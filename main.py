@@ -44,6 +44,7 @@ sentry_sdk.init(
     integrations=[FastApiIntegration()],
     traces_sample_rate=1.0,
     environment='development' if config.is_local else 'production',
+    send_default_pii=True,
     ignore_errors=[
         KeyboardInterrupt,
         BrokenPipeError,
@@ -64,18 +65,28 @@ registry.register_value(hikari.RESTApp, rest)
 async def lifespan(_: fastapi.FastAPI) -> t.AsyncGenerator[None, t.Any]:
     # Login with CoC credentials
     print(f"Attempting CoC login with email: {config.coc_email}")
-    
+
     try:
         await coc_client.login(email=config.coc_email, password=config.coc_password)
         print("CoC client logged in successfully")
     except Exception as e:
         print(f"Failed to login to CoC: {e}")
         print(f"Exception type: {type(e)}")
+        sentry_sdk.capture_exception(e, tags={"startup": "coc_login_failed"})
         # Continue without CoC login for now
         pass
-    
-    await rest.start()
+
+    try:
+        await rest.start()
+        print("✅ Startup tasks completed successfully")
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+        sentry_sdk.capture_exception(e, tags={"startup": "failed"})
+        raise
+
     yield
+
+    print("🔄 Application shutting down...")
     await manager.close()
 
 

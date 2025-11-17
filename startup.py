@@ -9,6 +9,7 @@ from routers.v2.dates.dates import router as dates_router
 from routers.v2.war.war import router as war_router
 from routers.v2.ui.ui import router as ui_router
 from routers.v2.guilds import router as guilds_router
+from routers.v2.config import router as config_router
 from routers.v2.server.server import router as server_router
 from routers.v2.server.logs import router as server_logs_router
 from routers.v2.server.reminders import router as server_reminders_router
@@ -27,6 +28,7 @@ from coc.errors import HTTPException
 def define_app(app: FastAPI):
 
     #include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"), recursive=True)
+    app.include_router(config_router)
     app.include_router(rosters_router)
     app.include_router(accounts_router)
     app.include_router(auth_router)

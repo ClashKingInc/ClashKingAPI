@@ -720,9 +720,7 @@ async def list_rosters(
         query['clan_tag'] = clan_tag
 
     # Execute query with sorting by most recently updated first
-    cursor = await mongo.rosters.find(query, {'_id': 0}).sort(
-        {'updated_at': -1}
-    )
+    cursor = mongo.rosters.find(query, {'_id': 0}).sort('updated_at', -1)
     rosters = await cursor.to_list(length=None)
 
     # Enrich each roster with additional group information for display
@@ -888,7 +886,7 @@ async def get_roster_group(
         raise HTTPException(status_code=404, detail='Roster group not found')
 
     # Get all rosters that belong to this group for display
-    cursor = await mongo.rosters.find(
+    cursor = mongo.rosters.find(
         {'group_id': group_id},
         {
             '_id': 0,
@@ -980,9 +978,9 @@ async def list_roster_groups(
     Note: Returns empty list if server has no roster groups
     """
     # Fetch all groups for the server, sorted by most recent activity
-    cursor = await mongo.roster_groups.find(
+    cursor = mongo.roster_groups.find(
         {'server_id': server_id}, {'_id': 0}
-    ).sort({'updated_at': -1})
+    ).sort('updated_at', -1)
     groups = await cursor.to_list(length=None)
 
     # Enrich each group with roster count for better overview

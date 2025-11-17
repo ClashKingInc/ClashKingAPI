@@ -58,10 +58,8 @@ async def get_server_links(
         # Fetch guild members using bot token
         async with rest.acquire(token=config.bot_token, token_type=hikari.TokenType.BOT) as client:
             try:
-                guild = await client.fetch_guild(server_id)
-                # Fetch all members (this may need chunking for large servers)
-                members = await client.fetch_members(server_id)
-                all_members = [m async for m in members]
+                # Fetch all members - fetch_members returns a list
+                all_members = await client.fetch_members(server_id)
             except hikari.ForbiddenError:
                 raise HTTPException(
                     status_code=403,

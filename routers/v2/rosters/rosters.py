@@ -24,6 +24,7 @@ from utils.custom_coc import CustomClashClient
 from utils.database import MongoClient
 from utils.discord_api import get_discord_channels
 from utils.security import check_authentication
+from utils.sentry_utils import capture_endpoint_errors
 from utils.utils import gen_clean_custom_id, generate_access_token
 
 router = APIRouter(prefix='/v2', tags=['Rosters'], include_in_schema=True)
@@ -31,8 +32,9 @@ security = HTTPBearer()
 
 
 @router.post('/roster', name='Create a roster')
-@check_authentication
 @linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
 async def create_roster(
     server_id: int,
     roster_data: CreateRosterModel,
@@ -65,7 +67,7 @@ async def create_roster(
             )
 
         # Ensure the clan is already linked to this Discord server
-        server_clan = await mongo.clans.find_one({
+        server_clan = await mongo.clan_db.find_one({
             'tag': roster_data.clan_tag,
             'server': server_id
         })
@@ -82,7 +84,7 @@ async def create_roster(
         # Family-wide rosters can span multiple clans but may have a primary clan for reference
         if roster_data.clan_tag:
             # If a primary clan is specified, ensure it's linked to the server
-            server_clan = await mongo.clans.find_one({
+            server_clan = await mongo.clan_db.find_one({
                 'tag': roster_data.clan_tag,
                 'server': server_id
             })
@@ -138,6 +140,7 @@ async def create_roster(
 @router.patch('/roster/{roster_id}', name='Update a Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_roster(
     server_id: int,
     roster_id: str,
@@ -213,7 +216,7 @@ async def update_roster(
                 )
 
             # Validate that the clan is linked to this server
-            server_clan = await mongo.clans.find_one({
+            server_clan = await mongo.clan_db.find_one({
                 'tag': new_clan_tag,
                 'server': server_id
             })
@@ -284,6 +287,7 @@ async def update_roster(
 @router.get('/roster/{roster_id}', name='Get a Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_roster(
     server_id: int,
     roster_id: str,
@@ -354,6 +358,7 @@ async def get_roster(
 @router.delete('/roster/{roster_id}', name='Delete a Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_roster(
     server_id: int,
     roster_id: str,
@@ -393,6 +398,7 @@ async def delete_roster(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def remove_member_from_roster(
     roster_id: str,
     player_tag: str,
@@ -439,6 +445,7 @@ async def remove_member_from_roster(
 @router.post('/roster/refresh', name='General Refresh Rosters')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def general_refresh_rosters(
     server_id: int = Query(
         None, description='Refresh all rosters for this server'
@@ -569,6 +576,7 @@ async def general_refresh_rosters(
 @router.post('/roster/{roster_id}/clone', name='Clone Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def clone_roster(
     server_id: int,  # Target server ID (destination)
     roster_id: str,  # Source roster ID
@@ -673,6 +681,7 @@ async def clone_roster(
 @router.get('/roster/{server_id}/list', name='List Rosters')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def list_rosters(
     server_id: int,
     group_id: str = None,
@@ -737,6 +746,7 @@ async def list_rosters(
 @router.delete('/roster/{roster_id}', name='Delete Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_roster_or_members(
     server_id: int,
     roster_id: str,
@@ -800,6 +810,7 @@ async def delete_roster_or_members(
 @router.post('/roster-group', name='Create Roster Group')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_roster_group(
     server_id: int,
     payload: CreateRosterGroupModel,
@@ -846,6 +857,7 @@ async def create_roster_group(
 @router.get('/roster-group/{group_id}', name='Get Roster Group')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_roster_group(
     server_id: int,
     group_id: str,
@@ -896,6 +908,7 @@ async def get_roster_group(
 @router.patch('/roster-group/{group_id}', name='Update Roster Group')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_roster_group(
     server_id: int,
     group_id: str,
@@ -945,6 +958,7 @@ async def update_roster_group(
 @router.get('/roster-group/list', name='List Roster Groups')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def list_roster_groups(
     server_id: int,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -985,6 +999,7 @@ async def list_roster_groups(
 @router.delete('/roster-group/{group_id}', name='Delete Roster Group')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_roster_group(
     server_id: int,
     group_id: str,
@@ -1037,6 +1052,7 @@ async def delete_roster_group(
 @router.post('/roster-signup-category', name='Create Roster Signup Category')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_roster_signup_category(
     payload: CreateRosterSignupCategoryModel,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -1112,6 +1128,7 @@ async def create_roster_signup_category(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def list_roster_signup_categories(
     server_id: int,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -1144,6 +1161,7 @@ async def list_roster_signup_categories(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_roster_signup_category(
     server_id: int,
     custom_id: str,
@@ -1194,6 +1212,7 @@ async def update_roster_signup_category(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_roster_signup_category(
     server_id: int,
     custom_id: str,
@@ -1249,6 +1268,7 @@ async def delete_roster_signup_category(
 @router.post('/roster/{roster_id}/members', name='Manage Roster Members')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def manage_roster_members(
     server_id: int,
     roster_id: str,
@@ -1475,6 +1495,7 @@ async def manage_roster_members(
 @router.patch('/roster/{roster_id}/members/{member_tag}', name='Update Individual Member')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_roster_member(
     server_id: int,
     roster_id: str,
@@ -1565,6 +1586,7 @@ async def update_roster_member(
 @router.post('/roster-automation', name='Create Roster Automation')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_roster_automation(
     payload: CreateRosterAutomationModel,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -1632,6 +1654,7 @@ async def create_roster_automation(
 @router.get('/roster-automation/list', name='List Roster Automation Rules')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def list_roster_automation(
     server_id: int,
     roster_id: str = None,
@@ -1691,6 +1714,7 @@ async def list_roster_automation(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_roster_automation(
     server_id: int,
     automation_id: str,
@@ -1744,6 +1768,7 @@ async def update_roster_automation(
 )
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_roster_automation(
     server_id: int,
     automation_id: str,
@@ -1783,6 +1808,7 @@ async def delete_roster_automation(
 @router.get('/roster/missing-members', name='Get Missing Members')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_missing_members(
     server_id: int,
     roster_id: str = Query(
@@ -1929,6 +1955,7 @@ async def get_missing_members(
 @router.get('/roster/server/{server_id}/members', name='Get Server Clan Members')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_clan_members(
     server_id: int,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -1953,7 +1980,7 @@ async def get_server_clan_members(
     """
     
     # Fetch all clans that are linked to this Discord server
-    server_clans = await mongo.clans.find({
+    server_clans = await mongo.clan_db.find({
         'server': server_id
     }).to_list(length=None)
     
@@ -1993,6 +2020,7 @@ async def get_server_clan_members(
 @router.post('/roster-token', name='Generate Server Roster Access Token')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def generate_server_roster_token(
     server_id: int,
     roster_id: str = None,
@@ -2052,6 +2080,7 @@ async def generate_server_roster_token(
 @router.get('/server/{server_id}/discord-channels', name='Get Discord Channels')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_discord_channels(
     server_id: int,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -2117,6 +2146,7 @@ async def get_server_discord_channels(
 @router.get('/server/{server_id}/discord-test', name='Test Discord API Access')
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def test_discord_api_access(
     server_id: int,
     credentials: HTTPAuthorizationCredentials = Depends(security),

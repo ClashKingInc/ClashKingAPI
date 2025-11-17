@@ -34,12 +34,12 @@ security = HTTPBearer()
 @check_authentication
 @linkd.ext.fastapi.inject
 async def create_roster(
-        server_id: int,
-        roster_data: CreateRosterModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,
+    roster_data: CreateRosterModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Create a new roster for a Discord server.
@@ -134,18 +134,19 @@ async def create_roster(
     }
 
 
+
 @router.patch('/roster/{roster_id}', name='Update a Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
 async def update_roster(
-        server_id: int,
-        roster_id: str,
-        payload: RosterUpdateModel,
-        group_id: str = None,  # For group updates
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,
+    roster_id: str,
+    payload: RosterUpdateModel,
+    group_id: str = None,  # For group updates
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Update roster settings including name, clan assignment, and townhall restrictions.
@@ -280,16 +281,15 @@ async def update_roster(
             status_code=400, detail='Must provide roster_id or group_id'
         )
 
-
 @router.get('/roster/{roster_id}', name='Get a Roster')
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_roster(
-        server_id: int,
-        roster_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve a specific roster by its ID for display in the dashboard.
@@ -355,11 +355,11 @@ async def get_roster(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def delete_roster(
-        server_id: int,
-        roster_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Permanently delete a roster and all its member data.
@@ -386,6 +386,7 @@ async def delete_roster(
     return {'message': 'Roster deleted successfully'}
 
 
+
 @router.delete(
     '/roster/{roster_id}/members/{player_tag}',
     name='Remove Member from Roster',
@@ -393,12 +394,12 @@ async def delete_roster(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def remove_member_from_roster(
-        roster_id: str,
-        player_tag: str,
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    roster_id: str,
+    player_tag: str,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Remove a specific player from a roster by their player tag.
@@ -424,7 +425,7 @@ async def remove_member_from_roster(
         {'custom_id': roster_id},
         {
             '$pull': {'members': {'tag': player_tag}},  # Remove member with matching tag
-            '$set': {'updated_at': pend.now('UTC')},  # Update roster timestamp
+            '$set': {'updated_at': pend.now('UTC')},    # Update roster timestamp
         },
     )
 
@@ -439,17 +440,17 @@ async def remove_member_from_roster(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def general_refresh_rosters(
-        server_id: int = Query(
-            None, description='Refresh all rosters for this server'
-        ),
-        group_id: str = Query(
-            None, description='Refresh all rosters in this group'
-        ),
-        roster_id: str = Query(None, description='Refresh specific roster'),
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int = Query(
+        None, description='Refresh all rosters for this server'
+    ),
+    group_id: str = Query(
+        None, description='Refresh all rosters in this group'
+    ),
+    roster_id: str = Query(None, description='Refresh specific roster'),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Refresh member data for rosters by updating player stats from Clash of Clans API.
@@ -569,13 +570,13 @@ async def general_refresh_rosters(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def clone_roster(
-        server_id: int,  # Target server ID (destination)
-        roster_id: str,  # Source roster ID
-        payload: RosterCloneModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,  # Target server ID (destination)
+    roster_id: str,  # Source roster ID
+    payload: RosterCloneModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Create a copy of an existing roster, supporting both same-server and cross-server cloning.
@@ -618,7 +619,7 @@ async def clone_roster(
     base_alias = new_alias
     counter = 1
     while await mongo.rosters.find_one(
-            {'server_id': server_id, 'alias': new_alias}
+        {'server_id': server_id, 'alias': new_alias}
     ):
         # Append incrementing number to make alias unique
         new_alias = f'{base_alias} ({counter})'
@@ -673,12 +674,12 @@ async def clone_roster(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def list_rosters(
-        server_id: int,
-        group_id: str = None,
-        clan_tag: str = None,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    group_id: str = None,
+    clan_tag: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve a list of rosters for a Discord server with optional filtering.
@@ -710,7 +711,7 @@ async def list_rosters(
         query['clan_tag'] = clan_tag
 
     # Execute query with sorting by most recently updated first
-    cursor = mongo.rosters.find(query, {'_id': 0}).sort(
+    cursor = await mongo.rosters.find(query, {'_id': 0}).sort(
         {'updated_at': -1}
     )
     rosters = await cursor.to_list(length=None)
@@ -737,12 +738,12 @@ async def list_rosters(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def delete_roster_or_members(
-        server_id: int,
-        roster_id: str,
-        members_only: bool = False,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str,
+    members_only: bool = False,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Delete an entire roster or clear only its member list.
@@ -800,11 +801,11 @@ async def delete_roster_or_members(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def create_roster_group(
-        server_id: int,
-        payload: CreateRosterGroupModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    payload: CreateRosterGroupModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Create a new roster group to organize multiple rosters together.
@@ -846,11 +847,11 @@ async def create_roster_group(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_roster_group(
-        server_id: int,
-        group_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    group_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve detailed information about a specific roster group including associated rosters.
@@ -880,9 +881,9 @@ async def get_roster_group(
         {
             '_id': 0,
             'custom_id': 1,  # Roster identifier
-            'alias': 1,  # Roster display name
+            'alias': 1,      # Roster display name
             'clan_name': 1,  # Associated clan name
-            'updated_at': 1,  # Last modification time
+            'updated_at': 1, # Last modification time
         },
     )
     rosters = await cursor.to_list(length=None)
@@ -896,12 +897,12 @@ async def get_roster_group(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def update_roster_group(
-        server_id: int,
-        group_id: str,
-        payload: UpdateRosterGroupModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    group_id: str,
+    payload: UpdateRosterGroupModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Update roster group settings such as alias, description, or other metadata.
@@ -945,10 +946,10 @@ async def update_roster_group(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def list_roster_groups(
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve all roster groups for a Discord server with roster counts.
@@ -985,11 +986,11 @@ async def list_roster_groups(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def delete_roster_group(
-        server_id: int,
-        group_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    group_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Delete a roster group while preserving associated rosters.
@@ -1037,10 +1038,10 @@ async def delete_roster_group(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def create_roster_signup_category(
-        payload: CreateRosterSignupCategoryModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    payload: CreateRosterSignupCategoryModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Create a new signup category for organizing roster members by role or skill level.
@@ -1112,10 +1113,10 @@ async def create_roster_signup_category(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def list_roster_signup_categories(
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve all signup categories for a Discord server.
@@ -1144,12 +1145,12 @@ async def list_roster_signup_categories(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def update_roster_signup_category(
-        server_id: int,
-        custom_id: str,
-        payload: UpdateRosterSignupCategoryModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    custom_id: str,
+    payload: UpdateRosterSignupCategoryModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Update settings for an existing roster signup category.
@@ -1194,11 +1195,11 @@ async def update_roster_signup_category(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def delete_roster_signup_category(
-        server_id: int,
-        custom_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    custom_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Delete a roster signup category and remove it from all associated members.
@@ -1249,13 +1250,13 @@ async def delete_roster_signup_category(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def manage_roster_members(
-        server_id: int,
-        roster_id: str,
-        payload: RosterMemberBulkOperationModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,
+    roster_id: str,
+    payload: RosterMemberBulkOperationModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Perform bulk operations to add and/or remove members from a roster.
@@ -1298,7 +1299,7 @@ async def manage_roster_members(
             {'custom_id': roster_id},
             {
                 '$pull': {'members': {'tag': {'$in': remove_tags}}},  # Remove matching members
-                '$set': {'updated_at': pend.now(tz=pend.UTC)},  # Update timestamp
+                '$set': {'updated_at': pend.now(tz=pend.UTC)},         # Update timestamp
             },
         )
         removed_tags = remove_tags
@@ -1365,7 +1366,7 @@ async def manage_roster_members(
             # Calculate current account counts per Discord user for limit enforcement
             pipeline = [
                 {'$match': {'custom_id': roster_id}},  # Target this roster
-                {'$unwind': '$members'},  # Flatten members array
+                {'$unwind': '$members'},                # Flatten members array
                 {'$group': {'_id': '$members.discord', 'count': {'$sum': 1}}},  # Count per user
             ]
             cursor = await mongo.rosters.aggregate(pipeline)
@@ -1390,9 +1391,9 @@ async def manage_roster_members(
 
                 # Skip player if they would exceed the account limit
                 if (
-                        max_accounts
-                        and current_count >= max_accounts
-                        and user_id != 'No User'  # Unlinked accounts don't count toward limits
+                    max_accounts
+                    and current_count >= max_accounts
+                    and user_id != 'No User'  # Unlinked accounts don't count toward limits
                 ):
                     error_count += 1
                     continue
@@ -1425,22 +1426,22 @@ async def manage_roster_members(
                 member_data = {
                     'name': player.name,
                     'tag': player.tag,
-                    'hero_lvs': hero_lvs,  # Combined hero levels
+                    'hero_lvs': hero_lvs,                              # Combined hero levels
                     'townhall': player.town_hall,
-                    'discord': user_id,  # Discord account link
+                    'discord': user_id,                               # Discord account link
                     'current_clan': current_clan,
                     'current_clan_tag': current_clan_tag,
-                    'war_pref': player.war_opted_in,  # War preference setting
+                    'war_pref': player.war_opted_in,                  # War preference setting
                     'trophies': player.trophies,
-                    'signup_group': original_member.signup_group  # Category assignment
+                    'signup_group': original_member.signup_group      # Category assignment
                     if original_member
                     else None,
-                    'hitrate': hitrate,  # War hit performance
-                    'last_online': last_online,  # Activity timestamp
+                    'hitrate': hitrate,                               # War hit performance
+                    'last_online': last_online,                       # Activity timestamp
                     'current_league': current_league,
                     'last_updated': pend.now(tz=pend.UTC).int_timestamp,  # Data freshness
-                    'added_at': pend.now(tz=pend.UTC).int_timestamp,  # Addition time
-                    'member_status': 'active',  # Status flag
+                    'added_at': pend.now(tz=pend.UTC).int_timestamp,      # Addition time
+                    'member_status': 'active',                            # Status flag
                 }
 
                 # Add successfully processed member to the list
@@ -1458,7 +1459,7 @@ async def manage_roster_members(
                     {'custom_id': roster_id},
                     {
                         '$push': {'members': {'$each': added_members}},  # Add all new members
-                        '$set': {'updated_at': pend.now(tz=pend.UTC)},  # Update roster timestamp
+                        '$set': {'updated_at': pend.now(tz=pend.UTC)},   # Update roster timestamp
                     },
                 )
 
@@ -1475,13 +1476,13 @@ async def manage_roster_members(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def update_roster_member(
-        server_id: int,
-        roster_id: str,
-        member_tag: str,
-        payload: UpdateMemberModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str,
+    member_tag: str,
+    payload: UpdateMemberModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Update specific properties of an individual roster member.
@@ -1565,10 +1566,10 @@ async def update_roster_member(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def create_roster_automation(
-        payload: CreateRosterAutomationModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    payload: CreateRosterAutomationModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Create a scheduled automation rule for roster operations.
@@ -1613,10 +1614,10 @@ async def create_roster_automation(
     automation_doc.update(
         {
             'automation_id': gen_clean_custom_id(),  # Unique identifier
-            'active': True,  # Enable by default
-            'executed': False,  # Not yet run
-            'created_at': pend.now(tz=pend.UTC),  # Creation timestamp
-            'updated_at': pend.now(tz=pend.UTC),  # Last modification
+            'active': True,                          # Enable by default
+            'executed': False,                       # Not yet run
+            'created_at': pend.now(tz=pend.UTC),    # Creation timestamp
+            'updated_at': pend.now(tz=pend.UTC),    # Last modification
         }
     )
 
@@ -1632,13 +1633,13 @@ async def create_roster_automation(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def list_roster_automation(
-        server_id: int,
-        roster_id: str = None,
-        group_id: str = None,
-        active_only: bool = True,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str = None,
+    group_id: str = None,
+    active_only: bool = True,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve automation rules with optional filtering by roster or group.
@@ -1664,12 +1665,12 @@ async def list_roster_automation(
     if roster_id:
         query['roster_id'] = roster_id  # Filter to specific roster
     if group_id:
-        query['group_id'] = group_id  # Filter to specific group
+        query['group_id'] = group_id    # Filter to specific group
 
     # Filter by execution status if requested
     if active_only:
-        query['active'] = True  # Only enabled rules
-        query['executed'] = False  # Only unexecuted rules
+        query['active'] = True      # Only enabled rules
+        query['executed'] = False   # Only unexecuted rules
 
     # Fetch automations sorted by scheduled execution time (earliest first)
     cursor = mongo.roster_automation.find(query, {'_id': 0}).sort(
@@ -1680,7 +1681,7 @@ async def list_roster_automation(
     return {
         'items': automations,
         'server_id': server_id,
-        'roster_id': roster_id,  # Echo back applied filters
+        'roster_id': roster_id,   # Echo back applied filters
         'group_id': group_id,
     }
 
@@ -1691,12 +1692,12 @@ async def list_roster_automation(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def update_roster_automation(
-        server_id: int,
-        automation_id: str,
-        payload: UpdateRosterAutomationModel,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    automation_id: str,
+    payload: UpdateRosterAutomationModel,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Update settings for an existing automation rule.
@@ -1744,11 +1745,11 @@ async def update_roster_automation(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def delete_roster_automation(
-        server_id: int,
-        automation_id: str,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    automation_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Permanently delete an automation rule.
@@ -1783,17 +1784,17 @@ async def delete_roster_automation(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_missing_members(
-        server_id: int,
-        roster_id: str = Query(
-            None, description='Get missing members for specific roster'
-        ),
-        group_id: str = Query(
-            None, description='Get missing members for all rosters in group'
-        ),
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,
+    roster_id: str = Query(
+        None, description='Get missing members for specific roster'
+    ),
+    group_id: str = Query(
+        None, description='Get missing members for all rosters in group'
+    ),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Identify clan members who are not yet registered in roster(s) for recruitment analysis.
@@ -1826,7 +1827,7 @@ async def get_missing_members(
     if roster_id:
         query_filter['custom_id'] = roster_id  # Single roster analysis
     elif group_id:
-        query_filter['group_id'] = group_id  # Group-wide analysis
+        query_filter['group_id'] = group_id    # Group-wide analysis
 
     # Find target rosters for missing member analysis
     rosters = await mongo.rosters.find(query_filter, {'_id': 0}).to_list(
@@ -1929,63 +1930,63 @@ async def get_missing_members(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_server_clan_members(
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
-        coc_client: CustomClashClient,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+    coc_client: CustomClashClient,
 ):
     """
     Retrieve all members from clans linked to a Discord server for roster management.
-
+    
     Input:
         - server_id: Discord server ID to get clan members for
         - credentials: JWT authentication token
-
+        
     Output:
         - List of all clan members from server-linked clans
         - Member details including name, tag, townhall, and clan info
         - Sorted alphabetically by player name
         - HTTP 401 if unauthorized
-
+        
     Note: Used for autocomplete and bulk member selection in roster interfaces
     """
-
+    
     # Fetch all clans that are linked to this Discord server
     server_clans = await mongo.clans.find({
         'server': server_id
     }).to_list(length=None)
-
+    
     # Return empty result if no clans are linked to this server
     if not server_clans:
         return {'members': []}
-
+    
     all_members = []
-
+    
     # Fetch member lists from each linked clan via Clash of Clans API
     for server_clan in server_clans:
         try:
             clan = await coc_client.get_clan(tag=server_clan['tag'])
-
+            
             # Add each clan member to the combined list with full details
             for member in clan.members:
                 all_members.append({
                     'name': member.name,
                     'tag': member.tag,
                     'townhall': member.town_hall,
-                    'clan_name': clan.name,  # Which clan they belong to
+                    'clan_name': clan.name,      # Which clan they belong to
                     'clan_tag': clan.tag,
                     'role': member.role.name if member.role else 'Member'
                 })
-
+                
         except Exception as e:
             # Log error but continue with other clans to avoid total failure
             print(f"Error fetching clan {server_clan['tag']}: {e}")
             continue
-
+    
     # Sort members alphabetically by name for easier browsing
     all_members.sort(key=lambda x: x['name'].lower())
-
+    
     return {'members': all_members}
 
 
@@ -1993,38 +1994,38 @@ async def get_server_clan_members(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def generate_server_roster_token(
-        server_id: int,
-        roster_id: str = None,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    roster_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Generate a temporary access token for roster dashboard access without requiring full authentication.
-
+    
     Input:
         - server_id: Discord server ID to generate token for
         - roster_id: Optional specific roster to focus dashboard on
         - credentials: JWT authentication token (for initial authorization)
-
+        
     Output:
         - Temporary access token valid for 1 hour
         - Dashboard URL with embedded token and parameters
         - Server information including roster count
         - Token expiration timestamp
         - HTTP 401 if unauthorized
-
+        
     Note: Allows sharing roster management access without full bot permissions
     """
 
     # Get roster count for server information display
     roster_count = await mongo.rosters.count_documents({'server_id': server_id})
-
+    
     # Generate time-limited access token for roster operations
     token_info = await generate_access_token(
         server_id=server_id,
-        token_type='roster',  # Token type for roster dashboard access
-        expires_hours=1,  # 1 hour expiration for security
+        token_type='roster',      # Token type for roster dashboard access
+        expires_hours=1,         # 1 hour expiration for security
         mongo_client=mongo,
     )
 
@@ -2042,9 +2043,9 @@ async def generate_server_roster_token(
             'server_id': server_id,
             'roster_count': roster_count,  # How many rosters exist on this server
         },
-        'access_url': dashboard_url,  # Ready-to-use dashboard URL
-        'token': token_info['token'],  # Raw token for API access
-        'expires_at': token_info['expires_at'].isoformat(),  # When token expires
+        'access_url': dashboard_url,                           # Ready-to-use dashboard URL
+        'token': token_info['token'],                          # Raw token for API access
+        'expires_at': token_info['expires_at'].isoformat(),   # When token expires
     }
 
 
@@ -2052,10 +2053,10 @@ async def generate_server_roster_token(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def get_server_discord_channels(
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """
     Retrieve Discord channels for a server with write permissions, filtered and sorted for automation use.
@@ -2117,10 +2118,10 @@ async def get_server_discord_channels(
 @linkd.ext.fastapi.inject
 @check_authentication
 async def test_discord_api_access(
-        server_id: int,
-        credentials: HTTPAuthorizationCredentials = Depends(security),
-        *,
-        mongo: MongoClient,
+    server_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
 ):
     """Test endpoint to verify Discord API configuration."""
     try:

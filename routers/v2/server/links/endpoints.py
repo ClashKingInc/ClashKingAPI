@@ -112,6 +112,11 @@ async def get_server_links(
                     status_code=401,
                     detail="Invalid bot token. Please check BOT_TOKEN environment variable."
                 )
+            except hikari.UnauthorizedError:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid bot token. Please check BOT_TOKEN environment variable."
+                )
 
         # Build the response for paginated results
         for group in paginated_groups:

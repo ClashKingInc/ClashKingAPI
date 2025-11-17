@@ -2,44 +2,19 @@ import hikari
 import linkd
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 
 from utils.database import MongoClient
 from utils.security import check_authentication
 from routers.v2.auth.auth_utils import get_valid_discord_access_token
 from utils.config import Config
+from .models import GuildInfo, GuildDetails
 
 config = Config()
 
 security = HTTPBearer()
 router = APIRouter(prefix="/v2/guilds", tags=["Guilds"], include_in_schema=True)
 guild_router = APIRouter(prefix="/v2/guild", tags=["Guild"], include_in_schema=True)
-
-
-class GuildInfo(BaseModel):
-    id: str
-    name: str
-    icon: Optional[str]
-    owner: bool
-    permissions: str
-    role: str
-    features: List[str]
-    has_bot: bool
-    member_count: Optional[int] = None
-
-
-class GuildDetails(BaseModel):
-    id: str
-    name: str
-    icon: Optional[str]
-    owner_id: Optional[str]
-    features: List[str]
-    member_count: Optional[int]
-    description: Optional[str]
-    banner: Optional[str]
-    premium_tier: Optional[int]
-    boost_count: Optional[int]
 
 
 @router.get("", name="Get user guilds with bot status")

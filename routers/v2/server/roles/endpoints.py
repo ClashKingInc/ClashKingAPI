@@ -426,12 +426,12 @@ async def update_role_settings(
 @check_authentication
 @capture_endpoint_errors
 async def get_all_roles(
-    server_id: int,
-    user_id: str = None,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    *,
-    mongo: MongoClient,
-    rest: hikari.RESTApp
+        server_id: int,
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
 ) -> AllRolesResponse:
     """
     Get all configured roles of all types in a single request.
@@ -465,11 +465,19 @@ async def get_all_roles(
             else:
                 role_list = []
 
-        # Remove _id and toggle fields
+        # Remove _id and toggle fields, convert Discord IDs to strings
         for role in role_list:
             if isinstance(role, dict):
                 role.pop("_id", None)
                 role.pop("toggle", None)
+
+                # Convert Discord Snowflake IDs to strings
+                # JavaScript can't handle 64-bit integers without precision loss
+                if "role" in role and isinstance(role["role"], int):
+                    role["role"] = str(role["role"])
+                # Status roles use "id" instead of "role"
+                if "id" in role and isinstance(role["id"], int):
+                    role["id"] = str(role["id"])
 
         all_roles[role_type] = role_list
         total_count += len(role_list)

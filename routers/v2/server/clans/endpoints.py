@@ -5,7 +5,7 @@ from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.custom_coc import CustomClashClient
 from utils.sentry_utils import capture_endpoint_errors
-from .clan_models import (
+from .models import (
     ClanSettingsUpdate,
     ClanSettingsResponse,
     AddClanRequest,

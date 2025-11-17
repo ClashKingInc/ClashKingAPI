@@ -8,7 +8,7 @@ from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.config import Config
 from utils.sentry_utils import capture_endpoint_errors
-from routers.v2.server.logs_models import (
+from .models import (
     ServerLogsConfig, LogConfig, ChannelInfo, ThreadInfo,
     ClanLogsConfig, ClanLogTypeConfig, UpdateClanLogRequest
 )

@@ -7,7 +7,7 @@ from bson import ObjectId
 from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.sentry_utils import capture_endpoint_errors
-from routers.v2.server.autoboards_models import (
+from .models import (
     AutoBoardConfig,
     ServerAutoBoardsResponse,
     CreateAutoBoardRequest,

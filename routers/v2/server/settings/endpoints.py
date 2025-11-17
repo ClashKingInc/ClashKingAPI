@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from utils.security import check_authentication
 from utils.config import Config
 from utils.sentry_utils import capture_endpoint_errors
-from .server_models import ServerSettingsUpdate, ServerSettingsResponse
+from .models import ServerSettingsUpdate, ServerSettingsResponse
 import linkd
 import hikari
 

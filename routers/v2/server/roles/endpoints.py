@@ -4,7 +4,7 @@ from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.config import Config
 from utils.sentry_utils import capture_endpoint_errors
-from .roles_models import (
+from .models import (
     RoleType,
     TownhallRoleCreate,
     LeagueRoleCreate,

@@ -7,7 +7,7 @@ from typing import List, Optional
 from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.sentry_utils import capture_endpoint_errors
-from routers.v2.server.reminders_models import (
+from .models import (
     ReminderConfig,
     ServerRemindersResponse,
     CreateReminderRequest,

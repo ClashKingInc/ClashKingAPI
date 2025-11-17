@@ -9,7 +9,7 @@ from utils.security import check_authentication
 from utils.config import Config
 from utils.custom_coc import CustomClashClient
 from utils.sentry_utils import capture_endpoint_errors
-from routers.v2.server.links_models import (
+from .models import (
     LinkedAccount,
     MemberLinks,
     ServerLinksResponse,

@@ -103,10 +103,11 @@ async def list_roles(
         roles = await collection.find({"server": server_id}).to_list(length=None)
         role_list = roles
 
-    # Remove _id fields for JSON serialization
+    # Remove _id and toggle fields for JSON serialization
     for role in role_list:
-        if isinstance(role, dict) and "_id" in role:
-            role.pop("_id")
+        if isinstance(role, dict):
+            role.pop("_id", None)
+            role.pop("toggle", None)
 
     return RolesListResponse(
         server_id=server_id,
@@ -464,10 +465,11 @@ async def get_all_roles(
             else:
                 role_list = []
 
-        # Remove _id fields
+        # Remove _id and toggle fields
         for role in role_list:
-            if isinstance(role, dict) and "_id" in role:
-                role.pop("_id")
+            if isinstance(role, dict):
+                role.pop("_id", None)
+                role.pop("toggle", None)
 
         all_roles[role_type] = role_list
         total_count += len(role_list)

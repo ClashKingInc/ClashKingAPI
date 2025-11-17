@@ -47,6 +47,13 @@ async def get_server_links(
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
+    # Verify bot token is configured
+    if not config.bot_token:
+        raise HTTPException(
+            status_code=500,
+            detail="Bot token not configured. Please set BOT_TOKEN environment variable."
+        )
+
     try:
         # Fetch guild members using bot token
         async with rest.acquire(token=config.bot_token, token_type=hikari.TokenType.BOT) as client:
@@ -64,6 +71,11 @@ async def get_server_links(
                 raise HTTPException(
                     status_code=404,
                     detail="Server not found"
+                )
+            except hikari.UnauthorizedError:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid bot token. Please check BOT_TOKEN environment variable."
                 )
 
         # Get all linked accounts for all members at once

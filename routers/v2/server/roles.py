@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.config import Config
+from utils.sentry_utils import capture_endpoint_errors
 from .roles_models import (
     RoleType,
     TownhallRoleCreate,
@@ -59,6 +60,7 @@ def get_role_collection(mongo: MongoClient, role_type: str):
             response_model=RolesListResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def list_roles(
     server_id: int,
     role_type: RoleType,
@@ -119,6 +121,7 @@ async def list_roles(
              response_model=RoleResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_role(
     server_id: int,
     role_type: RoleType,
@@ -221,6 +224,7 @@ async def create_role(
                response_model=RoleResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_role(
     server_id: int,
     role_type: RoleType,
@@ -271,6 +275,7 @@ async def delete_role(
             response_model=DiscordRolesResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_discord_roles(
     server_id: int,
     user_id: str = None,
@@ -324,6 +329,7 @@ async def get_discord_roles(
             response_model=RoleSettingsResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_role_settings(
     server_id: int,
     user_id: str = None,
@@ -359,6 +365,7 @@ async def get_role_settings(
               response_model=RoleResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_role_settings(
     server_id: int,
     settings: RoleSettingsUpdate,
@@ -416,6 +423,7 @@ async def update_role_settings(
             response_model=AllRolesResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_all_roles(
     server_id: int,
     user_id: str = None,

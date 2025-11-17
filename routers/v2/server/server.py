@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from utils.security import check_authentication
 from utils.config import Config
+from utils.sentry_utils import capture_endpoint_errors
 from .server_models import ServerSettingsUpdate, ServerSettingsResponse
 import linkd
 import hikari
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/v2", tags=["Server Settings"], include_in_schema=Tru
              name="Get settings for a server")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def server_settings(
     server_id: int,
     request: Request,
@@ -61,6 +63,7 @@ async def server_settings(
             name="Get clan settings for a server")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def server_clan_settings(
     server_id: int,
     clan_tag: str,
@@ -81,6 +84,7 @@ async def server_clan_settings(
             name="Update server discord embed color")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def set_server_embed_color(
     server_id: int,
     hex_code: int,
@@ -106,6 +110,7 @@ async def set_server_embed_color(
               response_model=ServerSettingsResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_server_settings(
     server_id: int,
     settings: ServerSettingsUpdate,

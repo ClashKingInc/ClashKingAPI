@@ -8,6 +8,7 @@ from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.config import Config
 from utils.custom_coc import CustomClashClient
+from utils.sentry_utils import capture_endpoint_errors
 from routers.v2.server.links_models import (
     LinkedAccount,
     MemberLinks,
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/v2/server", tags=["Server Links"], include_in_schema
 @router.get("/{server_id}/links", name="Get all member links for a server")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_links(
         server_id: int,
         limit: int = 100,
@@ -172,6 +174,7 @@ async def get_server_links(
 @router.delete("/{server_id}/links/{user_discord_id}/{player_tag}", name="Unlink account from member")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def unlink_member_account(
         server_id: int,
         user_discord_id: str,
@@ -231,6 +234,7 @@ async def unlink_member_account(
 @router.post("/{server_id}/links/bulk-unlink", name="Bulk unlink accounts from member")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def bulk_unlink_accounts(
         server_id: int,
         request: BulkUnlinkRequest,

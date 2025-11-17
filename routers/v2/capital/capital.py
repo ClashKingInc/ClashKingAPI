@@ -9,6 +9,7 @@ from utils.database import MongoClient, OldMongoClient
 from utils.security import check_authentication
 from utils.config import Config
 from utils.utils import fix_tag
+from utils.sentry_utils import capture_endpoint_errors
 from .capital_models import (
     CapitalPlayerStatsResponse,
     PlayerRaidStats,
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/v2/capital", tags=["Capital Raids"], include_in_sche
             response_model=CapitalPlayerStatsResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_capital_player_stats(
     guild_id: int,
     clan_tags: Annotated[List[str], Query()],
@@ -196,6 +198,7 @@ async def get_capital_player_stats(
             response_model=CapitalGuildLeaderboardResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_capital_guild_leaderboard(
     guild_id: int,
     season: Optional[str] = None,

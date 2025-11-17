@@ -10,6 +10,7 @@ from utils.database import MongoClient, OldMongoClient
 from utils.security import check_authentication
 from utils.config import Config
 from utils.custom_coc import CustomClashClient
+from utils.sentry_utils import capture_endpoint_errors
 from .activity_models import (
     GuildActivitySummary,
     ClanActivity,
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/v2/activity", tags=["Activity & Inactivity"], includ
             response_model=GuildActivitySummary)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_guild_activity_summary(
     guild_id: int,
     inactive_threshold_days: int = 7,
@@ -183,6 +185,7 @@ async def get_guild_activity_summary(
             response_model=InactivePlayersResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_inactive_players(
     guild_id: int,
     inactive_threshold_days: int = 7,

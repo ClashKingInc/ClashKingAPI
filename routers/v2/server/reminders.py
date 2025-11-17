@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from utils.database import MongoClient
 from utils.security import check_authentication
+from utils.sentry_utils import capture_endpoint_errors
 from routers.v2.server.reminders_models import (
     ReminderConfig,
     ServerRemindersResponse,
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/v2/server", tags=["Server Reminders"], include_in_sc
 @router.get("/{server_id}/reminders", name="Get server reminders")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_reminders(
     server_id: int,
     user_id: str = None,
@@ -92,6 +94,7 @@ async def get_server_reminders(
 @router.post("/{server_id}/reminders", name="Create a reminder")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_reminder(
     server_id: int,
     reminder: CreateReminderRequest,
@@ -153,6 +156,7 @@ async def create_reminder(
 @router.put("/{server_id}/reminders/{reminder_id}", name="Update a reminder")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_reminder(
     server_id: int,
     reminder_id: str,
@@ -227,6 +231,7 @@ async def update_reminder(
 @router.delete("/{server_id}/reminders/{reminder_id}", name="Delete a reminder")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_reminder(
     server_id: int,
     reminder_id: str,

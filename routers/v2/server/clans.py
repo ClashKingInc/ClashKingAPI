@@ -4,6 +4,7 @@ from typing import List
 from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.custom_coc import CustomClashClient
+from utils.sentry_utils import capture_endpoint_errors
 from .clan_models import (
     ClanSettingsUpdate,
     ClanSettingsResponse,
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/v2/server", tags=["Clan Settings"], include_in_schem
             response_model=List[ClanListItem])
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_clans(
     server_id: int,
     user_id: str = None,
@@ -133,6 +135,7 @@ async def get_server_clans(
             response_model=ClanSettingsDetail)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_clan_settings(
     server_id: int,
     clan_tag: str,
@@ -216,6 +219,7 @@ async def get_clan_settings(
               response_model=ClanSettingsResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_clan_settings(
     server_id: int,
     clan_tag: str,
@@ -301,6 +305,7 @@ async def update_clan_settings(
              response_model=AddClanResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def add_clan(
     server_id: int,
     clan_request: AddClanRequest,
@@ -393,6 +398,7 @@ async def add_clan(
                response_model=RemoveClanResponse)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def remove_clan(
     server_id: int,
     clan_tag: str,

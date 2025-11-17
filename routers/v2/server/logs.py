@@ -7,6 +7,7 @@ from typing import List, Annotated
 from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.config import Config
+from utils.sentry_utils import capture_endpoint_errors
 from routers.v2.server.logs_models import (
     ServerLogsConfig, LogConfig, ChannelInfo, ThreadInfo,
     ClanLogsConfig, ClanLogTypeConfig, UpdateClanLogRequest
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/v2/server", tags=["Server Logs"], include_in_schema=
 @router.get("/{server_id}/logs", name="Get server logs configuration")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_logs(
         server_id: int,
         user_id: str = None,
@@ -132,6 +134,7 @@ async def get_server_logs(
 @router.put("/{server_id}/logs", name="Update server logs configuration")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_server_logs(
         server_id: int,
         logs_config: ServerLogsConfig,
@@ -232,6 +235,7 @@ async def update_server_logs(
 @router.patch("/{server_id}/logs/{log_type}", name="Update specific log type")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_log_type(
         server_id: int,
         log_type: str,
@@ -282,6 +286,7 @@ async def update_log_type(
 @router.get("/{server_id}/clans-basic", name="Get server clans (basic)")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_clans_basic(
         server_id: int,
         user_id: str = None,
@@ -304,6 +309,7 @@ async def get_server_clans_basic(
 @router.get("/{server_id}/channels", name="Get server Discord channels")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_channels(
         server_id: int,
         user_id: str = None,
@@ -363,6 +369,7 @@ async def get_server_channels(
 @router.get("/{server_id}/threads", name="Get server Discord threads")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_threads(
         server_id: int,
         user_id: str = None,
@@ -408,6 +415,7 @@ async def get_server_threads(
 @router.get("/{server_id}/clan-logs", name="Get all clans logs configuration")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_all_clans_logs(
         server_id: int,
         user_id: str = None,
@@ -487,6 +495,7 @@ async def get_all_clans_logs(
 @router.put("/{server_id}/clan/{clan_tag}/logs", name="Update clan logs configuration")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_clan_logs(
         server_id: int,
         clan_tag: str,
@@ -604,6 +613,7 @@ async def update_clan_logs(
 @router.delete("/{server_id}/clan/{clan_tag}/logs", name="Delete clan logs configuration")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_clan_logs(
         server_id: int,
         clan_tag: str,

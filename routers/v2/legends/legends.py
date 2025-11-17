@@ -12,6 +12,7 @@ from utils.database import MongoClient, OldMongoClient
 from utils.security import check_authentication
 from utils.config import Config
 from utils.custom_coc import CustomClashClient
+from utils.sentry_utils import capture_endpoint_errors
 from .legends_models import (
     GuildLegendsStats,
     ClanLegendsStats,
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/v2", tags=["Bot Legends Endpoints"], include_in_sche
 @router.get("/legends/players/day/{day}",
             name="Get legends stats for a specific day")
 @linkd.ext.fastapi.inject
+@capture_endpoint_errors
 async def legend_stats_day(
     day: str,
     players: Annotated[List[str], Query()],
@@ -100,6 +102,7 @@ async def legend_stats_day(
 @router.get("/legends/players/season/{season}",
             name="Get legends stats for a specific season")
 @linkd.ext.fastapi.inject
+@capture_endpoint_errors
 async def legend_stats_season(
     season: str,
     players: Annotated[List[str], Query()],
@@ -189,6 +192,7 @@ async def legend_stats_season(
             include_in_schema=True)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_guild_legends_stats(
         guild_id: int,
         season: Optional[str] = None,
@@ -365,6 +369,7 @@ async def get_guild_legends_stats(
             include_in_schema=True)
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_legends_daily_tracking(
         guild_id: int,
         start_date: str,

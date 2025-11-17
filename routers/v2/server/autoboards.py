@@ -6,6 +6,7 @@ from bson import ObjectId
 
 from utils.database import MongoClient
 from utils.security import check_authentication
+from utils.sentry_utils import capture_endpoint_errors
 from routers.v2.server.autoboards_models import (
     AutoBoardConfig,
     ServerAutoBoardsResponse,
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/v2/server", tags=["Server AutoBoards"], include_in_s
 @router.get("/{server_id}/autoboards", name="Get server autoboards")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def get_server_autoboards(
     server_id: int,
     user_id: str = None,
@@ -88,6 +90,7 @@ async def get_server_autoboards(
 @router.post("/{server_id}/autoboards", name="Create an autoboard")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def create_autoboard(
     server_id: int,
     autoboard: CreateAutoBoardRequest,
@@ -149,6 +152,7 @@ async def create_autoboard(
 @router.patch("/{server_id}/autoboards/{autoboard_id}", name="Update an autoboard")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def update_autoboard(
     server_id: int,
     autoboard_id: str,
@@ -208,6 +212,7 @@ async def update_autoboard(
 @router.delete("/{server_id}/autoboards/{autoboard_id}", name="Delete an autoboard")
 @linkd.ext.fastapi.inject
 @check_authentication
+@capture_endpoint_errors
 async def delete_autoboard(
     server_id: int,
     autoboard_id: str,

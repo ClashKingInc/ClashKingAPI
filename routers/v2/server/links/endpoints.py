@@ -178,6 +178,9 @@ async def get_server_links(
     except HTTPException:
         raise
     except Exception as e:
+        # Log the full exception for debugging
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch server links: {str(e)}"

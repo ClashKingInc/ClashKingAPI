@@ -90,24 +90,8 @@ async def get_server_links(
                 links_by_user[user_id] = []
             links_by_user[user_id].append(link)
 
-        # Fetch player details for all linked accounts
-        player_tags = [link.get("player_tag") for link in all_links]
-        player_details = {}
-        for tag in player_tags:
-            try:
-                player = await coc_client.get_player(player_tag=tag)
-                player_details[tag] = {
-                    "name": player.name,
-                    "town_hall": player.town_hall
-                }
-            except Exception:
-                # If player fetch fails, use defaults
-                player_details[tag] = {
-                    "name": tag,
-                    "town_hall": None
-                }
-
-        # Build member links list
+        # Build member links list WITHOUT fetching player details (too slow)
+        # Player details should be fetched on-demand by the frontend
         member_links_list = []
         total_linked_accounts = 0
         verified_accounts = 0
@@ -120,13 +104,13 @@ async def get_server_links(
             linked_accounts = []
             for link in member_link_data:
                 player_tag = link.get("player_tag")
-                player_info = player_details.get(player_tag, {})
                 is_verified = link.get("is_verified", False)
 
+                # Don't fetch player details here - just return the tag
                 linked_accounts.append(LinkedAccount(
                     player_tag=player_tag,
-                    player_name=player_info.get("name"),
-                    town_hall=player_info.get("town_hall"),
+                    player_name=None,  # Frontend can fetch if needed
+                    town_hall=None,     # Frontend can fetch if needed
                     is_verified=is_verified,
                     added_at=str(link.get("added_at")) if link.get("added_at") else None
                 ))
@@ -142,8 +126,6 @@ async def get_server_links(
                 if not (
                         search_lower in member.user.username.lower() or
                         search_lower in (member.nickname or "").lower() or
-                        any(search_lower in acc.player_name.lower() for acc in linked_accounts if
-                            acc.player_name) or
                         any(search_lower in acc.player_tag.lower() for acc in linked_accounts)
                 ):
                     continue
@@ -159,6 +141,7 @@ async def get_server_links(
 
         # Sort by account count (descending) then by display name
         member_links_list.sort(key=lambda x: (-x.account_count, x.display_name.lower()))
+
         # Apply pagination
         total_filtered = len(member_links_list)
         paginated_members = member_links_list[offset:offset + limit]

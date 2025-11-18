@@ -53,7 +53,8 @@ async def server_settings(
     ]
     if not clan_settings:
         pipeline.pop(-1)
-    results = await mongo.server_db.aggregate(pipeline).to_list(length=1)
+    cursor = await mongo.server_db.aggregate(pipeline)
+    results = await cursor.to_list(length=1)
     if not results:
         raise HTTPException(status_code=404, detail="Server Not Found")
     return remove_id_fields(results[0])

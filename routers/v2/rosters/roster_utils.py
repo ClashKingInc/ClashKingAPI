@@ -103,9 +103,8 @@ async def calculate_player_activity(player_tag: str, days: int = 30) -> int:
             {'$count': 'total_days'},
         ]
 
-        result = await mongo.player_history.aggregate(pipeline).to_list(
-            length=1
-        )
+        cursor = await mongo.player_history.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
         return result[0]['total_days'] if result else 0
     except Exception:
         return 0

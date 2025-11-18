@@ -219,7 +219,8 @@ async def clan_donations(
             "received": 1
         }}
     ]
-    stats = await mongo.new_player_stats.aggregate(pipeline).to_list(length=None)
+    cursor = await mongo.new_player_stats.aggregate(pipeline)
+    stats = await cursor.to_list(length=None)
     return stats
 
 

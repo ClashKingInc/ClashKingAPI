@@ -60,7 +60,8 @@ async def search_clan(
                 },
                 {'$match': {'server': guild_id}},
             ]
-        results = await mongo.clan_db.aggregate(pipeline=pipeline).to_list(length=None)
+        cursor = await mongo.clan_db.aggregate(pipeline=pipeline)
+        results = await cursor.to_list(length=None)
         for document in results:
             guild_clans.append(document.get("tag"))
 

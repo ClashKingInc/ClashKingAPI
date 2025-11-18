@@ -71,7 +71,7 @@ async def get_server_links(
             {"$sort": {"account_count": -1}}
         ]
 
-        links_by_user_cursor = mongo.coc_accounts.aggregate(pipeline)
+        links_by_user_cursor = await mongo.coc_accounts.aggregate(pipeline)
         links_grouped = await links_by_user_cursor.to_list(length=None)
 
         # Calculate total stats

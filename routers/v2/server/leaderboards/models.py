@@ -38,3 +38,67 @@ class ServerLeaderboardResponse(BaseModel):
     total_clans: int = 0
     players: List[PlayerLeaderboardEntry] = Field(default_factory=list)
     clans: List[ClanLeaderboardEntry] = Field(default_factory=list)
+
+
+class WarPerformanceEntry(BaseModel):
+    """Player war performance entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    total_stars: int = 0
+    total_destruction: float = 0.0
+    attack_count: int = 0
+    defense_count: int = 0
+    triple_stars: int = 0
+    average_stars: float = 0.0
+    average_destruction: float = 0.0
+    war_count: int = 0
+
+
+class DonationsEntry(BaseModel):
+    """Player donations entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    donations_sent: int = 0
+    donations_received: int = 0
+    donation_ratio: Optional[float] = None  # sent / received
+
+
+class CapitalRaidEntry(BaseModel):
+    """Player capital raid performance entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    total_capital_gold: int = 0
+    total_raids: int = 0
+    average_capital_gold: float = 0.0
+    total_attacks: int = 0
+
+
+class WarPerformanceLeaderboardResponse(BaseModel):
+    """Response for war performance leaderboard"""
+    server_id: int
+    total_count: int
+    players: List[WarPerformanceEntry] = Field(default_factory=list)
+
+
+class DonationsLeaderboardResponse(BaseModel):
+    """Response for donations leaderboard"""
+    server_id: int
+    total_count: int
+    players: List[DonationsEntry] = Field(default_factory=list)
+
+
+class CapitalRaidLeaderboardResponse(BaseModel):
+    """Response for capital raid leaderboard"""
+    server_id: int
+    total_count: int
+    players: List[CapitalRaidEntry] = Field(default_factory=list)
+

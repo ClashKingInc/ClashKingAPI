@@ -580,6 +580,7 @@ async def enrich_league_info(league_info, war_league_infos, session):
     except Exception:
         pass
 
+<<<<<<< HEAD
     return league_info
 
 
@@ -1024,3 +1025,6 @@ async def collect_player_hits_from_wars(wars_docs, tags_to_include=None, clan_ta
         return {
             "items": results
         }
+=======
+    return league_info
+>>>>>>> e5288c7 (feat: add POST /war/war-summary endpoint for multiple clans)

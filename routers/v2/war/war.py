@@ -542,4 +542,3 @@ async def clan_warhits_stats(filter: ClanWarHitsFilter, request: Request, *, mon
     items = await asyncio.gather(*clan_tasks)
 
     return {"items": items}
-

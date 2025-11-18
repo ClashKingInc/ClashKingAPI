@@ -105,7 +105,8 @@ async def export_cwl_summary_to_excel(tag: str):
             {"$limit": 1}
         ]
 
-        result = await mongo.clan_leaderboard.aggregate(pipeline).to_list(length=1)
+        cursor = await mongo.clan_leaderboard.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
         if not result:
             raise HTTPException(status_code=404, detail="No CWL data found for this clan")
 
@@ -243,7 +244,8 @@ async def export_player_war_stats(filter: PlayerWarhitsFilter):
         {"$project": {"data": "$data"}},
     ]
 
-    wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+    cursor = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True)
+    wars_docs = await cursor.to_list(length=None)
 
     result = await collect_player_hits_from_wars(
         wars_docs,

@@ -216,7 +216,8 @@ async def players_summary_top(season: str, request: Request, body: PlayerTagsReq
         {'$sort': {'totalStars': -1}},
         {'$limit': limit},
     ]
-    war_star_results = await mongo.clan_wars.aggregate(pipeline=pipeline).to_list(length=None)
+    cursor = await mongo.clan_wars.aggregate(pipeline=pipeline)
+    war_star_results = await cursor.to_list(length=None)
 
     new_data["war_stars"] = [{"tag": result["_id"], "value": result["totalStars"], "count": count}
                              for count, result in enumerate(war_star_results, 1)]

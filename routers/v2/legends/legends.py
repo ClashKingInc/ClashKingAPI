@@ -94,7 +94,8 @@ async def legend_stats_day(
     ]
 
     # Execute the aggregation
-    combined_data = await mongo.player_stats.aggregate(pipeline).to_list(length=None)
+    cursor = await mongo.player_stats.aggregate(pipeline)
+    combined_data = await cursor.to_list(length=None)
 
     return remove_id_fields(combined_data)
 
@@ -164,7 +165,8 @@ async def legend_stats_season(
     ]
 
     # Execute the aggregation
-    combined_data = await mongo.player_stats.aggregate(pipeline).to_list(length=None)
+    cursor = await mongo.player_stats.aggregate(pipeline)
+    combined_data = await cursor.to_list(length=None)
     year, month = season.split('-')
     season_start = coc.utils.get_season_start(month=int(month) - 1, year=int(year))
     season_end = coc.utils.get_season_end(month=int(month) - 1, year=int(year))

@@ -68,7 +68,8 @@ async def legend_stats_day(day: str, request: Request, response: Response, playe
     ]
 
     # Execute the aggregation
-    combined_data = await db_client.player_stats_db.aggregate(pipeline).to_list(length=None)
+    cursor = await db_client.player_stats_db.aggregate(pipeline)
+    combined_data = await cursor.to_list(length=None)
 
     '''legend_stats = await db_client.player_stats_db.find({"tag": {"$in": players}},
                                                         projection={"name": 1, "townhall": 1, "legends.streak": 1, f"legends.{day}" "tag": 1, "_id": 0}).to_list(length=None)'''

@@ -58,7 +58,6 @@ async def get_server_clans(
 
     result = []
     for clan_doc in clans:
-        print(clan_doc)
         # Fetch live clan data from CoC API
         clan_tag = clan_doc.get("tag")
         badge_url = None

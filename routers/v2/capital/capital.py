@@ -131,7 +131,8 @@ async def get_capital_player_stats(
     ]
 
     # Execute aggregation
-    results = await OldMongoClient.raid_weekend_db.aggregate(pipeline).to_list(length=None)
+    cursor = await OldMongoClient.raid_weekend_db.aggregate(pipeline)
+    results = await cursor.to_list(length=None)
 
     # Get total count for pagination
     count_pipeline = [
@@ -140,7 +141,8 @@ async def get_capital_player_stats(
         {"$group": {"_id": "$data.members.tag"}},
         {"$count": "total"}
     ]
-    count_result = await OldMongoClient.raid_weekend_db.aggregate(count_pipeline).to_list(length=1)
+    count_cursor = await OldMongoClient.raid_weekend_db.aggregate(count_pipeline)
+    count_result = await count_cursor.to_list(length=1)
     total_count = count_result[0]["total"] if count_result else 0
 
     # Format response
@@ -306,7 +308,8 @@ async def get_capital_guild_leaderboard(
         {"$sort": {"total_capital_gold_looted": -1}}
     ]
 
-    results = await OldMongoClient.raid_weekend_db.aggregate(pipeline).to_list(length=None)
+    cursor = await OldMongoClient.raid_weekend_db.aggregate(pipeline)
+    results = await cursor.to_list(length=None)
 
     # Format response
     clan_leaderboard = []

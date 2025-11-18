@@ -390,7 +390,8 @@ async def clan_war_stats(
 
         pipeline.insert(1, {"$match" : {"$or": check}})
 
-    wars = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+    cursor = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True)
+    wars = await cursor.to_list(length=None)
 
     return await calculate_war_stats(
         wars=wars, clan_tags=set(clan_tags),
@@ -484,7 +485,8 @@ async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request, *
             {"$project": {"data": "$data"}},
         ]
 
-        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+        cursor = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True)
+        wars_docs = await cursor.to_list(length=None)
 
         result = await collect_player_hits_from_wars(
             wars_docs,
@@ -522,7 +524,8 @@ async def clan_warhits_stats(filter: ClanWarHitsFilter, request: Request, *, mon
             {"$limit": filter.limit or 100},
         ]
 
-        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+        cursor = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True)
+        wars_docs = await cursor.to_list(length=None)
 
         results = await collect_player_hits_from_wars(
             wars_docs,
@@ -542,4 +545,3 @@ async def clan_warhits_stats(filter: ClanWarHitsFilter, request: Request, *, mon
     items = await asyncio.gather(*clan_tasks)
 
     return {"items": items}
-

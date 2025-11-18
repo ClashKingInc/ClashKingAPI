@@ -55,98 +55,102 @@ async def get_server_links(
         )
 
     try:
-        # Fetch guild members using bot token
+        # Use MongoDB aggregation to group links by user and get stats
+        # This is MUCH faster than fetching all Discord members
+        pipeline = [
+            {"$group": {
+                "_id": "$user_id",
+                "links": {"$push": {
+                    "player_tag": "$player_tag",
+                    "is_verified": "$is_verified",
+                    "added_at": "$added_at"
+                }},
+                "account_count": {"$sum": 1},
+                "verified_count": {"$sum": {"$cond": ["$is_verified", 1, 0]}}
+            }},
+            {"$sort": {"account_count": -1}}
+        ]
+
+        links_by_user_cursor = await mongo.coc_accounts.aggregate(pipeline)
+        links_grouped = await links_by_user_cursor.to_list(length=None)
+
+        # Calculate total stats
+        total_linked_accounts = sum(group["account_count"] for group in links_grouped)
+        verified_accounts = sum(group["verified_count"] for group in links_grouped)
+        total_members_with_links = len(links_grouped)
+
+        # Apply search filter if provided (on player tags only, since we don't have Discord info yet)
+        if search:
+            search_lower = search.lower()
+            links_grouped = [
+                group for group in links_grouped
+                if any(search_lower in link["player_tag"].lower() for link in group["links"])
+            ]
+
+        # Apply pagination on the grouped results
+        total_filtered = len(links_grouped)
+        paginated_groups = links_grouped[offset:offset + limit]
+
+        # Now fetch Discord member info ONLY for the paginated results
+        member_links_list = []
+        user_ids_to_fetch = [group["_id"] for group in paginated_groups]
+
         async with rest.acquire(token=config.bot_token, token_type=hikari.TokenType.BOT) as client:
             try:
-                # Fetch all members - fetch_members returns a list
-                all_members = await client.fetch_members(server_id)
-            except hikari.ForbiddenError:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Bot does not have access to this server"
-                )
-            except hikari.NotFoundError:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Server not found"
-                )
+                # Fetch only the members we need
+                members_data = {}
+                for user_id in user_ids_to_fetch:
+                    try:
+                        member = await client.fetch_member(server_id, int(user_id))
+                        members_data[user_id] = member
+                    except (hikari.NotFoundError, hikari.ForbiddenError):
+                        # Member might have left the server or bot doesn't have access
+                        # Still include them with limited info
+                        members_data[user_id] = None
             except hikari.UnauthorizedError:
                 raise HTTPException(
                     status_code=401,
                     detail="Invalid bot token. Please check BOT_TOKEN environment variable."
                 )
 
-        # Get all linked accounts for all members at once
-        member_ids = [str(m.user.id) for m in all_members]
-        all_links = await mongo.coc_accounts.find(
-            {"user_id": {"$in": member_ids}}
-        ).to_list(length=None)
-
-        # Group links by user_id
-        links_by_user = {}
-        for link in all_links:
-            user_id = link.get("user_id")
-            if user_id not in links_by_user:
-                links_by_user[user_id] = []
-            links_by_user[user_id].append(link)
-
-        # Build member links list WITHOUT fetching player details (too slow)
-        # Player details should be fetched on-demand by the frontend
-        member_links_list = []
-        total_linked_accounts = 0
-        verified_accounts = 0
-
-        for member in all_members:
-            user_id = str(member.user.id)
-            member_link_data = links_by_user.get(user_id, [])
+        # Build the response for paginated results
+        for group in paginated_groups:
+            user_id = group["_id"]
+            member = members_data.get(user_id)
 
             # Build linked accounts list
             linked_accounts = []
-            for link in member_link_data:
-                player_tag = link.get("player_tag")
-                is_verified = link.get("is_verified", False)
-
-                # Don't fetch player details here - just return the tag
+            for link in group["links"]:
                 linked_accounts.append(LinkedAccount(
-                    player_tag=player_tag,
+                    player_tag=link["player_tag"],
                     player_name=None,  # Frontend can fetch if needed
                     town_hall=None,     # Frontend can fetch if needed
-                    is_verified=is_verified,
+                    is_verified=link.get("is_verified", False),
                     added_at=str(link.get("added_at")) if link.get("added_at") else None
                 ))
 
-                if is_verified:
-                    verified_accounts += 1
-
-            total_linked_accounts += len(linked_accounts)
-
-            # Apply search filter if provided
-            if search:
-                search_lower = search.lower()
-                if not (
-                        search_lower in member.user.username.lower() or
-                        search_lower in (member.nickname or "").lower() or
-                        any(search_lower in acc.player_tag.lower() for acc in linked_accounts)
-                ):
-                    continue
+            # Get Discord user info if available
+            if member:
+                username = member.user.username
+                display_name = member.nickname or member.user.username
+                avatar_url = str(member.user.avatar_url) if member.user.avatar_url else None
+            else:
+                # Member not in server anymore, show user_id only
+                username = f"User {user_id}"
+                display_name = f"User {user_id}"
+                avatar_url = None
 
             member_links_list.append(MemberLinks(
                 user_id=user_id,
-                username=member.user.username,
-                display_name=member.nickname or member.user.username,
-                avatar_url=str(member.user.avatar_url) if member.user.avatar_url else None,
+                username=username,
+                display_name=display_name,
+                avatar_url=avatar_url,
                 linked_accounts=linked_accounts,
                 account_count=len(linked_accounts)
             ))
 
-        # Sort by account count (descending) then by display name
-        member_links_list.sort(key=lambda x: (-x.account_count, x.display_name.lower()))
-
-        # Apply pagination
-        total_filtered = len(member_links_list)
-        paginated_members = member_links_list[offset:offset + limit]
-
-        members_with_links = sum(1 for m in member_links_list if m.account_count > 0)
+        paginated_members = member_links_list
+        members_with_links = total_members_with_links
 
         return ServerLinksResponse(
             members=paginated_members,

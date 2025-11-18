@@ -53,7 +53,7 @@ async def get_strikes(
             {"rollover_date": {"$gte": gte}}
         ]
 
-    strikes = await mongo.strikelist.find(query).sort("date_created", -1).to_list(length=None)
+    strikes = await mongo.strike_list.find(query).sort("date_created", -1).to_list(length=None)
 
     return remove_id_fields({"items": strikes, "count": len(strikes)})
 

@@ -8,7 +8,6 @@ from routers.v2.rosters.rosters import router as rosters_router
 from routers.v2.dates.dates import router as dates_router
 from routers.v2.war.war import router as war_router
 from routers.v2.ui.ui import router as ui_router
-from routers.v2.guilds import router as guilds_router
 from routers.v2.config import router as config_router
 from routers.v2.server.settings.endpoints import router as server_router
 from routers.v2.server.logs.endpoints import router as server_logs_routere --
@@ -17,6 +16,7 @@ from routers.v2.server.autoboards.endpoints import router as server_autoboards_r
 from routers.v2.server.links.endpoints import router as server_links_router
 from routers.v2.server.clans.endpoints import router as server_clans_router
 from routers.v2.server.roles.endpoints import router as server_roles_router
+from routers.v2.server.guilds.endpoints import router as guilds_router, guild_router
 from routers.v2.server.strikes.endpoints import router as server_strikes_router
 from routers.v2.server.bans.endpoints import router as server_bans_router
 from routers.v2.server.leaderboards.endpoints import router as server_leaderboards_router
@@ -39,6 +39,7 @@ def define_app(app: FastAPI):
     app.include_router(war_router)
     app.include_router(ui_router)
     app.include_router(guilds_router)
+    app.include_router(guild_router)
     app.include_router(server_router)
     app.include_router(server_logs_router)
     app.include_router(server_reminders_router)

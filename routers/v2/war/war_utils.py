@@ -2,9 +2,12 @@ import asyncio
 import coc
 import requests
 import sentry_sdk
-from typing import List
+from typing import List, TYPE_CHECKING
 from collections import defaultdict
 from fastapi import HTTPException
+
+if TYPE_CHECKING:
+    from routers.v2.war.models import PlayerWarhitsFilter
 
 semaphore = asyncio.Semaphore(10)
 
@@ -583,7 +586,7 @@ async def enrich_league_info(league_info, war_league_infos, session):
 def compute_warhit_stats(
         attacks: List[dict],
         defenses: List[dict],
-        filter: PlayerWarhitsFilter,
+        filter: "PlayerWarhitsFilter",
         missed_attacks: int = 0,
         missed_defenses: int = 0,
         num_wars: int = 0,

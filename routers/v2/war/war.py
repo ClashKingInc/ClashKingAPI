@@ -1,4 +1,6 @@
 
+import asyncio
+import aiohttp
 import coc
 import linkd
 from coc.utils import correct_tag
@@ -6,10 +8,23 @@ import pendulum as pend
 from collections import defaultdict
 from fastapi import HTTPException
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
 from utils.utils import remove_id_fields
 from utils.database import MongoClient
+from utils.time import is_cwl
 
-from routers.v2.war.war_utils import calculate_war_stats, deconstruct_type
+from routers.v2.war.war_utils import (
+    calculate_war_stats,
+    deconstruct_type,
+    fetch_current_war_info_bypass,
+    fetch_league_info,
+    fetch_war_league_infos,
+    enrich_league_info,
+    collect_player_hits_from_wars
+)
+from routers.v2.war.models import PlayerWarhitsFilter, ClanWarHitsFilter
+from routers.v2.clan.clan_models import ClanTagsRequest
+from utils.utils import fix_tag
 
 router = APIRouter(prefix="/v2",tags=["War"], include_in_schema=True)
 
@@ -381,4 +396,150 @@ async def clan_war_stats(
         wars=wars, clan_tags=set(clan_tags),
         townhall_filter=townhall_filter
     )
+
+
+@router.post("/war/war-summary", name="Get full war and CWL summary for multiple clans")
+async def get_multiple_clan_war_summary(body: ClanTagsRequest, request: Request):
+    if not body.clan_tags:
+        raise HTTPException(status_code=400, detail="clan_tags cannot be empty")
+
+    async with aiohttp.ClientSession() as session:
+
+        async def process_clan(clan_tag: str):
+            war_info = await fetch_current_war_info_bypass(clan_tag, session)
+            league_info = None
+            war_league_infos = []
+
+            if is_cwl():
+                league_info = await fetch_league_info(clan_tag, session)
+                if league_info and "rounds" in league_info:
+                    war_tags = [tag for r in league_info["rounds"] for tag in r.get("warTags", [])]
+                    war_league_infos = await fetch_war_league_infos(war_tags, session)
+                    league_info = await enrich_league_info(league_info, war_league_infos, session)
+
+            return {
+                "clan_tag": clan_tag,
+                "isInWar": war_info and war_info.get("state") == "war",
+                "isInCwl": league_info is not None and war_info and war_info.get("state") == "notInWar",
+                "war_info": war_info,
+                "league_info": league_info,
+                "war_league_infos": war_league_infos
+            }
+
+        results = await asyncio.gather(*(process_clan(tag) for tag in body.clan_tags))
+        return JSONResponse(content={"items": results})
+
+
+@router.get(
+    "/war/{clan_tag}/war-summary",
+    name="Get full war and CWL summary for a clan, including war state, CWL rounds and war details"
+)
+async def get_clan_war_summary(clan_tag: str):
+    async with aiohttp.ClientSession() as session:
+        war_info = await fetch_current_war_info_bypass(clan_tag, session)
+        league_info = None
+        war_league_infos = []
+
+        if is_cwl():
+            league_info = await fetch_league_info(clan_tag, session)
+            if league_info and "rounds" in league_info:
+                for round_entry in league_info["rounds"]:
+                    war_tags = round_entry.get("warTags", [])
+                    war_league_infos.extend(await fetch_war_league_infos(war_tags, session))
+
+                league_info = await enrich_league_info(league_info, war_league_infos, session)
+
+        return JSONResponse(content={
+            "isInWar": war_info and war_info.get("state") == "war",
+            "isInCwl": league_info is not None and war_info and war_info.get("state") == "notInWar",
+            "war_info": war_info,
+            "league_info": league_info,
+            "war_league_infos": war_league_infos
+        })
+
+
+@router.post("/war/players/warhits")
+@linkd.ext.fastapi.inject
+async def players_warhits_stats(filter: PlayerWarhitsFilter, request: Request, *, mongo: MongoClient):
+    client = coc.Client(raw_attribute=True)
+    START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+
+    async def fetch_player(tag: str):
+        player_tag = fix_tag(tag)
+        pipeline = [
+            {"$match": {
+                "$and": [
+                    {"$or": [
+                        {"data.clan.members.tag": player_tag},
+                        {"data.opponent.members.tag": player_tag}
+                    ]},
+                    {"data.preparationStartTime": {"$gte": START}},
+                    {"data.preparationStartTime": {"$lte": END}}
+                ]
+            }},
+            {"$sort": {"data.preparationStartTime": -1}},
+            {"$limit": filter.limit or 50},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
+        ]
+
+        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+        result = await collect_player_hits_from_wars(
+            wars_docs,
+            tags_to_include=[player_tag],
+            clan_tags=None,
+            filter=filter,
+            client=client
+        )
+        return result["items"]
+
+    player_tasks = [fetch_player(tag) for tag in filter.player_tags]
+    results_per_player = await asyncio.gather(*player_tasks)
+    results = [item for sublist in results_per_player for item in sublist]  # flatten
+
+    return {"items": results}
+
+
+@router.post("/war/clans/warhits")
+@linkd.ext.fastapi.inject
+async def clan_warhits_stats(filter: ClanWarHitsFilter, request: Request, *, mongo: MongoClient):
+    client = coc.Client(raw_attribute=True)
+    START = pend.from_timestamp(filter.timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    END = pend.from_timestamp(filter.timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
+    clan_tags = [fix_tag(tag) for tag in filter.clan_tags]
+
+    async def fetch_clan(clan_tag: str):
+        pipeline = [
+            {"$match": {
+                "data.clan.tag": clan_tag,
+                "data.preparationStartTime": {"$gte": START, "$lte": END}
+            }},
+            {"$unset": ["_id"]},
+            {"$project": {"data": "$data"}},
+            {"$sort": {"data.preparationStartTime": -1}},
+            {"$limit": filter.limit or 100},
+        ]
+
+        wars_docs = await mongo.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
+
+        results = await collect_player_hits_from_wars(
+            wars_docs,
+            tags_to_include=None,
+            clan_tags=[clan_tag],
+            filter=filter,
+            client=client,
+        )
+
+        return {
+            "clan_tag": clan_tag,
+            "players": results["items"],
+            "wars": results["wars"]
+        }
+
+    clan_tasks = [fetch_clan(tag) for tag in clan_tags]
+    items = await asyncio.gather(*clan_tasks)
+
+    return {"items": items}
 

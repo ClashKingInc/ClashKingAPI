@@ -10,7 +10,7 @@ from routers.v2.war.war import router as war_router
 from routers.v2.ui.ui import router as ui_router
 from routers.v2.config import router as config_router
 from routers.v2.server.settings.endpoints import router as server_router
-from routers.v2.server.logs.endpoints import router as server_logs_routere --
+from routers.v2.server.logs.endpoints import router as server_logs_router
 from routers.v2.server.reminders.endpoints import router as server_reminders_router
 from routers.v2.server.autoboards.endpoints import router as server_autoboards_router
 from routers.v2.server.links.endpoints import router as server_links_router

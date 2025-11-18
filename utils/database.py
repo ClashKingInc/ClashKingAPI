@@ -52,6 +52,8 @@ class MongoClient(AsyncMongoClient):
         self.server_db = self.__bot_settings.get_collection('server')
         self.clan_db = self.__bot_settings.get_collection('clans')
         self.reminders = self.__bot_settings.get_collection('reminders')
+        self.banlist = self.__bot_settings.get_collection('banlist')
+        self.strike_list = self.__bot_settings.get_collection('strikes')
 
         # Role management collections
         self.townhall_roles = self.__bot_settings.get_collection('townhallroles')

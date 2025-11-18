@@ -17,7 +17,15 @@ from .models import (
     DonationsEntry,
     DonationsLeaderboardResponse,
     CapitalRaidEntry,
-    CapitalRaidLeaderboardResponse
+    CapitalRaidLeaderboardResponse,
+    LegendLeagueEntry,
+    LegendLeagueLeaderboardResponse,
+    ClanGamesEntry,
+    ClanGamesLeaderboardResponse,
+    ActivityEntry,
+    ActivityLeaderboardResponse,
+    LootingEntry,
+    LootingLeaderboardResponse
 )
 
 security = HTTPBearer()
@@ -585,5 +593,550 @@ async def get_capital_raids_leaderboard(
     return CapitalRaidLeaderboardResponse(
         server_id=server_id,
         total_count=len(player_raid_stats),
+        players=entries
+    )
+
+
+@router.get("/{server_id}/leaderboards/legends",
+            name="Get legend league leaderboard",
+            response_model=LegendLeagueLeaderboardResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
+async def get_legend_league_leaderboard(
+        server_id: int,
+        limit: int = Query(default=100, le=500, ge=1),
+        days: int = Query(default=7, le=30, ge=1, description="Number of days to analyze (1-30)"),
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
+) -> LegendLeagueLeaderboardResponse:
+    """
+    Get legend league leaderboard for a Discord server.
+
+    Returns top players by legend league performance over a specified period.
+
+    Args:
+        server_id: Discord server ID
+        limit: Maximum number of players to return (default 100, max 500)
+        days: Number of days to analyze (default 7, max 30)
+
+    Returns:
+        Legend league leaderboard
+    """
+    import pendulum
+    from datetime import datetime, timedelta
+
+    # Verify server exists
+    server = await mongo.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Get all linked Discord accounts for this server
+    all_links = await mongo.coc_accounts.find(
+        {"server": server_id}
+    ).to_list(length=None)
+
+    player_tags = list(set(link["player_tag"] for link in all_links))
+
+    if not player_tags:
+        return LegendLeagueLeaderboardResponse(
+            server_id=server_id,
+            total_count=0,
+            players=[]
+        )
+
+    # Generate list of dates to query
+    today = pendulum.now(tz="UTC")
+    dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+
+    # Build projection for legend days
+    projection = {
+        "tag": 1,
+        "name": 1,
+        "townhall": 1,
+        "clan": 1,
+        "legends.streak": 1
+    }
+    for date in dates:
+        projection[f"legends.{date}"] = 1
+
+    # Fetch legend data
+    player_stats = await mongo.player_stats.find(
+        {"tag": {"$in": player_tags}},
+        projection
+    ).to_list(length=None)
+
+    # Get all clans for this server for clan name mapping
+    clans = await mongo.clan_db.find({"server": server_id}).to_list(length=None)
+    clan_name_map = {clan["tag"]: clan["name"] for clan in clans}
+
+    # Process legend stats
+    entries = []
+
+    for player in player_stats:
+        player_tag = player.get("tag")
+        legends_data = player.get("legends", {})
+
+        if not isinstance(legends_data, dict):
+            continue
+
+        # Calculate stats across all days
+        total_attacks = 0
+        total_defenses = 0
+        attack_wins = 0
+        defense_wins = 0
+        first_trophies = None
+        last_trophies = None
+
+        for i, date in enumerate(reversed(dates)):  # Process chronologically
+            day_data = legends_data.get(date)
+            if not isinstance(day_data, dict):
+                continue
+
+            # Get trophy counts
+            if first_trophies is None:
+                first_trophies = day_data.get("start", 0)
+            last_trophies = day_data.get("end", 0)
+
+            # Process attacks
+            attacks = day_data.get("attacks", day_data.get("new_attacks", []))
+            if isinstance(attacks, list):
+                total_attacks += len(attacks)
+                for attack in attacks:
+                    if isinstance(attack, dict) and attack.get("stars", 0) >= 1:
+                        attack_wins += 1
+
+            # Process defenses
+            defenses = day_data.get("defenses", day_data.get("new_defenses", []))
+            if isinstance(defenses, list):
+                total_defenses += len(defenses)
+                for defense in defenses:
+                    if isinstance(defense, dict) and defense.get("stars", 0) == 0:
+                        defense_wins += 1
+
+        # Skip players with no legend activity
+        if total_attacks == 0 and total_defenses == 0:
+            continue
+
+        # Calculate trophy change
+        trophy_change = 0
+        current_trophies = 0
+        if first_trophies is not None and last_trophies is not None:
+            trophy_change = last_trophies - first_trophies
+            current_trophies = last_trophies
+
+        # Get clan info
+        player_clan = player.get("clan", {})
+        player_clan_tag = player_clan.get("tag") if isinstance(player_clan, dict) else None
+        player_clan_name = clan_name_map.get(player_clan_tag) if player_clan_tag else None
+
+        entry = LegendLeagueEntry(
+            player_tag=player_tag,
+            player_name=player.get("name", "Unknown"),
+            townhall_level=player.get("townhall"),
+            clan_tag=player_clan_tag,
+            clan_name=player_clan_name,
+            current_trophies=current_trophies,
+            trophy_change=trophy_change,
+            attack_wins=attack_wins,
+            defense_wins=defense_wins,
+            total_attacks=total_attacks,
+            total_defenses=total_defenses,
+            streak=legends_data.get("streak")
+        )
+
+        entries.append(entry)
+
+    # Sort by trophy change (descending), then by current trophies
+    entries.sort(key=lambda x: (-x.trophy_change, -x.current_trophies))
+
+    # Limit results
+    entries = entries[:limit]
+
+    return LegendLeagueLeaderboardResponse(
+        server_id=server_id,
+        total_count=len(entries),
+        players=entries
+    )
+
+
+@router.get("/{server_id}/leaderboards/clan-games",
+            name="Get clan games leaderboard",
+            response_model=ClanGamesLeaderboardResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
+async def get_clan_games_leaderboard(
+        server_id: int,
+        limit: int = Query(default=100, le=500, ge=1),
+        season: Optional[str] = Query(None, description="Season in YYYY-MM format (defaults to current)"),
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
+) -> ClanGamesLeaderboardResponse:
+    """
+    Get clan games leaderboard for a Discord server.
+
+    Returns top players by clan games points for a season.
+
+    Args:
+        server_id: Discord server ID
+        limit: Maximum number of players to return (default 100, max 500)
+        season: Season in YYYY-MM format (defaults to current season)
+
+    Returns:
+        Clan games leaderboard
+    """
+    import pendulum
+
+    # Verify server exists
+    server = await mongo.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Default to current season if not provided
+    if not season:
+        now = pendulum.now(tz="UTC")
+        season = now.strftime("%Y-%m")
+
+    # Validate season format
+    try:
+        pendulum.from_format(season, "YYYY-MM")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid season format. Use YYYY-MM")
+
+    # Get all linked Discord accounts for this server
+    all_links = await mongo.coc_accounts.find(
+        {"server": server_id}
+    ).to_list(length=None)
+
+    player_tags = list(set(link["player_tag"] for link in all_links))
+
+    if not player_tags:
+        return ClanGamesLeaderboardResponse(
+            server_id=server_id,
+            season=season,
+            total_count=0,
+            players=[]
+        )
+
+    # Fetch player stats with clan games data
+    player_stats = await mongo.player_stats.find(
+        {"tag": {"$in": player_tags}},
+        {"tag": 1, "name": 1, "townhall": 1, "clan": 1, f"clan_games.{season}": 1}
+    ).to_list(length=None)
+
+    # Get all clans for this server for clan name mapping
+    clans = await mongo.clan_db.find({"server": server_id}).to_list(length=None)
+    clan_name_map = {clan["tag"]: clan["name"] for clan in clans}
+
+    # Build entries
+    entries = []
+
+    for player in player_stats:
+        player_tag = player.get("tag")
+        clan_games_data = player.get("clan_games", {})
+        season_data = clan_games_data.get(season, {})
+
+        points = season_data.get("points", 0) if isinstance(season_data, dict) else 0
+
+        # Skip players with 0 points
+        if points == 0:
+            continue
+
+        # Get clan info
+        player_clan = player.get("clan", {})
+        player_clan_tag = player_clan.get("tag") if isinstance(player_clan, dict) else None
+        player_clan_name = clan_name_map.get(player_clan_tag) if player_clan_tag else None
+
+        entry = ClanGamesEntry(
+            player_tag=player_tag,
+            player_name=player.get("name", "Unknown"),
+            townhall_level=player.get("townhall"),
+            clan_tag=player_clan_tag,
+            clan_name=player_clan_name,
+            points=points
+        )
+
+        entries.append(entry)
+
+    # Sort by points (descending)
+    entries.sort(key=lambda x: -x.points)
+
+    # Limit results
+    entries = entries[:limit]
+
+    return ClanGamesLeaderboardResponse(
+        server_id=server_id,
+        season=season,
+        total_count=len(entries),
+        players=entries
+    )
+
+
+@router.get("/{server_id}/leaderboards/activity",
+            name="Get activity leaderboard",
+            response_model=ActivityLeaderboardResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
+async def get_activity_leaderboard(
+        server_id: int,
+        limit: int = Query(default=100, le=500, ge=1),
+        season: Optional[str] = Query(None, description="Season in YYYY-MM format (defaults to current)"),
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
+) -> ActivityLeaderboardResponse:
+    """
+    Get activity leaderboard for a Discord server.
+
+    Returns top players by activity count and last online time.
+
+    Args:
+        server_id: Discord server ID
+        limit: Maximum number of players to return (default 100, max 500)
+        season: Season in YYYY-MM format (defaults to current season)
+
+    Returns:
+        Activity leaderboard
+    """
+    import pendulum
+    from datetime import datetime
+
+    # Verify server exists
+    server = await mongo.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Default to current season if not provided
+    if not season:
+        now = pendulum.now(tz="UTC")
+        season = now.strftime("%Y-%m")
+
+    # Validate season format
+    try:
+        pendulum.from_format(season, "YYYY-MM")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid season format. Use YYYY-MM")
+
+    # Get all linked Discord accounts for this server
+    all_links = await mongo.coc_accounts.find(
+        {"server": server_id}
+    ).to_list(length=None)
+
+    player_tags = list(set(link["player_tag"] for link in all_links))
+
+    if not player_tags:
+        return ActivityLeaderboardResponse(
+            server_id=server_id,
+            season=season,
+            total_count=0,
+            players=[]
+        )
+
+    # Fetch player stats with activity data
+    player_stats = await mongo.player_stats.find(
+        {"tag": {"$in": player_tags}},
+        {"tag": 1, "name": 1, "townhall": 1, "clan": 1, f"activity.{season}": 1, "last_online": 1}
+    ).to_list(length=None)
+
+    # Get all clans for this server for clan name mapping
+    clans = await mongo.clan_db.find({"server": server_id}).to_list(length=None)
+    clan_name_map = {clan["tag"]: clan["name"] for clan in clans}
+
+    # Build entries
+    entries = []
+    now_timestamp = int(datetime.now().timestamp())
+
+    for player in player_stats:
+        player_tag = player.get("tag")
+        activity_data = player.get("activity", {})
+        activity_count = activity_data.get(season, 0) if isinstance(activity_data, dict) else 0
+
+        last_online = player.get("last_online")
+        days_since_online = None
+        if last_online is not None:
+            days_since_online = (now_timestamp - last_online) // 86400  # Convert to days
+
+        # Get clan info
+        player_clan = player.get("clan", {})
+        player_clan_tag = player_clan.get("tag") if isinstance(player_clan, dict) else None
+        player_clan_name = clan_name_map.get(player_clan_tag) if player_clan_tag else None
+
+        entry = ActivityEntry(
+            player_tag=player_tag,
+            player_name=player.get("name", "Unknown"),
+            townhall_level=player.get("townhall"),
+            clan_tag=player_clan_tag,
+            clan_name=player_clan_name,
+            activity_count=activity_count,
+            last_online=last_online,
+            days_since_online=days_since_online
+        )
+
+        entries.append(entry)
+
+    # Sort by activity count (descending), then by last online (most recent first)
+    entries.sort(key=lambda x: (-x.activity_count, -(x.last_online or 0)))
+
+    # Limit results
+    entries = entries[:limit]
+
+    return ActivityLeaderboardResponse(
+        server_id=server_id,
+        season=season,
+        total_count=len(entries),
+        players=entries
+    )
+
+
+@router.get("/{server_id}/leaderboards/looting",
+            name="Get looting leaderboard",
+            response_model=LootingLeaderboardResponse)
+@linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
+async def get_looting_leaderboard(
+        server_id: int,
+        limit: int = Query(default=100, le=500, ge=1),
+        season: Optional[str] = Query(None, description="Season in YYYY-MM format (defaults to current)"),
+        sort_by: str = Query(default="total", enum=["gold", "elixir", "dark_elixir", "total"]),
+        user_id: str = None,
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        *,
+        mongo: MongoClient,
+        rest: hikari.RESTApp
+) -> LootingLeaderboardResponse:
+    """
+    Get looting/resources leaderboard for a Discord server.
+
+    Returns top players by resources looted (gold, elixir, dark elixir).
+
+    Args:
+        server_id: Discord server ID
+        limit: Maximum number of players to return (default 100, max 500)
+        season: Season in YYYY-MM format (defaults to current season)
+        sort_by: Sort by gold, elixir, dark_elixir, or total (default: total)
+
+    Returns:
+        Looting leaderboard
+    """
+    import pendulum
+
+    # Verify server exists
+    server = await mongo.server_db.find_one({"server": server_id})
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Default to current season if not provided
+    if not season:
+        now = pendulum.now(tz="UTC")
+        season = now.strftime("%Y-%m")
+
+    # Validate season format
+    try:
+        pendulum.from_format(season, "YYYY-MM")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid season format. Use YYYY-MM")
+
+    # Get all linked Discord accounts for this server
+    all_links = await mongo.coc_accounts.find(
+        {"server": server_id}
+    ).to_list(length=None)
+
+    player_tags = list(set(link["player_tag"] for link in all_links))
+
+    if not player_tags:
+        return LootingLeaderboardResponse(
+            server_id=server_id,
+            season=season,
+            total_count=0,
+            sort_by=sort_by,
+            players=[]
+        )
+
+    # Fetch player stats with looting data
+    player_stats = await mongo.player_stats.find(
+        {"tag": {"$in": player_tags}},
+        {
+            "tag": 1,
+            "name": 1,
+            "townhall": 1,
+            "clan": 1,
+            f"gold.{season}": 1,
+            f"elixir.{season}": 1,
+            f"dark_elixir.{season}": 1
+        }
+    ).to_list(length=None)
+
+    # Get all clans for this server for clan name mapping
+    clans = await mongo.clan_db.find({"server": server_id}).to_list(length=None)
+    clan_name_map = {clan["tag"]: clan["name"] for clan in clans}
+
+    # Build entries
+    entries = []
+
+    for player in player_stats:
+        player_tag = player.get("tag")
+
+        gold_data = player.get("gold", {})
+        elixir_data = player.get("elixir", {})
+        dark_elixir_data = player.get("dark_elixir", {})
+
+        gold_looted = gold_data.get(season, 0) if isinstance(gold_data, dict) else 0
+        elixir_looted = elixir_data.get(season, 0) if isinstance(elixir_data, dict) else 0
+        dark_elixir_looted = dark_elixir_data.get(season, 0) if isinstance(dark_elixir_data, dict) else 0
+
+        total_looted = gold_looted + elixir_looted + dark_elixir_looted
+
+        # Skip players with 0 loot
+        if total_looted == 0:
+            continue
+
+        # Get clan info
+        player_clan = player.get("clan", {})
+        player_clan_tag = player_clan.get("tag") if isinstance(player_clan, dict) else None
+        player_clan_name = clan_name_map.get(player_clan_tag) if player_clan_tag else None
+
+        entry = LootingEntry(
+            player_tag=player_tag,
+            player_name=player.get("name", "Unknown"),
+            townhall_level=player.get("townhall"),
+            clan_tag=player_clan_tag,
+            clan_name=player_clan_name,
+            gold_looted=gold_looted,
+            elixir_looted=elixir_looted,
+            dark_elixir_looted=dark_elixir_looted,
+            total_looted=total_looted
+        )
+
+        entries.append(entry)
+
+    # Sort based on sort_by parameter
+    if sort_by == "gold":
+        entries.sort(key=lambda x: -x.gold_looted)
+    elif sort_by == "elixir":
+        entries.sort(key=lambda x: -x.elixir_looted)
+    elif sort_by == "dark_elixir":
+        entries.sort(key=lambda x: -x.dark_elixir_looted)
+    else:  # total
+        entries.sort(key=lambda x: -x.total_looted)
+
+    # Limit results
+    entries = entries[:limit]
+
+    return LootingLeaderboardResponse(
+        server_id=server_id,
+        season=season,
+        total_count=len(entries),
+        sort_by=sort_by,
         players=entries
     )

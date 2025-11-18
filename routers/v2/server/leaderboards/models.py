@@ -102,3 +102,86 @@ class CapitalRaidLeaderboardResponse(BaseModel):
     total_count: int
     players: List[CapitalRaidEntry] = Field(default_factory=list)
 
+
+class LegendLeagueEntry(BaseModel):
+    """Player legend league performance entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    current_trophies: int = 0
+    trophy_change: int = 0  # Net change for the period
+    attack_wins: int = 0
+    defense_wins: int = 0
+    total_attacks: int = 0
+    total_defenses: int = 0
+    streak: Optional[int] = None
+
+
+class ClanGamesEntry(BaseModel):
+    """Player clan games entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    points: int = 0
+
+
+class ActivityEntry(BaseModel):
+    """Player activity entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    activity_count: int = 0
+    last_online: Optional[int] = None  # Unix timestamp
+    days_since_online: Optional[int] = None
+
+
+class LootingEntry(BaseModel):
+    """Player looting/resources entry"""
+    player_tag: str
+    player_name: str
+    townhall_level: Optional[int] = None
+    clan_tag: Optional[str] = None
+    clan_name: Optional[str] = None
+    gold_looted: int = 0
+    elixir_looted: int = 0
+    dark_elixir_looted: int = 0
+    total_looted: int = 0  # Sum of all resources
+
+
+class LegendLeagueLeaderboardResponse(BaseModel):
+    """Response for legend league leaderboard"""
+    server_id: int
+    total_count: int
+    players: List[LegendLeagueEntry] = Field(default_factory=list)
+
+
+class ClanGamesLeaderboardResponse(BaseModel):
+    """Response for clan games leaderboard"""
+    server_id: int
+    season: str  # Format: YYYY-MM
+    total_count: int
+    players: List[ClanGamesEntry] = Field(default_factory=list)
+
+
+class ActivityLeaderboardResponse(BaseModel):
+    """Response for activity leaderboard"""
+    server_id: int
+    season: str  # Format: YYYY-MM
+    total_count: int
+    players: List[ActivityEntry] = Field(default_factory=list)
+
+
+class LootingLeaderboardResponse(BaseModel):
+    """Response for looting leaderboard"""
+    server_id: int
+    season: str  # Format: YYYY-MM
+    total_count: int
+    sort_by: str  # gold, elixir, dark_elixir, or total
+    players: List[LootingEntry] = Field(default_factory=list)
+

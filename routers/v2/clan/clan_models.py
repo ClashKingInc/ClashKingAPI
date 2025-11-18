@@ -14,3 +14,6 @@ class JoinLeaveList(BaseModel):
 
 class PlayerTagsRequest(BaseModel):
     player_tags: list[str]
+
+class ClanTagsRequest(BaseModel):
+    clan_tags: list[str]

@@ -1,30 +1,44 @@
-
 import pendulum as pend
-from fastapi import HTTPException
-from fastapi import APIRouter, Request
-from utils.utils import remove_id_fields, check_authentication
-from utils.database import MongoClient as mongo
-from routers.v2.bans.ban_models import BanRequest
+import linkd
+from fastapi import HTTPException, APIRouter, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-router = APIRouter(prefix="/v2",tags=["Bans"], include_in_schema=True)
+from utils.utils import remove_id_fields
+from utils.database import MongoClient
+from utils.security import check_authentication
+from .models import BanRequest
+
+router = APIRouter(prefix="/v2/server", tags=["Server Bans"], include_in_schema=True)
+security = HTTPBearer()
 
 
-
-@router.get("/ban/list/{server_id}",
-             name="Get bans for a server")
+@router.get("/{server_id}/bans",
+            name="Get bans for a server")
+@linkd.ext.fastapi.inject
 @check_authentication
-async def ban_list(server_id: int, request: Request):
+async def get_bans(
+    server_id: int,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient
+):
     bans = await mongo.banlist.find({'server': server_id}).sort([("_id", -1)]).to_list(length=None)
-    return remove_id_fields({"items" : bans})
+    return remove_id_fields({"items": bans, "count": len(bans)})
 
 
-@router.post("/ban/add/{server_id}/{player_tag}")
+@router.post("/{server_id}/bans/{player_tag}",
+             name="Add or update a ban")
+@linkd.ext.fastapi.inject
 @check_authentication
 async def add_ban(
     server_id: int,
     player_tag: str,
-    request: Request,
     ban_data: BanRequest,
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient
 ):
     """Add or update a ban for a player in a specific server"""
     find_ban = await mongo.banlist.find_one({'VillageTag': player_tag, 'server': server_id})
@@ -61,12 +75,17 @@ async def add_ban(
 
 
 
-@router.delete("/ban/remove/{server_id}/{player_tag}")
+@router.delete("/{server_id}/bans/{player_tag}",
+               name="Remove a ban")
+@linkd.ext.fastapi.inject
 @check_authentication
 async def remove_ban(
-    server_id: str,
+    server_id: int,
     player_tag: str,
-    request: Request
+    user_id: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient
 ):
     """Delete a ban for a player in a specific server"""
 

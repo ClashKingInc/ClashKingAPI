@@ -42,6 +42,23 @@ class MongoClient(AsyncMongoClient):
 
         self.__new_looper = self.get_database('new_looper')
         self.player_stats = self.__new_looper.get_collection('player_stats')
+        self.leaderboard_db = self.__new_looper.get_collection('leaderboard_db')
+        self.clan_leaderboard_db = self.__new_looper.get_collection('clan_leaderboard_db')
+        self.clan_stats = self.__new_looper.get_collection('clan_stats')
+        self.legend_rankings = self.__new_looper.get_collection('legend_rankings')
+
+        # Looper database (for war, raid, and tracking data)
+        self.__looper = self.get_database('looper')
+        self.history_db = self.__looper.get_collection('legend_history')
+        self.clan_wars = self.__looper.get_collection('clan_war')
+        self.clan_join_leave = self.__looper.get_collection('join_leave_history')
+        self.war_timers = self.__looper.get_collection('war_timer')
+        self.new_player_stats = self.__looper.get_collection('player_stats')
+        self.raid_weekend_db = self.__looper.get_collection('raid_weekends')
+        self.cwl_db = self.__looper.get_collection('cwl_db')
+        self.cwl_groups = self.__looper.get_collection('cwl_group')
+        self.war_elo = self.__looper.get_collection('war_elo')
+        self.warhits = self.__looper.get_collection('warhits')
 
         # Second connection for static_mongodb (bot settings)
         self.__static_client = pymongo.AsyncMongoClient(
@@ -52,6 +69,8 @@ class MongoClient(AsyncMongoClient):
         self.server_db = self.__bot_settings.get_collection('server')
         self.clan_db = self.__bot_settings.get_collection('clans')
         self.reminders = self.__bot_settings.get_collection('reminders')
+        self.banlist = self.__bot_settings.get_collection('banlist')
+        self.strike_list = self.__bot_settings.get_collection('strikes')
 
         # Role management collections
         self.townhall_roles = self.__bot_settings.get_collection('townhallroles')

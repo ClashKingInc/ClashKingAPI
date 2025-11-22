@@ -6,6 +6,7 @@ description = "API serving Clash of Clans stats for ClashKing"
 requires-python = "==3.13.7"
 dependencies = [
     "aiocache",
+    "aiohttp",
     "bcrypt",
     "coc-py @ git+https://github.com/mathsman5133/coc.py.git@march-update",
     "cryptography",
@@ -28,6 +29,7 @@ dependencies = [
     "python-dotenv",
     "python-snappy",
     "redis",
+    "requests",
     "sentry-sdk",
     "slowapi",
     "uvloop",

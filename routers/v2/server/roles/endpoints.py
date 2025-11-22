@@ -4,6 +4,7 @@ from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.config import Config
 from utils.sentry_utils import capture_endpoint_errors
+from utils.cache_decorator import cache_endpoint
 from .models import (
     RoleType,
     TownhallRoleCreate,
@@ -277,6 +278,7 @@ async def delete_role(
 @linkd.ext.fastapi.inject
 @check_authentication
 @capture_endpoint_errors
+@cache_endpoint(ttl=30, key_prefix="discord-roles")
 async def get_discord_roles(
     server_id: int,
     user_id: str = None,

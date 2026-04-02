@@ -198,6 +198,23 @@ async def upload_to_cdn(title: str, picture=None, image=None):
     return f'https://cdn.clashking.xyz/{title}.png'
 
 
+async def upload_html_to_cdn(title: str, html_content: str | bytes):
+    headers = {
+        'content-type': 'application/octet-stream',
+        'AccessKey': os.getenv('BUNNY_ACCESS_KEY'),
+    }
+    payload = html_content.encode('utf-8') if isinstance(html_content, str) else html_content
+    title = title.replace(' ', '_').lower()
+    async with aiohttp.ClientSession() as session:
+        await session.put(
+            url=f'https://storage.bunnycdn.com/clashking-files/{title}.html',
+            headers=headers,
+            data=payload,
+        )
+        await session.close()
+    return f'https://cdn.clashking.xyz/{title}.html'
+
+
 async def delete_from_cdn(image_url: str):
     """
     Delete a file from the BunnyCDN storage.

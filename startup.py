@@ -15,6 +15,7 @@ from routers.v2.server.logs.endpoints import router as server_logs_router
 from routers.v2.server.reminders.endpoints import router as server_reminders_router
 from routers.v2.server.giveaways.endpoints import router as server_giveaways_router
 from routers.v2.server.tickets.endpoints import router as server_tickets_router
+from routers.v2.server.panels.endpoints import router as server_panels_router
 from routers.v2.server.autoboards.endpoints import router as server_autoboards_router
 from routers.v2.server.links.endpoints import router as server_links_router
 from routers.v2.server.clans.endpoints import router as server_clans_router
@@ -58,6 +59,7 @@ def define_app(app: FastAPI):
         server_reminders_router,
         server_giveaways_router,
         server_tickets_router,
+        server_panels_router,
         server_links_router,
         server_autoboards_router,
         server_clans_router,

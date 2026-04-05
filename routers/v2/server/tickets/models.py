@@ -131,3 +131,19 @@ class ServerEmbedsResponse(BaseModel):
 class UpsertEmbedRequest(BaseModel):
     name: str
     data: Dict[str, Any]
+
+
+class CreatePanelRequest(BaseModel):
+    name: str
+
+
+class CreateButtonRequest(BaseModel):
+    label: str
+    style: int = 2  # 1=Primary(Blue), 2=Secondary(Grey), 3=Success(Green), 4=Danger(Red)
+    emoji: Optional[Dict[str, Any]] = None
+
+
+class UpdateButtonAppearanceRequest(BaseModel):
+    label: str
+    style: int
+    emoji: Optional[Dict[str, Any]] = None

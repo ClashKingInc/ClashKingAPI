@@ -13,6 +13,8 @@ from utils.utils import upload_html_to_cdn
 
 from .models import (
     ApproveMessage,
+    CreateButtonRequest,
+    CreatePanelRequest,
     MessageResponse,
     OpenTicket,
     OpenTicketsResponse,
@@ -22,6 +24,7 @@ from .models import (
     TicketButtonSettings,
     TicketPanel,
     TicketPanelsResponse,
+    UpdateButtonAppearanceRequest,
     UpdateOpenTicketClanRequest,
     UpdateOpenTicketStatusRequest,
     UpdateApproveMessagesRequest,
@@ -505,6 +508,142 @@ async def get_ticket_panels(
     embed_docs = await mongo.embeds.find({"server": server_id}, {"_id": 0, "name": 1}).to_list(length=None)
     available_embeds = sorted([doc.get("name") for doc in embed_docs if doc.get("name")])
     return TicketPanelsResponse(items=panels, total=len(panels), available_embeds=available_embeds)
+
+
+@router.post("/{server_id}/tickets")
+@linkd.ext.fastapi.inject
+@check_authentication
+async def create_ticket_panel(
+    server_id: int,
+    body: CreatePanelRequest,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> MessageResponse:
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Panel name cannot be empty")
+    existing = await mongo.ticketing.find_one({"server_id": server_id, "name": name})
+    if existing:
+        raise HTTPException(status_code=409, detail="A panel with this name already exists")
+    await mongo.ticketing.insert_one({"server_id": server_id, "name": name, "components": []})
+    return MessageResponse(message="Panel created successfully")
+
+
+@router.delete("/{server_id}/tickets/{panel_name}")
+@linkd.ext.fastapi.inject
+@check_authentication
+async def delete_ticket_panel(
+    server_id: int,
+    panel_name: str,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> MessageResponse:
+    result = await mongo.ticketing.delete_one({"server_id": server_id, "name": panel_name})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    return MessageResponse(message="Panel deleted successfully")
+
+
+@router.post("/{server_id}/tickets/{panel_name}/buttons")
+@linkd.ext.fastapi.inject
+@check_authentication
+async def create_button(
+    server_id: int,
+    panel_name: str,
+    body: CreateButtonRequest,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> MessageResponse:
+    panel = await mongo.ticketing.find_one({"server_id": server_id, "name": panel_name})
+    if not panel:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    components = panel.get("components") or []
+    if len(components) >= 5:
+        raise HTTPException(status_code=400, detail="A panel can have at most 5 buttons")
+    import time
+    custom_id = f"{panel_name}_{int(time.time() * 1000)}"
+    new_component = {
+        "type": 2,
+        "style": body.style,
+        "label": body.label,
+        "custom_id": custom_id,
+    }
+    if body.emoji:
+        new_component["emoji"] = body.emoji
+    await mongo.ticketing.update_one(
+        {"server_id": server_id, "name": panel_name},
+        {"$push": {"components": new_component}},
+    )
+    return MessageResponse(message="Button added successfully")
+
+
+@router.delete("/{server_id}/tickets/{panel_name}/buttons/{custom_id}")
+@linkd.ext.fastapi.inject
+@check_authentication
+async def delete_button(
+    server_id: int,
+    panel_name: str,
+    custom_id: str,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> MessageResponse:
+    panel = await mongo.ticketing.find_one({"server_id": server_id, "name": panel_name})
+    if not panel:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    components = panel.get("components") or []
+    if not any(c.get("custom_id") == custom_id for c in components):
+        raise HTTPException(status_code=404, detail="Button not found in panel")
+    await mongo.ticketing.update_one(
+        {"server_id": server_id, "name": panel_name},
+        {
+            "$pull": {"components": {"custom_id": custom_id}},
+            "$unset": {f"{custom_id}_settings": ""},
+        },
+    )
+    return MessageResponse(message="Button deleted successfully")
+
+
+@router.patch("/{server_id}/tickets/{panel_name}/buttons/{custom_id}")
+@linkd.ext.fastapi.inject
+@check_authentication
+async def update_button_appearance(
+    server_id: int,
+    panel_name: str,
+    custom_id: str,
+    body: UpdateButtonAppearanceRequest,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> MessageResponse:
+    panel = await mongo.ticketing.find_one({"server_id": server_id, "name": panel_name})
+    if not panel:
+        raise HTTPException(status_code=404, detail="Panel not found")
+    components = panel.get("components") or []
+    if not any(c.get("custom_id") == custom_id for c in components):
+        raise HTTPException(status_code=404, detail="Button not found in panel")
+    update_fields: dict = {
+        "components.$[elem].label": body.label,
+        "components.$[elem].style": body.style,
+    }
+    if body.emoji is not None:
+        update_fields["components.$[elem].emoji"] = body.emoji
+    else:
+        update_fields["components.$[elem].emoji"] = None
+    await mongo.ticketing.update_one(
+        {"server_id": server_id, "name": panel_name},
+        {"$set": update_fields},
+        array_filters=[{"elem.custom_id": custom_id}],
+    )
+    return MessageResponse(message="Button appearance updated successfully")
 
 
 @router.get("/{server_id}/tickets/open")

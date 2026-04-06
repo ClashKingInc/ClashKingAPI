@@ -1,0 +1,5563 @@
+basePath: /
+definitions:
+  accounts.cocAccountRequest:
+    properties:
+      api_token:
+        type: string
+      player_tag:
+        type: string
+      player_token:
+        type: string
+    type: object
+  accounts.reorderAccountsRequest:
+    properties:
+      ordered_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  authmodule.authResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/authmodule.userInfo'
+    type: object
+  authmodule.discordOAuthRequest:
+    properties:
+      code:
+        type: string
+      code_verifier:
+        type: string
+      device_id:
+        type: string
+      device_name:
+        type: string
+      redirect_uri:
+        type: string
+    type: object
+  authmodule.emailAuthRequest:
+    properties:
+      device_id:
+        type: string
+      device_name:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  authmodule.emailCodeRequest:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    type: object
+  authmodule.emailRegisterRequest:
+    properties:
+      device_id:
+        type: string
+      device_name:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  authmodule.forgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    type: object
+  authmodule.refreshTokenRequest:
+    properties:
+      device_id:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  authmodule.resetPasswordRequest:
+    properties:
+      device_id:
+        type: string
+      device_name:
+        type: string
+      email:
+        type: string
+      new_password:
+        type: string
+      reset_code:
+        type: string
+    type: object
+  authmodule.userInfo:
+    properties:
+      avatar_url:
+        type: string
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  clan.clanTagsBody:
+    properties:
+      clan_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  clan.playerTagsBody:
+    properties:
+      player_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  guilds.guildDetails:
+    properties:
+      banner:
+        type: string
+      boost_count:
+        type: integer
+      description:
+        type: string
+      features:
+        items:
+          type: string
+        type: array
+      icon:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      owner_id:
+        type: string
+      premium_tier:
+        type: integer
+    type: object
+  guilds.guildInfo:
+    properties:
+      features:
+        items:
+          type: string
+        type: array
+      has_bot:
+        type: boolean
+      icon:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      owner:
+        type: boolean
+      permissions:
+        type: string
+      role:
+        type: string
+    type: object
+  mobile.playerTagsRequest:
+    properties:
+      clan_tags:
+        additionalProperties:
+          type: string
+        type: object
+      player_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  v1capital.clanTagsBody:
+    properties:
+      clan_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  war.clanTagsBody:
+    properties:
+      clan_tags:
+        items:
+          type: string
+        type: array
+    type: object
+  war.warPlayersBody:
+    properties:
+      players:
+        items:
+          type: string
+        type: array
+    type: object
+info:
+  contact: {}
+  description: Go Fiber rewrite of the ClashKing API.
+  title: ClashKingAPI
+  version: 2.0.0
+paths:
+  /capital/{clan_tag}:
+    get:
+      description: Returns raid weekend logs for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Log of Raid Weekends
+      tags:
+      - Clan Capital Endpoints
+  /capital/bulk:
+    post:
+      description: Returns raid weekend documents for up to one hundred clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1capital.clanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Fetch Raid Weekends in Bulk
+      tags:
+      - Clan Capital Endpoints
+  /capital/stats/district:
+    get:
+      description: Returns capital raid weekends for the requested weekend.
+      parameters:
+      - description: Weekend
+        in: query
+        name: weekend
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Capital district stats
+      tags:
+      - Clan Capital Endpoints
+  /capital/stats/leagues:
+    get:
+      description: Returns capital raid weekends grouped as league stats for the requested
+        weekend.
+      parameters:
+      - description: Weekend
+        in: query
+        name: weekend
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Capital league stats
+      tags:
+      - Clan Capital Endpoints
+  /clan/{clan_tag}/basic:
+    get:
+      description: Returns the cached clan object for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Basic Clan Object
+      tags:
+      - Clan Endpoints
+  /clan/{clan_tag}/historical:
+    get:
+      description: Returns historical player data for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Historical data for a clan
+      tags:
+      - Clan Endpoints
+  /clan/{clan_tag}/join-leave:
+    get:
+      description: Returns join and leave history for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Join leaves in a season
+      tags:
+      - Clan Endpoints
+  /clan/search:
+    get:
+      description: Returns clans filtered by location, membership, and limit options.
+      parameters:
+      - description: Location ID
+        in: query
+        name: location_id
+        type: integer
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - description: Include member list
+        in: query
+        name: member_list
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search clans by filtering
+      tags:
+      - Clan Endpoints
+  /v2/activity/guild-summary:
+    get:
+      description: Returns clan and member activity totals for a Discord guild.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get guild activity summary
+      tags:
+      - Activity & Inactivity
+  /v2/activity/inactive-players:
+    get:
+      description: Returns players in the guild that are considered inactive by the
+        provided threshold.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      - description: Days before a player is considered inactive
+        in: query
+        name: inactive_threshold_days
+        type: integer
+      - description: Minimum town hall
+        in: query
+        name: min_townhall
+        type: integer
+      - description: Restrict results to a single clan
+        in: query
+        name: clan_tag
+        type: string
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - description: Number of results to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get inactive players
+      tags:
+      - Activity & Inactivity
+  /v2/auth/discord:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges Discord OAuth credentials for a ClashKing session.
+      parameters:
+      - description: Discord OAuth payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.discordOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authmodule.authResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Authenticate with Discord
+      tags:
+      - App Authentication
+  /v2/auth/email:
+    post:
+      consumes:
+      - application/json
+      description: Validates email/password credentials and returns access and refresh
+        tokens.
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.emailAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authmodule.authResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Authenticate with email
+      tags:
+      - App Authentication
+  /v2/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Issues a password reset code for the matching email account.
+      parameters:
+      - description: Forgot password payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.forgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Request password reset
+      tags:
+      - App Authentication
+  /v2/auth/link-discord:
+    post:
+      description: Placeholder endpoint for Discord account linking.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link Discord to an existing account
+      tags:
+      - App Authentication
+  /v2/auth/link-email:
+    post:
+      consumes:
+      - application/json
+      description: Attaches email credentials to the authenticated account.
+      parameters:
+      - description: Link email payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.emailRegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link Email to an existing Discord account
+      tags:
+      - App Authentication
+  /v2/auth/me:
+    get:
+      description: Returns the authenticated user's current profile information.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authmodule.userInfo'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get current user information
+      tags:
+      - App Authentication
+  /v2/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Validates a refresh token and returns a new access token for the
+        same user.
+      parameters:
+      - description: Refresh token payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.refreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh the access token
+      tags:
+      - App Authentication
+  /v2/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a pending email registration and issues a verification
+        code.
+      parameters:
+      - description: Registration payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.emailRegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register with email
+      tags:
+      - App Authentication
+  /v2/auth/resend-verification:
+    post:
+      consumes:
+      - application/json
+      description: Resends the verification code for a pending email registration.
+      parameters:
+      - description: Email payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.forgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Gone
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resend verification email
+      tags:
+      - App Authentication
+  /v2/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Validates a password reset token and updates the account password.
+      parameters:
+      - description: Reset password payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.resetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authmodule.authResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Reset password with token
+      tags:
+      - App Authentication
+  /v2/auth/verify-email-code:
+    post:
+      consumes:
+      - application/json
+      description: Confirms a pending email registration by checking the verification
+        code and creates the account session.
+      parameters:
+      - description: Verification payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/authmodule.emailCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/authmodule.authResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify email address with 6-digit code
+      tags:
+      - App Authentication
+  /v2/capital/guild-leaderboard:
+    get:
+      description: Returns a capital leaderboard for all clans attached to the requested
+        guild.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      - description: Season filter
+        in: query
+        name: season
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get capital guild leaderboard
+      tags:
+      - Capital Raids
+  /v2/capital/player-stats:
+    get:
+      description: Returns raid weekend player rows for the requested guild and clan
+        tags.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        required: true
+        type: array
+      - description: Season filter
+        in: query
+        name: season
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      - description: Number of rows to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get capital player statistics
+      tags:
+      - Capital Raids
+  /v2/clan/{clan_tag}/board/totals:
+    get:
+      description: Returns aggregate board totals for one or more player tags.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Player tags
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/clan.playerTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get aggregated board totals for a clan
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/details:
+    get:
+      description: Returns the live clan object for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get full stats for a single clan
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/donations/{season}:
+    get:
+      description: Returns donation totals for a single clan and season.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Season
+        in: path
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan donations
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/join-leave:
+    get:
+      description: Returns join and leave history for a single clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - description: Start timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Join Leaves in a season
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/members:
+    get:
+      description: Returns the current members for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Clan Members
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/ranking:
+    get:
+      description: Returns the cached ranking document for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get ranking of a clan
+      tags:
+      - Clan
+  /v2/clan/compo:
+    get:
+      description: Returns town hall, role, and league composition for the requested
+        clan tags.
+      parameters:
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get composition of a clan or clans
+      tags:
+      - Clan
+  /v2/clan/donations/{season}:
+    get:
+      description: Returns donation totals for multiple clans in a season.
+      parameters:
+      - description: Season
+        in: path
+        name: season
+        required: true
+        type: string
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get donations for many clans
+      tags:
+      - Clan
+  /v2/clans/capital-raids:
+    post:
+      description: Returns raid weekend documents for the requested clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/clan.clanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get capital raids for a list of clans
+      tags:
+      - Clan
+  /v2/clans/details:
+    post:
+      description: Returns detailed clan objects for the requested clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/clan.clanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get full stats for a list of clans
+      tags:
+      - Clan
+  /v2/clans/join-leave:
+    post:
+      description: Returns join and leave history for multiple clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/clan.clanTagsBody'
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - description: Start timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Join leaves for many clans
+      tags:
+      - Clan
+  /v2/config/public:
+    get:
+      description: Returns client-safe configuration values.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get public configuration
+      tags:
+      - Configuration
+  /v2/cwl/{clan_tag}/ranking-history:
+    get:
+      description: Returns CWL ranking history rows for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: CWL ranking history for a clan
+      tags:
+      - War
+  /v2/cwl/league-thresholds:
+    get:
+      description: Returns the static CWL promotion and demotion thresholds list.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Promo and demotion thresholds for CWL leagues
+      tags:
+      - War
+  /v2/dates/current:
+    get:
+      description: Returns current season and event date identifiers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current dates
+      tags:
+      - Dates
+  /v2/dates/raid-weekends:
+    get:
+      description: Returns the current raid weekend or a list of recent raid weekend
+        dates.
+      parameters:
+      - description: Number of raid weekends to return
+        in: query
+        name: number_of_weeks
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get raid weekend dates
+      tags:
+      - Dates
+  /v2/dates/season-raid-dates:
+    get:
+      description: Returns raid weekend dates for the requested season.
+      parameters:
+      - description: Season in YYYY-MM format
+        in: query
+        name: season
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get season raid dates
+      tags:
+      - Dates
+  /v2/dates/season-start-end:
+    get:
+      description: Returns RFC3339 season boundaries for the requested season identifier.
+      parameters:
+      - description: Season in YYYY-MM format
+        in: query
+        name: season
+        type: string
+      - description: Use gold pass season boundaries
+        in: query
+        name: gold_pass_season
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get season start/end
+      tags:
+      - Dates
+  /v2/dates/seasons:
+    get:
+      description: Returns the current season or a list of previous seasons.
+      parameters:
+      - description: Number of seasons to return
+        in: query
+        name: number_of_seasons
+        type: integer
+      - description: Return seasons as text
+        in: query
+        name: as_text
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get season dates
+      tags:
+      - Dates
+  /v2/guild/{server_id}:
+    get:
+      description: Returns guild metadata for the requested server identifier.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/guilds.guildDetails'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get guild details by ID
+      tags:
+      - Guild
+  /v2/guilds:
+    get:
+      description: Returns the authenticated user's guilds and whether the bot is
+        present.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/guilds.guildInfo'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get user guilds with bot status
+      tags:
+      - Guilds
+  /v2/legends/daily-tracking:
+    get:
+      description: Returns daily tracking rows for a guild and optional day.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      - description: Day in YYYY-MM-DD format
+        in: query
+        name: day
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get legends daily tracking
+      tags:
+      - Bot Legends Endpoints
+  /v2/legends/guild-stats:
+    get:
+      description: Returns legends leaderboard and player stats for a guild.
+      parameters:
+      - description: Discord guild ID
+        in: query
+        name: guild_id
+        required: true
+        type: integer
+      - description: Season
+        in: query
+        name: season
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get guild legends statistics
+      tags:
+      - Bot Legends Endpoints
+  /v2/mobile/initialization:
+    post:
+      consumes:
+      - application/json
+      description: Returns a minimal initialization payload for the mobile app based
+        on the supplied player tags.
+      parameters:
+      - description: Initialization payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/mobile.playerTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Initialize all account data for mobile app
+      tags:
+      - Mobile App
+  /v2/mobile/public-config:
+    get:
+      description: Returns client-safe configuration values for the mobile app.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get public app configuration
+      tags:
+      - Mobile App
+  /v2/roster:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create roster
+      tags:
+      - Rosters
+  /v2/roster-automation:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create roster automation
+      tags:
+      - Rosters
+  /v2/roster-automation/{automation_id}:
+    delete:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Automation ID
+        in: path
+        name: automation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete roster automation
+      tags:
+      - Rosters
+    patch:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Automation ID
+        in: path
+        name: automation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update roster automation
+      tags:
+      - Rosters
+  /v2/roster-automation/list:
+    get:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roster automation
+      tags:
+      - Rosters
+  /v2/roster-group:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create roster group
+      tags:
+      - Rosters
+  /v2/roster-group/{group_id}:
+    delete:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Group ID
+        in: path
+        name: group_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete roster group
+      tags:
+      - Rosters
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Group ID
+        in: path
+        name: group_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get roster group
+      tags:
+      - Rosters
+    patch:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Group ID
+        in: path
+        name: group_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update roster group
+      tags:
+      - Rosters
+  /v2/roster-group/list:
+    get:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roster groups
+      tags:
+      - Rosters
+  /v2/roster-signup-category:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create roster signup category
+      tags:
+      - Rosters
+  /v2/roster-signup-category/{custom_id}:
+    delete:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Custom ID
+        in: path
+        name: custom_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete roster signup category
+      tags:
+      - Rosters
+    patch:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Custom ID
+        in: path
+        name: custom_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update roster signup category
+      tags:
+      - Rosters
+  /v2/roster-signup-category/list:
+    get:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roster signup categories
+      tags:
+      - Rosters
+  /v2/roster-token:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Generate roster token
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}:
+    delete:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete roster
+      tags:
+      - Rosters
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get roster
+      tags:
+      - Rosters
+    patch:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update roster
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}/clone:
+    post:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Clone roster
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}/members:
+    post:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Manage roster members
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}/members/{member_tag}:
+    patch:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      - description: Member tag
+        in: path
+        name: member_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update roster member
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}/members/{member_tag}/refresh:
+    post:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      - description: Member tag
+        in: path
+        name: member_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh roster member
+      tags:
+      - Rosters
+  /v2/roster/{roster_id}/members/{player_tag}:
+    delete:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove roster member
+      tags:
+      - Rosters
+  /v2/roster/{server_id}/list:
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List rosters
+      tags:
+      - Rosters
+  /v2/roster/missing-members:
+    get:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get missing members
+      tags:
+      - Rosters
+  /v2/roster/refresh:
+    post:
+      description: Currently returns not implemented.
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh rosters
+      tags:
+      - Rosters
+  /v2/roster/server/{server_id}/members:
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server clan members
+      tags:
+      - Rosters
+  /v2/server/{server_id}/all-roles:
+    get:
+      description: Returns every configured role group for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all roles
+      tags:
+      - Role Management
+  /v2/server/{server_id}/autoboards:
+    get:
+      description: Returns the configured autoboards and counts for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server autoboards
+      tags:
+      - Server AutoBoards
+    post:
+      consumes:
+      - application/json
+      description: Creates a new autoboard for the given server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Autoboard payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create an autoboard
+      tags:
+      - Server AutoBoards
+  /v2/server/{server_id}/autoboards/{autoboard_id}:
+    delete:
+      description: Deletes an existing autoboard by ID.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Autoboard ID
+        in: path
+        name: autoboard_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete an autoboard
+      tags:
+      - Server AutoBoards
+    patch:
+      consumes:
+      - application/json
+      description: Updates an existing autoboard by ID.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Autoboard ID
+        in: path
+        name: autoboard_id
+        required: true
+        type: string
+      - description: Autoboard payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update an autoboard
+      tags:
+      - Server AutoBoards
+  /v2/server/{server_id}/bans:
+    get:
+      description: Returns the ban list for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get bans
+      tags:
+      - Server Bans
+  /v2/server/{server_id}/bans/{player_tag}:
+    delete:
+      description: Deletes the ban entry for the given player tag on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a ban
+      tags:
+      - Server Bans
+    post:
+      consumes:
+      - application/json
+      description: Creates a ban entry or updates the existing one for the given player
+        tag.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Ban payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Add or update a ban
+      tags:
+      - Server Bans
+  /v2/server/{server_id}/channels:
+    get:
+      description: Returns an empty list for endpoints that currently have no backing
+        data in the Go port.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get an empty item list
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/clan-logs:
+    get:
+      description: Returns the full clan log documents for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all clan logs
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/clan/{clan_tag}/countdowns:
+    get:
+      description: Returns the configured countdown state for a clan on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get clan countdowns status
+      tags:
+      - Countdowns
+  /v2/server/{server_id}/clan/{clan_tag}/logs:
+    delete:
+      description: Clears the stored logs document for the given clan on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete clan logs
+      tags:
+      - Server Logs
+    put:
+      consumes:
+      - application/json
+      description: Replaces the stored logs document for the given clan on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Logs payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update clan logs
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/clan/{clan_tag}/settings:
+    get:
+      description: Returns the stored clan settings document for the given server
+        and clan tag.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get clan settings for a server
+      tags:
+      - Server Settings
+    patch:
+      consumes:
+      - application/json
+      description: Updates the stored settings for a clan attached to a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Clan settings payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update clan settings
+      tags:
+      - Clan Settings
+  /v2/server/{server_id}/clans:
+    get:
+      description: Returns the clans stored on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server clans
+      tags:
+      - Clan Settings
+    post:
+      consumes:
+      - application/json
+      description: Adds a clan to the server configuration.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Add clan
+      tags:
+      - Clan Settings
+  /v2/server/{server_id}/clans-basic:
+    get:
+      description: Returns a lightweight list of clans for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server clans basic
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/clans/{clan_tag}:
+    delete:
+      description: Removes a clan from the server configuration.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove clan
+      tags:
+      - Clan Settings
+  /v2/server/{server_id}/countdowns:
+    delete:
+      consumes:
+      - application/json
+      description: Disables a countdown for the server or a clan, depending on the
+        countdown type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Countdown payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Disable a countdown
+      tags:
+      - Countdowns
+    get:
+      description: Returns the configured countdown state for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server countdowns status
+      tags:
+      - Countdowns
+    post:
+      consumes:
+      - application/json
+      description: Enables a countdown for the server or a clan, depending on the
+        countdown type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Countdown payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Enable a countdown
+      tags:
+      - Countdowns
+  /v2/server/{server_id}/discord-channels:
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get discord channels
+      tags:
+      - Rosters
+  /v2/server/{server_id}/discord-roles:
+    get:
+      description: Returns an empty list for endpoints that currently have no backing
+        data in the Go port.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get an empty item list
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/discord-test:
+    get:
+      description: Currently returns not implemented.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Test discord API
+      tags:
+      - Rosters
+  /v2/server/{server_id}/embed-color/{hex_code}:
+    put:
+      description: Updates the Discord embed color stored for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Embed color hex code
+        in: path
+        name: hex_code
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update server embed color
+      tags:
+      - Server Settings
+  /v2/server/{server_id}/family-roles:
+    get:
+      description: Returns family role documents for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get family roles
+      tags:
+      - Family Roles
+    post:
+      consumes:
+      - application/json
+      description: Creates a family role entry for the requested role type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Family role payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Add family role
+      tags:
+      - Family Roles
+  /v2/server/{server_id}/family-roles/{role_type}/{role_id}:
+    delete:
+      description: Deletes a family role entry for the requested role type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role type
+        in: path
+        name: role_type
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove family role
+      tags:
+      - Family Roles
+  /v2/server/{server_id}/links:
+    get:
+      description: Returns member link data grouped by Discord user ID for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server links
+      tags:
+      - Server Links
+  /v2/server/{server_id}/links/{user_discord_id}/{player_tag}:
+    delete:
+      description: Removes a single player tag from a Discord member on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Discord user ID
+        in: path
+        name: user_discord_id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Unlink account from member
+      tags:
+      - Server Links
+  /v2/server/{server_id}/links/bulk-unlink:
+    post:
+      consumes:
+      - application/json
+      description: Removes multiple player tags from a Discord member on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Bulk unlink payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Bulk unlink accounts from member
+      tags:
+      - Server Links
+  /v2/server/{server_id}/logs:
+    get:
+      description: Returns the configured log wiring for the server and its clans.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server logs
+      tags:
+      - Server Logs
+    put:
+      consumes:
+      - application/json
+      description: Updates the configured webhook/thread pairs for one or more server
+        log categories.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Log configuration payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update server logs
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/logs/{log_type}:
+    patch:
+      consumes:
+      - application/json
+      description: Updates the stored configuration for a specific server log type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Log type
+        in: path
+        name: log_type
+        required: true
+        type: string
+      - description: Log type payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update log type
+      tags:
+      - Server Logs
+  /v2/server/{server_id}/reminders:
+    get:
+      description: Returns reminders grouped by reminder type for the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server reminders
+      tags:
+      - Server Reminders
+    post:
+      consumes:
+      - application/json
+      description: Creates a reminder for the given server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Reminder payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a reminder
+      tags:
+      - Server Reminders
+  /v2/server/{server_id}/reminders/{reminder_id}:
+    delete:
+      description: Deletes an existing reminder for the given server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Reminder ID
+        in: path
+        name: reminder_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a reminder
+      tags:
+      - Server Reminders
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing reminder for the given server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Reminder ID
+        in: path
+        name: reminder_id
+        required: true
+        type: string
+      - description: Reminder payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a reminder
+      tags:
+      - Server Reminders
+  /v2/server/{server_id}/role-settings:
+    get:
+      description: Returns the server's role settings document.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get role settings
+      tags:
+      - Role Management
+    patch:
+      consumes:
+      - application/json
+      description: Applies a partial update to the server's role settings.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role settings payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update role settings
+      tags:
+      - Role Management
+  /v2/server/{server_id}/roles/{role_type}:
+    get:
+      description: Returns the configured roles for the requested role type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role type
+        in: path
+        name: role_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roles by type
+      tags:
+      - Role Management
+    post:
+      consumes:
+      - application/json
+      description: Creates a role for the requested role type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role type
+        in: path
+        name: role_type
+        required: true
+        type: string
+      - description: Role payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create role
+      tags:
+      - Role Management
+  /v2/server/{server_id}/roles/{role_type}/{role_id}:
+    delete:
+      description: Deletes a role for the requested role type.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role type
+        in: path
+        name: role_type
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete role
+      tags:
+      - Role Management
+  /v2/server/{server_id}/settings:
+    get:
+      description: Returns the stored settings for a server, optionally including
+        clan settings.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Include clan settings
+        in: query
+        name: clan_settings
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get settings for a server
+      tags:
+      - Server Settings
+    patch:
+      consumes:
+      - application/json
+      description: Applies a partial update to the server settings document.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update server settings
+      tags:
+      - Server Settings
+  /v2/server/{server_id}/strikes:
+    get:
+      description: Returns strike list entries for the server, optionally filtered
+        by player tag or expiry state.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Player tag
+        in: query
+        name: player_tag
+        type: string
+      - description: Include expired strikes
+        in: query
+        name: view_expired
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get strikes
+      tags:
+      - Server Strikes
+  /v2/server/{server_id}/strikes/{player_tag}:
+    post:
+      consumes:
+      - application/json
+      description: Creates a strike entry for a player on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Strike payload
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Add strike
+      tags:
+      - Server Strikes
+  /v2/server/{server_id}/strikes/{strike_id}:
+    delete:
+      description: Removes a strike entry from the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Strike ID
+        in: path
+        name: strike_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete strike
+      tags:
+      - Server Strikes
+  /v2/server/{server_id}/strikes/player/{player_tag}/summary:
+    get:
+      description: Returns strike summary information for a single player on the server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get player strike summary
+      tags:
+      - Server Strikes
+  /v2/server/{server_id}/threads:
+    get:
+      description: Returns an empty list for endpoints that currently have no backing
+        data in the Go port.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get an empty item list
+      tags:
+      - Server Logs
+  /v2/static/{category}:
+    get:
+      description: Returns static items for a category, with optional filters applied.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Locale code
+        in: query
+        name: locale
+        type: string
+      - description: Substring to filter item names
+        in: query
+        name: name
+        type: string
+      - description: Village filter
+        in: query
+        name: village
+        type: string
+      - description: Type filter
+        in: query
+        name: type
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category items
+      tags:
+      - Static Data
+  /v2/static/{category}/{item_id_or_name}:
+    get:
+      description: Returns a static data item resolved by item ID or name.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Item ID or name
+        in: path
+        name: item_id_or_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category item by id
+      tags:
+      - Static Data
+  /v2/static/{category}/{item_id_or_name}/maxlevel:
+    get:
+      description: Returns the highest level defined for a static item.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Item ID or name
+        in: path
+        name: item_id_or_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item max level
+      tags:
+      - Static Data
+  /v2/static/{category}/names:
+    get:
+      description: Returns the names of static items for a category, with optional
+        filters applied.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Locale code
+        in: query
+        name: locale
+        type: string
+      - description: Substring to filter item names
+        in: query
+        name: name
+        type: string
+      - description: Village filter
+        in: query
+        name: village
+        type: string
+      - description: Type filter
+        in: query
+        name: type
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category names
+      tags:
+      - Static Data
+  /v2/static/categories:
+    get:
+      description: Returns all available static data categories and item counts.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get static categories
+      tags:
+      - Static Data
+  /v2/users/coc-accounts:
+    get:
+      description: Returns the authenticated user's linked Clash of Clans accounts
+        in order.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Clash of Clans accounts linked to a user
+      tags:
+      - Coc Accounts
+    post:
+      consumes:
+      - application/json
+      description: Links a Clash of Clans account to the authenticated user.
+      parameters:
+      - description: Account payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/accounts.cocAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link a Clash of Clans account to a user
+      tags:
+      - Coc Accounts
+  /v2/users/coc-accounts/{player_tag}:
+    delete:
+      description: Unlinks a Clash of Clans account from the authenticated user.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a linked Clash of Clans account
+      tags:
+      - Coc Accounts
+  /v2/users/coc-accounts/{player_tag}/status:
+    get:
+      description: Checks whether a Clash of Clans account is linked to any user.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Check if a Clash of Clans account is linked
+      tags:
+      - Coc Accounts
+  /v2/users/coc-accounts/{player_tag}/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verifies ownership of a linked account using the provided player
+        token.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Verification payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/accounts.cocAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Verify ownership of an existing linked Clash of Clans account
+      tags:
+      - Coc Accounts
+  /v2/users/coc-accounts/order:
+    put:
+      consumes:
+      - application/json
+      description: Reorders the authenticated user's linked Clash of Clans accounts.
+      parameters:
+      - description: Reorder payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/accounts.reorderAccountsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Reorder linked Clash of Clans accounts
+      tags:
+      - Coc Accounts
+  /v2/users/coc-accounts/verified:
+    post:
+      consumes:
+      - application/json
+      description: Links a Clash of Clans account to the authenticated user after
+        verifying the player token.
+      parameters:
+      - description: Verified account payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/accounts.cocAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link a Clash of Clans account to a user with verification
+      tags:
+      - Coc Accounts
+  /v2/war/{clan_tag}/previous:
+    get:
+      description: Returns previous wars for a clan tag, optionally filtered to CWL.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Include CWL wars
+        in: query
+        name: include_cwl
+        type: boolean
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Previous wars for a clan
+      tags:
+      - War
+  /v2/war/{clan_tag}/war-summary:
+    get:
+      description: Returns current war summary data for a single clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get war summary for a clan
+      tags:
+      - War
+  /v2/war/clan/stats:
+    get:
+      description: Returns the number of wars for the requested clan tags.
+      parameters:
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Single clan tag
+        in: query
+        name: clan_tag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Clan war stats
+      tags:
+      - War
+  /v2/war/clans/warhits:
+    post:
+      description: Returns war hit rows for the requested clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/war.clanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Clan warhits stats
+      tags:
+      - War
+  /v2/war/players/warhits:
+    post:
+      description: Returns war hit rows for the requested player tags.
+      parameters:
+      - description: Player tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/war.warPlayersBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Player warhits stats
+      tags:
+      - War
+  /v2/war/war-summary:
+    post:
+      description: Returns current war summary data for multiple clan tags.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/war.clanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get full war summary for multiple clans
+      tags:
+      - War
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

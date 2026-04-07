@@ -4,8 +4,8 @@ import linkd
 
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
+from datetime import timezone
 from utils.database import MongoClient
-from pytz import utc
 import dateutil.relativedelta
 
 router = APIRouter(tags=["List Endpoints"])
@@ -27,7 +27,7 @@ async def list_seasons(last: int = 12):
     last = min(last, 1000)
     dates = []
     for x in range(0, last + 1):
-        end = coc.utils.get_season_end().replace(tzinfo=utc) - dateutil.relativedelta.relativedelta(months=x)
+        end = coc.utils.get_season_end().replace(tzinfo=timezone.utc) - dateutil.relativedelta.relativedelta(months=x)
         month = end.month
         if end.month <= 9:
             month = f"0{month}"

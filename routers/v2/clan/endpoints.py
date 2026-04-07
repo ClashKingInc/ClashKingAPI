@@ -280,7 +280,7 @@ async def clan_join_leave(
     clan_tag: str,
     timestamp_start: int = Query(0),
     time_stamp_end: int = Query(9999999999),
-    season: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}$"),
+    season: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
     current_season: Optional[bool] = Query(False),
     limit: int = Query(50),
     filter_leave_join_enabled: bool = Query(False),
@@ -288,7 +288,7 @@ async def clan_join_leave(
     filter_time: Optional[int] = Query(86400),
     only_type: Optional[str] = Query(None, pattern="^(join_leave|leave_join)$"),
     townhall: Optional[list[int]] = Query(None),
-    type: Optional[str] = Query(None, regex="^(join|leave)$"),
+    type: Optional[str] = Query(None, pattern="^(join|leave)$"),
     tag: Optional[list[str]] = Query(None)
 ):
     """Get join/leave events for a clan with optional filtering.

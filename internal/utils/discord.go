@@ -2,14 +2,22 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/disgoorg/disgo/discord"
 	disgo "github.com/disgoorg/disgo/rest"
+	"github.com/disgoorg/snowflake/v2"
 )
 
 type DiscordAdapter struct {
 	cfg     Config
 	client  disgo.Rest
+	http    *http.Client
 	limiter <-chan time.Time
 }
 
@@ -18,6 +26,7 @@ func NewDiscordAdapter(cfg Config) (*DiscordAdapter, error) {
 	return &DiscordAdapter{
 		cfg:     cfg,
 		client:  client,
+		http:    &http.Client{Timeout: 15 * time.Second},
 		limiter: time.Tick(500 * time.Millisecond),
 	}, nil
 }
@@ -32,6 +41,93 @@ func (a *DiscordAdapter) wait() {
 func (a *DiscordAdapter) VerifyMember(_ context.Context, _ int64, _ int64) error {
 	a.wait()
 	return nil
+}
+
+// ExchangeCode exchanges a Discord OAuth authorization code for an access token using PKCE.
+func (a *DiscordAdapter) ExchangeCode(_ context.Context, code, codeVerifier, redirectURI string) (*discord.AccessTokenResponse, error) {
+	a.wait()
+	form := url.Values{}
+	form.Set("client_id", a.cfg.DiscordClientID)
+	form.Set("client_secret", a.cfg.DiscordClientSecret)
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", redirectURI)
+	form.Set("code_verifier", codeVerifier)
+
+	req, err := http.NewRequest(http.MethodPost, "https://discord.com/api/oauth2/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := a.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		var body struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		if body.ErrorDescription != "" {
+			return nil, fmt.Errorf("discord token exchange failed: %s", body.ErrorDescription)
+		}
+		if body.Error != "" {
+			return nil, fmt.Errorf("discord token exchange failed: %s", body.Error)
+		}
+		return nil, fmt.Errorf("discord token exchange failed with status %d", resp.StatusCode)
+	}
+
+	var token discord.AccessTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+// GetCurrentUser fetches the OAuth2 user associated with the bearer token.
+func (a *DiscordAdapter) GetCurrentUser(_ context.Context, bearerToken string) (*discord.OAuth2User, error) {
+	a.wait()
+	return a.client.GetCurrentUser(bearerToken)
+}
+
+// GetUserGuilds fetches the guilds the OAuth2 user belongs to using their bearer token.
+func (a *DiscordAdapter) GetUserGuilds(_ context.Context, bearerToken string) ([]discord.OAuth2Guild, error) {
+	a.wait()
+	return a.client.GetCurrentUserGuilds(bearerToken, 0, 0, 200, true)
+}
+
+// GetGuild fetches a guild by ID using the bot token.
+func (a *DiscordAdapter) GetGuild(_ context.Context, guildID int64) (*discord.RestGuild, error) {
+	a.wait()
+	return a.client.GetGuild(snowflake.ID(guildID), true)
+}
+
+// IsMember checks whether a user is a member of a guild (using bot token).
+func (a *DiscordAdapter) IsMember(_ context.Context, guildID, userID int64) bool {
+	a.wait()
+	_, err := a.client.GetMember(snowflake.ID(guildID), snowflake.ID(userID))
+	return err == nil
+}
+
+// IsInGuild reports whether the bot is present in the given guild (using bot token).
+func (a *DiscordAdapter) IsInGuild(_ context.Context, guildID int64) bool {
+	a.wait()
+	_, err := a.client.GetGuild(snowflake.ID(guildID), false)
+	return err == nil
+}
+
+// RefreshToken exchanges a Discord refresh token for a new access token.
+func (a *DiscordAdapter) RefreshToken(_ context.Context, refreshToken string) (*discord.AccessTokenResponse, error) {
+	a.wait()
+	clientID, err := snowflake.Parse(a.cfg.DiscordClientID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid discord client ID: %w", err)
+	}
+	return a.client.RefreshAccessToken(clientID, a.cfg.DiscordClientSecret, refreshToken)
 }
 
 func (a *DiscordAdapter) Close(context.Context) error { return nil }

@@ -136,7 +136,7 @@ func (a *App) registerRoutes(app *fiber.App) {
 
 	app.Post("/v2/auth/verify-email-code", routes.VerifyEmailCode(a.Deps))
 	app.Get("/v2/auth/me", a.wrap(routes.CurrentUser(a.Deps)))
-	app.Post("/v2/auth/discord", routes.DiscordAuth())
+	app.Post("/v2/auth/discord", routes.DiscordAuth(a.Deps))
 	app.Post("/v2/auth/refresh", routes.RefreshToken(a.Deps))
 	app.Post("/v2/auth/register", routes.Register(a.Deps))
 	app.Post("/v2/auth/resend-verification", routes.ResendVerification(a.Deps))
@@ -169,10 +169,26 @@ func (a *App) registerRoutes(app *fiber.App) {
 	app.Get("/v2/dates/season-start-end", routes.SeasonStartEnd())
 	app.Get("/v2/dates/season-raid-dates", routes.SeasonRaidDates())
 
-	app.Get("/v2/guilds", a.wrap(routes.GetUserGuilds()))
-	app.Get("/v2/guild/:server_id", a.wrap(routes.GetGuildDetails()))
+	app.Get("/v2/guilds", a.wrap(routes.GetUserGuilds(a.Deps)))
+	app.Get("/v2/guild/:server_id", a.wrap(routes.GetGuildDetails(a.Deps)))
 
 	app.Get("/v2/internal/bot/info", a.wrap(routes.BotInfo(a.Deps)))
+
+	app.Post("/v2/tracking/players/add", a.wrap(routes.AddTrackingPlayers(a.Deps)))
+	app.Post("/v2/tracking/players/remove", a.wrap(routes.RemoveTrackingPlayers(a.Deps)))
+
+	app.Get("/v2/search/clan", routes.SearchClan(a.Deps))
+	app.Get("/v2/search/:guild_id/banned-players", a.wrap(routes.SearchBannedPlayers(a.Deps)))
+	app.Post("/v2/search/bookmark/:user_id/:search_type/:tag", a.wrap(routes.BookmarkSearch(a.Deps)))
+	app.Post("/v2/search/recent/:user_id/:search_type/:tag", a.wrap(routes.RecentSearch(a.Deps)))
+	app.Post("/v2/search/groups/create/:user_id/:name/:search_type", a.wrap(routes.GroupCreate(a.Deps)))
+	app.Post("/v2/search/groups/:group_id/add/:tag", a.wrap(routes.GroupAdd(a.Deps)))
+	app.Post("/v2/search/groups/:group_id/remove/:tag", a.wrap(routes.GroupRemove(a.Deps)))
+	app.Get("/v2/search/groups/:group_id", a.wrap(routes.GroupGet(a.Deps)))
+	app.Get("/v2/search/groups/:user_id/list", a.wrap(routes.GroupList(a.Deps)))
+	app.Delete("/v2/search/groups/:group_id", a.wrap(routes.GroupDelete(a.Deps)))
+
+	app.Get("/v2/link/server/:server_id/clan/list", a.wrap(routes.GetServerClansBasic(a.Deps)))
 
 	app.Get("/v2/legends/players/day/:day", routes.LegendStatsDay(a.Deps))
 	app.Get("/v2/legends/players/season/:season", routes.LegendStatsSeason(a.Deps))
@@ -258,6 +274,25 @@ func (a *App) registerRoutes(app *fiber.App) {
 	app.Post("/v2/server/:server_id/bans/:player_tag", a.wrap(routes.AddBan(a.Deps)))
 	app.Delete("/v2/server/:server_id/bans/:player_tag", a.wrap(routes.RemoveBan(a.Deps)))
 	app.Get("/v2/server/:server_id/countdowns", a.wrap(routes.GetServerCountdowns(a.Deps)))
+
+	app.Get("/v2/server/:server_id/panel", a.wrap(routes.GetServerPanel(a.Deps)))
+	app.Put("/v2/server/:server_id/panel", a.wrap(routes.UpdateServerPanel(a.Deps)))
+
+	app.Get("/v2/server/:server_id/giveaways", a.wrap(routes.GetServerGiveaways(a.Deps)))
+	app.Get("/v2/server/:server_id/giveaways/:giveaway_id", a.wrap(routes.GetServerGiveaway(a.Deps)))
+	app.Post("/v2/server/:server_id/giveaways", a.wrap(routes.CreateServerGiveaway(a.Deps)))
+	app.Put("/v2/server/:server_id/giveaways/:giveaway_id", a.wrap(routes.UpdateServerGiveaway(a.Deps)))
+	app.Delete("/v2/server/:server_id/giveaways/:giveaway_id", a.wrap(routes.DeleteServerGiveaway(a.Deps)))
+	app.Post("/v2/server/:server_id/giveaways/:giveaway_id/reroll", a.wrap(routes.RerollGiveawayWinners(a.Deps)))
+
+	app.Get("/v2/server/:server_id/leaderboards", a.wrap(routes.GetServerLeaderboards(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/war-performance", a.wrap(routes.GetServerWarLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/donations", a.wrap(routes.GetServerDonationsLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/capital-raids", a.wrap(routes.GetServerCapitalRaidsLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/legends", a.wrap(routes.GetServerLegendsLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/clan-games", a.wrap(routes.GetServerClanGamesLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/activity", a.wrap(routes.GetServerActivityLeaderboard(a.Deps)))
+	app.Get("/v2/server/:server_id/leaderboards/looting", a.wrap(routes.GetServerLootingLeaderboard(a.Deps)))
 	app.Get("/v2/server/:server_id/clan/:clan_tag/countdowns", a.wrap(routes.GetClanCountdowns(a.Deps)))
 	app.Post("/v2/server/:server_id/countdowns", a.wrap(routes.EnableCountdown(a.Deps)))
 	app.Delete("/v2/server/:server_id/countdowns", a.wrap(routes.DisableCountdown(a.Deps)))

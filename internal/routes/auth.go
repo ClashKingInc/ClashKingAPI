@@ -12,9 +12,11 @@ import (
 
 	"github.com/ClashKingInc/ClashKingAPI/internal/models"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -149,11 +151,51 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 // @Param body body models.AuthDiscordOAuthRequest true "Discord OAuth payload"
 // @Success 200 {object} models.AuthResponse
 // @Failure 400 {object} map[string]interface{}
-// @Failure 501 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Router /v2/auth/discord [post]
-func discordAuth() fiber.Handler {
-	return func(_ *fiber.Ctx) error {
-		return apptypes.Error(fiber.StatusNotImplemented, "Discord OAuth is not implemented yet in the shared Discord adapter")
+func discordAuth(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body models.AuthDiscordOAuthRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		if strings.TrimSpace(body.Code) == "" || strings.TrimSpace(body.CodeVerifier) == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "Missing Discord code")
+		}
+		redirectURI := strings.TrimSpace(body.RedirectURI)
+		if redirectURI == "" {
+			redirectURI = a.Config.DiscordRedirectURI
+		}
+
+		token, err := a.Discord.ExchangeCode(c.UserContext(), body.Code, body.CodeVerifier, redirectURI)
+		if err != nil {
+			return apptypes.Error(fiber.StatusInternalServerError, err.Error())
+		}
+		if token.RefreshToken == "" {
+			return apptypes.Error(fiber.StatusInternalServerError, "Discord did not provide a refresh token")
+		}
+
+		discordUser, err := a.Discord.GetCurrentUser(c.UserContext(), token.AccessToken)
+		if err != nil {
+			return apptypes.Error(fiber.StatusInternalServerError, "Failed to fetch Discord user")
+		}
+
+		userID, err := upsertDiscordUser(c.UserContext(), a, discordUser)
+		if err != nil {
+			return err
+		}
+		if err := storeDiscordTokens(c.UserContext(), a, userID, body.DeviceID, body.DeviceName, token); err != nil {
+			return err
+		}
+
+		response, err := buildAuthResponse(a, userID, discordUser.EffectiveName(), body.DeviceID, discordUser.EffectiveAvatarURL())
+		if err != nil {
+			return err
+		}
+		if err := storeRefreshToken(c.UserContext(), a, userID, response.RefreshToken); err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
 }
 
@@ -693,4 +735,76 @@ func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) 
 		return nil, apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token signature.")
 	}
 	return claims, nil
+}
+
+func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discord.OAuth2User) (string, error) {
+	emailConditions := []bson.M{{"user_id": discordUser.ID.String()}}
+	if strings.TrimSpace(discordUser.Email) != "" {
+		emailConditions = append(emailConditions, bson.M{"email_hash": hashEmail(a, discordUser.Email)})
+	}
+
+	var existingUser map[string]any
+	_ = a.Store.C.Users.FindOne(ctx, bson.M{"$or": emailConditions}).Decode(&existingUser)
+
+	username := discordUser.EffectiveName()
+	if username == "" {
+		username = discordUser.Username
+	}
+	avatarURL := discordUser.EffectiveAvatarURL()
+
+	if existingUser != nil {
+		userID := authStringify(existingUser["user_id"])
+		if userID == "" {
+			userID = discordUser.ID.String()
+		}
+		authMethods := append(toStringSlice(existingUser["auth_methods"]), "discord")
+		update := bson.M{
+			"auth_methods": uniqueStrings(authMethods),
+			"username":     username,
+			"avatar_url":   avatarURL,
+		}
+		if strings.TrimSpace(discordUser.Email) != "" {
+			update["email_encrypted"] = apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(discordUser.Email)))
+			update["email_hash"] = hashEmail(a, discordUser.Email)
+		}
+		if _, err := a.Store.C.Users.UpdateOne(ctx, bson.M{"user_id": existingUser["user_id"]}, bson.M{"$set": update}); err != nil {
+			return "", err
+		}
+		return userID, nil
+	}
+
+	userID := discordUser.ID.String()
+	insert := bson.M{
+		"user_id":      userID,
+		"auth_methods": []string{"discord"},
+		"username":     username,
+		"avatar_url":   avatarURL,
+		"created_at":   time.Now().UTC(),
+	}
+	if strings.TrimSpace(discordUser.Email) != "" {
+		insert["email_encrypted"] = apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(discordUser.Email)))
+		insert["email_hash"] = hashEmail(a, discordUser.Email)
+	}
+	if _, err := a.Store.C.Users.InsertOne(ctx, insert); err != nil {
+		return "", err
+	}
+	return userID, nil
+}
+
+func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, deviceName string, token *discord.AccessTokenResponse) error {
+	update := bson.M{
+		"user_id":               userID,
+		"device_id":             deviceID,
+		"device_name":           deviceName,
+		"discord_access_token":  apptypes.EncryptToString(token.AccessToken),
+		"discord_refresh_token": apptypes.EncryptToString(token.RefreshToken),
+		"expires_at":            time.Now().UTC().Add(token.ExpiresIn),
+	}
+	_, err := a.Store.C.DiscordTokens.UpdateOne(
+		ctx,
+		bson.M{"user_id": userID, "device_id": deviceID, "device_name": deviceName},
+		bson.M{"$set": update},
+		options.UpdateOne().SetUpsert(true),
+	)
+	return err
 }

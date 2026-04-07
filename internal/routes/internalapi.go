@@ -13,7 +13,7 @@ import (
 func botInfo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		ctx := c.UserContext()
-		shardCur, err := a.Store.C.BotSync.Find(ctx, map[string]any{"bot_id": 824653933347209227}, options.Find())
+		shardCur, err := a.Store.C.BotSync.Find(ctx, map[string]any{"bot_id": int64(824653933347209227)}, options.Find())
 		if err != nil {
 			return err
 		}

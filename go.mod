@@ -54,4 +54,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace github.com/clashkinginc/clashy.go => /Users/matthewanderson/GolandProjects/clashy.go
+replace github.com/clashkinginc/clashy.go => ../clashy.go

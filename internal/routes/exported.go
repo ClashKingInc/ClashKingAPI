@@ -9,6 +9,10 @@ func AccountStatus(a apptypes.Deps) fiber.Handler { return accountStatus(a) }
 
 func AddBan(a apptypes.Deps) fiber.Handler { return addBan(a) }
 
+func AddTrackingPlayers(a apptypes.Deps) fiber.Handler { return addTrackingPlayers(a) }
+
+func BookmarkSearch(a apptypes.Deps) fiber.Handler { return bookmarkSearch(a) }
+
 func AddFamilyRole(a apptypes.Deps) fiber.Handler { return addFamilyRole(a) }
 
 func AddServerClan(a apptypes.Deps) fiber.Handler { return addServerClan(a) }
@@ -93,6 +97,8 @@ func DailyTracking(a apptypes.Deps) fiber.Handler { return dailyTracking(a) }
 
 func DeleteAutoboard(a apptypes.Deps) fiber.Handler { return deleteAutoboard(a) }
 
+func DeleteServerGiveaway(a apptypes.Deps) fiber.Handler { return deleteServerGiveaway(a) }
+
 func DeleteClanLogs(a apptypes.Deps) fiber.Handler { return deleteClanLogs(a) }
 
 func DeleteLink(a apptypes.Deps) fiber.Handler { return deleteLink(a) }
@@ -113,7 +119,7 @@ func DeleteStrike(a apptypes.Deps) fiber.Handler { return deleteStrike(a) }
 
 func DisableCountdown(a apptypes.Deps) fiber.Handler { return disableCountdown(a) }
 
-func DiscordAuth() fiber.Handler { return discordAuth() }
+func DiscordAuth(a apptypes.Deps) fiber.Handler { return discordAuth(a) }
 
 func DistrictStats(a apptypes.Deps) fiber.Handler { return districtStats(a) }
 
@@ -137,6 +143,46 @@ func GetAllRoles(a apptypes.Deps) fiber.Handler { return getAllRoles(a) }
 
 func GetAutoboards(a apptypes.Deps) fiber.Handler { return getAutoboards(a) }
 
+func GetServerGiveaway(a apptypes.Deps) fiber.Handler { return getServerGiveaway(a) }
+
+func GetServerGiveaways(a apptypes.Deps) fiber.Handler { return getServerGiveaways(a) }
+
+func GetServerLeaderboards(a apptypes.Deps) fiber.Handler { return getServerLeaderboards(a) }
+
+func GetServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerLegendsLeaderboard(a)
+}
+
+func GetServerPanel(a apptypes.Deps) fiber.Handler { return getServerPanel(a) }
+
+func GetServerWarLeaderboard(a apptypes.Deps) fiber.Handler { return getServerWarLeaderboard(a) }
+
+func GetServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerDonationsLeaderboard(a)
+}
+
+func GetServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerCapitalRaidsLeaderboard(a)
+}
+
+func GetServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerClanGamesLeaderboard(a)
+}
+
+func GetServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerActivityLeaderboard(a)
+}
+
+func GetServerLootingLeaderboard(a apptypes.Deps) fiber.Handler {
+	return getServerLootingLeaderboard(a)
+}
+
+func CreateServerGiveaway(a apptypes.Deps) fiber.Handler { return createServerGiveaway(a) }
+
+func UpdateServerGiveaway(a apptypes.Deps) fiber.Handler { return updateServerGiveaway(a) }
+
+func RerollGiveawayWinners(a apptypes.Deps) fiber.Handler { return rerollGiveawayWinners(a) }
+
 func GetBans(a apptypes.Deps) fiber.Handler { return getBans(a) }
 
 func GetClanCountdowns(a apptypes.Deps) fiber.Handler { return getClanCountdowns(a) }
@@ -145,7 +191,7 @@ func GetDiscordChannels() fiber.Handler { return getDiscordChannels() }
 
 func GetFamilyRoles(a apptypes.Deps) fiber.Handler { return getFamilyRoles(a) }
 
-func GetGuildDetails() fiber.Handler { return getGuildDetails() }
+func GetGuildDetails(a apptypes.Deps) fiber.Handler { return getGuildDetails(a) }
 
 func GetLinks(a apptypes.Deps) fiber.Handler { return getLinks(a) }
 
@@ -175,7 +221,19 @@ func GetServerSettings(a apptypes.Deps) fiber.Handler { return getServerSettings
 
 func GetStrikes(a apptypes.Deps) fiber.Handler { return getStrikes(a) }
 
-func GetUserGuilds() fiber.Handler { return getUserGuilds() }
+func GetUserGuilds(a apptypes.Deps) fiber.Handler { return getUserGuilds(a) }
+
+func GroupAdd(a apptypes.Deps) fiber.Handler { return groupAdd(a) }
+
+func GroupCreate(a apptypes.Deps) fiber.Handler { return groupCreate(a) }
+
+func GroupDelete(a apptypes.Deps) fiber.Handler { return groupDelete(a) }
+
+func GroupGet(a apptypes.Deps) fiber.Handler { return groupGet(a) }
+
+func GroupList(a apptypes.Deps) fiber.Handler { return groupList(a) }
+
+func GroupRemove(a apptypes.Deps) fiber.Handler { return groupRemove(a) }
 
 func GuildLeaderboard(a apptypes.Deps) fiber.Handler { return guildLeaderboard(a) }
 
@@ -239,6 +297,10 @@ func PutEmbedColor(a apptypes.Deps) fiber.Handler { return putEmbedColor(a) }
 
 func RaidWeekends() fiber.Handler { return raidWeekends }
 
+func RecentSearch(a apptypes.Deps) fiber.Handler { return recentSearch(a) }
+
+func RemoveTrackingPlayers(a apptypes.Deps) fiber.Handler { return removeTrackingPlayers(a) }
+
 func RefreshRosterMember() fiber.Handler { return refreshRosterMember() }
 
 func RefreshRosters() fiber.Handler { return refreshRosters() }
@@ -263,6 +325,10 @@ func ResendVerification(a apptypes.Deps) fiber.Handler { return resendVerificati
 
 func ResetPassword(a apptypes.Deps) fiber.Handler { return resetPassword(a) }
 
+func SearchBannedPlayers(a apptypes.Deps) fiber.Handler { return searchBannedPlayers(a) }
+
+func SearchClan(a apptypes.Deps) fiber.Handler { return searchClan(a) }
+
 func SeasonRaidDates() fiber.Handler { return seasonRaidDates }
 
 func SeasonStartEnd() fiber.Handler { return seasonStartEnd }
@@ -274,6 +340,8 @@ func StrikeSummary(a apptypes.Deps) fiber.Handler { return strikeSummary(a) }
 func TestDiscordAPI() fiber.Handler { return testDiscordAPI() }
 
 func UpdateAutoboard(a apptypes.Deps) fiber.Handler { return updateAutoboard(a) }
+
+func UpdateServerPanel(a apptypes.Deps) fiber.Handler { return updateServerPanel(a) }
 
 func UpdateReminder(a apptypes.Deps) fiber.Handler { return updateReminder(a) }
 

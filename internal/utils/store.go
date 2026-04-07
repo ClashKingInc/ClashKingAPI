@@ -43,6 +43,13 @@ type Collections struct {
 	Autoboards       *mongo.Collection
 	Links            *mongo.Collection
 	StrikeList       *mongo.Collection
+	Groups           *mongo.Collection
+	UserSettings     *mongo.Collection
+	BasicClan        *mongo.Collection
+	Giveaways        *mongo.Collection
+	LeaderboardDB    *mongo.Collection
+	ClanLeaderboardDB *mongo.Collection
+	ClanStats        *mongo.Collection
 }
 
 type Store struct {
@@ -103,6 +110,13 @@ func NewStore(ctx context.Context, cfg Config) (*Store, error) {
 			Autoboards:       db.ClashKing.Collection("autoboards"),
 			Links:            db.ClashKing.Collection("coc_accounts"),
 			StrikeList:       db.Usafam.Collection("strikes"),
+			Groups:           db.ClashKing.Collection("groups"),
+			UserSettings:     db.Usafam.Collection("user_settings"),
+			BasicClan:        db.Looper.Collection("clan_tags"),
+			Giveaways:        db.ClashKing.Collection("giveaways"),
+			LeaderboardDB:    db.NewLooper.Collection("leaderboard_db"),
+			ClanLeaderboardDB: db.NewLooper.Collection("clan_leaderboard_db"),
+			ClanStats:        db.NewLooper.Collection("clan_stats"),
 		},
 	}, nil
 }

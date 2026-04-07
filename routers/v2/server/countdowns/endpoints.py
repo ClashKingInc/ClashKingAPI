@@ -4,8 +4,6 @@ import hikari
 import linkd
 import logging
 from datetime import datetime
-from pytz import utc
-
 from utils.security import check_authentication
 from utils.database import MongoClient
 from utils.sentry_utils import capture_endpoint_errors

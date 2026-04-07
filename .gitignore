@@ -6,3 +6,4 @@
 *pycache*
 .venv/
 .claude/
+node_modules/

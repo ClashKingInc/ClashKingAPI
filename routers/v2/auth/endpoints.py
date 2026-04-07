@@ -11,7 +11,7 @@ from routers.v2.auth.utils import (
     encrypt_data, verify_password,
     hash_password, hash_email, prepare_email_for_storage, decrypt_data,
     generate_verification_code, safe_email_log, validate_expires_at,
-    store_refresh_token, create_auth_response,
+    store_refresh_token, create_auth_response, generate_refresh_token,
     validate_verification_record, handle_existing_user_email_verification,
     create_new_user_from_verification,
     generate_jwt, create_password_reset_token, send_password_reset_with_cleanup,
@@ -284,16 +284,22 @@ async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClie
             sentry_sdk.capture_message(f"Invalid refresh token signature: {str(e)}", level="warning")
             raise HTTPException(status_code=401, detail="Invalid refresh token signature.")
 
-        # Then check if it exists in database
-        stored_refresh_token = await mongo.auth_refresh_tokens.find_one({"refresh_token": request.refresh_token})
+        # Atomically consume the refresh token — prevents concurrent reuse
+        # Note: JWT expiry is already validated by decode_refresh_token() above,
+        # so no need to re-check expires_at on the DB document.
+        new_refresh_token = generate_refresh_token(str(user_id_from_token))
+        stored_refresh_token = await mongo.auth_refresh_tokens.find_one_and_update(
+            {"refresh_token": request.refresh_token},
+            {"$set": {
+                "refresh_token": new_refresh_token,
+                "expires_at": pend.now(tz=pend.UTC).add(days=30),
+            }},
+        )
 
         if not stored_refresh_token:
             sentry_sdk.capture_message(f"Refresh token not found in database for user: {user_id_from_token}",
                                        level="warning")
             raise HTTPException(status_code=401, detail="Invalid refresh token.")
-
-        if pend.now(tz=pend.UTC).int_timestamp > stored_refresh_token["expires_at"].timestamp():
-            raise HTTPException(status_code=401, detail="Expired refresh token. Please login again.")
 
         user_id = stored_refresh_token["user_id"]
 
@@ -305,7 +311,7 @@ async def refresh_access_token(request: RefreshTokenRequest, *, mongo: MongoClie
 
         new_access_token = generate_jwt(str(user_id), request.device_id)
 
-        return {"access_token": new_access_token}
+        return {"access_token": new_access_token, "refresh_token": new_refresh_token}
     except HTTPException:
         raise
     except Exception as e:

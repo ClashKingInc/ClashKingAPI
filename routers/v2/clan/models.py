@@ -23,7 +23,7 @@ class JoinLeaveQueryParams:
         timestamp_start: int = Query(0),
         time_stamp_end: int = Query(9999999999),
         season: Optional[str] = Query(
-            None, regex=r"^\d{4}-\d{2}$", description="Season format YYYY-MM"
+            None, pattern=r"^\d{4}-\d{2}$", description="Season format YYYY-MM"
         ),
         current_season: Optional[bool] = Query(False),
         limit: int = Query(50),
@@ -34,7 +34,7 @@ class JoinLeaveQueryParams:
             None, pattern="^(join_leave|leave_join)$"
         ),
         townhall: Optional[List[int]] = Query(None),
-        type: Optional[str] = Query(None, regex="^(join|leave)$"),
+        type: Optional[str] = Query(None, pattern="^(join|leave)$"),
         tag: Optional[List[str]] = Query(None),
         name_contains: Optional[str] = Query(None),
     ):

@@ -26,6 +26,7 @@ dependencies = [
     "pydantic>=2.10.3",
     "pyjwt",
     "pymongo>=4.5.0",
+    "python-multipart",
     "python-dotenv",
     "python-snappy",
     "redis",

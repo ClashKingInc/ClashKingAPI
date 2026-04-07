@@ -11,7 +11,6 @@ import aiohttp
 import coc
 import orjson
 import pendulum as pend
-import pytz
 from bson import json_util
 from dotenv import load_dotenv
 from fastapi import HTTPException

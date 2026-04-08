@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout clashy.go
+        uses: actions/checkout@v6
+        with:
+          repository: ClashKingInc/clashy.go
+          path: ../clashy.go
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -34,6 +40,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout clashy.go
+        uses: actions/checkout@v6
+        with:
+          repository: ClashKingInc/clashy.go
+          path: ../clashy.go
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -49,6 +61,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Checkout clashy.go
+        uses: actions/checkout@v6
+        with:
+          repository: ClashKingInc/clashy.go
+          path: ../clashy.go
 
       - name: Setup Go
         uses: actions/setup-go@v5

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -28,14 +29,42 @@ func Error(status int, detail string) error {
 func ErrorHandler(c *fiber.Ctx, err error) error {
 	var appErr *AppError
 	if errors.As(err, &appErr) {
+		if appErr.Status >= fiber.StatusInternalServerError {
+			Logger().Error("request_failed",
+				"request_id", RequestID(c),
+				"method", c.Method(),
+				"path", c.Path(),
+				"status", appErr.Status,
+				"error", appErr.Detail,
+				"user_id", UserID(c.UserContext()),
+			)
+		}
 		return JSON(c, appErr.Status, map[string]any{"detail": appErr.Detail})
 	}
 
 	var fiberErr *fiber.Error
 	if errors.As(err, &fiberErr) {
+		if fiberErr.Code >= fiber.StatusInternalServerError {
+			Logger().Error("request_failed",
+				"request_id", RequestID(c),
+				"method", c.Method(),
+				"path", c.Path(),
+				"status", fiberErr.Code,
+				"error", fiberErr.Message,
+				"user_id", UserID(c.UserContext()),
+			)
+		}
 		return JSON(c, fiberErr.Code, map[string]any{"detail": fiberErr.Message})
 	}
 
+	Logger().Log(context.Background(), slog.LevelError, "unhandled_error",
+		"request_id", RequestID(c),
+		"method", c.Method(),
+		"path", c.Path(),
+		"status", fiber.StatusInternalServerError,
+		"error", err.Error(),
+		"user_id", UserID(c.UserContext()),
+	)
 	return JSON(c, fiber.StatusInternalServerError, map[string]any{"detail": err.Error()})
 }
 

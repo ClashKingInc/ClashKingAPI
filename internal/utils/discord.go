@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,10 +101,111 @@ func (a *DiscordAdapter) GetUserGuilds(_ context.Context, bearerToken string) ([
 	return a.client.GetCurrentUserGuilds(bearerToken, 0, 0, 200, true)
 }
 
+// GetBotGuildIDs fetches guild IDs where the bot is present.
+func (a *DiscordAdapter) GetBotGuildIDs(_ context.Context) (map[string]bool, error) {
+	a.wait()
+
+	guildIDs := make(map[string]bool)
+	after := ""
+
+	for {
+		req, err := http.NewRequest(http.MethodGet, "https://discord.com/api/v10/users/@me/guilds", nil)
+		if err != nil {
+			return nil, err
+		}
+
+		q := req.URL.Query()
+		q.Set("limit", "200")
+		q.Set("with_counts", "true")
+		if after != "" {
+			q.Set("after", after)
+		}
+		req.URL.RawQuery = q.Encode()
+		req.Header.Set("Authorization", "Bot "+a.cfg.BotToken)
+
+		resp, err := a.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		var batch []struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode >= http.StatusBadRequest {
+			return nil, fmt.Errorf("discord bot guild fetch failed with status %d", resp.StatusCode)
+		}
+
+		for _, guild := range batch {
+			guildIDs[guild.ID] = true
+		}
+
+		if len(batch) < 200 {
+			break
+		}
+		after = batch[len(batch)-1].ID
+
+		// small backoff between pages
+		if _, err := strconv.ParseInt(after, 10, 64); err != nil {
+			break
+		}
+		a.wait()
+	}
+
+	return guildIDs, nil
+}
+
 // GetGuild fetches a guild by ID using the bot token.
 func (a *DiscordAdapter) GetGuild(_ context.Context, guildID int64) (*discord.RestGuild, error) {
 	a.wait()
 	return a.client.GetGuild(snowflake.ID(guildID), true)
+}
+
+// GetMembers fetches guild members using the bot token.
+func (a *DiscordAdapter) GetMembers(_ context.Context, guildID int64, limit int, after int64) ([]discord.Member, error) {
+	a.wait()
+	return a.client.GetMembers(snowflake.ID(guildID), limit, snowflake.ID(after))
+}
+
+// GetChannel fetches a channel by ID using the bot token.
+func (a *DiscordAdapter) GetChannel(_ context.Context, channelID int64) (discord.Channel, error) {
+	a.wait()
+	return a.client.GetChannel(snowflake.ID(channelID))
+}
+
+// GetGuildChannels fetches the guild channels using the bot token.
+func (a *DiscordAdapter) GetGuildChannels(_ context.Context, guildID int64) ([]discord.GuildChannel, error) {
+	a.wait()
+	return a.client.GetGuildChannels(snowflake.ID(guildID))
+}
+
+// GetGuildWebhooks fetches all webhooks for a guild using the bot token.
+func (a *DiscordAdapter) GetGuildWebhooks(_ context.Context, guildID int64) ([]discord.Webhook, error) {
+	a.wait()
+	return a.client.GetAllWebhooks(snowflake.ID(guildID))
+}
+
+// CreateWebhook creates a webhook in a guild channel using the bot token.
+func (a *DiscordAdapter) CreateWebhook(_ context.Context, channelID int64, name string) (*discord.IncomingWebhook, error) {
+	a.wait()
+	return a.client.CreateWebhook(snowflake.ID(channelID), discord.WebhookCreate{Name: name})
+}
+
+// GetActiveGuildThreads fetches active threads for a guild using the bot token.
+func (a *DiscordAdapter) GetActiveGuildThreads(_ context.Context, guildID int64) (*discord.GuildActiveThreads, error) {
+	a.wait()
+	return a.client.GetActiveGuildThreads(snowflake.ID(guildID))
+}
+
+// GetRoles fetches guild roles using the bot token.
+func (a *DiscordAdapter) GetRoles(_ context.Context, guildID int64) ([]discord.Role, error) {
+	a.wait()
+	return a.client.GetRoles(snowflake.ID(guildID))
 }
 
 // IsMember checks whether a user is a member of a guild (using bot token).

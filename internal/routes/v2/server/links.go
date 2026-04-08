@@ -1,0 +1,274 @@
+package server
+
+import (
+	"net/http"
+	"sort"
+	"strings"
+
+	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/disgoorg/disgo/discord"
+	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
+
+func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
+	return func(c *fiber.Ctx) error {
+		serverID, err := pathInt(c, "server_id")
+		if err != nil {
+			return err
+		}
+		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+			return notFoundErr(err, "Server not found")
+		}
+		limit := c.QueryInt("limit", 100)
+		if limit <= 0 {
+			limit = 100
+		}
+		offset := c.QueryInt("offset", 0)
+		if offset < 0 {
+			offset = 0
+		}
+		search := c.Query("search")
+
+		serverMembers, err := fetchAllServerMembers(c, rt, int64(serverID))
+		if err != nil {
+			return apptypes.Error(http.StatusBadGateway, "Failed to fetch Discord members")
+		}
+		memberIDs := make([]string, 0, len(serverMembers))
+		for userID := range serverMembers {
+			memberIDs = append(memberIDs, userID)
+		}
+		if len(memberIDs) == 0 {
+			return apptypes.JSON(c, http.StatusOK, map[string]any{
+				"members":               []any{},
+				"total_members":         0,
+				"members_with_links":    0,
+				"total_linked_accounts": 0,
+				"verified_accounts":     0,
+			})
+		}
+
+		links, err := findManyMaps(c.UserContext(), rt.Store.C.Links, bson.M{"user_id": bson.M{"$in": memberIDs}})
+		if err != nil {
+			return err
+		}
+
+		grouped := map[string][]map[string]any{}
+		for _, link := range links {
+			userID := serverAsString(link["user_id"])
+			if userID == "" {
+				continue
+			}
+			grouped[userID] = append(grouped[userID], link)
+		}
+
+		type groupedMember struct {
+			UserID        string
+			Links         []map[string]any
+			AccountCount  int
+			VerifiedCount int
+		}
+		groupedMembers := make([]groupedMember, 0, len(grouped))
+		totalLinkedAccounts := 0
+		verifiedAccounts := 0
+		for userID, userLinks := range grouped {
+			if search != "" && !linksMatchSearch(userLinks, search) {
+				continue
+			}
+			accountCount := len(userLinks)
+			verifiedCount := 0
+			for _, link := range userLinks {
+				if asBool(link["is_verified"]) {
+					verifiedCount++
+				}
+			}
+			totalLinkedAccounts += accountCount
+			verifiedAccounts += verifiedCount
+			groupedMembers = append(groupedMembers, groupedMember{
+				UserID:        userID,
+				Links:         userLinks,
+				AccountCount:  accountCount,
+				VerifiedCount: verifiedCount,
+			})
+		}
+
+		sort.SliceStable(groupedMembers, func(i, j int) bool {
+			if groupedMembers[i].AccountCount != groupedMembers[j].AccountCount {
+				return groupedMembers[i].AccountCount > groupedMembers[j].AccountCount
+			}
+			return groupedMembers[i].UserID < groupedMembers[j].UserID
+		})
+
+		totalFiltered := len(groupedMembers)
+		start := offset
+		if start > totalFiltered {
+			start = totalFiltered
+		}
+		end := start + limit
+		if end > totalFiltered {
+			end = totalFiltered
+		}
+		paginatedGroups := groupedMembers[start:end]
+
+		playerTags := make([]string, 0)
+		for _, group := range paginatedGroups {
+			for _, link := range group.Links {
+				if tag := serverAsString(link["player_tag"]); tag != "" {
+					playerTags = append(playerTags, tag)
+				}
+			}
+		}
+		playerDocs, err := findManyMaps(c.UserContext(), rt.Store.C.PlayerStats, bson.M{"tag": bson.M{"$in": playerTags}})
+		if err != nil {
+			playerDocs = nil
+		}
+		playerMap := map[string]map[string]any{}
+		for _, playerDoc := range playerDocs {
+			tag := serverAsString(playerDoc["tag"])
+			if tag != "" {
+				playerMap[tag] = playerDoc
+			}
+		}
+
+		members := make([]map[string]any, 0, len(paginatedGroups))
+		for _, group := range paginatedGroups {
+			member := serverMembers[group.UserID]
+			linkedAccounts := make([]map[string]any, 0, len(group.Links))
+			for _, link := range group.Links {
+				tag := serverAsString(link["player_tag"])
+				playerDoc := playerMap[tag]
+				townHall := playerDoc["town_hall"]
+				if townHall == nil {
+					townHall = playerDoc["townhall"]
+				}
+				linkedAccounts = append(linkedAccounts, map[string]any{
+					"player_tag":  tag,
+					"player_name": toStringMaybe(playerDoc["name"]),
+					"town_hall":   townHall,
+					"is_verified": asBool(link["is_verified"]),
+					"added_at":    stringifyTimeLike(link["added_at"]),
+				})
+			}
+			members = append(members, map[string]any{
+				"user_id":         group.UserID,
+				"username":        member.User.Username,
+				"display_name":    member.EffectiveName(),
+				"avatar_url":      member.EffectiveAvatarURL(),
+				"linked_accounts": linkedAccounts,
+				"account_count":   len(linkedAccounts),
+			})
+		}
+
+		return apptypes.JSON(c, http.StatusOK, map[string]any{
+			"members":               members,
+			"total_members":         totalFiltered,
+			"members_with_links":    len(groupedMembers),
+			"total_linked_accounts": totalLinkedAccounts,
+			"verified_accounts":     verifiedAccounts,
+		})
+	}
+}
+
+func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_, err := pathInt(c, "server_id")
+		if err != nil {
+			return err
+		}
+		userID := c.Params("user_discord_id")
+		tag := serverNormalizeTag(c.Params("player_tag"))
+		result, err := rt.Store.C.Links.DeleteOne(c.UserContext(), bson.M{"user_id": userID, "player_tag": tag})
+		if err != nil {
+			return err
+		}
+		if result.DeletedCount == 0 {
+			return apptypes.Error(http.StatusNotFound, "Link not found")
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Link removed successfully", "player_tag": tag, "user_id": userID})
+	}
+}
+
+func bulkUnlink(rt apptypes.Deps) apptypes.HandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_, err := pathInt(c, "server_id")
+		if err != nil {
+			return err
+		}
+		var body struct {
+			UserDiscordID string   `json:"user_discord_id"`
+			PlayerTags    []string `json:"player_tags"`
+		}
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		tags := make([]string, 0, len(body.PlayerTags))
+		for _, tag := range body.PlayerTags {
+			tags = append(tags, serverNormalizeTag(tag))
+		}
+		result, err := rt.Store.C.Links.DeleteMany(c.UserContext(), bson.M{"user_id": body.UserDiscordID, "player_tag": bson.M{"$in": tags}})
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Links removed successfully", "deleted_count": result.DeletedCount})
+	}
+}
+
+func fetchAllServerMembers(c *fiber.Ctx, rt apptypes.Deps, serverID int64) (map[string]discord.Member, error) {
+	members := map[string]discord.Member{}
+	var after int64
+	for {
+		batch, err := rt.Discord.GetMembers(c.UserContext(), serverID, 1000, after)
+		if err != nil {
+			return nil, err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, member := range batch {
+			members[member.User.ID.String()] = member
+			if int64(member.User.ID) > after {
+				after = int64(member.User.ID)
+			}
+		}
+		if len(batch) < 1000 {
+			break
+		}
+	}
+	return members, nil
+}
+
+func linksMatchSearch(links []map[string]any, search string) bool {
+	if search == "" {
+		return true
+	}
+	for _, link := range links {
+		if containsInsensitive(serverAsString(link["player_tag"]), search) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInsensitive(value, search string) bool {
+	value = strings.ToLower(value)
+	search = strings.ToLower(search)
+	return strings.Contains(value, search)
+}
+
+func asBool(value any) bool {
+	if typed, ok := value.(bool); ok {
+		return typed
+	}
+	return false
+}
+
+func stringifyTimeLike(value any) any {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case string:
+		return typed
+	default:
+		return serverAsString(typed)
+	}
+}

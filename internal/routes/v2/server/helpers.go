@@ -179,6 +179,21 @@ func sanitize(value any) any {
 			out[key] = sanitize(item)
 		}
 		return out
+	case bson.D:
+		out := make(map[string]any, len(typed))
+		for _, e := range typed {
+			if e.Key == "_id" {
+				continue
+			}
+			out[e.Key] = sanitize(e.Value)
+		}
+		return out
+	case bson.A:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, sanitize(item))
+		}
+		return out
 	case bson.ObjectID:
 		return typed.Hex()
 	default:

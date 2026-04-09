@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -224,6 +225,9 @@ func filteredItems(a apptypes.Deps, c *fiber.Ctx) ([]map[string]any, error) {
 }
 
 func findItem(a apptypes.Deps, category, itemID string) (map[string]any, error) {
+	if decoded, err := url.PathUnescape(itemID); err == nil {
+		itemID = decoded
+	}
 	if _, ok := categories[category]; !ok {
 		return nil, apptypes.Error(fiber.StatusNotFound, "Category '"+category+"' not found. Available categories: "+strings.Join(categoryNamesList(), ", "))
 	}

@@ -433,6 +433,8 @@ func stringifyTime(value any) string {
 	switch typed := value.(type) {
 	case time.Time:
 		return typed.UTC().Format(time.RFC3339)
+	case bson.DateTime:
+		return time.UnixMilli(int64(typed)).UTC().Format(time.RFC3339)
 	case string:
 		return typed
 	default:

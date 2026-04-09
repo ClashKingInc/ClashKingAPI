@@ -24,6 +24,9 @@ func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 			if err != nil {
 				return notFoundErr(err, "Server not found")
 			}
+			if sanitizedDoc, ok := sanitize(serverDoc).(map[string]any); ok {
+				serverDoc = sanitizedDoc
+			}
 			statusRoles, _ := serverDoc["status_roles"].(map[string]any)
 			discordRoles, _ := statusRoles["discord"].([]any)
 			for _, role := range discordRoles {
@@ -228,6 +231,9 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 			totalCount += len(sanitized)
 		}
 		serverDoc, _ := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		if sanitizedDoc, ok := sanitize(serverDoc).(map[string]any); ok {
+			serverDoc = sanitizedDoc
+		}
 		statusRoles, _ := serverDoc["status_roles"].(map[string]any)
 		status := sanitizeRoleList(anyMapSlice(statusRoles["discord"]))
 		out["status"] = status

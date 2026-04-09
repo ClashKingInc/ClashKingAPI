@@ -26,9 +26,9 @@ func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		aggregated := map[string]modelsv2.LogConfig{}
 		for _, clanDoc := range clans {
-			logs, _ := clanDoc["logs"].(map[string]any)
+			logs := bsonToMap(clanDoc["logs"])
 			for dbName, apiName := range logMapping {
-				raw, _ := logs[dbName].(map[string]any)
+				raw := bsonToMap(logs[dbName])
 				webhook := serverAsString(raw["webhook"])
 				if webhook == "" {
 					continue
@@ -137,7 +137,7 @@ func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 
 		items := make([]modelsv2.ClanLogsConfig, 0, len(clans))
 		for _, clanDoc := range clans {
-			logs, _ := clanDoc["logs"].(map[string]any)
+			logs := bsonToMap(clanDoc["logs"])
 			items = append(items, modelsv2.ClanLogsConfig{
 				Tag:                  serverAsString(clanDoc["tag"]),
 				Name:                 serverAsString(clanDoc["name"]),
@@ -316,9 +316,23 @@ func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+func bsonToMap(raw any) map[string]any {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v
+	case bson.D:
+		out := make(map[string]any, len(v))
+		for _, e := range v {
+			out[e.Key] = e.Value
+		}
+		return out
+	}
+	return nil
+}
+
 func parseClanLogType(raw any, webhookToChannel map[string]string) *modelsv2.ClanLogTypeConfig {
-	data, ok := raw.(map[string]any)
-	if !ok || data == nil {
+	data := bsonToMap(raw)
+	if data == nil {
 		return nil
 	}
 

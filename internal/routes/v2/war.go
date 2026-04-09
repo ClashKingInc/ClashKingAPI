@@ -56,7 +56,7 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 		seen := map[string]struct{}{}
 		items := make([]any, 0, warMin(limit, len(rows)))
 		for _, row := range rows {
-			data, _ := row["data"].(bson.M)
+			data, _ := sanitize(row["data"]).(map[string]any)
 			prep := warAsString(data["preparationStartTime"])
 			if prep == "" {
 				prep = warAsString(row["preparationStartTime"])
@@ -65,7 +65,7 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 				continue
 			}
 			seen[prep] = struct{}{}
-			items = append(items, warWithoutID(data))
+			items = append(items, warWithoutID(bson.M(data)))
 			if len(items) == limit {
 				break
 			}

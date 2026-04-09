@@ -668,7 +668,11 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
 		for _, d := range docs {
 			if _, ok := d["name"].(string); ok {
-				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: mapMaybe(d["data"])})
+				sanitizedData, _ := sanitize(d["data"]).(map[string]any)
+				if sanitizedData == nil {
+					sanitizedData = map[string]any{}
+				}
+				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: sanitizedData})
 			}
 		}
 		sort.Slice(items, func(i, j int) bool {
@@ -857,7 +861,7 @@ func ticketApproveMessages(value any) []modelsv2.ApproveMessage {
 
 func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {
 	return modelsv2.OpenTicket{
-		Channel:            asStringOr(ticket["channel"], ""),
+		Channel:            serverAsString(ticket["channel"]),
 		ChannelExists:      !strings.EqualFold(asStringOr(ticket["status"], ""), "delete"),
 		User:               asStringOr(ticket["user"], ""),
 		DiscordUsername:    stringPtrMaybe(ticket["discord_username"]),

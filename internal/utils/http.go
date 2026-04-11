@@ -38,6 +38,7 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 				"error", appErr.Detail,
 				"user_id", UserID(c.UserContext()),
 			)
+			CaptureFiberError(c, err, appErr.Status)
 		}
 		return JSON(c, appErr.Status, map[string]any{"detail": appErr.Detail})
 	}
@@ -53,6 +54,7 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 				"error", fiberErr.Message,
 				"user_id", UserID(c.UserContext()),
 			)
+			CaptureFiberError(c, err, fiberErr.Code)
 		}
 		return JSON(c, fiberErr.Code, map[string]any{"detail": fiberErr.Message})
 	}
@@ -65,6 +67,7 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		"error", err.Error(),
 		"user_id", UserID(c.UserContext()),
 	)
+	CaptureFiberError(c, err, fiber.StatusInternalServerError)
 	return JSON(c, fiber.StatusInternalServerError, map[string]any{"detail": err.Error()})
 }
 

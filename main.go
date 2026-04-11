@@ -52,7 +52,7 @@ func New(ctx context.Context) (*App, error) {
 	}
 	logger := utils.InitLogger(cfg)
 	logger.Info("initializing_app")
-	if err := utils.Init(cfg.SentryDSN); err != nil {
+	if err := utils.Init(cfg); err != nil {
 		return nil, err
 	}
 	stores, err := utils.NewStore(ctx, cfg)
@@ -96,8 +96,8 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	})
 	app.Use(requestid.New())
 	app.Use(utils.HTTPLoggerMiddleware(a.Config))
-	app.Use(fiberrecover.New())
 	app.Use(utils.FiberMiddleware())
+	app.Use(fiberrecover.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowMethods: "*",

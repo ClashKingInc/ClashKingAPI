@@ -319,9 +319,120 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		if err := cur.All(c.UserContext(), &tickets); err != nil {
 			return err
 		}
+
+		// Collect unique user IDs to batch-fetch linked accounts
+		userIDSet := map[string]struct{}{}
+		for _, t := range tickets {
+			if uid := serverAsString(t["user"]); uid != "" {
+				userIDSet[uid] = struct{}{}
+			}
+		}
+		userIDs := make([]any, 0, len(userIDSet))
+		for uid := range userIDSet {
+			userIDs = append(userIDs, uid)
+			if n := ticketParseInt64(uid); n != 0 {
+				userIDs = append(userIDs, n)
+			}
+		}
+
+		// user_id → []player_tag
+		userTagMap := map[string][]string{}
+		if len(userIDs) > 0 {
+			linkCur, lerr := a.Store.C.Links.Find(c.UserContext(),
+				bson.M{"user_id": bson.M{"$in": userIDs}},
+				options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "player_tag": 1}))
+			if lerr == nil {
+				var linkDocs []bson.M
+				_ = linkCur.All(c.UserContext(), &linkDocs)
+				for _, ld := range linkDocs {
+					uid := serverAsString(ld["user_id"])
+					tag := serverAsString(ld["player_tag"])
+					if uid != "" && tag != "" {
+						userTagMap[uid] = append(userTagMap[uid], tag)
+					}
+				}
+			}
+		}
+
+		// Collect all tags to batch-fetch player info
+		allTags := []any{}
+		tagSet := map[string]struct{}{}
+		for _, tags := range userTagMap {
+			for _, tag := range tags {
+				if _, seen := tagSet[tag]; !seen {
+					tagSet[tag] = struct{}{}
+					allTags = append(allTags, tag)
+				}
+			}
+		}
+		playerMap := map[string]bson.M{}
+		if len(allTags) > 0 {
+			pCur, perr := a.Store.C.PlayerStats.Find(c.UserContext(),
+				bson.M{"tag": bson.M{"$in": allTags}},
+				options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1, "town_hall": 1, "townhall": 1}))
+			if perr == nil {
+				var playerDocs []bson.M
+				_ = pCur.All(c.UserContext(), &playerDocs)
+				for _, pd := range playerDocs {
+					if tag := serverAsString(pd["tag"]); tag != "" {
+						playerMap[tag] = pd
+					}
+				}
+			}
+		}
+
 		items := make([]modelsv2.OpenTicket, 0, len(tickets))
 		for _, ticket := range tickets {
-			items = append(items, openTicketFromDoc(ticket))
+			t := openTicketFromDoc(ticket)
+
+			// Resolve Discord member info if not already stored in the doc
+			if t.DiscordUsername == nil && t.DiscordDisplayName == nil {
+				if userInt := ticketParseInt64(t.User); userInt != 0 {
+					if member := a.Discord.GetMember(c.UserContext(), serverID, userInt); member != nil {
+						username := member.User.Username
+						displayName := member.EffectiveName()
+						avatarURL := member.EffectiveAvatarURL()
+						if username != "" {
+							t.DiscordUsername = &username
+						}
+						if displayName != "" {
+							t.DiscordDisplayName = &displayName
+						}
+						if avatarURL != "" {
+							t.DiscordAvatarURL = &avatarURL
+						}
+					}
+				}
+			}
+
+			uid := t.User
+			if tags, ok := userTagMap[uid]; ok {
+				accounts := make([]modelsv2.LinkedAccount, 0, len(tags))
+				for _, tag := range tags {
+					pd := playerMap[tag]
+					var name *string
+					if n := serverAsString(pd["name"]); n != "" {
+						n := n
+						name = &n
+					}
+					var th *int
+					raw := pd["town_hall"]
+					if raw == nil {
+						raw = pd["townhall"]
+					}
+					if n := asIntWithDefault(raw, -1); n >= 0 {
+						n := n
+						th = &n
+					}
+					accounts = append(accounts, modelsv2.LinkedAccount{
+						PlayerTag:  tag,
+						PlayerName: name,
+						TownHall:   th,
+					})
+				}
+				t.LinkedAccounts = accounts
+			}
+			items = append(items, t)
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.OpenTicketsResponse{Items: items, Total: len(items)})
 	}
@@ -862,17 +973,17 @@ func ticketApproveMessages(value any) []modelsv2.ApproveMessage {
 func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {
 	return modelsv2.OpenTicket{
 		Channel:            serverAsString(ticket["channel"]),
-		ChannelExists:      !strings.EqualFold(asStringOr(ticket["status"], ""), "delete"),
-		User:               asStringOr(ticket["user"], ""),
+		ChannelExists:      !strings.EqualFold(serverAsString(ticket["status"]), "delete"),
+		User:               serverAsString(ticket["user"]),
 		DiscordUsername:    stringPtrMaybe(ticket["discord_username"]),
 		DiscordDisplayName: stringPtrMaybe(ticket["discord_display_name"]),
 		DiscordAvatarURL:   stringPtrMaybe(ticket["discord_avatar_url"]),
 		Thread:             stringPtrMaybe(ticket["thread"]),
-		Server:             asStringOr(ticket["server"], ""),
-		Status:             asStringOr(ticket["status"], ""),
+		Server:             serverAsString(ticket["server"]),
+		Status:             serverAsString(ticket["status"]),
 		Number:             asIntWithDefault(ticket["number"], 0),
 		ApplyAccount:       stringPtrMaybe(ticket["apply_account"]),
-		Panel:              asStringOr(ticket["panel"], ""),
+		Panel:              serverAsString(ticket["panel"]),
 		SetClan:            stringPtrMaybe(ticket["set_clan"]),
 	}
 }

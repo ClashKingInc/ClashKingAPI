@@ -208,6 +208,17 @@ func (a *DiscordAdapter) GetRoles(_ context.Context, guildID int64) ([]discord.R
 	return a.client.GetRoles(snowflake.ID(guildID))
 }
 
+// GetMember fetches a single guild member by user ID using the bot token.
+// Returns nil if the member is not found or an error occurs.
+func (a *DiscordAdapter) GetMember(_ context.Context, guildID, userID int64) *discord.Member {
+	a.wait()
+	m, err := a.client.GetMember(snowflake.ID(guildID), snowflake.ID(userID))
+	if err != nil {
+		return nil
+	}
+	return m
+}
+
 // IsMember checks whether a user is a member of a guild (using bot token).
 func (a *DiscordAdapter) IsMember(_ context.Context, guildID, userID int64) bool {
 	a.wait()

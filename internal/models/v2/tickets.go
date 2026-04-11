@@ -51,20 +51,27 @@ type TicketPanelsResponse struct {
 	AvailableEmbeds []string      `json:"available_embeds"`
 }
 
+type LinkedAccount struct {
+	PlayerTag  string  `json:"player_tag"`
+	PlayerName *string `json:"player_name"`
+	TownHall   *int    `json:"town_hall"`
+}
+
 type OpenTicket struct {
-	Channel            string  `json:"channel"`
-	ChannelExists      bool    `json:"channel_exists"`
-	User               string  `json:"user"`
-	DiscordUsername    *string `json:"discord_username,omitempty"`
-	DiscordDisplayName *string `json:"discord_display_name,omitempty"`
-	DiscordAvatarURL   *string `json:"discord_avatar_url,omitempty"`
-	Thread             *string `json:"thread,omitempty"`
-	Server             string  `json:"server"`
-	Status             string  `json:"status"`
-	Number             int     `json:"number"`
-	ApplyAccount       *string `json:"apply_account,omitempty"`
-	Panel              string  `json:"panel"`
-	SetClan            *string `json:"set_clan,omitempty"`
+	Channel            string           `json:"channel"`
+	ChannelExists      bool             `json:"channel_exists"`
+	User               string           `json:"user"`
+	DiscordUsername    *string          `json:"discord_username,omitempty"`
+	DiscordDisplayName *string          `json:"discord_display_name,omitempty"`
+	DiscordAvatarURL   *string          `json:"discord_avatar_url,omitempty"`
+	Thread             *string          `json:"thread,omitempty"`
+	Server             string           `json:"server"`
+	Status             string           `json:"status"`
+	Number             int              `json:"number"`
+	ApplyAccount       *string          `json:"apply_account,omitempty"`
+	Panel              string           `json:"panel"`
+	SetClan            *string          `json:"set_clan,omitempty"`
+	LinkedAccounts     []LinkedAccount  `json:"linked_accounts,omitempty"`
 }
 
 type OpenTicketsResponse struct {

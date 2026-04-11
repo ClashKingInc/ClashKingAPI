@@ -108,7 +108,7 @@ func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		roleType := c.Params("role_type")
 		roleID := c.Params("role_id")
 		if roleType == "status" {
-			_, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$pull": bson.M{"status_roles.discord": bson.M{"id": roleID}}})
+			_, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$pull": bson.M{"status_roles.discord": bson.M{"id": numericMaybe(roleID)}}})
 			if err != nil {
 				return err
 			}

@@ -21,10 +21,5 @@ type WarStatsItem struct {
 	ClanTags []string `json:"clan_tags"`
 }
 
-// WarSummaryResponse is returned by GET /v2/war/:clan_tag/war-summary.
-type WarSummaryResponse struct {
-	Tag              string `json:"tag"`
-	State            string `json:"state"`
-	TeamSize         int    `json:"team_size"`
-	AttacksPerMember int    `json:"attacks_per_member"`
-}
+
+

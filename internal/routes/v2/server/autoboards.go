@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
@@ -162,10 +163,17 @@ func autoBoardConfigFromDoc(item map[string]any) modelsv2.AutoBoardConfig {
 	if oid, ok := item["_id"].(bson.ObjectID); ok {
 		id = oid.Hex()
 	}
+	// board_type may not be stored (bot-created docs); extract from button_id like the Python API
+	boardType := serverAsString(item["board_type"])
+	if boardType == "" {
+		if buttonID := serverAsString(item["button_id"]); strings.Contains(buttonID, ":") {
+			boardType = strings.SplitN(buttonID, ":", 2)[0]
+		}
+	}
 	return modelsv2.AutoBoardConfig{
 		ID:        id,
 		Type:      serverAsString(item["type"]),
-		BoardType: serverAsString(item["board_type"]),
+		BoardType: boardType,
 		ButtonID:  serverAsString(item["button_id"]),
 		WebhookID: serverAsString(item["webhook_id"]),
 		ThreadID:  stringPtrMaybe(item["thread_id"]),

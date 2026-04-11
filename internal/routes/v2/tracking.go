@@ -81,12 +81,16 @@ func removeTrackingPlayers(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		if _, err := a.Store.C.PlayerStats.DeleteMany(c.UserContext(), bson.M{"tag": bson.M{"$in": body.Tags}}); err != nil {
+		tags := make([]string, 0, len(body.Tags))
+		for _, tag := range body.Tags {
+			tags = append(tags, accountsNormalizeTag(tag))
+		}
+		if _, err := a.Store.C.PlayerStats.DeleteMany(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}}); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
 			"status":          "success",
-			"players_removed": body.Tags,
+			"players_removed": tags,
 		})
 	}
 }

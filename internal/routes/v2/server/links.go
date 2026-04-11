@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
@@ -268,6 +269,10 @@ func stringifyTimeLike(value any) any {
 		return nil
 	case string:
 		return typed
+	case bson.DateTime:
+		return typed.Time().UTC().Format(time.RFC3339)
+	case time.Time:
+		return typed.UTC().Format(time.RFC3339)
 	default:
 		return serverAsString(typed)
 	}

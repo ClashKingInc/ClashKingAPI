@@ -59,25 +59,29 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		doc := bson.M{
-			"type":       body.Type,
-			"server":     serverID,
-			"channel_id": body.ChannelID,
-			"time":       body.Time,
+			"type":    body.Type,
+			"server":  serverID,
+			"channel": numericMaybe(body.ChannelID),
+			"time":    body.Time,
 		}
 		if body.ClanTag != "" {
-			doc["clan_tag"] = serverNormalizeTag(body.ClanTag)
+			doc["clan"] = serverNormalizeTag(body.ClanTag)
 		}
 		if body.CustomText != "" {
 			doc["custom_text"] = body.CustomText
 		}
 		if body.TownhallFilter != nil {
-			doc["townhall_filter"] = body.TownhallFilter
+			if body.Type == "Clan Capital" || body.Type == "Clan Games" {
+				doc["townhalls"] = body.TownhallFilter
+			} else {
+				doc["townhall_filter"] = body.TownhallFilter
+			}
 		}
 		if body.Roles != nil {
 			doc["roles"] = body.Roles
 		}
 		if body.WarTypes != nil {
-			doc["war_types"] = body.WarTypes
+			doc["types"] = body.WarTypes
 		}
 		if body.PointThreshold != nil {
 			doc["point_threshold"] = body.PointThreshold
@@ -86,7 +90,10 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 			doc["attack_threshold"] = body.AttackThreshold
 		}
 		if body.RosterID != "" {
-			doc["roster_id"] = body.RosterID
+			id, err := objectID(body.RosterID)
+			if err == nil {
+				doc["roster"] = id
+			}
 		}
 		if body.PingType != "" {
 			doc["ping_type"] = body.PingType
@@ -113,8 +120,13 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		update := reminderUpdateMap(body)
-		result, err := rt.Store.C.Reminders.UpdateOne(c.UserContext(), bson.M{"_id": id, "server": serverID}, bson.M{"$set": update})
+		existing, err := findOneMap(c.UserContext(), rt.Store.C.Reminders, bson.M{"_id": id, "server": serverID})
+		if err != nil {
+			return apptypes.Error(http.StatusNotFound, "Reminder not found")
+		}
+		existingType := serverAsString(existing["type"])
+		update := reminderUpdateMap(body, existingType)
+		result, err := rt.Store.C.Reminders.UpdateOne(c.UserContext(), bson.M{"_id": id}, bson.M{"$set": update})
 		if err != nil {
 			return err
 		}
@@ -147,27 +159,34 @@ func deleteReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 }
 
 func reminderConfigFromDoc(reminder map[string]any) modelsv2.ReminderConfig {
+	reminderType := serverAsString(reminder["type"])
+	var thFilter []int
+	if reminderType == "Clan Capital" || reminderType == "Clan Games" {
+		thFilter = intSlice(reminder["townhalls"])
+	} else {
+		thFilter = intSlice(reminder["townhall_filter"])
+	}
 	return modelsv2.ReminderConfig{
 		ID:              serverAsString(reminder["_id"]),
-		Type:            serverAsString(reminder["type"]),
-		ClanTag:         stringPtrMaybe(reminder["clan_tag"]),
-		ChannelID:       stringPtrMaybe(reminder["channel_id"]),
+		Type:            reminderType,
+		ClanTag:         stringPtrMaybe(reminder["clan"]),
+		ChannelID:       stringPtrMaybe(reminder["channel"]),
 		Time:            serverAsString(reminder["time"]),
 		CustomText:      stringPtrMaybe(reminder["custom_text"]),
-		TownhallFilter:  intSlice(reminder["townhall_filter"]),
+		TownhallFilter:  thFilter,
 		Roles:           stringSlice(reminder["roles"]),
-		WarTypes:        stringSlice(reminder["war_types"]),
+		WarTypes:        stringSlice(reminder["types"]),
 		PointThreshold:  reminder["point_threshold"],
 		AttackThreshold: reminder["attack_threshold"],
-		RosterID:        stringPtrMaybe(reminder["roster_id"]),
+		RosterID:        stringPtrMaybe(reminder["roster"]),
 		PingType:        stringPtrMaybe(reminder["ping_type"]),
 	}
 }
 
-func reminderUpdateMap(body modelsv2.UpdateReminderRequest) bson.M {
+func reminderUpdateMap(body modelsv2.UpdateReminderRequest, existingType string) bson.M {
 	update := bson.M{}
 	if body.ChannelID != nil {
-		update["channel_id"] = *body.ChannelID
+		update["channel"] = numericMaybe(*body.ChannelID)
 	}
 	if body.Time != nil {
 		update["time"] = *body.Time
@@ -176,13 +195,17 @@ func reminderUpdateMap(body modelsv2.UpdateReminderRequest) bson.M {
 		update["custom_text"] = *body.CustomText
 	}
 	if body.TownhallFilter != nil {
-		update["townhall_filter"] = body.TownhallFilter
+		if existingType == "Clan Capital" || existingType == "Clan Games" {
+			update["townhalls"] = body.TownhallFilter
+		} else {
+			update["townhall_filter"] = body.TownhallFilter
+		}
 	}
 	if body.Roles != nil {
 		update["roles"] = body.Roles
 	}
 	if body.WarTypes != nil {
-		update["war_types"] = body.WarTypes
+		update["types"] = body.WarTypes
 	}
 	if body.PointThreshold != nil {
 		update["point_threshold"] = body.PointThreshold

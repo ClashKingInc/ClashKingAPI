@@ -5,5 +5,8 @@
 .idea/
 *pycache*
 .venv/
-.claude/
 node_modules/
+
+# AI files
+.claude/
+.github/copilot-instructions.md

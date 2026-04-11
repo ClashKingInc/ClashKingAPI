@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -217,6 +218,9 @@ func sanitizeObjectID(value any) any {
 }
 
 func serverNormalizeTag(tag string) string {
+	if decoded, err := url.PathUnescape(tag); err == nil {
+		tag = decoded
+	}
 	tag = apptypes.NormalizeTag(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(tag, "#"))))
 	if tag == "" {
 		return ""
@@ -228,6 +232,10 @@ func serverAsString(value any) string {
 	switch typed := value.(type) {
 	case string:
 		return typed
+	case nil:
+		return ""
+	case bson.ObjectID:
+		return typed.Hex()
 	default:
 		return fmt.Sprint(typed)
 	}

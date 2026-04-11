@@ -2,14 +2,21 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
+	"math"
+	"sort"
 	"strconv"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // previousWars godoc
@@ -45,7 +52,8 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 		if !includeCWL {
 			filter["$and"] = append(filter["$and"].(bson.A), bson.M{"data.season": bson.M{"$eq": nil}})
 		}
-		cur, err := a.Store.DB.Looper.Collection("clan_war").Find(c.UserContext(), filter)
+		cur, err := a.Store.DB.Looper.Collection("clan_war").Find(c.UserContext(), filter,
+			options.Find().SetSort(bson.D{{Key: "data.endTime", Value: -1}}))
 		if err != nil {
 			return err
 		}
@@ -173,11 +181,18 @@ func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		items := make([]modelsv2.WarSummaryResponse, 0, len(body.ClanTags))
-		for _, tag := range body.ClanTags {
-			items = append(items, currentWarSummary(c.UserContext(), a, tag))
+		ctx := c.UserContext()
+		results := make([]map[string]any, len(body.ClanTags))
+		var wg sync.WaitGroup
+		for i, tag := range body.ClanTags {
+			wg.Add(1)
+			go func(idx int, t string) {
+				defer wg.Done()
+				results[idx] = currentWarSummary(ctx, a, t)
+			}(i, tag)
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
+		wg.Wait()
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": results})
 	}
 }
 
@@ -252,27 +267,170 @@ func clanWarhits(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) modelsv2.WarSummaryResponse {
-	war, err := a.Clash.Client().GetCurrentWar(ctx, warFixTag(tag))
-	if err != nil || war == nil {
-		return modelsv2.WarSummaryResponse{Tag: warFixTag(tag), State: "notFound"}
+func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[string]any {
+	tag = warFixTag(tag)
+
+	war, err := a.Clash.Client().GetCurrentWar(ctx, tag)
+
+	isInWar := false
+	var warInfo any
+	if err != nil || war == nil || war.State == "" || war.State == clashy.WarStateNotInWar {
+		warInfo = map[string]any{"state": "notInWar"}
+	} else {
+		isInWar = true
+		warInfo = map[string]any{
+			"state":          "war",
+			"currentWarInfo": war,
+			"bypass":         false,
+		}
 	}
-	attacksPerMember := 0
-	if war.TeamSize > 0 {
-		totalAttacks := len(war.Attacks())
-		if totalAttacks > 0 {
-			attacksPerMember = totalAttacks / (war.TeamSize * 2)
-			if attacksPerMember == 0 {
-				attacksPerMember = 1
+
+	isInCwl := false
+	var leagueInfo any
+	warLeagueInfos := []any{}
+
+	if isCWLWindow() {
+		lg, lgErr := a.Clash.Client().GetLeagueGroup(ctx, tag)
+		if lgErr == nil && lg != nil && lg.State != "notInWar" && lg.State != "" {
+			var warTags []string
+			for _, round := range lg.Rounds {
+				for _, wt := range round.WarTags {
+					if wt != "#0" && wt != "" {
+						warTags = append(warTags, wt)
+					}
+				}
+			}
+
+			var leagueWars []clashy.ClanWar
+			if len(warTags) > 0 {
+				leagueWars, _ = a.Clash.Client().GetLeagueWars(ctx, warTags)
+			}
+
+			leagueInfo = enrichLeagueInfo(lg, leagueWars)
+			for i := range leagueWars {
+				warLeagueInfos = append(warLeagueInfos, &leagueWars[i])
+			}
+
+			if !isInWar {
+				isInCwl = true
 			}
 		}
 	}
-	return modelsv2.WarSummaryResponse{
-		Tag:              warFixTag(tag),
-		State:            string(war.State),
-		TeamSize:         war.TeamSize,
-		AttacksPerMember: attacksPerMember,
+
+	return map[string]any{
+		"clan_tag":         tag,
+		"isInWar":          isInWar,
+		"isInCwl":          isInCwl,
+		"war_info":         warInfo,
+		"league_info":      leagueInfo,
+		"war_league_infos": warLeagueInfos,
 	}
+}
+
+// isCWLWindow returns true during the Clan War League event window.
+// CWL runs from the 1st at 08:00 UTC through the 11th at 07:59 UTC each month.
+func isCWLWindow() bool {
+	now := time.Now().UTC()
+	d, h := now.Day(), now.Hour()
+	if d < 1 || d > 12 {
+		return false
+	}
+	if d == 1 && h < 8 {
+		return false
+	}
+	if d == 11 && h >= 8 {
+		return false
+	}
+	return true
+}
+
+type cwlClanStats struct {
+	totalStars       int
+	totalDestruction float64
+	warsPlayed       int
+}
+
+// enrichLeagueInfo converts a ClanWarLeagueGroup to a JSON map and adds per-clan
+// stats (total_stars, total_destruction, wars_played, rank) derived from the
+// individual CWL war results.
+func enrichLeagueInfo(lg *clashy.ClanWarLeagueGroup, wars []clashy.ClanWar) map[string]any {
+	b, err := json.Marshal(lg)
+	if err != nil {
+		return nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal(b, &result); err != nil {
+		return nil
+	}
+
+	statsMap := make(map[string]*cwlClanStats)
+	if clans, ok := result["clans"].([]any); ok {
+		for _, c := range clans {
+			if clan, ok := c.(map[string]any); ok {
+				if tag, ok := clan["tag"].(string); ok && tag != "" {
+					statsMap[tag] = &cwlClanStats{}
+				}
+			}
+		}
+	}
+
+	for _, war := range wars {
+		state := string(war.State)
+		if state != "inWar" && state != "warEnded" {
+			continue
+		}
+		if war.Clan != nil {
+			if s, ok := statsMap[war.Clan.Tag]; ok {
+				s.totalStars += war.Clan.Stars
+				s.totalDestruction += war.Clan.Destruction
+				s.warsPlayed++
+			}
+		}
+		if war.Opponent != nil {
+			if s, ok := statsMap[war.Opponent.Tag]; ok {
+				s.totalStars += war.Opponent.Stars
+				s.totalDestruction += war.Opponent.Destruction
+				s.warsPlayed++
+			}
+		}
+	}
+
+	type rankEntry struct {
+		tag         string
+		stars       int
+		destruction float64
+	}
+	ranking := make([]rankEntry, 0, len(statsMap))
+	for tag, s := range statsMap {
+		ranking = append(ranking, rankEntry{tag: tag, stars: s.totalStars, destruction: s.totalDestruction})
+	}
+	sort.Slice(ranking, func(i, j int) bool {
+		if ranking[i].stars != ranking[j].stars {
+			return ranking[i].stars > ranking[j].stars
+		}
+		return ranking[i].destruction > ranking[j].destruction
+	})
+	rankMap := make(map[string]int, len(ranking))
+	for i, r := range ranking {
+		rankMap[r.tag] = i + 1
+	}
+
+	if clans, ok := result["clans"].([]any); ok {
+		for _, c := range clans {
+			if clan, ok := c.(map[string]any); ok {
+				if tag, ok := clan["tag"].(string); ok {
+					if s, ok := statsMap[tag]; ok {
+						clan["total_stars"] = s.totalStars
+						clan["total_destruction"] = math.Round(s.totalDestruction*100) / 100
+						clan["wars_played"] = s.warsPlayed
+						clan["rank"] = rankMap[tag]
+					}
+				}
+			}
+		}
+	}
+
+	return result
 }
 
 func timestampString(raw string, fallback int64) string {
@@ -365,6 +523,9 @@ func warFixTags(tags []string) []string {
 }
 
 func warFixTag(tag string) string {
+	if decoded, err := url.PathUnescape(tag); err == nil {
+		tag = decoded
+	}
 	tag = strings.TrimSpace(strings.ToUpper(tag))
 	tag = strings.TrimPrefix(tag, "#")
 	if tag == "" {

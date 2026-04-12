@@ -3,10 +3,10 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +65,9 @@ func (a *DiscordAdapter) ExchangeCode(_ context.Context, code, codeVerifier, red
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		var body struct {
@@ -99,65 +101,6 @@ func (a *DiscordAdapter) GetCurrentUser(_ context.Context, bearerToken string) (
 func (a *DiscordAdapter) GetUserGuilds(_ context.Context, bearerToken string) ([]discord.OAuth2Guild, error) {
 	a.wait()
 	return a.client.GetCurrentUserGuilds(bearerToken, 0, 0, 200, true)
-}
-
-// GetBotGuildIDs fetches guild IDs where the bot is present.
-func (a *DiscordAdapter) GetBotGuildIDs(_ context.Context) (map[string]bool, error) {
-	a.wait()
-
-	guildIDs := make(map[string]bool)
-	after := ""
-
-	for {
-		req, err := http.NewRequest(http.MethodGet, "https://discord.com/api/v10/users/@me/guilds", nil)
-		if err != nil {
-			return nil, err
-		}
-
-		q := req.URL.Query()
-		q.Set("limit", "200")
-		q.Set("with_counts", "true")
-		if after != "" {
-			q.Set("after", after)
-		}
-		req.URL.RawQuery = q.Encode()
-		req.Header.Set("Authorization", "Bot "+a.cfg.BotToken)
-
-		resp, err := a.http.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		var batch []struct {
-			ID string `json:"id"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode >= http.StatusBadRequest {
-			return nil, fmt.Errorf("discord bot guild fetch failed with status %d", resp.StatusCode)
-		}
-
-		for _, guild := range batch {
-			guildIDs[guild.ID] = true
-		}
-
-		if len(batch) < 200 {
-			break
-		}
-		after = batch[len(batch)-1].ID
-
-		// small backoff between pages
-		if _, err := strconv.ParseInt(after, 10, 64); err != nil {
-			break
-		}
-		a.wait()
-	}
-
-	return guildIDs, nil
 }
 
 // GetGuild fetches a guild by ID using the bot token.
@@ -227,10 +170,22 @@ func (a *DiscordAdapter) IsMember(_ context.Context, guildID, userID int64) bool
 }
 
 // IsInGuild reports whether the bot is present in the given guild (using bot token).
-func (a *DiscordAdapter) IsInGuild(_ context.Context, guildID int64) bool {
+func (a *DiscordAdapter) IsInGuild(_ context.Context, guildID int64) (bool, error) {
 	a.wait()
 	_, err := a.client.GetGuild(snowflake.ID(guildID), false)
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+
+	var discordErr interface{ Status() int }
+	if errors.As(err, &discordErr) {
+		status := discordErr.Status()
+		if status == 403 || status == 404 {
+			return false, nil
+		}
+	}
+
+	return false, fmt.Errorf("discord guild lookup failed: %w", err)
 }
 
 // RefreshToken exchanges a Discord refresh token for a new access token.
@@ -243,4 +198,4 @@ func (a *DiscordAdapter) RefreshToken(_ context.Context, refreshToken string) (*
 	return a.client.RefreshAccessToken(clientID, a.cfg.DiscordClientSecret, refreshToken)
 }
 
-func (a *DiscordAdapter) Close(context.Context) error { return nil }
+func (a *DiscordAdapter) Close(_ context.Context) error { return nil }

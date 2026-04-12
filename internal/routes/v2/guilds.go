@@ -49,14 +49,12 @@ func getUserGuilds(a apptypes.Deps) fiber.Handler {
 			}
 		}
 
-		botGuildIDs, err := a.Discord.GetBotGuildIDs(c.UserContext())
-		if err != nil {
-			return apptypes.Error(http.StatusInternalServerError, "Failed to fetch bot guilds from Discord: "+err.Error())
-		}
-
 		result := make([]modelsv2.GuildInfo, 0, len(adminGuilds))
 		for _, g := range adminGuilds {
-			hasBot := botGuildIDs[g.ID.String()]
+			hasBot, err := a.Discord.IsInGuild(c.UserContext(), int64(g.ID))
+			if err != nil {
+				return apptypes.Error(http.StatusInternalServerError, "Failed to verify bot guild access with Discord: "+err.Error())
+			}
 			result = append(result, buildGuildInfo(g, hasBot))
 		}
 
@@ -126,53 +124,6 @@ func getGuildDetails(a apptypes.Deps) fiber.Handler {
 }
 
 // --- helpers ---
-
-// getDiscordAccessToken reads and decrypts the user's Discord OAuth access token from the database,
-// refreshing it via Discord's API if it has expired.
-func getDiscordAccessToken(c *fiber.Ctx, a apptypes.Deps, userID string) (string, error) {
-	var doc struct {
-		AccessToken  string    `bson:"discord_access_token"`
-		RefreshToken string    `bson:"discord_refresh_token"`
-		ExpiresAt    time.Time `bson:"expires_at"`
-	}
-	if err := a.Store.C.DiscordTokens.FindOne(c.UserContext(), bson.M{"user_id": userID}).Decode(&doc); err != nil {
-		return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token — please link your Discord account")
-	}
-	if doc.AccessToken == "" || doc.RefreshToken == "" {
-		return "", apptypes.Error(http.StatusUnauthorized, "Invalid stored Discord tokens")
-	}
-
-	accessToken, err := apptypes.DecryptString(doc.AccessToken)
-	if err != nil {
-		return "", apptypes.Error(http.StatusUnauthorized, "Failed to decrypt Discord access token")
-	}
-
-	// Still valid (with 60 s buffer)
-	if time.Now().UTC().Before(doc.ExpiresAt.Add(-60 * time.Second)) {
-		return accessToken, nil
-	}
-
-	// Refresh
-	refreshToken, err := apptypes.DecryptString(doc.RefreshToken)
-	if err != nil {
-		return "", apptypes.Error(http.StatusUnauthorized, "Failed to decrypt Discord refresh token")
-	}
-	newAuth, err := a.Discord.RefreshToken(c.UserContext(), refreshToken)
-	if err != nil {
-		return "", apptypes.Error(http.StatusUnauthorized, "Discord token expired — please re-authenticate with Discord")
-	}
-
-	newEncryptedAccess := apptypes.EncryptToString(newAuth.AccessToken)
-	_, _ = a.Store.C.DiscordTokens.UpdateOne(c.UserContext(),
-		bson.M{"user_id": userID},
-		bson.M{"$set": bson.M{
-			"discord_access_token": newEncryptedAccess,
-			"expires_at":           time.Now().UTC().Add(newAuth.ExpiresIn),
-		}},
-	)
-
-	return newAuth.AccessToken, nil
-}
 
 // getDiscordAccessTokenForDevice mirrors the Python migration more closely by
 // looking up the Discord OAuth token with the current device ID when available,

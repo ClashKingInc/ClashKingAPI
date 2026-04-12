@@ -221,26 +221,6 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// clanMembers godoc
-// @Summary Get Clan Members
-// @Description Returns the current members for a clan tag.
-// @Tags Clan
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/{clan_tag}/members [get]
-func clanMembers(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		clan, err := a.Clash.GetClan(c.UserContext(), c.Params("clan_tag"))
-		if err != nil || clan == nil {
-			return apptypes.Error(fiber.StatusNotFound, "Clan not found")
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": clan.Members})
-	}
-}
-
 // clanJoinLeaveSingle godoc
 // @Summary Join Leaves in a season
 // @Description Returns join and leave history for a single clan tag.

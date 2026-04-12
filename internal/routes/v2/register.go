@@ -53,7 +53,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/clan/donations/:season", clanDonationsMany(a))
 	app.Post("/v2/clans/details", clansDetails(a))
 	app.Get("/v2/clan/:clan_tag/details", clanDetails(a))
-	app.Get("/v2/clan/:clan_tag/members", clanMembers(a))
 	app.Get("/v2/clan/:clan_tag/join-leave", clanJoinLeaveSingle(a))
 	app.Post("/v2/clans/join-leave", clansJoinLeave(a))
 	app.Post("/v2/clans/capital-raids", clansCapitalRaids(a))

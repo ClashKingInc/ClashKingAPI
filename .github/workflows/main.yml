@@ -1,37 +1,91 @@
-name: Release and Deploy
+name: Build and Deploy Images
 
 on:
-  release:
-    types:
-      - published # Trigger workflow only when a release is published
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/clashkinginc/clashkingapi
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      # Step 2: Set up Docker Buildx
+      - name: Classify tag
+        id: release
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            {
+              echo "channel=beta"
+              echo "dockerfile=Dockerfile.beta"
+              echo "tags<<EOF"
+              echo "${IMAGE_NAME}:${tag}"
+              echo "${IMAGE_NAME}:beta"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            default_branch="${{ github.event.repository.default_branch }}"
+            git fetch origin "${default_branch}" --no-tags
+
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${default_branch}"; then
+              echo "Stable tags must reference a commit already reachable from ${default_branch}."
+              exit 1
+            fi
+
+            {
+              echo "channel=stable"
+              echo "dockerfile=Dockerfile"
+              echo "tags<<EOF"
+              echo "${IMAGE_NAME}:${tag}"
+              echo "${IMAGE_NAME}:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Unsupported tag format: ${tag}"
+          echo "Use vX.Y.Z for stable or vX.Y.Z-beta.N for beta."
+          exit 1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Log in to GitHub Container Registry
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 4: Build and push Docker image with both versioned and 'latest' tags
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ steps.release.outputs.dockerfile }}
           push: true
-          tags: |
-            ghcr.io/clashkinginc/clashkingbot:${{ github.event.release.tag_name }}
-            ghcr.io/clashkinginc/clashkingbot:latest
+          tags: ${{ steps.release.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}

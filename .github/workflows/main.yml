@@ -39,6 +39,7 @@ jobs:
               echo "tags<<EOF"
               echo "${IMAGE_NAME}:${tag}"
               echo "${IMAGE_NAME}:beta"
+              echo "${IMAGE_NAME}:beta-latest"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
             exit 0
@@ -89,3 +90,11 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Trigger Coolify stable deploy
+        if: steps.release.outputs.channel == 'stable' && secrets.COOLIFY_STABLE_WEBHOOK_URL != ''
+        run: curl --fail --silent --show-error --location --request POST "${{ secrets.COOLIFY_STABLE_WEBHOOK_URL }}"
+
+      - name: Trigger Coolify beta deploy
+        if: steps.release.outputs.channel == 'beta' && secrets.COOLIFY_BETA_WEBHOOK_URL != ''
+        run: curl --fail --silent --show-error --location --request POST "${{ secrets.COOLIFY_BETA_WEBHOOK_URL }}"

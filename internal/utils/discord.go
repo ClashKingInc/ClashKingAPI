@@ -171,16 +171,20 @@ func (a *DiscordAdapter) IsMember(_ context.Context, guildID, userID int64) bool
 
 // IsInGuild reports whether the bot is present in the given guild (using bot token).
 func (a *DiscordAdapter) IsInGuild(_ context.Context, guildID int64) (bool, error) {
-	a.wait()
 	_, err := a.client.GetGuild(snowflake.ID(guildID), false)
 	if err == nil {
 		return true, nil
 	}
 
-	var discordErr interface{ Status() int }
+	var discordErr *disgo.Error
 	if errors.As(err, &discordErr) {
-		status := discordErr.Status()
-		if status == 403 || status == 404 {
+		if discordErr.Response != nil {
+			status := discordErr.Response.StatusCode
+			if status == http.StatusForbidden || status == http.StatusNotFound {
+				return false, nil
+			}
+		}
+		if disgo.IsJSONErrorCode(err, disgo.JSONErrorCodeUnknownGuild) {
 			return false, nil
 		}
 	}

@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
+	"golang.org/x/sync/errgroup"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -49,17 +51,43 @@ func getUserGuilds(a apptypes.Deps) fiber.Handler {
 			}
 		}
 
+		hasBotFlags, err := resolveBotPresence(c.UserContext(), a.Discord, adminGuilds)
+		if err != nil {
+			return apptypes.Error(http.StatusInternalServerError, "Failed to verify bot guild access with Discord: "+err.Error())
+		}
+
 		result := make([]modelsv2.GuildInfo, 0, len(adminGuilds))
-		for _, g := range adminGuilds {
-			hasBot, err := a.Discord.IsInGuild(c.UserContext(), int64(g.ID))
-			if err != nil {
-				return apptypes.Error(http.StatusInternalServerError, "Failed to verify bot guild access with Discord: "+err.Error())
-			}
+		for i, g := range adminGuilds {
+			hasBot := hasBotFlags[i]
 			result = append(result, buildGuildInfo(g, hasBot))
 		}
 
 		return apptypes.JSON(c, http.StatusOK, result)
 	}
+}
+
+func resolveBotPresence(ctx context.Context, discordAdapter *apptypes.DiscordAdapter, guilds []discord.OAuth2Guild) ([]bool, error) {
+	flags := make([]bool, len(guilds))
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(8)
+
+	for i, guild := range guilds {
+		i := i
+		guild := guild
+		group.Go(func() error {
+			hasBot, err := discordAdapter.IsInGuild(groupCtx, int64(guild.ID))
+			if err != nil {
+				return err
+			}
+			flags[i] = hasBot
+			return nil
+		})
+	}
+
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	return flags, nil
 }
 
 // getGuildDetails returns metadata for a single guild.

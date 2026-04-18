@@ -20,6 +20,10 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     env:
+      COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+      COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      COOLIFY_STABLE_RESOURCE_UUID: ${{ secrets.COOLIFY_STABLE_RESOURCE_UUID }}
+      COOLIFY_BETA_RESOURCE_UUID: ${{ secrets.COOLIFY_BETA_RESOURCE_UUID }}
       COOLIFY_STABLE_WEBHOOK_URL: ${{ secrets.COOLIFY_STABLE_WEBHOOK_URL }}
       COOLIFY_BETA_WEBHOOK_URL: ${{ secrets.COOLIFY_BETA_WEBHOOK_URL }}
 
@@ -94,10 +98,28 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
 
-      - name: Trigger Coolify stable deploy
-        if: steps.release.outputs.channel == 'stable' && env.COOLIFY_STABLE_WEBHOOK_URL != ''
+      - name: Trigger Coolify stable deploy via API
+        if: steps.release.outputs.channel == 'stable' && env.COOLIFY_BASE_URL != '' && env.COOLIFY_API_TOKEN != '' && env.COOLIFY_STABLE_RESOURCE_UUID != ''
+        run: |
+          curl --fail --silent --show-error --location \
+            --request POST "${COOLIFY_BASE_URL%/}/api/v1/deploy" \
+            --header "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "{\"uuid\":\"$COOLIFY_STABLE_RESOURCE_UUID\"}"
+
+      - name: Trigger Coolify beta deploy via API
+        if: steps.release.outputs.channel == 'beta' && env.COOLIFY_BASE_URL != '' && env.COOLIFY_API_TOKEN != '' && env.COOLIFY_BETA_RESOURCE_UUID != ''
+        run: |
+          curl --fail --silent --show-error --location \
+            --request POST "${COOLIFY_BASE_URL%/}/api/v1/deploy" \
+            --header "Authorization: Bearer $COOLIFY_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "{\"uuid\":\"$COOLIFY_BETA_RESOURCE_UUID\"}"
+
+      - name: Trigger Coolify stable deploy via webhook
+        if: steps.release.outputs.channel == 'stable' && env.COOLIFY_STABLE_WEBHOOK_URL != '' && (env.COOLIFY_BASE_URL == '' || env.COOLIFY_API_TOKEN == '' || env.COOLIFY_STABLE_RESOURCE_UUID == '')
         run: curl --fail --silent --show-error --location --request POST "$COOLIFY_STABLE_WEBHOOK_URL"
 
-      - name: Trigger Coolify beta deploy
-        if: steps.release.outputs.channel == 'beta' && env.COOLIFY_BETA_WEBHOOK_URL != ''
+      - name: Trigger Coolify beta deploy via webhook
+        if: steps.release.outputs.channel == 'beta' && env.COOLIFY_BETA_WEBHOOK_URL != '' && (env.COOLIFY_BASE_URL == '' || env.COOLIFY_API_TOKEN == '' || env.COOLIFY_BETA_RESOURCE_UUID == '')
         run: curl --fail --silent --show-error --location --request POST "$COOLIFY_BETA_WEBHOOK_URL"

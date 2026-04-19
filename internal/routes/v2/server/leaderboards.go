@@ -19,14 +19,12 @@ import (
 // @Description Returns top players and clans for a Discord server based on ranking data.
 // @Tags Server Leaderboards
 // @Produce json
-// @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param limit_players query int false "Max players to return (default 100, max 500)"
 // @Param limit_clans query int false "Max clans to return (default 50, max 200)"
 // @Param sort_by query string false "Sort by: global_rank, local_rank, trophies, legend_trophies"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/{server_id}/leaderboards [get]
 func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
@@ -283,7 +281,7 @@ func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 // @Summary Get war performance leaderboard
 // @Router /v2/{server_id}/leaderboards/war-performance [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Success 200 {object} map[string]interface{}
@@ -437,7 +435,7 @@ func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get donations leaderboard
 // @Router /v2/{server_id}/leaderboards/donations [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Param sort_by query string false "sent | received | ratio (default: sent)"
@@ -524,7 +522,7 @@ func getServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get capital raids leaderboard
 // @Router /v2/{server_id}/leaderboards/capital-raids [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Param weekend query string false "Weekend date YYYY-MM-DD (defaults to latest)"
@@ -645,7 +643,7 @@ func getServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get legend league leaderboard
 // @Router /v2/{server_id}/leaderboards/legends [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -782,7 +780,7 @@ func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get clan games leaderboard
 // @Router /v2/{server_id}/leaderboards/clan-games [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Param season query string false "Season YYYY-MM (defaults to current)"
@@ -871,7 +869,7 @@ func getServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get activity leaderboard
 // @Router /v2/{server_id}/leaderboards/activity [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Param season query string false "Season YYYY-MM (defaults to current)"
@@ -957,7 +955,7 @@ func getServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Summary Get looting leaderboard
 // @Router /v2/{server_id}/leaderboards/looting [get]
 // @Tags Server Leaderboards
-// @Security ApiKeyAuth
+
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Max results (default 100, max 500)"
 // @Param season query string false "Season YYYY-MM (defaults to current)"

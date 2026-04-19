@@ -18,7 +18,6 @@ import (
 // @Description Returns clan and member activity totals for a Discord guild.
 // @Tags Activity & Inactivity
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param inactive_threshold_days query int false "Days without login to be considered inactive (default 7)"
 // @Success 200 {object} map[string]interface{}
@@ -173,7 +172,6 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 // @Description Returns players in the guild that are considered inactive by the provided threshold.
 // @Tags Activity & Inactivity
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param inactive_threshold_days query int false "Days before a player is considered inactive"
 // @Param min_townhall query int false "Minimum town hall level"
@@ -182,8 +180,6 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 // @Param offset query int false "Number of results to skip"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/inactive-players [get]

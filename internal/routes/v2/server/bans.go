@@ -11,6 +11,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getBans godoc
+// @Summary Get server bans
+// @Description Returns all banned players for a server.
+// @Tags Server Bans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/bans [get]
 func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -43,6 +53,19 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// addBan godoc
+// @Summary Add or update a ban
+// @Description Bans a player on the server.
+// @Tags Server Bans
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param player_tag path string true "Player Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/bans/{player_tag} [post]
 func addBan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -77,6 +100,18 @@ func addBan(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// removeBan godoc
+// @Summary Remove a ban
+// @Description Removes a player ban from the server.
+// @Tags Server Bans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param player_tag path string true "Player Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/bans/{player_tag} [delete]
 func removeBan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

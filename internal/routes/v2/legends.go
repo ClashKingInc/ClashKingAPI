@@ -155,14 +155,11 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 // @Description Returns legends leaderboard and player stats for a guild.
 // @Tags Bot Legends Endpoints
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param season query string false "Season (YYYY-MM)"
 // @Param limit_top_players query int false "Max number of top players to return"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/legends/guild-stats [get]
@@ -346,7 +343,6 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 // @Description Returns per-day legend stats for all players in a guild over a date range.
 // @Tags Bot Legends Endpoints
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param start_date query string true "Start date in YYYY-MM-DD format"
 // @Param end_date query string true "End date in YYYY-MM-DD format"
@@ -355,8 +351,6 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 // @Param offset query int false "Number of players to skip"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/legends/daily-tracking [get]

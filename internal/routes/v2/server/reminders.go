@@ -9,6 +9,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getServerReminders godoc
+// @Summary Get server reminders
+// @Description Returns all reminders for a server grouped by type.
+// @Tags Server Reminders
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/reminders [get]
 func getServerReminders(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -45,6 +55,19 @@ func getServerReminders(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// createReminder godoc
+// @Summary Create a reminder
+// @Description Creates a new reminder (war, capital, clan games, inactivity, or roster).
+// @Tags Server Reminders
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/reminders [post]
 func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -106,6 +129,20 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// updateReminder godoc
+// @Summary Update a reminder
+// @Description Updates an existing reminder by ID.
+// @Tags Server Reminders
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param reminder_id path string true "Reminder ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/reminders/{reminder_id} [put]
 func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -137,6 +174,18 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteReminder godoc
+// @Summary Delete a reminder
+// @Description Deletes a reminder by ID.
+// @Tags Server Reminders
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param reminder_id path string true "Reminder ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/reminders/{reminder_id} [delete]
 func deleteReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

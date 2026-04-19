@@ -10,6 +10,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// getServerChannels godoc
+// @Summary Get Discord channels
+// @Description Returns text and news channels for the Discord server, sorted by category.
+// @Tags Server Discord
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 502 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/channels [get]
 func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -63,6 +74,17 @@ func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getServerThreads godoc
+// @Summary Get Discord threads
+// @Description Returns all active threads for the Discord server.
+// @Tags Server Discord
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 502 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/threads [get]
 func getServerThreads(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -116,6 +138,17 @@ func getServerThreads(a apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getDiscordRoles godoc
+// @Summary Get Discord roles
+// @Description Returns all roles for the Discord server sorted by position.
+// @Tags Server Discord
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 502 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/discord-roles [get]
 func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -156,6 +189,16 @@ func getServerDiscordChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	return getServerChannels(a)
 }
 
+// testDiscordAPIStatus godoc
+// @Summary Test Discord API access
+// @Description Tests whether the bot has access to the Discord server via the API.
+// @Tags Server Discord
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/discord-test [get]
 func testDiscordAPIStatus(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

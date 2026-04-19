@@ -14,6 +14,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getServerLogs godoc
+// @Summary Get server logs config
+// @Description Returns the aggregated log configuration across all clans for a server.
+// @Tags Server Logs
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/logs [get]
 func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -54,6 +64,18 @@ func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// updateServerLogs godoc
+// @Summary Update server logs config
+// @Description Bulk-updates log webhook/thread settings for multiple log types across clans.
+// @Tags Server Logs
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/logs [put]
 func updateServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -90,6 +112,19 @@ func updateServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// patchServerLogType godoc
+// @Summary Patch a log type config
+// @Description Updates the configuration for a single log type on a server.
+// @Tags Server Logs
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param log_type path string true "Log type identifier"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/logs/{log_type} [patch]
 func patchServerLogType(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -112,6 +147,16 @@ func patchServerLogType(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getAllClanLogs godoc
+// @Summary Get all clan logs
+// @Description Returns the full log configuration for every clan tracked on the server.
+// @Tags Server Logs
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan-logs [get]
 func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -172,6 +217,20 @@ func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// putClanLogs godoc
+// @Summary Set clan log webhooks
+// @Description Creates a Discord webhook and assigns it to the specified log types on a clan.
+// @Tags Server Logs
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan/{clan_tag}/logs [put]
 func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -274,6 +333,20 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteClanLogs godoc
+// @Summary Delete clan log webhooks
+// @Description Removes the webhook config for specified log types on a clan.
+// @Tags Server Logs
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Param log_types query string true "Comma-separated list of log types to delete"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan/{clan_tag}/logs [delete]
 func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

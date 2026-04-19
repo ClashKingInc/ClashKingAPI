@@ -12,6 +12,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getAutoboards godoc
+// @Summary Get server autoboards
+// @Description Returns all autoboards for a server with post/refresh counts and limit.
+// @Tags Server Autoboards
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/autoboards [get]
 func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -49,6 +60,19 @@ func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// createAutoboard godoc
+// @Summary Create an autoboard
+// @Description Creates a new autoboard. Fails if the server autoboard limit is reached.
+// @Tags Server Autoboards
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/autoboards [post]
 func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -96,6 +120,20 @@ func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// updateAutoboard godoc
+// @Summary Update an autoboard
+// @Description Updates fields of an existing autoboard by ID.
+// @Tags Server Autoboards
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param autoboard_id path string true "Autoboard ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/autoboards/{autoboard_id} [patch]
 func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -137,6 +175,18 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteAutoboard godoc
+// @Summary Delete an autoboard
+// @Description Deletes an autoboard by ID.
+// @Tags Server Autoboards
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param autoboard_id path string true "Autoboard ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/autoboards/{autoboard_id} [delete]
 func deleteAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

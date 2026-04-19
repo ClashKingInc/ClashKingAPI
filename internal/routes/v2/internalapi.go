@@ -12,7 +12,15 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// botInfo returns internal bot and database health information.
+// botInfo godoc
+// @Summary Get bot info
+// @Description Returns internal bot cluster stats, system info, and database document counts.
+// @Tags Internal
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/internal/bot/info [get]
 func botInfo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		ctx := c.UserContext()

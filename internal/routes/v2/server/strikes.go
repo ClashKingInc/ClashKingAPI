@@ -11,6 +11,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getStrikes godoc
+// @Summary Get server strikes
+// @Description Returns all strikes for a server, optionally filtered by player tag or including expired.
+// @Tags Server Strikes
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param player_tag query string false "Filter by player tag"
+// @Param view_expired query bool false "Include expired strikes (default false)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/strikes [get]
 func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -64,6 +76,19 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// addStrike godoc
+// @Summary Add a strike
+// @Description Adds a strike to a player on the server.
+// @Tags Server Strikes
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param player_tag path string true "Player Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/strikes/{player_tag} [post]
 func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -114,6 +139,18 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteStrike godoc
+// @Summary Delete a strike
+// @Description Deletes a strike by its ID.
+// @Tags Server Strikes
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param strike_id path string true "Strike ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/strikes/{strike_id} [delete]
 func deleteStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -136,6 +173,17 @@ func deleteStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// strikeSummary godoc
+// @Summary Get player strike summary
+// @Description Returns all strikes and total weight for a player on the server.
+// @Tags Server Strikes
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param player_tag path string true "Player Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/strikes/player/{player_tag}/summary [get]
 func strikeSummary(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

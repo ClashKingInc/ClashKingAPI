@@ -16,7 +16,6 @@ import (
 // @Description Returns raid weekend player rows for the requested guild and clan tags.
 // @Tags Capital Raids
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param clan_tags query []string false "Clan tags (defaults to all guild clans)"
 // @Param season query string false "Season filter (YYYY-MM)"
@@ -24,8 +23,6 @@ import (
 // @Param offset query int false "Number of rows to skip"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/capital/player-stats [get]
@@ -186,13 +183,10 @@ func playerStats(a apptypes.Deps) fiber.Handler {
 // @Description Returns a capital leaderboard for all clans attached to the requested guild.
 // @Tags Capital Raids
 // @Produce json
-// @Security ApiKeyAuth
 // @Param guild_id query int true "Discord guild ID"
 // @Param season query string false "Season filter (YYYY-MM)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/capital/guild-leaderboard [get]

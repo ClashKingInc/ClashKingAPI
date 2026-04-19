@@ -9,6 +9,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getServerSettings godoc
+// @Summary Get server settings
+// @Description Returns the full settings document for a Discord server.
+// @Tags Server Settings
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_settings query bool false "Include clan settings"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/settings [get]
 func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -37,6 +49,19 @@ func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// putEmbedColor godoc
+// @Summary Set embed color
+// @Description Sets the embed color (decimal integer) for a Discord server.
+// @Tags Server Settings
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param hex_code path int true "Embed color as decimal integer"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/embed-color/{hex_code} [put]
 func putEmbedColor(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -58,6 +83,19 @@ func putEmbedColor(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// patchServerSettings godoc
+// @Summary Update server settings
+// @Description Partially updates server-level settings (nickname rules, eval config, etc.).
+// @Tags Server Settings
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/settings [patch]
 func patchServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

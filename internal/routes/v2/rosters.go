@@ -91,7 +91,6 @@ func createRoster(a apptypes.Deps) fiber.Handler {
 // @Description Identifies clan members not yet registered in a roster.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
 // @Param roster_id query string false "Roster ID"
 // @Param group_id query string false "Group ID"
@@ -218,7 +217,6 @@ func updateRoster(a apptypes.Deps) fiber.Handler {
 // @Description Returns a specific roster by ID.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param server_id query int true "Discord server ID"
 // @Success 200 {object} map[string]interface{}
@@ -413,7 +411,6 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 // @Description Returns all rosters for a Discord server.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param group_id query string false "Filter by group"
 // @Param clan_tag query string false "Filter by clan"
@@ -483,7 +480,6 @@ func createRosterGroup(a apptypes.Deps) fiber.Handler {
 // @Description Returns roster groups for a server.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
 // @Success 200 {object} map[string]interface{}
 // @Router /v2/roster-group/list [get]
@@ -506,7 +502,6 @@ func listRosterGroups(a apptypes.Deps) fiber.Handler {
 // @Description Returns a specific roster group.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
@@ -1064,7 +1059,6 @@ func deleteRosterAutomation(a apptypes.Deps) fiber.Handler {
 // @Description Returns all clan members for all clans linked to a server.
 // @Tags Rosters
 // @Produce json
-// @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Success 200 {object} map[string]interface{}
 // @Router /v2/roster/server/{server_id}/members [get]

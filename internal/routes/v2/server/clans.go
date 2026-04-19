@@ -9,6 +9,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getServerClanSettings godoc
+// @Summary Get clan settings
+// @Description Returns detailed settings for a specific clan on a server.
+// @Tags Server Clans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan/{clan_tag}/settings [get]
 func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -24,6 +36,16 @@ func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getServerClansBasic godoc
+// @Summary List server clans (basic)
+// @Description Returns a basic list of clans (tag+name) for a server.
+// @Tags Server Clans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clans-basic [get]
 func getServerClansBasic(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -42,6 +64,17 @@ func getServerClansBasic(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getServerClans godoc
+// @Summary List server clans (full)
+// @Description Returns the full clan list for a server with live CoC API data.
+// @Tags Server Clans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clans [get]
 func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -87,6 +120,20 @@ func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// patchClanSettings godoc
+// @Summary Update clan settings
+// @Description Partially updates the settings for a specific clan on a server.
+// @Tags Server Clans
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan/{clan_tag}/settings [patch]
 func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -110,6 +157,18 @@ func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// addServerClan godoc
+// @Summary Add a clan to the server
+// @Description Adds a CoC clan to the Discord server tracking list.
+// @Tags Server Clans
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clans [post]
 func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -143,6 +202,18 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// removeServerClan godoc
+// @Summary Remove a clan from the server
+// @Description Removes a clan from the Discord server tracking list.
+// @Tags Server Clans
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clans/{clan_tag} [delete]
 func removeServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

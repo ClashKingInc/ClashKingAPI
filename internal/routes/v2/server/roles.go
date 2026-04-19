@@ -11,6 +11,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// listRoles godoc
+// @Summary List roles by type
+// @Description Returns all roles of a given type configured for the server.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param role_type path string true "Role type (clan, league, townhall, status...)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/roles/{role_type} [get]
 func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -54,6 +66,19 @@ func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// createRole godoc
+// @Summary Create a role
+// @Description Creates a new role of a given type for the server.
+// @Tags Server Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param role_type path string true "Role type"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/roles/{role_type} [post]
 func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -99,6 +124,20 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteRole godoc
+// @Summary Delete a role
+// @Description Deletes a role by type and ID.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param role_type path string true "Role type"
+// @Param role_id path string true "Role ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/roles/{role_type}/{role_id} [delete]
 func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -139,6 +178,17 @@ func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getRoleSettings godoc
+// @Summary Get role settings
+// @Description Returns the role evaluation settings for a server.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/role-settings [get]
 func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -162,6 +212,18 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// patchRoleSettings godoc
+// @Summary Update role settings
+// @Description Partially updates the role evaluation settings for a server.
+// @Tags Server Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/role-settings [patch]
 func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -212,6 +274,17 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getAllRoles godoc
+// @Summary Get all roles
+// @Description Returns all roles of every type configured for the server.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/all-roles [get]
 func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -246,6 +319,17 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getFamilyRoles godoc
+// @Summary Get family roles
+// @Description Returns all family-related role configurations for the server.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/family-roles [get]
 func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -276,6 +360,18 @@ func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// addFamilyRole godoc
+// @Summary Add a family role
+// @Description Adds a Discord role to a family role category.
+// @Tags Server Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/family-roles [post]
 func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -314,6 +410,20 @@ func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// removeFamilyRole godoc
+// @Summary Remove a family role
+// @Description Removes a Discord role from a family role category.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param role_type path string true "Family role type"
+// @Param role_id path string true "Discord Role ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/family-roles/{role_type}/{role_id} [delete]
 func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

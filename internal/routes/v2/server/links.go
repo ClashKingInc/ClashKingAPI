@@ -12,6 +12,20 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getLinks godoc
+// @Summary Get server links
+// @Description Returns all player-Discord account links for server members.
+// @Tags Server Links
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param limit query int false "Max results per page (default 100)"
+// @Param offset query int false "Pagination offset"
+// @Param search query string false "Search by player tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 502 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/links [get]
 func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -170,6 +184,19 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// deleteLink godoc
+// @Summary Delete a link
+// @Description Removes the link between a Discord user and a player account.
+// @Tags Server Links
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param user_discord_id path string true "Discord User ID"
+// @Param player_tag path string true "Player Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/links/{user_discord_id}/{player_tag} [delete]
 func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		_, err := pathInt(c, "server_id")
@@ -189,6 +216,18 @@ func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// bulkUnlink godoc
+// @Summary Bulk unlink accounts
+// @Description Removes multiple player-Discord links for a user in bulk.
+// @Tags Server Links
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/links/bulk-unlink [post]
 func bulkUnlink(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		_, err := pathInt(c, "server_id")

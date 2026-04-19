@@ -13,6 +13,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// getServerCountdowns godoc
+// @Summary Get server countdowns
+// @Description Returns all server-level countdown types with enabled status and channel.
+// @Tags Server Countdowns
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/countdowns [get]
 func getServerCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -37,6 +48,18 @@ func getServerCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getClanCountdowns godoc
+// @Summary Get clan countdowns
+// @Description Returns all clan-level countdown types with enabled status and channel.
+// @Tags Server Countdowns
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param clan_tag path string true "Clan Tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/clan/{clan_tag}/countdowns [get]
 func getClanCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -62,6 +85,19 @@ func getClanCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// enableCountdown godoc
+// @Summary Enable a countdown
+// @Description Enables a countdown type for a server or clan.
+// @Tags Server Countdowns
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/countdowns [post]
 func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -107,6 +143,19 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// disableCountdown godoc
+// @Summary Disable a countdown
+// @Description Disables a countdown type for a server or clan.
+// @Tags Server Countdowns
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/countdowns [delete]
 func disableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")

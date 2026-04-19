@@ -99,7 +99,7 @@ jobs:
             org.opencontainers.image.version=${{ github.ref_name }}
 
       - name: Trigger Coolify stable deploy via API
-        if: steps.release.outputs.channel == 'stable' && env.COOLIFY_BASE_URL != '' && env."COOLIFY_API_TOKEN" != '' && env.COOLIFY_STABLE_RESOURCE_UUID != ''
+        if: steps.release.outputs.channel == 'stable' && env.COOLIFY_BASE_URL != '' && env.COOLIFY_API_TOKEN != '' && env.COOLIFY_STABLE_RESOURCE_UUID != ''
         run: |
           curl --fail --silent --show-error --location \
             --request POST "${COOLIFY_BASE_URL%/}/api/v1/deploy" \

@@ -8,6 +8,7 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -46,9 +47,38 @@ func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 				refreshCount++
 			}
 		}
+
+		webhookChannelIDs := map[string]string{}
+		for _, item := range items {
+			if stringPtrMaybe(item["channel_id"]) != nil {
+				continue
+			}
+			webhookID := serverAsString(item["webhook_id"])
+			if webhookID == "" {
+				continue
+			}
+			if _, seen := webhookChannelIDs[webhookID]; seen {
+				continue
+			}
+			webhookInt := ticketParseInt64(webhookID)
+			if webhookInt == 0 {
+				continue
+			}
+			webhook, err := rt.Discord.GetWebhook(c.UserContext(), webhookInt)
+			if err != nil {
+				continue
+			}
+			switch typed := webhook.(type) {
+			case discord.IncomingWebhook:
+				webhookChannelIDs[webhookID] = typed.ChannelID.String()
+			case discord.ChannelFollowerWebhook:
+				webhookChannelIDs[webhookID] = typed.ChannelID.String()
+			}
+		}
+
 		responseItems := make([]modelsv2.AutoBoardConfig, 0, len(items))
 		for _, item := range items {
-			responseItems = append(responseItems, autoBoardConfigFromDoc(item))
+			responseItems = append(responseItems, autoBoardConfigFromDoc(item, webhookChannelIDs))
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerAutoBoardsResponse{
 			Autoboards:   responseItems,
@@ -208,7 +238,7 @@ func deleteAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
-func autoBoardConfigFromDoc(item map[string]any) modelsv2.AutoBoardConfig {
+func autoBoardConfigFromDoc(item map[string]any, webhookChannelIDs map[string]string) modelsv2.AutoBoardConfig {
 	id := serverAsString(item["_id"])
 	if oid, ok := item["_id"].(bson.ObjectID); ok {
 		id = oid.Hex()
@@ -220,6 +250,12 @@ func autoBoardConfigFromDoc(item map[string]any) modelsv2.AutoBoardConfig {
 			boardType = strings.SplitN(buttonID, ":", 2)[0]
 		}
 	}
+	channelID := stringPtrMaybe(item["channel_id"])
+	if channelID == nil {
+		if fallback := webhookChannelIDs[serverAsString(item["webhook_id"])]; fallback != "" {
+			channelID = &fallback
+		}
+	}
 	return modelsv2.AutoBoardConfig{
 		ID:        id,
 		Type:      serverAsString(item["type"]),
@@ -227,7 +263,7 @@ func autoBoardConfigFromDoc(item map[string]any) modelsv2.AutoBoardConfig {
 		ButtonID:  serverAsString(item["button_id"]),
 		WebhookID: serverAsString(item["webhook_id"]),
 		ThreadID:  stringPtrMaybe(item["thread_id"]),
-		ChannelID: stringPtrMaybe(item["channel_id"]),
+		ChannelID: channelID,
 		Days:      stringSlice(item["days"]),
 		Locale:    serverAsString(item["locale"]),
 		CreatedAt: stringPtrMaybe(stringifyTimeLike(item["created_at"])),

@@ -4478,7 +4478,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns text and news channels for the Discord server, sorted by category.",
+                "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
                 ],

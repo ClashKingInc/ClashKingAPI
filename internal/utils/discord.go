@@ -121,6 +121,13 @@ func (a *DiscordAdapter) GetChannel(_ context.Context, channelID int64) (discord
 	return a.client.GetChannel(snowflake.ID(channelID))
 }
 
+// GetChannelDirect fetches a channel without the adapter's extra delay.
+// Use this only for bounded, concurrent lookups where the underlying Discord client
+// already handles rate limiting.
+func (a *DiscordAdapter) GetChannelDirect(_ context.Context, channelID int64) (discord.Channel, error) {
+	return a.client.GetChannel(snowflake.ID(channelID))
+}
+
 // GetGuildChannels fetches the guild channels using the bot token.
 func (a *DiscordAdapter) GetGuildChannels(_ context.Context, guildID int64) ([]discord.GuildChannel, error) {
 	a.wait()
@@ -131,6 +138,12 @@ func (a *DiscordAdapter) GetGuildChannels(_ context.Context, guildID int64) ([]d
 func (a *DiscordAdapter) GetGuildWebhooks(_ context.Context, guildID int64) ([]discord.Webhook, error) {
 	a.wait()
 	return a.client.GetAllWebhooks(snowflake.ID(guildID))
+}
+
+// GetWebhook fetches a webhook by ID using the bot token.
+func (a *DiscordAdapter) GetWebhook(_ context.Context, webhookID int64) (discord.Webhook, error) {
+	a.wait()
+	return a.client.GetWebhook(snowflake.ID(webhookID))
 }
 
 // CreateWebhook creates a webhook in a guild channel using the bot token.

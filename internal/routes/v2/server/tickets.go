@@ -403,6 +403,88 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		}
 		openTicketsDuration := time.Since(openTicketsStartedAt)
 
+		panelCategoryMap := map[string]bson.M{}
+		panelNames := make([]string, 0)
+		panelNameSet := map[string]struct{}{}
+		for _, ticket := range tickets {
+			panelName := serverAsString(ticket["panel"])
+			if panelName == "" {
+				continue
+			}
+			if _, seen := panelNameSet[panelName]; seen {
+				continue
+			}
+			panelNameSet[panelName] = struct{}{}
+			panelNames = append(panelNames, panelName)
+		}
+		if len(panelNames) > 0 {
+			panelCur, perr := a.Store.C.Ticketing.Find(c.UserContext(),
+				bson.M{"server_id": serverID, "name": bson.M{"$in": panelNames}},
+				options.Find().SetProjection(bson.M{"_id": 0, "name": 1, "open-category": 1, "sleep-category": 1, "closed-category": 1}))
+			if perr == nil {
+				var panelDocs []bson.M
+				if err := panelCur.All(c.UserContext(), &panelDocs); err == nil {
+					for _, panelDoc := range panelDocs {
+						panelName := serverAsString(panelDoc["name"])
+						if panelName != "" {
+							panelCategoryMap[panelName] = panelDoc
+						}
+					}
+				}
+			}
+		}
+		categoryNameMap := map[string]string{}
+		channelExistsByID := map[string]bool{}
+		channelExistenceLoaded := false
+		channels, cerr := a.Discord.GetGuildChannels(c.UserContext(), serverID)
+		if cerr == nil {
+			for _, channel := range channels {
+				if channel.Type() != discord.ChannelTypeGuildCategory {
+					continue
+				}
+				categoryNameMap[channel.ID().String()] = channel.Name()
+			}
+		}
+		ticketChannelIDs := make([]string, 0, len(tickets))
+		ticketChannelIDSet := map[string]struct{}{}
+		for _, ticket := range tickets {
+			channelID := serverAsString(ticket["channel"])
+			if channelID == "" {
+				continue
+			}
+			if _, seen := ticketChannelIDSet[channelID]; seen {
+				continue
+			}
+			ticketChannelIDSet[channelID] = struct{}{}
+			ticketChannelIDs = append(ticketChannelIDs, channelID)
+		}
+		if len(ticketChannelIDs) > 0 {
+			channelExistenceLoaded = true
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			sem := make(chan struct{}, 10)
+			for _, channelID := range ticketChannelIDs {
+				channelInt := ticketParseInt64(channelID)
+				if channelInt == 0 {
+					channelExistsByID[channelID] = false
+					continue
+				}
+				wg.Add(1)
+				go func(channelID string, channelInt int64) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					_, err := a.Discord.GetChannelDirect(c.UserContext(), channelInt)
+
+					mu.Lock()
+					channelExistsByID[channelID] = err == nil
+					mu.Unlock()
+				}(channelID, channelInt)
+			}
+			wg.Wait()
+		}
+
 		// Collect unique user IDs to batch-fetch linked accounts and missing identities.
 		userIDSet := map[string]struct{}{}
 		missingIdentityUserSet := map[string]struct{}{}
@@ -565,6 +647,28 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.OpenTicket, 0, len(tickets))
 		for _, ticket := range tickets {
 			t := openTicketFromDoc(ticket)
+			categoryID := t.CategoryID
+			if categoryID == nil {
+				categoryID = ticketPanelCategoryID(panelCategoryMap[t.Panel], t.Status)
+			}
+			if categoryID != nil {
+				t.CategoryID = categoryID
+				if t.CategoryName == nil {
+					if categoryName := categoryNameMap[*categoryID]; categoryName != "" {
+						t.CategoryName = &categoryName
+					}
+				}
+			}
+
+			if t.CategoryName == nil && t.CategoryID != nil {
+				if categoryName := categoryNameMap[*t.CategoryID]; categoryName != "" {
+					t.CategoryName = &categoryName
+				}
+			}
+
+			if channelExistenceLoaded {
+				t.ChannelExists = channelExistsByID[t.Channel]
+			}
 
 			if identity, ok := userIdentityMap[t.User]; ok {
 				if t.DiscordUsername == nil && identity.Username != nil {
@@ -1178,8 +1282,21 @@ func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {
 		Number:             asIntWithDefault(ticket["number"], 0),
 		ApplyAccount:       stringPtrMaybe(ticket["apply_account"]),
 		Panel:              serverAsString(ticket["panel"]),
+		CategoryID:         stringPtrMaybe(ticket["category_id"]),
+		CategoryName:       stringPtrMaybe(ticket["category_name"]),
 		SetClan:            stringPtrMaybe(ticket["set_clan"]),
 	}
+}
+
+func ticketPanelCategoryID(panel bson.M, status string) *string {
+	field := "open-category"
+	switch strings.ToLower(status) {
+	case "sleep":
+		field = "sleep-category"
+	case "closed", "delete":
+		field = "closed-category"
+	}
+	return stringPtrMaybe(panel[field])
 }
 
 // stringTrimSpace trims whitespace from a string.

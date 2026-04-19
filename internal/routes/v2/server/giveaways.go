@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
@@ -44,13 +45,14 @@ func getServerGiveaways(a apptypes.Deps) fiber.Handler {
 		if err := cur.All(c.UserContext(), &docs); err != nil {
 			return err
 		}
+		winnerIdentities := giveawayWinnerIdentities(c, a, int64(serverID), docs)
 
 		ongoing := make([]modelsv2.GiveawayConfig, 0)
 		upcoming := make([]modelsv2.GiveawayConfig, 0)
 		ended := make([]modelsv2.GiveawayConfig, 0)
 
 		for _, doc := range docs {
-			serialized := giveawayModel(doc)
+			serialized := giveawayModel(doc, winnerIdentities)
 			switch status, _ := doc["status"].(string); status {
 			case "ongoing":
 				ongoing = append(ongoing, serialized)
@@ -91,7 +93,7 @@ func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
-		return apptypes.JSON(c, http.StatusOK, giveawayModel(doc))
+		return apptypes.JSON(c, http.StatusOK, giveawayModel(doc, giveawayWinnerIdentities(c, a, int64(serverID), []bson.M{doc})))
 	}
 }
 
@@ -358,7 +360,7 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func giveawayModel(doc bson.M) modelsv2.GiveawayConfig {
+func giveawayModel(doc bson.M, winnerIdentities map[string]ticketUserIdentity) modelsv2.GiveawayConfig {
 	out := modelsv2.GiveawayConfig{
 		ID:                     asStringOr(doc["_id"], ""),
 		Prize:                  asStringOr(doc["prize"], ""),
@@ -380,9 +382,112 @@ func giveawayModel(doc bson.M) modelsv2.GiveawayConfig {
 		EntryCount:             giveawayEntryCount(doc["entries"]),
 		Updated:                asStringOr(doc["updated"], "") == "yes" || asBool(doc["updated"]),
 		MessageID:              stringPtrMaybe(doc["message_id"]),
-		WinnersList:            giveawayWinners(doc["winners_list"]),
+		WinnersList:            giveawayWinners(doc["winners_list"], winnerIdentities),
 	}
 	return out
+}
+
+func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, docs []bson.M) map[string]ticketUserIdentity {
+	identityMap := map[string]ticketUserIdentity{}
+	if len(docs) == 0 {
+		return identityMap
+	}
+
+	userIDSet := map[string]struct{}{}
+	lookupIDs := make([]any, 0)
+	for _, doc := range docs {
+		for _, winner := range anyMapSlice(doc["winners_list"]) {
+			userID := serverAsString(winner["user_id"])
+			if userID == "" {
+				continue
+			}
+			if _, seen := userIDSet[userID]; seen {
+				continue
+			}
+			userIDSet[userID] = struct{}{}
+			lookupIDs = append(lookupIDs, userID)
+			if numeric := ticketParseInt64(userID); numeric != 0 {
+				lookupIDs = append(lookupIDs, numeric)
+			}
+		}
+	}
+	if len(userIDSet) == 0 {
+		return identityMap
+	}
+
+	userCur, err := a.Store.C.Users.Find(c.UserContext(),
+		bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": lookupIDs}},
+		options.Find().SetProjection(bson.M{"_id": 0, "linked_accounts.discord": 1}))
+	if err == nil {
+		var userDocs []bson.M
+		if err := userCur.All(c.UserContext(), &userDocs); err == nil {
+			for _, userDoc := range userDocs {
+				discordAccount := mapMaybe(mapMaybe(userDoc["linked_accounts"])["discord"])
+				userID := serverAsString(discordAccount["discord_user_id"])
+				if userID == "" {
+					continue
+				}
+				identity := ticketIdentityFromAuthUser(userDoc)
+				if identity.Username != nil || identity.AvatarURL != nil {
+					identityMap[userID] = identity
+				}
+			}
+		}
+	}
+
+	remaining := make([]string, 0, len(userIDSet))
+	for userID := range userIDSet {
+		identity := identityMap[userID]
+		if identity.Username != nil && identity.AvatarURL != nil {
+			continue
+		}
+		remaining = append(remaining, userID)
+	}
+
+	if len(remaining) == 0 {
+		return identityMap
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, 10)
+	for _, userID := range remaining {
+		userInt := ticketParseInt64(userID)
+		if userInt == 0 {
+			continue
+		}
+		wg.Add(1)
+		go func(userID string, userInt int64) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			member := a.Discord.GetMemberDirect(c.UserContext(), serverID, userInt)
+			if member == nil {
+				return
+			}
+			identity := ticketIdentityFromMember(*member)
+			if identity.Username == nil && identity.AvatarURL == nil {
+				return
+			}
+			mu.Lock()
+			existing := identityMap[userID]
+			if existing.Username == nil {
+				existing.Username = identity.Username
+			}
+			if existing.DisplayName == nil {
+				existing.DisplayName = identity.DisplayName
+			}
+			if existing.AvatarURL == nil {
+				existing.AvatarURL = identity.AvatarURL
+			}
+			identityMap[userID] = existing
+			mu.Unlock()
+		}(userID, userInt)
+	}
+	wg.Wait()
+
+	return identityMap
 }
 
 func giveawayBoosters(value any) []modelsv2.GiveawayBooster {
@@ -402,22 +507,30 @@ func giveawayBoosters(value any) []modelsv2.GiveawayBooster {
 	return out
 }
 
-func giveawayWinners(value any) []modelsv2.GiveawayWinner {
-	raw, ok := value.([]any)
-	if !ok {
+func giveawayWinners(value any, winnerIdentities map[string]ticketUserIdentity) []modelsv2.GiveawayWinner {
+	raw := anyMapSlice(value)
+	if len(raw) == 0 {
 		return []modelsv2.GiveawayWinner{}
 	}
 	out := make([]modelsv2.GiveawayWinner, 0, len(raw))
-	for _, item := range raw {
-		if doc, ok := item.(bson.M); ok {
-			out = append(out, modelsv2.GiveawayWinner{
-				UserID:    asStringOr(doc["user_id"], ""),
-				Username:  stringPtrMaybe(doc["username"]),
-				Status:    asStringOr(doc["status"], "winner"),
-				Timestamp: stringPtrMaybe(doc["timestamp"]),
-				Reason:    stringPtrMaybe(doc["reason"]),
-			})
+	for _, doc := range raw {
+		userID := asStringOr(doc["user_id"], "")
+		identity := winnerIdentities[userID]
+		username := stringPtrMaybe(doc["username"])
+		if username == nil {
+			username = identity.DisplayName
 		}
+		if username == nil {
+			username = identity.Username
+		}
+		out = append(out, modelsv2.GiveawayWinner{
+			UserID:    userID,
+			Username:  username,
+			AvatarURL: identity.AvatarURL,
+			Status:    asStringOr(doc["status"], "winner"),
+			Timestamp: stringPtrMaybe(doc["timestamp"]),
+			Reason:    stringPtrMaybe(doc["reason"]),
+		})
 	}
 	return out
 }

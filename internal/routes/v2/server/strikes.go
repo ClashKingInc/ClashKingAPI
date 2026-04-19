@@ -45,18 +45,14 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
+		playerTags := make([]string, 0, len(items))
+		for _, item := range items {
+			if tag := serverNormalizeTag(serverAsString(item["tag"])); tag != "" {
+				playerTags = append(playerTags, tag)
+			}
+		}
+		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.C.PlayerStats, rt.Store.C.ClanDB, playerTags)
 		if members, err := fetchAllServerMembers(c, rt, int64(serverID)); err == nil {
-			playerTags := make([]string, 0, len(items))
-			for _, item := range items {
-				if tag := serverAsString(item["tag"]); tag != "" {
-					playerTags = append(playerTags, tag)
-				}
-			}
-			playerDocs, _ := findManyMaps(c.UserContext(), rt.Store.C.PlayerStats, bson.M{"tag": bson.M{"$in": playerTags}})
-			playerNames := map[string]string{}
-			for _, doc := range playerDocs {
-				playerNames[serverAsString(doc["tag"])] = serverAsString(doc["name"])
-			}
 			for _, item := range items {
 				if addedBy := serverAsString(item["added_by"]); addedBy != "" {
 					item["added_by"] = addedBy
@@ -65,10 +61,54 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 						item["added_by_avatar_url"] = member.EffectiveAvatarURL()
 					}
 				}
-				if tag := serverAsString(item["tag"]); tag != "" {
-					if name := playerNames[tag]; name != "" {
-						item["player_name"] = name
-					}
+				tag := serverNormalizeTag(serverAsString(item["tag"]))
+				if tag == "" {
+					continue
+				}
+				snapshot := playerSnapshots[tag]
+				if snapshot.Name != nil {
+					item["player_name"] = *snapshot.Name
+				}
+				if snapshot.TownHall != nil {
+					item["town_hall"] = *snapshot.TownHall
+				}
+				if snapshot.ClanTag != nil {
+					item["clan_tag"] = *snapshot.ClanTag
+				}
+				if snapshot.ClanName != nil {
+					item["clan_name"] = *snapshot.ClanName
+				}
+				if snapshot.ClanRole != nil {
+					item["current_role"] = *snapshot.ClanRole
+				}
+				if snapshot.Trophies != nil {
+					item["trophies"] = *snapshot.Trophies
+				}
+			}
+		} else {
+			for _, item := range items {
+				tag := serverNormalizeTag(serverAsString(item["tag"]))
+				if tag == "" {
+					continue
+				}
+				snapshot := playerSnapshots[tag]
+				if snapshot.Name != nil {
+					item["player_name"] = *snapshot.Name
+				}
+				if snapshot.TownHall != nil {
+					item["town_hall"] = *snapshot.TownHall
+				}
+				if snapshot.ClanTag != nil {
+					item["clan_tag"] = *snapshot.ClanTag
+				}
+				if snapshot.ClanName != nil {
+					item["clan_name"] = *snapshot.ClanName
+				}
+				if snapshot.ClanRole != nil {
+					item["current_role"] = *snapshot.ClanRole
+				}
+				if snapshot.Trophies != nil {
+					item["trophies"] = *snapshot.Trophies
 				}
 			}
 		}

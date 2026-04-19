@@ -31,6 +31,15 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
+
+		playerTags := make([]string, 0, len(items))
+		for _, item := range items {
+			if tag := serverNormalizeTag(serverAsString(item["VillageTag"])); tag != "" {
+				playerTags = append(playerTags, tag)
+			}
+		}
+		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.C.PlayerStats, rt.Store.C.ClanDB, playerTags)
+
 		if members, err := fetchAllServerMembers(c, rt, int64(serverID)); err == nil {
 			for _, item := range items {
 				if addedBy := serverAsString(item["added_by"]); addedBy != "" {
@@ -46,6 +55,55 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 							cast["user"] = serverAsString(cast["user"])
 						}
 					}
+				}
+				tag := serverNormalizeTag(serverAsString(item["VillageTag"]))
+				if tag == "" {
+					continue
+				}
+				snapshot := playerSnapshots[tag]
+				if snapshot.Name != nil {
+					item["name"] = *snapshot.Name
+				}
+				if snapshot.TownHall != nil {
+					item["town_hall"] = *snapshot.TownHall
+				}
+				if snapshot.ClanTag != nil {
+					item["clan_tag"] = *snapshot.ClanTag
+				}
+				if snapshot.ClanName != nil {
+					item["clan_name"] = *snapshot.ClanName
+				}
+				if snapshot.ClanRole != nil {
+					item["current_role"] = *snapshot.ClanRole
+				}
+				if snapshot.Trophies != nil {
+					item["trophies"] = *snapshot.Trophies
+				}
+			}
+		} else {
+			for _, item := range items {
+				tag := serverNormalizeTag(serverAsString(item["VillageTag"]))
+				if tag == "" {
+					continue
+				}
+				snapshot := playerSnapshots[tag]
+				if snapshot.Name != nil {
+					item["name"] = *snapshot.Name
+				}
+				if snapshot.TownHall != nil {
+					item["town_hall"] = *snapshot.TownHall
+				}
+				if snapshot.ClanTag != nil {
+					item["clan_tag"] = *snapshot.ClanTag
+				}
+				if snapshot.ClanName != nil {
+					item["clan_name"] = *snapshot.ClanName
+				}
+				if snapshot.ClanRole != nil {
+					item["current_role"] = *snapshot.ClanRole
+				}
+				if snapshot.Trophies != nil {
+					item["trophies"] = *snapshot.Trophies
 				}
 			}
 		}

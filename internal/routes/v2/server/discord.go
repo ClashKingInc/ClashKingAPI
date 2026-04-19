@@ -12,7 +12,7 @@ import (
 
 // getServerChannels godoc
 // @Summary Get Discord channels
-// @Description Returns text and news channels for the Discord server, sorted by category.
+// @Description Returns category, text, and news channels for the Discord server, sorted by category.
 // @Tags Server Discord
 // @Produce json
 // @Security ApiKeyAuth
@@ -39,18 +39,19 @@ func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 
 		items := make([]map[string]any, 0, len(channels))
 		for _, channel := range channels {
-			if channel.Type() != discord.ChannelTypeGuildText && channel.Type() != discord.ChannelTypeGuildNews {
-				continue
-			}
-
 			item := map[string]any{
 				"id":   channel.ID().String(),
 				"name": channel.Name(),
 			}
-			if channel.Type() == discord.ChannelTypeGuildNews {
+			switch channel.Type() {
+			case discord.ChannelTypeGuildCategory:
+				item["type"] = "category"
+			case discord.ChannelTypeGuildNews:
 				item["type"] = "news"
-			} else {
+			case discord.ChannelTypeGuildText:
 				item["type"] = "text"
+			default:
+				continue
 			}
 			if parentID := channel.ParentID(); parentID != nil {
 				item["parent_id"] = parentID.String()

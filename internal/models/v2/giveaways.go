@@ -8,6 +8,7 @@ type GiveawayBooster struct {
 type GiveawayWinner struct {
 	UserID    string  `json:"user_id"`
 	Username  *string `json:"username,omitempty"`
+	AvatarURL *string `json:"avatar_url,omitempty"`
 	Status    string  `json:"status"`
 	Timestamp *string `json:"timestamp,omitempty"`
 	Reason    *string `json:"reason,omitempty"`

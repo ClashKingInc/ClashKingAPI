@@ -55,7 +55,7 @@ func botInfo(a apptypes.Deps) fiber.Handler {
 			"clans_tracked":   a.Store.C.ClanDB,
 			"players_tracked": a.Store.C.PlayerStats,
 			"wars_stored":     a.Store.C.ClanWars,
-			"tickets_open":    a.Store.C.Banlist,
+			"tickets_open":    a.Store.C.OpenTickets,
 			"capital_raids":   a.Store.C.RaidWeekendDB,
 		})
 

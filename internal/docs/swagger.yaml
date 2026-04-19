@@ -3729,8 +3729,8 @@ paths:
       - Server Bans
   /v2/server/{server_id}/channels:
     get:
-      description: Returns text and news channels for the Discord server, sorted by
-        category.
+      description: Returns category, text, and news channels for the Discord server,
+        sorted by category.
       parameters:
       - description: Server ID
         in: path

@@ -490,27 +490,24 @@ func stringSlice(value any) []string {
 }
 
 func anySlice(value any) []any {
-	if typed, ok := value.([]any); ok {
-		return typed
+	if sanitized, ok := sanitize(value).([]any); ok {
+		return sanitized
 	}
 	return []any{}
 }
 
 func mapMaybe(value any) map[string]any {
-	if typed, ok := value.(map[string]any); ok {
-		return typed
+	if sanitized, ok := sanitize(value).(map[string]any); ok {
+		return sanitized
 	}
 	return map[string]any{}
 }
 
 func anyMapSlice(value any) []map[string]any {
-	raw, ok := value.([]any)
-	if !ok {
-		return nil
-	}
+	raw := anySlice(value)
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		if cast, ok := item.(map[string]any); ok {
+		if cast := mapMaybe(item); len(cast) > 0 {
 			out = append(out, cast)
 		}
 	}

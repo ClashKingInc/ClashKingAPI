@@ -34,29 +34,9 @@ func getServerPanel(a apptypes.Deps) fiber.Handler {
 		).Decode(&doc)
 		if err != nil {
 			// No document → return empty defaults
-			return apptypes.JSON(c, http.StatusOK, map[string]any{
-				"embed_name":      nil,
-				"buttons":         []any{},
-				"button_color":    "Grey",
-				"welcome_channel": nil,
-			})
+			return apptypes.JSON(c, http.StatusOK, serverPanelResponse(doc))
 		}
-		logs, _ := doc["logs"].(bson.M)
-		welcomeLink := map[string]any{}
-		if logs != nil {
-			if wl, ok := logs["welcome_link"].(bson.M); ok {
-				for k, v := range wl {
-					welcomeLink[k] = v
-				}
-			}
-		}
-		result := map[string]any{
-			"embed_name":      welcomeLink["embed_name"],
-			"buttons":         serverPanelButtonsSlice(welcomeLink["buttons"]),
-			"button_color":    serverPanelString(welcomeLink["button_color"], "Grey"),
-			"welcome_channel": welcomeLink["welcome_channel"],
-		}
-		return apptypes.JSON(c, http.StatusOK, result)
+		return apptypes.JSON(c, http.StatusOK, serverPanelResponse(doc))
 	}
 }
 
@@ -113,16 +93,26 @@ func updateServerPanel(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func serverPanelButtonsSlice(v any) []any {
-	switch typed := v.(type) {
-	case bson.A:
-		out := make([]any, len(typed))
-		copy(out, typed)
-		return out
-	case []any:
-		return typed
+func serverPanelResponse(doc bson.M) map[string]any {
+	welcomeLink := mapMaybe(mapMaybe(doc["logs"])["welcome_link"])
+	return map[string]any{
+		"embed_name":      welcomeLink["embed_name"],
+		"buttons":         serverPanelButtonsSlice(welcomeLink["buttons"]),
+		"button_color":    serverPanelString(welcomeLink["button_color"], "Grey"),
+		"welcome_channel": welcomeLink["welcome_channel"],
 	}
-	return []any{}
+}
+
+func serverPanelButtonsSlice(v any) []string {
+	items := anySlice(v)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		button := serverAsString(item)
+		if button != "" {
+			out = append(out, button)
+		}
+	}
+	return out
 }
 
 func serverPanelString(v any, defaultVal string) string {

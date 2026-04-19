@@ -159,6 +159,15 @@ func flattenForMongo(input map[string]any, prefix string) bson.M {
 
 func sanitize(value any) any {
 	switch typed := value.(type) {
+	case bson.M:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if key == "_id" {
+				continue
+			}
+			out[key] = sanitize(item)
+		}
+		return out
 	case []map[string]any:
 		out := make([]map[string]any, 0, len(typed))
 		for _, item := range typed {

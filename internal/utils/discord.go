@@ -162,6 +162,17 @@ func (a *DiscordAdapter) GetMember(_ context.Context, guildID, userID int64) *di
 	return m
 }
 
+// GetMemberDirect fetches a single guild member without the adapter's extra delay.
+// Use this only for bounded, concurrent lookups where the underlying Discord client
+// already handles rate limiting.
+func (a *DiscordAdapter) GetMemberDirect(_ context.Context, guildID, userID int64) *discord.Member {
+	m, err := a.client.GetMember(snowflake.ID(guildID), snowflake.ID(userID))
+	if err != nil {
+		return nil
+	}
+	return m
+}
+
 // IsMember checks whether a user is a member of a guild (using bot token).
 func (a *DiscordAdapter) IsMember(_ context.Context, guildID, userID int64) bool {
 	a.wait()

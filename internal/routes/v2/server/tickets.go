@@ -2,13 +2,16 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -32,6 +35,49 @@ func ticketParseInt64(s string) int64 {
 	var n int64
 	fmt.Sscanf(s, "%d", &n)
 	return n
+}
+
+type ticketUserIdentity struct {
+	Username    *string
+	DisplayName *string
+	AvatarURL   *string
+}
+
+func ticketIdentityFromAuthUser(doc bson.M) ticketUserIdentity {
+	discord := mapMaybe(mapMaybe(doc["linked_accounts"])["discord"])
+	username := stringPtrMaybe(discord["username"])
+	avatarURL := stringPtrMaybe(discord["avatar_url"])
+	return ticketUserIdentity{
+		Username:    username,
+		DisplayName: username,
+		AvatarURL:   avatarURL,
+	}
+}
+
+func ticketIdentityFromMember(member discord.Member) ticketUserIdentity {
+	var username *string
+	if member.User.Username != "" {
+		name := member.User.Username
+		username = &name
+	}
+
+	var displayName *string
+	if effectiveName := member.EffectiveName(); effectiveName != "" {
+		name := effectiveName
+		displayName = &name
+	}
+
+	var avatarURL *string
+	if effectiveAvatarURL := member.EffectiveAvatarURL(); effectiveAvatarURL != "" {
+		url := effectiveAvatarURL
+		avatarURL = &url
+	}
+
+	return ticketUserIdentity{
+		Username:    username,
+		DisplayName: displayName,
+		AvatarURL:   avatarURL,
+	}
 }
 
 // getTicketPanels returns all ticket panels for a server.
@@ -302,15 +348,51 @@ func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 // @Router /v2/server/{server_id}/tickets/open [get]
 func getOpenTickets(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		serverID, err := ticketServerID(c)
+		startedAt := time.Now()
+		var serverID int64
+		debugEnabled := apptypes.Logger().Enabled(c.UserContext(), slog.LevelDebug)
+		debugLog := func(duration time.Duration, ticketCount, uniqueUsers, missingIdentityUsers, linkDocCount, linkedUserCount, uniqueTags, playerDocCount, authUserDocCount, authIdentityHits, discordLookupsAttempted, discordLookupsSucceeded, resultCount int, statusFilter string, openTicketsMS, linksMS, playersMS, authUsersMS, discordMS, serializeMS int64) {
+			if !debugEnabled {
+				return
+			}
+			apptypes.Logger().Debug("tickets_open_profile",
+				"request_id", apptypes.RequestID(c),
+				"server_id", serverID,
+				"status", statusFilter,
+				"tickets", ticketCount,
+				"unique_users", uniqueUsers,
+				"missing_identity_users", missingIdentityUsers,
+				"link_docs", linkDocCount,
+				"linked_users", linkedUserCount,
+				"unique_tags", uniqueTags,
+				"player_docs", playerDocCount,
+				"auth_user_docs", authUserDocCount,
+				"auth_identity_hits", authIdentityHits,
+				"discord_lookup_attempted", discordLookupsAttempted,
+				"discord_lookup_succeeded", discordLookupsSucceeded,
+				"result_count", resultCount,
+				"open_tickets_ms", openTicketsMS,
+				"links_ms", linksMS,
+				"players_ms", playersMS,
+				"auth_users_ms", authUsersMS,
+				"discord_ms", discordMS,
+				"serialize_ms", serializeMS,
+				"total_ms", duration.Milliseconds(),
+			)
+		}
+
+		var err error
+		serverID, err = ticketServerID(c)
 		if err != nil {
 			return err
 		}
+		statusFilter := c.Query("status")
 		query := bson.M{"server": bson.M{"$in": bson.A{fmt.Sprint(serverID), serverID}}}
-		if status := c.Query("status"); status != "" {
-			query["status"] = status
+		if statusFilter != "" {
+			query["status"] = statusFilter
 		}
 		proj := options.Find().SetProjection(bson.M{"_id": 0})
+		openTicketsStartedAt := time.Now()
 		cur, err := a.Store.C.OpenTickets.Find(c.UserContext(), query, proj)
 		if err != nil {
 			return err
@@ -319,12 +401,17 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		if err := cur.All(c.UserContext(), &tickets); err != nil {
 			return err
 		}
+		openTicketsDuration := time.Since(openTicketsStartedAt)
 
-		// Collect unique user IDs to batch-fetch linked accounts
+		// Collect unique user IDs to batch-fetch linked accounts and missing identities.
 		userIDSet := map[string]struct{}{}
+		missingIdentityUserSet := map[string]struct{}{}
 		for _, t := range tickets {
 			if uid := serverAsString(t["user"]); uid != "" {
 				userIDSet[uid] = struct{}{}
+				if stringPtrMaybe(t["discord_username"]) == nil && stringPtrMaybe(t["discord_display_name"]) == nil {
+					missingIdentityUserSet[uid] = struct{}{}
+				}
 			}
 		}
 		userIDs := make([]any, 0, len(userIDSet))
@@ -337,13 +424,17 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 
 		// user_id → []player_tag
 		userTagMap := map[string][]string{}
+		linkDocCount := 0
+		linksDuration := time.Duration(0)
 		if len(userIDs) > 0 {
+			linksStartedAt := time.Now()
 			linkCur, lerr := a.Store.C.Links.Find(c.UserContext(),
 				bson.M{"user_id": bson.M{"$in": userIDs}},
 				options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "player_tag": 1}))
 			if lerr == nil {
 				var linkDocs []bson.M
 				_ = linkCur.All(c.UserContext(), &linkDocs)
+				linkDocCount = len(linkDocs)
 				for _, ld := range linkDocs {
 					uid := serverAsString(ld["user_id"])
 					tag := serverAsString(ld["player_tag"])
@@ -352,6 +443,7 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 					}
 				}
 			}
+			linksDuration = time.Since(linksStartedAt)
 		}
 
 		// Collect all tags to batch-fetch player info
@@ -366,42 +458,127 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			}
 		}
 		playerMap := map[string]bson.M{}
+		playerDocCount := 0
+		playersDuration := time.Duration(0)
 		if len(allTags) > 0 {
+			playersStartedAt := time.Now()
 			pCur, perr := a.Store.C.PlayerStats.Find(c.UserContext(),
 				bson.M{"tag": bson.M{"$in": allTags}},
 				options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1, "town_hall": 1, "townhall": 1}))
 			if perr == nil {
 				var playerDocs []bson.M
 				_ = pCur.All(c.UserContext(), &playerDocs)
+				playerDocCount = len(playerDocs)
 				for _, pd := range playerDocs {
 					if tag := serverAsString(pd["tag"]); tag != "" {
 						playerMap[tag] = pd
 					}
 				}
 			}
+			playersDuration = time.Since(playersStartedAt)
 		}
 
+		userIdentityMap := map[string]ticketUserIdentity{}
+		missingIdentityIDs := make([]any, 0, len(missingIdentityUserSet)*2)
+		for uid := range missingIdentityUserSet {
+			missingIdentityIDs = append(missingIdentityIDs, uid)
+			if n := ticketParseInt64(uid); n != 0 {
+				missingIdentityIDs = append(missingIdentityIDs, n)
+			}
+		}
+		authUserDocCount := 0
+		authIdentityHits := 0
+		authUsersDuration := time.Duration(0)
+		if len(missingIdentityIDs) > 0 {
+			authUsersStartedAt := time.Now()
+			userCur, uerr := a.Store.C.Users.Find(c.UserContext(),
+				bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": missingIdentityIDs}},
+				options.Find().SetProjection(bson.M{"_id": 0, "linked_accounts.discord": 1}))
+			if uerr == nil {
+				var userDocs []bson.M
+				_ = userCur.All(c.UserContext(), &userDocs)
+				authUserDocCount = len(userDocs)
+				for _, userDoc := range userDocs {
+					discordAccount := mapMaybe(mapMaybe(userDoc["linked_accounts"])["discord"])
+					uid := serverAsString(discordAccount["discord_user_id"])
+					if uid == "" {
+						continue
+					}
+					identity := ticketIdentityFromAuthUser(userDoc)
+					if identity.Username != nil || identity.DisplayName != nil || identity.AvatarURL != nil {
+						userIdentityMap[uid] = identity
+						authIdentityHits++
+					}
+				}
+			}
+			authUsersDuration = time.Since(authUsersStartedAt)
+		}
+
+		remainingMissingIdentityUserIDs := make([]string, 0, len(missingIdentityUserSet))
+		for uid := range missingIdentityUserSet {
+			identity := userIdentityMap[uid]
+			if identity.Username != nil || identity.DisplayName != nil {
+				continue
+			}
+			remainingMissingIdentityUserIDs = append(remainingMissingIdentityUserIDs, uid)
+		}
+		sort.Strings(remainingMissingIdentityUserIDs)
+		discordLookupsAttempted := 0
+		discordLookupsSucceeded := 0
+		discordDuration := time.Duration(0)
+		if len(remainingMissingIdentityUserIDs) > 0 {
+			discordStartedAt := time.Now()
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			sem := make(chan struct{}, 10)
+
+			for _, uid := range remainingMissingIdentityUserIDs {
+				userInt := ticketParseInt64(uid)
+				if userInt == 0 {
+					continue
+				}
+				discordLookupsAttempted++
+
+				wg.Add(1)
+				go func(userID string, userInt int64) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					member := a.Discord.GetMemberDirect(c.UserContext(), serverID, userInt)
+					if member == nil {
+						return
+					}
+
+					mu.Lock()
+					userIdentityMap[userID] = ticketIdentityFromMember(*member)
+					discordLookupsSucceeded++
+					mu.Unlock()
+				}(uid, userInt)
+			}
+
+			wg.Wait()
+			discordDuration = time.Since(discordStartedAt)
+		}
+
+		serializeStartedAt := time.Now()
 		items := make([]modelsv2.OpenTicket, 0, len(tickets))
 		for _, ticket := range tickets {
 			t := openTicketFromDoc(ticket)
 
-			// Resolve Discord member info if not already stored in the doc
-			if t.DiscordUsername == nil && t.DiscordDisplayName == nil {
-				if userInt := ticketParseInt64(t.User); userInt != 0 {
-					if member := a.Discord.GetMember(c.UserContext(), serverID, userInt); member != nil {
-						username := member.User.Username
-						displayName := member.EffectiveName()
-						avatarURL := member.EffectiveAvatarURL()
-						if username != "" {
-							t.DiscordUsername = &username
-						}
-						if displayName != "" {
-							t.DiscordDisplayName = &displayName
-						}
-						if avatarURL != "" {
-							t.DiscordAvatarURL = &avatarURL
-						}
+			if identity, ok := userIdentityMap[t.User]; ok {
+				if t.DiscordUsername == nil && identity.Username != nil {
+					t.DiscordUsername = identity.Username
+				}
+				if t.DiscordDisplayName == nil {
+					if identity.DisplayName != nil {
+						t.DiscordDisplayName = identity.DisplayName
+					} else if identity.Username != nil {
+						t.DiscordDisplayName = identity.Username
 					}
+				}
+				if t.DiscordAvatarURL == nil && identity.AvatarURL != nil {
+					t.DiscordAvatarURL = identity.AvatarURL
 				}
 			}
 
@@ -434,6 +611,29 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			}
 			items = append(items, t)
 		}
+		serializeDuration := time.Since(serializeStartedAt)
+		debugLog(
+			time.Since(startedAt),
+			len(tickets),
+			len(userIDSet),
+			len(missingIdentityUserSet),
+			linkDocCount,
+			len(userTagMap),
+			len(tagSet),
+			playerDocCount,
+			authUserDocCount,
+			authIdentityHits,
+			discordLookupsAttempted,
+			discordLookupsSucceeded,
+			len(items),
+			statusFilter,
+			openTicketsDuration.Milliseconds(),
+			linksDuration.Milliseconds(),
+			playersDuration.Milliseconds(),
+			authUsersDuration.Milliseconds(),
+			discordDuration.Milliseconds(),
+			serializeDuration.Milliseconds(),
+		)
 		return apptypes.JSON(c, http.StatusOK, modelsv2.OpenTicketsResponse{Items: items, Total: len(items)})
 	}
 }
@@ -894,7 +1094,7 @@ func deleteServerEmbed(a apptypes.Deps) fiber.Handler {
 func ticketPanelFromDoc(panel bson.M) modelsv2.TicketPanel {
 	result := modelsv2.TicketPanel{
 		Name:                 asStringOr(panel["name"], ""),
-		ServerID:             ticketParseInt64(asStringOr(panel["server_id"], "0")),
+		ServerID:             ticketParseInt64(serverAsString(panel["server_id"])),
 		EmbedName:            stringPtrMaybe(panel["embed_name"]),
 		Components:           ticketButtons(panel["components"]),
 		ButtonSettings:       ticketButtonSettings(panel),
@@ -910,13 +1110,10 @@ func ticketPanelFromDoc(panel bson.M) modelsv2.TicketPanel {
 }
 
 func ticketButtons(value any) []modelsv2.TicketButton {
-	raw, ok := value.([]any)
-	if !ok {
-		return []modelsv2.TicketButton{}
-	}
+	raw := anySlice(value)
 	out := make([]modelsv2.TicketButton, 0, len(raw))
 	for _, item := range raw {
-		if doc, ok := item.(bson.M); ok {
+		if doc := mapMaybe(item); len(doc) > 0 {
 			out = append(out, modelsv2.TicketButton{
 				CustomID: asStringOr(doc["custom_id"], ""),
 				Label:    asStringOr(doc["label"], ""),
@@ -957,13 +1154,10 @@ func ticketButtonSettings(panel bson.M) map[string]modelsv2.TicketButtonSettings
 }
 
 func ticketApproveMessages(value any) []modelsv2.ApproveMessage {
-	raw, ok := value.([]any)
-	if !ok {
-		return []modelsv2.ApproveMessage{}
-	}
+	raw := anySlice(value)
 	out := make([]modelsv2.ApproveMessage, 0, len(raw))
 	for _, item := range raw {
-		if doc, ok := item.(bson.M); ok {
+		if doc := mapMaybe(item); len(doc) > 0 {
 			out = append(out, modelsv2.ApproveMessage{Name: asStringOr(doc["name"], ""), Message: asStringOr(doc["message"], "")})
 		}
 	}

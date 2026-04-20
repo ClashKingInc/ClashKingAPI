@@ -1,8 +1,12 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "ClashKing Go API documentation. Public Swagger lists only unauthenticated endpoints; private Swagger includes the full API and supports Authorization headers for secured endpoints. This API is still under active construction, so use it with caution because endpoints and payloads may still change.",
+        "title": "ClashKing API",
+        "contact": {},
+        "version": "1.0"
     },
+    "basePath": "/",
     "paths": {
         "/v2/capital/guild-leaderboard": {
             "get": {
@@ -9427,6 +9431,13 @@
                     }
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }

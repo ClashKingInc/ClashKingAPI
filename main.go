@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/ClashKingInc/ClashKingAPI/internal/docs"
 	routesv1 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v1"
 	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
 	"github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -19,10 +18,15 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	fiberSwagger "github.com/swaggo/fiber-swagger"
-	"github.com/swaggo/swag"
 )
 
+// @title ClashKing API
+// @version 1.0
+// @description ClashKing Go API documentation. Public Swagger lists only unauthenticated endpoints; private Swagger includes the full API and supports Authorization headers for secured endpoints. This API is still under active construction, so use it with caution because endpoints and payloads may still change.
+// @BasePath /
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 type App struct {
 	utils.Deps
 	StartedAt time.Time
@@ -105,22 +109,9 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	}))
 	app.Use(compress.New())
 	a.registerRoutes(app)
-	swaggerHandler := fiberSwagger.FiberWrapHandler(fiberSwagger.URL("/openapi.json"))
-	app.Get("/openapi.json", func(c *fiber.Ctx) error {
-		doc, err := swag.ReadDoc()
-		if err != nil {
-			return err
-		}
-		c.Type("json")
-		return c.SendString(doc)
-	})
-	app.Get("/docs", func(c *fiber.Ctx) error {
-		return c.Redirect("/docs/index.html", fiber.StatusPermanentRedirect)
-	})
-	app.Get("/docs/*", swaggerHandler)
-	app.Get("/redoc", func(c *fiber.Ctx) error {
-		return c.Redirect("/docs", fiber.StatusPermanentRedirect)
-	})
+	if err := a.registerSwaggerRoutes(app); err != nil {
+		return nil, err
+	}
 	return app, nil
 }
 

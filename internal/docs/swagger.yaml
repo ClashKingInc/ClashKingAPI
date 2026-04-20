@@ -1,3 +1,4 @@
+basePath: /
 definitions:
   modelsv2.AccountsCOCAccountRequest:
     properties:
@@ -211,6 +212,12 @@ definitions:
     type: object
 info:
   contact: {}
+  description: ClashKing Go API documentation. Public Swagger lists only unauthenticated
+    endpoints; private Swagger includes the full API and supports Authorization headers
+    for secured endpoints. This API is still under active construction, so use it
+    with caution because endpoints and payloads may still change.
+  title: ClashKing API
+  version: "1.0"
 paths:
   /v2/{category}:
     get:
@@ -6261,4 +6268,9 @@ paths:
       summary: Get full war summary for multiple clans
       tags:
       - War
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

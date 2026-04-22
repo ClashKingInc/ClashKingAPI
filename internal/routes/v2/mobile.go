@@ -29,24 +29,24 @@ type mobileMatchupStats struct {
 }
 
 type mobileWarHitsFilter struct {
-	PlayerTags       []string
-	ClanTags         []string
-	TimestampStart   int64
-	TimestampEnd     int64
-	Limit            int
-	OwnTH            []int
-	EnemyTH          []int
-	SameTH           bool
-	Types            []string
-	FreshOnly        *bool
-	MinStars         *int
-	MaxStars         *int
-	Stars            []int
-	Season           string
-	MinDestruction   *float64
-	MaxDestruction   *float64
-	MapPositionMin   *int
-	MapPositionMax   *int
+	PlayerTags     []string
+	ClanTags       []string
+	TimestampStart int64
+	TimestampEnd   int64
+	Limit          int
+	OwnTH          []int
+	EnemyTH        []int
+	SameTH         bool
+	Types          []string
+	FreshOnly      *bool
+	MinStars       *int
+	MaxStars       *int
+	Stars          []int
+	Season         string
+	MinDestruction *float64
+	MaxDestruction *float64
+	MapPositionMin *int
+	MapPositionMax *int
 }
 
 // publicMobileConfig returns public mobile app configuration values.
@@ -91,10 +91,28 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 
 		ctx := c.UserContext()
 		playersBasic := mobileFetchPlayersBasic(ctx, a, playerTags)
-		playersExtended := mobileFetchPlayersExtended(ctx, a, playerTags, playersBasic)
 		clanTags := mobileExtractClanTags(playersBasic)
-		clanBundle := mobileFetchClanBundle(ctx, a, clanTags)
-		playerWarStats := mobileFetchPlayerWarStats(ctx, a, playerTags)
+
+		var playersExtended []map[string]any
+		var clanBundle map[string]any
+		var playerWarStats []any
+		var clanWarStats []any
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, playersBasic)
+		}()
+		go func() {
+			defer wg.Done()
+			clanBundle = mobileFetchClanBundle(ctx, a, clanTags)
+		}()
+		go func() {
+			defer wg.Done()
+			playerWarStats, clanWarStats = mobileFetchInitializationWarStats(ctx, a, playerTags, clanTags)
+		}()
+		wg.Wait()
+		clanBundle["clan_war_stats"] = clanWarStats
 
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
 			"players":       playersExtended,
@@ -110,6 +128,43 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 			},
 		})
 	}
+}
+
+func mobileFetchInitializationWarStats(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string) ([]any, []any) {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	filter := mobileWarHitsFilter{
+		TimestampStart: time.Now().UTC().AddDate(0, -6, 0).Unix(),
+		TimestampEnd:   time.Now().UTC().Unix(),
+	}
+	wars := mobileFindRelevantWarDocs(ctx, a, playerTags, clanTags, filter.TimestampStart, filter.TimestampEnd)
+	if len(wars) == 0 {
+		return []any{}, []any{}
+	}
+
+	selectedPlayers := make(map[string]bool, len(playerTags))
+	for _, tag := range playerTags {
+		selectedPlayers[tag] = true
+	}
+	selectedClans := make(map[string]bool, len(clanTags))
+	for _, tag := range clanTags {
+		selectedClans[tag] = true
+	}
+
+	playerAggregates := map[string]*mobilePlayerWarAggregate{}
+	clanAggregates := map[string]*mobileClanWarAggregate{}
+	for _, war := range wars {
+		if !mobileWarMatchesFilter(war, filter) {
+			continue
+		}
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+		mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, selectedPlayers, filter, playerAggregates)
+		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, selectedClans, filter, clanAggregates)
+	}
+
+	return mobileBuildPlayerWarResults(playerAggregates, playerTags, filter.TimestampStart, filter.TimestampEnd),
+		mobileBuildClanWarResults(clanAggregates, clanTags, filter.TimestampStart, filter.TimestampEnd)
 }
 
 func mobileNormalizeUniqueTags(tags []string) []string {
@@ -303,10 +358,42 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 				clanTag = mobileString(mobileMap(basic["clan"])["tag"])
 			}
 
-			item["legend_eos_ranking"] = mobileFetchLegendRankings(ctx, a, playerTag, 10)
-			item["rankings"] = mobileFetchCurrentRankings(ctx, a, playerTag)
-			item["raid_data"] = mobileFetchPlayerRaidData(ctx, a, playerTag, clanTag)
-			item["war_data"] = mobileFetchPlayerWarContext(ctx, a, playerTag, clanTag)
+			var legendRankings []any
+			var rankings map[string]any
+			var raidData map[string]any
+			var warData map[string]any
+			var itemWG sync.WaitGroup
+			itemWG.Add(4)
+			go func() {
+				defer itemWG.Done()
+				legendRankings = mobileFetchLegendRankings(ctx, a, playerTag, 10)
+			}()
+			go func() {
+				defer itemWG.Done()
+				rankings = mobileFetchCurrentRankings(ctx, a, playerTag)
+			}()
+			go func() {
+				defer itemWG.Done()
+				raidData = mobileFetchPlayerRaidData(ctx, a, playerTag, clanTag)
+			}()
+			go func() {
+				defer itemWG.Done()
+				warData = mobileFetchPlayerWarContext(ctx, a, playerTag, clanTag)
+			}()
+			itemWG.Wait()
+
+			if legendRankings != nil {
+				item["legend_eos_ranking"] = legendRankings
+			}
+			if rankings != nil {
+				item["rankings"] = rankings
+			}
+			if raidData != nil {
+				item["raid_data"] = raidData
+			}
+			if warData != nil {
+				item["war_data"] = warData
+			}
 			results[i] = item
 		}(idx, tag)
 	}
@@ -450,7 +537,7 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 		bundle[key] = value
 	}
 
-	wg.Add(6)
+	wg.Add(5)
 	go func() {
 		defer wg.Done()
 		set("clan_details", mobileFetchClanDetails(ctx, a, clanTags))
@@ -470,10 +557,6 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 	go func() {
 		defer wg.Done()
 		set("war_data", mobileFetchClanWarSummaries(ctx, a, clanTags))
-	}()
-	go func() {
-		defer wg.Done()
-		set("clan_war_stats", mobileFetchClanWarStats(ctx, a, clanTags))
 	}()
 	wg.Wait()
 
@@ -897,68 +980,7 @@ func mobileFetchSinglePlayerWarStats(ctx context.Context, a apptypes.Deps, playe
 
 		cleanWar := mobileCleanWarData(war)
 		freshOrders := mobileFreshAttackOrders(war)
-		memberDataByTag := map[string]map[string]any{}
-		originalByTag := map[string]map[string]any{}
-
-		for _, sideKey := range []string{"clan", "opponent"} {
-			side := mobileMap(war[sideKey])
-			for _, rawMember := range mobileList(side["members"]) {
-				member := mobileMap(rawMember)
-				tag := mobileString(member["tag"])
-				if !selected[tag] {
-					continue
-				}
-
-				agg := mobileGetOrCreatePlayerAggregate(aggregates, tag, member)
-				memberData := mobileBuildWarMemberData(member)
-				for _, rawAttack := range mobileList(member["attacks"]) {
-					attack := mobileBuildAttackData(mobileMap(rawAttack), member, war, freshOrders)
-					if !mobileAttackMatchesFilter(attack, filter) {
-						continue
-					}
-					memberData["attacks"] = append(memberData["attacks"].([]any), attack)
-					agg.Attacks = append(agg.Attacks, attack)
-				}
-				memberDataByTag[tag] = memberData
-				originalByTag[tag] = member
-			}
-		}
-
-		for _, sideKey := range []string{"clan", "opponent"} {
-			side := mobileMap(war[sideKey])
-			for _, rawMember := range mobileList(side["members"]) {
-				member := mobileMap(rawMember)
-				for _, rawAttack := range mobileList(member["attacks"]) {
-					attack := mobileMap(rawAttack)
-					defenderTag := mobileString(attack["defenderTag"])
-					memberData := memberDataByTag[defenderTag]
-					if memberData == nil {
-						continue
-					}
-					defense := mobileBuildDefenseData(attack, member, originalByTag[defenderTag], mobileWarType(war), freshOrders)
-					if !mobileDefenseMatchesFilter(defense, filter) {
-						continue
-					}
-					memberData["defenses"] = append(memberData["defenses"].([]any), defense)
-					aggregates[defenderTag].Defenses = append(aggregates[defenderTag].Defenses, defense)
-				}
-			}
-		}
-
-		for tag, memberData := range memberDataByTag {
-			original := originalByTag[tag]
-			missedAttacks := mobileMax(mobileInt(cleanWar["attacksPerMember"])-len(mobileList(original["attacks"])), 0)
-			missedDefenses := 1
-			if original["bestOpponentAttack"] != nil {
-				missedDefenses = 0
-			}
-			aggregates[tag].Wars = append(aggregates[tag].Wars, map[string]any{
-				"war_data":       cleanWar,
-				"members":        []any{memberData},
-				"missedAttacks":  missedAttacks,
-				"missedDefenses": missedDefenses,
-			})
-		}
+		mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, selected, filter, aggregates)
 	}
 
 	results := mobileBuildPlayerWarResults(aggregates, []string{playerTag}, filter.TimestampStart, filter.TimestampEnd)
@@ -1001,87 +1023,14 @@ func mobileFetchSingleClanWarStats(ctx context.Context, a apptypes.Deps, clanTag
 
 		cleanWar := mobileCleanWarData(war)
 		freshOrders := mobileFreshAttackOrders(war)
-		for _, sideKey := range []string{"clan", "opponent"} {
-			side := mobileMap(war[sideKey])
-			if mobileString(side["tag"]) != clanTag {
-				continue
-			}
-
-			memberDataByTag := map[string]map[string]any{}
-			originalByTag := map[string]map[string]any{}
-			membersList := make([]any, 0, len(mobileList(side["members"])))
-
-			for _, rawMember := range mobileList(side["members"]) {
-				member := mobileMap(rawMember)
-				tag := mobileString(member["tag"])
-				playerAgg := mobileGetOrCreatePlayerAggregate(agg.Players, tag, member)
-				memberData := mobileBuildWarMemberData(member)
-				for _, rawAttack := range mobileList(member["attacks"]) {
-					attack := mobileBuildAttackData(mobileMap(rawAttack), member, war, freshOrders)
-					if !mobileAttackMatchesFilter(attack, filter) {
-						continue
-					}
-					memberData["attacks"] = append(memberData["attacks"].([]any), attack)
-					playerAgg.Attacks = append(playerAgg.Attacks, attack)
-				}
-				memberDataByTag[tag] = memberData
-				originalByTag[tag] = member
-				membersList = append(membersList, memberData)
-			}
-
-			for _, warSideKey := range []string{"clan", "opponent"} {
-				warSide := mobileMap(war[warSideKey])
-				for _, rawMember := range mobileList(warSide["members"]) {
-					member := mobileMap(rawMember)
-					for _, rawAttack := range mobileList(member["attacks"]) {
-						attack := mobileMap(rawAttack)
-						defenderTag := mobileString(attack["defenderTag"])
-						memberData := memberDataByTag[defenderTag]
-						if memberData == nil {
-							continue
-						}
-						defense := mobileBuildDefenseData(attack, member, originalByTag[defenderTag], mobileWarType(war), freshOrders)
-						if !mobileDefenseMatchesFilter(defense, filter) {
-							continue
-						}
-						memberData["defenses"] = append(memberData["defenses"].([]any), defense)
-						agg.Players[defenderTag].Defenses = append(agg.Players[defenderTag].Defenses, defense)
-					}
-				}
-			}
-
-			for tag, memberData := range memberDataByTag {
-				original := originalByTag[tag]
-				missedAttacks := mobileMax(mobileInt(cleanWar["attacksPerMember"])-len(mobileList(original["attacks"])), 0)
-				missedDefenses := 1
-				if original["bestOpponentAttack"] != nil {
-					missedDefenses = 0
-				}
-				agg.Players[tag].Wars = append(agg.Players[tag].Wars, map[string]any{
-					"war_data":       cleanWar,
-					"members":        []any{memberData},
-					"missedAttacks":  missedAttacks,
-					"missedDefenses": missedDefenses,
-				})
-			}
-
-			agg.Wars = append(agg.Wars, map[string]any{
-				"war_data": cleanWar,
-				"members":  membersList,
-			})
-		}
+		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, map[string]bool{clanTag: true}, filter, map[string]*mobileClanWarAggregate{clanTag: agg})
 	}
 
-	playerTags := make([]string, 0, len(agg.Players))
-	for tag := range agg.Players {
-		playerTags = append(playerTags, tag)
+	results := mobileBuildClanWarResults(map[string]*mobileClanWarAggregate{clanTag: agg}, []string{clanTag}, filter.TimestampStart, filter.TimestampEnd)
+	if len(results) == 0 {
+		return map[string]any{"clan_tag": clanTag, "players": []any{}, "wars": []any{}}
 	}
-	sort.Strings(playerTags)
-	return map[string]any{
-		"clan_tag": clanTag,
-		"players":  mobileBuildPlayerWarResults(agg.Players, playerTags, filter.TimestampStart, filter.TimestampEnd),
-		"wars":     agg.Wars,
-	}
+	return results[0]
 }
 
 func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, pipeline bson.A) []map[string]any {
@@ -1110,6 +1059,35 @@ func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, pipeline bson.A) []
 		out = append(out, data)
 	}
 	return out
+}
+
+func mobileFindRelevantWarDocs(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string, startUnix int64, endUnix int64) []map[string]any {
+	matchers := bson.A{}
+	if len(playerTags) > 0 {
+		matchers = append(matchers,
+			bson.M{"data.clan.members.tag": bson.M{"$in": playerTags}},
+			bson.M{"data.opponent.members.tag": bson.M{"$in": playerTags}},
+		)
+	}
+	if len(clanTags) > 0 {
+		matchers = append(matchers,
+			bson.M{"data.clan.tag": bson.M{"$in": clanTags}},
+			bson.M{"data.opponent.tag": bson.M{"$in": clanTags}},
+		)
+	}
+	if len(matchers) == 0 {
+		return nil
+	}
+
+	return mobileFindWarDocs(ctx, a, bson.A{
+		bson.M{"$match": bson.M{"$and": bson.A{
+			bson.M{"$or": matchers},
+			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix)}},
+			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(endUnix)}},
+		}}},
+		bson.M{"$project": bson.M{"_id": 0, "data": "$data"}},
+		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
+	})
 }
 
 func mobileFreshAttackOrders(war map[string]any) map[string]int {
@@ -1286,6 +1264,155 @@ func mobileGetOrCreateClanAggregate(store map[string]*mobileClanWarAggregate, cl
 	return agg
 }
 
+func mobileAccumulatePlayerWarAggregates(war map[string]any, cleanWar map[string]any, freshOrders map[string]int, selected map[string]bool, filter mobileWarHitsFilter, aggregates map[string]*mobilePlayerWarAggregate) {
+	if len(selected) == 0 {
+		return
+	}
+
+	memberDataByTag := map[string]map[string]any{}
+	originalByTag := map[string]map[string]any{}
+	for _, sideKey := range []string{"clan", "opponent"} {
+		side := mobileMap(war[sideKey])
+		for _, rawMember := range mobileList(side["members"]) {
+			member := mobileMap(rawMember)
+			tag := mobileString(member["tag"])
+			if !selected[tag] {
+				continue
+			}
+
+			agg := mobileGetOrCreatePlayerAggregate(aggregates, tag, member)
+			memberData := mobileBuildWarMemberData(member)
+			for _, rawAttack := range mobileList(member["attacks"]) {
+				attack := mobileBuildAttackData(mobileMap(rawAttack), member, war, freshOrders)
+				if !mobileAttackMatchesFilter(attack, filter) {
+					continue
+				}
+				memberData["attacks"] = append(memberData["attacks"].([]any), attack)
+				agg.Attacks = append(agg.Attacks, attack)
+			}
+			memberDataByTag[tag] = memberData
+			originalByTag[tag] = member
+		}
+	}
+	if len(memberDataByTag) == 0 {
+		return
+	}
+
+	for _, sideKey := range []string{"clan", "opponent"} {
+		side := mobileMap(war[sideKey])
+		for _, rawMember := range mobileList(side["members"]) {
+			member := mobileMap(rawMember)
+			for _, rawAttack := range mobileList(member["attacks"]) {
+				attack := mobileMap(rawAttack)
+				defenderTag := mobileString(attack["defenderTag"])
+				memberData := memberDataByTag[defenderTag]
+				if memberData == nil {
+					continue
+				}
+				defense := mobileBuildDefenseData(attack, member, originalByTag[defenderTag], mobileWarType(war), freshOrders)
+				if !mobileDefenseMatchesFilter(defense, filter) {
+					continue
+				}
+				memberData["defenses"] = append(memberData["defenses"].([]any), defense)
+				aggregates[defenderTag].Defenses = append(aggregates[defenderTag].Defenses, defense)
+			}
+		}
+	}
+
+	for tag, memberData := range memberDataByTag {
+		original := originalByTag[tag]
+		missedAttacks := mobileMax(mobileInt(cleanWar["attacksPerMember"])-len(mobileList(original["attacks"])), 0)
+		missedDefenses := 1
+		if original["bestOpponentAttack"] != nil {
+			missedDefenses = 0
+		}
+		aggregates[tag].Wars = append(aggregates[tag].Wars, map[string]any{
+			"war_data":       cleanWar,
+			"members":        []any{memberData},
+			"missedAttacks":  missedAttacks,
+			"missedDefenses": missedDefenses,
+		})
+	}
+}
+
+func mobileAccumulateClanWarAggregates(war map[string]any, cleanWar map[string]any, freshOrders map[string]int, selected map[string]bool, filter mobileWarHitsFilter, aggregates map[string]*mobileClanWarAggregate) {
+	if len(selected) == 0 {
+		return
+	}
+
+	for _, sideKey := range []string{"clan", "opponent"} {
+		side := mobileMap(war[sideKey])
+		clanTag := mobileString(side["tag"])
+		if !selected[clanTag] {
+			continue
+		}
+
+		agg := mobileGetOrCreateClanAggregate(aggregates, clanTag)
+		memberDataByTag := map[string]map[string]any{}
+		originalByTag := map[string]map[string]any{}
+		membersList := make([]any, 0, len(mobileList(side["members"])))
+
+		for _, rawMember := range mobileList(side["members"]) {
+			member := mobileMap(rawMember)
+			tag := mobileString(member["tag"])
+			playerAgg := mobileGetOrCreatePlayerAggregate(agg.Players, tag, member)
+			memberData := mobileBuildWarMemberData(member)
+			for _, rawAttack := range mobileList(member["attacks"]) {
+				attack := mobileBuildAttackData(mobileMap(rawAttack), member, war, freshOrders)
+				if !mobileAttackMatchesFilter(attack, filter) {
+					continue
+				}
+				memberData["attacks"] = append(memberData["attacks"].([]any), attack)
+				playerAgg.Attacks = append(playerAgg.Attacks, attack)
+			}
+			memberDataByTag[tag] = memberData
+			originalByTag[tag] = member
+			membersList = append(membersList, memberData)
+		}
+
+		for _, warSideKey := range []string{"clan", "opponent"} {
+			warSide := mobileMap(war[warSideKey])
+			for _, rawMember := range mobileList(warSide["members"]) {
+				member := mobileMap(rawMember)
+				for _, rawAttack := range mobileList(member["attacks"]) {
+					attack := mobileMap(rawAttack)
+					defenderTag := mobileString(attack["defenderTag"])
+					memberData := memberDataByTag[defenderTag]
+					if memberData == nil {
+						continue
+					}
+					defense := mobileBuildDefenseData(attack, member, originalByTag[defenderTag], mobileWarType(war), freshOrders)
+					if !mobileDefenseMatchesFilter(defense, filter) {
+						continue
+					}
+					memberData["defenses"] = append(memberData["defenses"].([]any), defense)
+					agg.Players[defenderTag].Defenses = append(agg.Players[defenderTag].Defenses, defense)
+				}
+			}
+		}
+
+		for tag, memberData := range memberDataByTag {
+			original := originalByTag[tag]
+			missedAttacks := mobileMax(mobileInt(cleanWar["attacksPerMember"])-len(mobileList(original["attacks"])), 0)
+			missedDefenses := 1
+			if original["bestOpponentAttack"] != nil {
+				missedDefenses = 0
+			}
+			agg.Players[tag].Wars = append(agg.Players[tag].Wars, map[string]any{
+				"war_data":       cleanWar,
+				"members":        []any{memberData},
+				"missedAttacks":  missedAttacks,
+				"missedDefenses": missedDefenses,
+			})
+		}
+
+		agg.Wars = append(agg.Wars, map[string]any{
+			"war_data": cleanWar,
+			"members":  membersList,
+		})
+	}
+}
+
 func mobileBuildWarMemberData(member map[string]any) map[string]any {
 	return map[string]any{
 		"tag":             mobileString(member["tag"]),
@@ -1363,6 +1490,28 @@ func mobileBuildPlayerWarResults(aggregates map[string]*mobilePlayerWarAggregate
 				"end":   endUnix,
 			},
 			"wars": agg.Wars,
+		})
+	}
+	return results
+}
+
+func mobileBuildClanWarResults(aggregates map[string]*mobileClanWarAggregate, order []string, startUnix int64, endUnix int64) []any {
+	results := make([]any, 0, len(order))
+	for _, clanTag := range order {
+		agg := aggregates[clanTag]
+		if agg == nil {
+			continue
+		}
+
+		playerTags := make([]string, 0, len(agg.Players))
+		for tag := range agg.Players {
+			playerTags = append(playerTags, tag)
+		}
+		sort.Strings(playerTags)
+		results = append(results, map[string]any{
+			"clan_tag": clanTag,
+			"players":  mobileBuildPlayerWarResults(agg.Players, playerTags, startUnix, endUnix),
+			"wars":     agg.Wars,
 		})
 	}
 	return results

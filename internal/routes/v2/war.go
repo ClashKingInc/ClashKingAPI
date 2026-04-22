@@ -311,7 +311,7 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		}
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"clan_tag":         tag,
 		"isInWar":          isInWar,
 		"isInCwl":          isInCwl,
@@ -319,6 +319,7 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		"league_info":      leagueInfo,
 		"war_league_infos": warLeagueInfos,
 	}
+	return result
 }
 
 // isCWLWindow returns true during the Clan War League event window.

@@ -91,6 +91,7 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 
 		ctx := c.UserContext()
 		playersBasic := mobileFetchPlayersBasic(ctx, a, playerTags)
+
 		clanTags := mobileExtractClanTags(playersBasic)
 
 		var playersExtended []map[string]any
@@ -321,6 +322,8 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		}
 	}
 
+	raidDataByClan := mobileFetchPlayerRaidDataBatch(ctx, a, mobileExtractClanTags(playersBasic))
+
 	results := make([]map[string]any, len(playerTags))
 	var wg sync.WaitGroup
 	for idx, tag := range playerTags {
@@ -374,7 +377,7 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 			}()
 			go func() {
 				defer itemWG.Done()
-				raidData = mobileFetchPlayerRaidData(ctx, a, playerTag, clanTag)
+				raidData = mobileLookupPlayerRaidData(raidDataByClan, playerTag, clanTag)
 			}()
 			go func() {
 				defer itemWG.Done()
@@ -454,30 +457,58 @@ func mobileFetchCurrentRankings(ctx context.Context, a apptypes.Deps, tag string
 	return result
 }
 
-func mobileFetchPlayerRaidData(ctx context.Context, a apptypes.Deps, playerTag string, clanTag string) map[string]any {
+func mobileFetchPlayerRaidDataBatch(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]map[string]map[string]any {
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	if len(clanTags) == 0 {
+		return map[string]map[string]map[string]any{}
+	}
+
+	out := make(map[string]map[string]map[string]any, len(clanTags))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, clanTag := range clanTags {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			var row bson.M
+			err := a.Store.C.RaidWeekendDB.FindOne(
+				ctx,
+				bson.M{"clan_tag": tag},
+				options.FindOne().SetSort(bson.M{"data.endTime": -1}).SetProjection(bson.M{"_id": 0, "data.members": 1}),
+			).Decode(&row)
+			if err != nil {
+				return
+			}
+
+			members := make(map[string]map[string]any)
+			for _, rawMember := range mobileList(mobileMap(mobileMap(row)["data"])["members"]) {
+				member := mobileMap(rawMember)
+				playerTag := mobileString(member["tag"])
+				if playerTag == "" {
+					continue
+				}
+				members[playerTag] = map[string]any{
+					"attacks_done": mobileInt(member["attackCount"]),
+					"attack_limit": mobileInt(member["attackLimit"]) + mobileInt(member["bonusAttackLimit"]),
+				}
+			}
+
+			mu.Lock()
+			out[tag] = members
+			mu.Unlock()
+		}(clanTag)
+	}
+	wg.Wait()
+	return out
+}
+
+func mobileLookupPlayerRaidData(raidDataByClan map[string]map[string]map[string]any, playerTag string, clanTag string) map[string]any {
 	if clanTag == "" {
 		return map[string]any{}
 	}
-
-	var row bson.M
-	err := a.Store.C.RaidWeekendDB.FindOne(
-		ctx,
-		bson.M{"clan_tag": clanTag, "data.members.tag": playerTag},
-		options.FindOne().SetSort(bson.M{"data.endTime": -1}).SetProjection(bson.M{"_id": 0, "data.members": 1}),
-	).Decode(&row)
-	if err != nil {
-		return map[string]any{}
-	}
-
-	data := mobileMap(mobileMap(row)["data"])
-	for _, rawMember := range mobileList(data["members"]) {
-		member := mobileMap(rawMember)
-		if mobileString(member["tag"]) != playerTag {
-			continue
-		}
-		return map[string]any{
-			"attacks_done": mobileInt(member["attackCount"]),
-			"attack_limit": mobileInt(member["attackLimit"]) + mobileInt(member["bonusAttackLimit"]),
+	if members := raidDataByClan[clanTag]; members != nil {
+		if playerData := members[playerTag]; playerData != nil {
+			return playerData
 		}
 	}
 	return map[string]any{}

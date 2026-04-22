@@ -16,7 +16,9 @@ import (
 
 // playerNormalizeTag converts a raw tag string to #TAG format.
 func playerNormalizeTag(tag string) string {
-	tag = strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(tag, "#")))
+	tag = strings.ToUpper(strings.TrimSpace(tag))
+	tag = strings.TrimLeft(tag, "#!")
+	tag = strings.ReplaceAll(tag, "O", "0")
 	if tag == "" {
 		return ""
 	}

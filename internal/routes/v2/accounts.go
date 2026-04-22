@@ -339,6 +339,7 @@ func accountsNormalizeTag(tag string) string {
 	if tag == "" {
 		return tag
 	}
+	tag = strings.TrimLeft(tag, "#!")
 	if !strings.HasPrefix(tag, "#") {
 		tag = "#" + tag
 	}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/url"
 	"sort"
 	"strconv"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -223,19 +223,14 @@ func warSummarySingle(a apptypes.Deps) fiber.Handler {
 // @Router /v2/war/players/warhits [post]
 func playerWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var body modelsv2.WarPlayersBody
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		cur, err := a.Store.DB.Looper.Collection("warhits").Find(c.UserContext(), bson.M{"tag": bson.M{"$in": body.Players}})
+		filter, err := mobileDecodeWarHitsFilter(c)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
-			return err
+		if len(filter.PlayerTags) == 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": warStripIDs(rows)})
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileFetchPlayerWarStatsWithFilter(c.UserContext(), a, filter)})
 	}
 }
 
@@ -251,19 +246,14 @@ func playerWarhits(a apptypes.Deps) fiber.Handler {
 // @Router /v2/war/clans/warhits [post]
 func clanWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var body modelsv2.WarClanTagsBody
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		cur, err := a.Store.DB.Looper.Collection("warhits").Find(c.UserContext(), bson.M{"clan_tag": bson.M{"$in": warFixTags(body.ClanTags)}})
+		filter, err := mobileDecodeWarHitsFilter(c)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
-			return err
+		if len(filter.ClanTags) == 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": warStripIDs(rows)})
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileFetchClanWarStatsWithFilter(c.UserContext(), a, filter)})
 	}
 }
 
@@ -278,9 +268,13 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		warInfo = map[string]any{"state": "notInWar"}
 	} else {
 		isInWar = true
+		currentWarInfo := mobileHTTPGetJSON("https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(tag, "#", "%23") + "/currentwar")
+		if currentWarInfo == nil {
+			currentWarInfo = playerStructToMap(war)
+		}
 		warInfo = map[string]any{
 			"state":          "war",
-			"currentWarInfo": war,
+			"currentWarInfo": currentWarInfo,
 			"bypass":         false,
 		}
 	}
@@ -308,7 +302,7 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 
 			leagueInfo = enrichLeagueInfo(lg, leagueWars)
 			for i := range leagueWars {
-				warLeagueInfos = append(warLeagueInfos, &leagueWars[i])
+				warLeagueInfos = append(warLeagueInfos, playerStructToMap(&leagueWars[i]))
 			}
 
 			if !isInWar {
@@ -527,7 +521,8 @@ func warFixTag(tag string) string {
 		tag = decoded
 	}
 	tag = strings.TrimSpace(strings.ToUpper(tag))
-	tag = strings.TrimPrefix(tag, "#")
+	tag = strings.TrimLeft(tag, "#!")
+	tag = strings.ReplaceAll(tag, "O", "0")
 	if tag == "" {
 		return ""
 	}

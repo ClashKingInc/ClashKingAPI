@@ -215,6 +215,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	app.Get("/v2/categories", listCategories(a))
 	app.Get("/v2/static/categories", listCategories(a))
+	app.Get("/v2/static/app-bundle", appStaticDataBundle(a))
+	app.Get("/v2/static/app-translations", appStaticTranslations(a))
 	app.Get("/v2/:category/names", categoryNames(a))
 	app.Get("/v2/static/:category/names", categoryNames(a))
 	app.Get("/v2/:category/:item_id_or_name/maxlevel", maxLevel(a))

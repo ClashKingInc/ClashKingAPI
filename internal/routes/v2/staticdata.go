@@ -24,6 +24,7 @@ var categories = map[string]categoryMeta{
 	"sceneries":           {},
 	"skins":               {},
 	"capital_house_parts": {},
+	"capital_leagues":     {},
 	"helpers":             {},
 	"war_leagues":         {},
 	"league_tiers":        {},
@@ -32,6 +33,8 @@ var categories = map[string]categoryMeta{
 
 var locales = []string{"EN", "AR", "CN", "CNT", "DE", "ES", "FA", "FI", "FR", "ID", "IT", "JP", "KR", "MS", "NL", "NO", "PL", "PT", "RU", "TH", "TR", "VI"}
 var levelCategories = []string{"buildings", "traps", "troops", "guardians", "spells", "heroes", "pets", "equipment", "helpers", "achievements"}
+
+const appStaticDataIconBaseURL = "https://coc-assets.clashk.ing"
 
 type categoryMeta struct {
 	SupportsVillage  bool
@@ -159,27 +162,66 @@ func maxLevel(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		rawLevels, ok := item["levels"].([]any)
-		if !ok || len(rawLevels) == 0 {
-			return apptypes.Error(fiber.StatusNotFound, "Item '"+item["name"].(string)+"' in category '"+category+"' has no levels defined")
-		}
-		maxLevel := 0
-		for _, rawLevel := range rawLevels {
-			switch value := rawLevel.(type) {
-			case map[string]any:
-				if level, ok := value["level"].(float64); ok && int(level) > maxLevel {
-					maxLevel = int(level)
-				}
-			case float64:
-				if int(value) > maxLevel {
-					maxLevel = int(value)
-				}
-			}
-		}
+		maxLevel := extractMaxLevel(item)
 		if maxLevel == 0 {
 			return apptypes.Error(fiber.StatusNotFound, "Could not extract level numbers from item '"+item["name"].(string)+"' in category '"+category+"'")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"name": item["name"], "max_level": maxLevel})
+	}
+}
+
+func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		raw := a.Clash.Client().StaticData().Raw
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
+			"troops_data":          map[string]any{"troops": buildAppTroopsData(raw["troops"])},
+			"heroes_data":          map[string]any{"heroes": buildAppHeroesData(raw["heroes"])},
+			"spells_data":          map[string]any{"spells": buildAppSpellsData(raw["spells"])},
+			"pets_data":            map[string]any{"pets": buildAppPetsData(raw["pets"])},
+			"gears_data":           map[string]any{"gears": buildAppEquipmentData(raw["equipment"])},
+			"league_data":          map[string]any{"leagues": buildAppLeagueData(raw["war_leagues"], raw["league_tiers"])},
+			"player_league_data":   map[string]any{"leagues": buildNamedAppData(raw["league_tiers"], nil)},
+			"war_leagues_data":     map[string]any{"leagues": buildNamedAppData(raw["war_leagues"], nil)},
+			"capital_leagues_data": map[string]any{"leagues": buildNamedAppData(raw["capital_leagues"], nil)},
+			"game_data":            map[string]any{"max_TownHall": appMaxTownHallLevel(raw["buildings"])},
+		})
+	}
+}
+
+// appStaticTranslations returns a compact locale-specific translation pack for app static data.
+//
+// @Summary Get app static translations
+// @Description Returns locale-specific translations keyed by TID for the static-data app bundle.
+// @Tags Static Data
+// @Produce json
+// @Param locale query string true "Locale code"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /v2/static/app-translations [get]
+func appStaticTranslations(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		locale := strings.ToUpper(c.Query("locale"))
+		if locale == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "Missing required locale query parameter")
+		}
+		if !slices.Contains(locales, locale) {
+			return apptypes.Error(fiber.StatusBadRequest, "Invalid locale '"+locale+"'. Available locales: "+strings.Join(locales, ", "))
+		}
+
+		raw := a.Clash.Client().StaticData().Raw
+		translations := a.Clash.Client().StaticData().Translations
+		tids := collectAppBundleTIDs(raw)
+		pack := make(map[string]string, len(tids))
+		for tid := range tids {
+			if translated := translations[tid][locale]; translated != "" {
+				pack[tid] = translated
+			}
+		}
+
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
+			"locale":       locale,
+			"translations": pack,
+		})
 	}
 }
 
@@ -263,6 +305,200 @@ func clone(input map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func buildAppTroopsData(items []map[string]any) map[string]any {
+	return buildNamedAppData(items, func(item map[string]any) {
+		item["type"] = appTroopType(item)
+	})
+}
+
+func buildAppHeroesData(items []map[string]any) map[string]any {
+	return buildNamedAppData(items, func(item map[string]any) {
+		if staticDataAsString(item["village"]) == "builderBase" {
+			item["type"] = "bb-hero"
+			return
+		}
+		item["type"] = "hero"
+	})
+}
+
+func buildAppSpellsData(items []map[string]any) map[string]any {
+	return buildNamedAppData(items, func(item map[string]any) {
+		item["type"] = "spell"
+		item["elixir"] = appSpellElixirType(item)
+		if staticDataAsString(item["village"]) == "" {
+			item["village"] = "home"
+		}
+	})
+}
+
+func buildAppPetsData(items []map[string]any) map[string]any {
+	return buildNamedAppData(items, func(item map[string]any) {
+		item["type"] = "pet"
+		if staticDataAsString(item["village"]) == "" {
+			item["village"] = "home"
+		}
+	})
+}
+
+func buildAppEquipmentData(items []map[string]any) map[string]any {
+	return buildNamedAppData(items, func(item map[string]any) {
+		rawRarity := staticDataAsString(item["rarity"])
+		item["type"] = "gear"
+		item["rarity_label"] = rawRarity
+		item["rarity"] = appEquipmentRarityCode(rawRarity)
+		if staticDataAsString(item["village"]) == "" {
+			item["village"] = "home"
+		}
+	})
+}
+
+func buildAppLeagueData(warLeagues []map[string]any, leagueTiers []map[string]any) map[string]any {
+	out := buildNamedAppData(warLeagues, nil)
+	for _, rawItem := range leagueTiers {
+		name := staticDataAsString(rawItem["name"])
+		if name != "Unranked" {
+			continue
+		}
+		item := clone(rawItem)
+		if iconURL := appItemIconURL(rawItem); iconURL != "" {
+			item["url"] = iconURL
+		}
+		out[name] = item
+	}
+	return out
+}
+
+func buildNamedAppData(items []map[string]any, enrich func(map[string]any)) map[string]any {
+	out := make(map[string]any, len(items))
+	for _, rawItem := range items {
+		name := staticDataAsString(rawItem["name"])
+		if name == "" {
+			continue
+		}
+		item := clone(rawItem)
+		item["maxLevel"] = extractMaxLevel(rawItem)
+		if iconURL := appItemIconURL(rawItem); iconURL != "" {
+			item["url"] = iconURL
+		}
+		if enrich != nil {
+			enrich(item)
+		}
+		out[name] = item
+	}
+	return out
+}
+
+func collectAppBundleTIDs(raw map[string][]map[string]any) map[string]struct{} {
+	tids := make(map[string]struct{})
+	for _, category := range []string{
+		"troops",
+		"heroes",
+		"spells",
+		"pets",
+		"equipment",
+		"war_leagues",
+		"league_tiers",
+		"capital_leagues",
+	} {
+		for _, item := range raw[category] {
+			collectTIDs(item, tids)
+		}
+	}
+	return tids
+}
+
+func collectTIDs(value any, tids map[string]struct{}) {
+	switch current := value.(type) {
+	case map[string]any:
+		for key, nested := range current {
+			if key == "TID" {
+				if tidMap, ok := nested.(map[string]any); ok {
+					for _, tidValue := range tidMap {
+						if tid := staticDataAsString(tidValue); tid != "" {
+							tids[tid] = struct{}{}
+						}
+					}
+				}
+				continue
+			}
+			collectTIDs(nested, tids)
+		}
+	case []any:
+		for _, nested := range current {
+			collectTIDs(nested, tids)
+		}
+	}
+}
+
+func appItemIconURL(item map[string]any) string {
+	icon := strings.TrimPrefix(staticDataAsString(item["icon"]), "/")
+	if icon == "" {
+		return ""
+	}
+	return appStaticDataIconBaseURL + "/" + icon
+}
+
+func extractMaxLevel(item map[string]any) int {
+	rawLevels, ok := item["levels"].([]any)
+	if !ok || len(rawLevels) == 0 {
+		return 0
+	}
+	maxLevel := 0
+	for _, rawLevel := range rawLevels {
+		switch value := rawLevel.(type) {
+		case map[string]any:
+			if level, ok := value["level"].(float64); ok && int(level) > maxLevel {
+				maxLevel = int(level)
+			}
+		case float64:
+			if int(value) > maxLevel {
+				maxLevel = int(value)
+			}
+		}
+	}
+	return maxLevel
+}
+
+func appTroopType(item map[string]any) string {
+	if staticDataAsString(item["village"]) == "builderBase" {
+		return "bb-troop"
+	}
+	if item["super_troop"] != nil {
+		return "super-troop"
+	}
+	if strings.EqualFold(staticDataAsString(item["production_building"]), "Workshop") {
+		return "siege-machine"
+	}
+	return "troop"
+}
+
+func appSpellElixirType(item map[string]any) string {
+	if strings.EqualFold(staticDataAsString(item["upgrade_resource"]), "Dark Elixir") {
+		return "dark"
+	}
+	return "basic"
+}
+
+func appEquipmentRarityCode(rarity string) string {
+	switch strings.ToLower(rarity) {
+	case "epic":
+		return "2"
+	case "common":
+		return "1"
+	default:
+		return "1"
+	}
+}
+
+func appMaxTownHallLevel(items []map[string]any) int {
+	for _, item := range items {
+		if strings.EqualFold(staticDataAsString(item["name"]), "Town Hall") {
+			return extractMaxLevel(item)
+		}
+	}
+	return 0
 }
 
 func staticDataAsString(v any) string {

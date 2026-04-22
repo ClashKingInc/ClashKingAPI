@@ -5723,6 +5723,32 @@ paths:
       summary: Update open ticket status
       tags:
       - Server Tickets
+  /v2/static/app-translations:
+    get:
+      description: Returns locale-specific translations keyed by TID for the static-data
+        app bundle.
+      parameters:
+      - description: Locale code
+        in: query
+        name: locale
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get app static translations
+      tags:
+      - Static Data
   /v2/tracking/players/add:
     post:
       consumes:

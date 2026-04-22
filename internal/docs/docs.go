@@ -7493,6 +7493,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/static/app-translations": {
+            "get": {
+                "description": "Returns locale-specific translations keyed by TID for the static-data app bundle.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Static Data"
+                ],
+                "summary": "Get app static translations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Locale code",
+                        "name": "locale",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v2/tracking/players/add": {
             "post": {
                 "security": [

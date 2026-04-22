@@ -163,6 +163,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if a.Clash != nil {
 		_ = a.Clash.Close()
 	}
+	utils.FlushSentry(2 * time.Second)
 	if a.Store != nil {
 		err := a.Store.Close(ctx)
 		if err == nil {

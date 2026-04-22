@@ -61,11 +61,14 @@ func FiberMiddleware() fiber.Handler {
 		defer func() {
 			transaction.Status = httpStatusToSpanStatus(c.Response().StatusCode())
 			transaction.Finish()
-			hub.Flush(2 * time.Second)
 		}()
 
 		return c.Next()
 	}
+}
+
+func FlushSentry(timeout time.Duration) {
+	sentrysdk.Flush(timeout)
 }
 
 // CaptureFiberError reports err to Sentry when status >= 500.

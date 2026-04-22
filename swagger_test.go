@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 func TestFilterPublicSwaggerPathsRemovesSecuredOperations(t *testing.T) {
 	doc := map[string]any{
@@ -99,5 +105,29 @@ func TestEnsureSwaggerSecurityDefinitionAddsAuthorizationScheme(t *testing.T) {
 	}
 	if apiKey["name"] != "Authorization" {
 		t.Fatalf("expected Authorization header name, got %v", apiKey["name"])
+	}
+}
+
+func TestSwaggerUIHandlersServeAssetsIndependently(t *testing.T) {
+	app := fiber.New()
+	app.Get("/docs/public/*", newSwaggerUIHandler("/openapi-public.json"))
+	app.Get("/docs/private/*", newSwaggerUIHandler("/openapi-private.json"))
+
+	for _, path := range []string{
+		"/docs/public/index.html",
+		"/docs/private/index.html",
+		"/docs/public/swagger-ui.css",
+		"/docs/private/swagger-ui.css",
+		"/docs/public/swagger-ui-bundle.js",
+		"/docs/private/swagger-ui-bundle.js",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("request %s failed: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d", path, resp.StatusCode)
+		}
 	}
 }

@@ -113,22 +113,85 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 			playerWarStats, clanWarStats = mobileFetchInitializationWarStats(ctx, a, playerTags, clanTags)
 		}()
 		wg.Wait()
-		clanBundle["clan_war_stats"] = clanWarStats
+		clanBundle = mobileClanBundleContract(clanBundle)
+		clanBundle["clan_war_stats"] = playerWarStatsOrEmpty(clanWarStats)
 
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
-			"players":       playersExtended,
-			"players_basic": playersBasic,
-			"clans":         clanBundle,
-			"war_stats":     playerWarStats,
-			"clan_tags":     clanTags,
-			"metadata": map[string]any{
-				"total_players": len(playerTags),
-				"total_clans":   len(clanTags),
-				"fetch_time":    time.Now().UTC().Format(time.RFC3339),
-				"user_id":       apptypes.UserID(c.UserContext()),
-			},
-		})
+		return apptypes.JSON(c, fiber.StatusOK, mobileInitializationResponse(
+			playerTags,
+			clanTags,
+			playersExtended,
+			playersBasic,
+			clanBundle,
+			playerWarStats,
+			apptypes.UserID(c.UserContext()),
+			time.Now().UTC(),
+		))
 	}
+}
+
+func mobileInitializationResponse(
+	playerTags []string,
+	clanTags []string,
+	playersExtended []map[string]any,
+	playersBasic []map[string]any,
+	clanBundle map[string]any,
+	playerWarStats []any,
+	userID string,
+	fetchTime time.Time,
+) map[string]any {
+	return map[string]any{
+		"players":       playerMapsOrEmpty(playersExtended),
+		"players_basic": playerMapsOrEmpty(playersBasic),
+		"clans":         mobileClanBundleContract(clanBundle),
+		"war_stats":     playerWarStatsOrEmpty(playerWarStats),
+		"clan_tags":     playerStringsOrEmpty(clanTags),
+		"metadata": map[string]any{
+			"total_players": len(playerTags),
+			"total_clans":   len(clanTags),
+			"fetch_time":    fetchTime.Format(time.RFC3339),
+			"user_id":       userID,
+		},
+	}
+}
+
+func mobileClanBundleContract(bundle map[string]any) map[string]any {
+	out := map[string]any{
+		"clan_details":    map[string]any{},
+		"clan_stats":      map[string]any{},
+		"war_data":        []any{},
+		"join_leave_data": map[string]any{},
+		"capital_data":    []any{},
+		"war_log_data":    []any{},
+		"clan_war_stats":  []any{},
+		"cwl_data":        []any{},
+	}
+	for key, value := range bundle {
+		if value != nil {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func playerMapsOrEmpty(items []map[string]any) []map[string]any {
+	if items == nil {
+		return []map[string]any{}
+	}
+	return items
+}
+
+func playerWarStatsOrEmpty(items []any) []any {
+	if items == nil {
+		return []any{}
+	}
+	return items
+}
+
+func playerStringsOrEmpty(items []string) []string {
+	if items == nil {
+		return []string{}
+	}
+	return items
 }
 
 func mobileFetchInitializationWarStats(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string) ([]any, []any) {

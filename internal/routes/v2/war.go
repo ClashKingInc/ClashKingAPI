@@ -302,7 +302,9 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 
 			leagueInfo = enrichLeagueInfo(lg, leagueWars)
 			for i := range leagueWars {
-				warLeagueInfos = append(warLeagueInfos, playerStructToMap(&leagueWars[i]))
+				if warMap := playerStructToMap(&leagueWars[i]); warMap != nil {
+					warLeagueInfos = append(warLeagueInfos, warMap)
+				}
 			}
 
 			if !isInWar {
@@ -311,15 +313,72 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		}
 	}
 
-	result := map[string]any{
-		"clan_tag":         tag,
+	return warSummaryResponse(tag, isInWar, isInCwl, warInfo, leagueInfo, warLeagueInfos)
+}
+
+func warSummaryResponse(tag string, isInWar bool, isInCwl bool, warInfo any, leagueInfo any, warLeagueInfos []any) map[string]any {
+	return map[string]any{
+		"clan_tag":         warFixTag(tag),
 		"isInWar":          isInWar,
 		"isInCwl":          isInCwl,
-		"war_info":         warInfo,
-		"league_info":      leagueInfo,
-		"war_league_infos": warLeagueInfos,
+		"war_info":         warSummaryInfoMap(warInfo),
+		"league_info":      warSummaryMapOrNil(leagueInfo),
+		"war_league_infos": warSummarySlice(warLeagueInfos),
 	}
-	return result
+}
+
+func warSummaryInfoMap(warInfo any) map[string]any {
+	info := warSummaryMapOrNil(warInfo)
+	if info == nil {
+		return map[string]any{"state": "notInWar"}
+	}
+	if strings.TrimSpace(warAsString(info["state"])) == "" {
+		info["state"] = "unknown"
+	}
+	if currentWarInfo := warSummaryMapOrNil(info["currentWarInfo"]); currentWarInfo != nil {
+		info["currentWarInfo"] = currentWarInfo
+	} else {
+		delete(info, "currentWarInfo")
+	}
+	return info
+}
+
+func warSummarySlice(items []any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		if mapped := warSummaryMapOrNil(item); mapped != nil {
+			out = append(out, mapped)
+		}
+	}
+	return out
+}
+
+func warSummaryMapOrNil(value any) map[string]any {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case map[string]any:
+		return mapsClone(typed)
+	case bson.M:
+		if out, ok := sanitize(typed).(map[string]any); ok {
+			return out
+		}
+	case map[string]string:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[key] = item
+		}
+		return out
+	}
+	return nil
+}
+
+func mapsClone(value map[string]any) map[string]any {
+	out := make(map[string]any, len(value))
+	for key, item := range value {
+		out[key] = item
+	}
+	return out
 }
 
 // isCWLWindow returns true during the Clan War League event window.

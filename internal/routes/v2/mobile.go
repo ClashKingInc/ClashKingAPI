@@ -140,10 +140,10 @@ func mobileInitializationResponse(
 	fetchTime time.Time,
 ) map[string]any {
 	return map[string]any{
-		"players":       playerMapsOrEmpty(playersExtended),
+		"players":       mobilePlayerExtendedListContract(playersExtended),
 		"players_basic": playerMapsOrEmpty(playersBasic),
 		"clans":         mobileClanBundleContract(clanBundle),
-		"war_stats":     playerWarStatsOrEmpty(playerWarStats),
+		"war_stats":     mobilePlayerWarStatsListContract(playerWarStatsOrEmpty(playerWarStats)),
 		"clan_tags":     playerStringsOrEmpty(clanTags),
 		"metadata": map[string]any{
 			"total_players": len(playerTags),
@@ -155,22 +155,17 @@ func mobileInitializationResponse(
 }
 
 func mobileClanBundleContract(bundle map[string]any) map[string]any {
-	out := map[string]any{
-		"clan_details":    map[string]any{},
-		"clan_stats":      map[string]any{},
-		"war_data":        []any{},
-		"join_leave_data": map[string]any{},
-		"capital_data":    []any{},
-		"war_log_data":    []any{},
-		"clan_war_stats":  []any{},
-		"cwl_data":        []any{},
+	source := mobileMap(bundle)
+	return map[string]any{
+		"clan_details":    mobileMap(source["clan_details"]),
+		"clan_stats":      mobileMap(source["clan_stats"]),
+		"war_data":        mobileWarSummaryList(mobileList(source["war_data"])),
+		"join_leave_data": mobileJoinLeaveByClanContract(source["join_leave_data"]),
+		"capital_data":    mobileCapitalDataContract(source["capital_data"]),
+		"war_log_data":    mobileWarLogDataContract(source["war_log_data"]),
+		"clan_war_stats":  mobileClanWarStatsListContract(mobileList(source["clan_war_stats"])),
+		"cwl_data":        mobileList(source["cwl_data"]),
 	}
-	for key, value := range bundle {
-		if value != nil {
-			out[key] = value
-		}
-	}
-	return out
 }
 
 func playerMapsOrEmpty(items []map[string]any) []map[string]any {
@@ -178,6 +173,187 @@ func playerMapsOrEmpty(items []map[string]any) []map[string]any {
 		return []map[string]any{}
 	}
 	return items
+}
+
+func mobilePlayerExtendedListContract(items []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, mobilePlayerExtendedContract(item))
+	}
+	return out
+}
+
+func mobilePlayerExtendedContract(item map[string]any) map[string]any {
+	out := mobileMap(item)
+	tag := mobileString(out["tag"])
+	out["tag"] = tag
+	out["legends_by_season"] = mobileMap(out["legends_by_season"])
+	out["legend_eos_ranking"] = mobileList(out["legend_eos_ranking"])
+	out["rankings"] = mobilePlayerRankingsContract(out["rankings"], tag)
+	out["raid_data"] = mobilePlayerRaidDataContract(out["raid_data"])
+	out["war_data"] = mobilePlayerWarDataContract(out["war_data"])
+	return out
+}
+
+func mobilePlayerRankingsContract(value any, playerTag string) map[string]any {
+	out := map[string]any{
+		"tag":                 playerTag,
+		"country_code":        nil,
+		"country_name":        nil,
+		"local_rank":          nil,
+		"global_rank":         nil,
+		"builder_global_rank": nil,
+		"builder_local_rank":  nil,
+	}
+	for key, value := range mobileMap(value) {
+		out[key] = value
+	}
+	return out
+}
+
+func mobilePlayerRaidDataContract(value any) map[string]any {
+	data := mobileMap(value)
+	if len(data) == 0 {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"attack_limit": mobileInt(data["attack_limit"]),
+		"attacks_done": mobileInt(data["attacks_done"]),
+	}
+}
+
+func mobilePlayerWarDataContract(value any) map[string]any {
+	out := mobileMap(value)
+	if len(out) == 0 {
+		return map[string]any{}
+	}
+	if currentWarInfo := mobileMap(out["currentWarInfo"]); len(currentWarInfo) > 0 {
+		out["currentWarInfo"] = currentWarInfo
+		return out
+	}
+	warInfo := mobileMap(out["war_info"])
+	if currentWarInfo := mobileMap(warInfo["currentWarInfo"]); len(currentWarInfo) > 0 {
+		out["currentWarInfo"] = currentWarInfo
+	} else {
+		delete(out, "currentWarInfo")
+	}
+	return out
+}
+
+func mobilePlayerWarStatsListContract(items []any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		data := mobileMap(item)
+		out = append(out, map[string]any{
+			"name":          mobileString(data["name"]),
+			"tag":           mobileString(data["tag"]),
+			"townhallLevel": mobileInt(data["townhallLevel"]),
+			"stats":         mobileMap(data["stats"]),
+			"timeRange":     mobileMap(data["timeRange"]),
+			"wars":          mobileList(data["wars"]),
+		})
+	}
+	return out
+}
+
+func mobileJoinLeaveByClanContract(value any) map[string]any {
+	out := map[string]any{}
+	for clanTag, item := range mobileMap(value) {
+		out[clanTag] = mobileJoinLeaveContract(item)
+	}
+	return out
+}
+
+func mobileJoinLeaveContract(value any) map[string]any {
+	data := mobileMap(value)
+	return map[string]any{
+		"clan_tag":        mobileString(data["clan_tag"]),
+		"timestamp_start": mobileInt(data["timestamp_start"]),
+		"timestamp_end":   mobileInt(data["timestamp_end"]),
+		"stats":           mobileJoinLeaveStatsContract(data["stats"]),
+		"join_leave_list": mobileList(data["join_leave_list"]),
+	}
+}
+
+func mobileJoinLeaveStatsContract(value any) map[string]any {
+	data := mobileMap(value)
+	return map[string]any{
+		"total_events":                mobileInt(data["total_events"]),
+		"total_joins":                 mobileInt(data["total_joins"]),
+		"total_leaves":                mobileInt(data["total_leaves"]),
+		"unique_players":              mobileInt(data["unique_players"]),
+		"moving_players":              mobileInt(data["moving_players"]),
+		"rejoined_players":            mobileInt(data["rejoined_players"]),
+		"first_event":                 data["first_event"],
+		"last_event":                  data["last_event"],
+		"most_moving_hour":            data["most_moving_hour"],
+		"avg_time_between_join_leave": data["avg_time_between_join_leave"],
+		"players_still_in_clan":       mobileInt(data["players_still_in_clan"]),
+		"players_left_forever":        mobileInt(data["players_left_forever"]),
+		"most_moving_players":         mobileList(data["most_moving_players"]),
+	}
+}
+
+func mobileCapitalDataContract(value any) []any {
+	items := mobileList(value)
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		data := mobileMap(item)
+		entry := map[string]any{
+			"clan_tag": mobileString(data["clan_tag"]),
+			"history":  mobileList(data["history"]),
+		}
+		if stats := mobileMap(data["stats"]); len(stats) > 0 {
+			entry["stats"] = stats
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func mobileWarLogDataContract(value any) []any {
+	items := mobileList(value)
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		data := mobileMap(item)
+		out = append(out, map[string]any{
+			"clan_tag": mobileString(data["clan_tag"]),
+			"items":    mobileList(data["items"]),
+		})
+	}
+	return out
+}
+
+func mobileClanWarStatsListContract(items []any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		data := mobileMap(item)
+		out = append(out, map[string]any{
+			"clan_tag": mobileString(data["clan_tag"]),
+			"players":  mobilePlayerWarStatsListContract(mobileList(data["players"])),
+			"wars":     mobileList(data["wars"]),
+		})
+	}
+	return out
+}
+
+func mobileWarSummaryList(items []any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		summary := mobileMap(item)
+		if len(summary) == 0 {
+			continue
+		}
+		out = append(out, warSummaryResponse(
+			mobileString(summary["clan_tag"]),
+			mobileBool(summary["isInWar"]),
+			mobileBool(summary["isInCwl"]),
+			summary["war_info"],
+			summary["league_info"],
+			mobileList(summary["war_league_infos"]),
+		))
+	}
+	return out
 }
 
 func playerWarStatsOrEmpty(items []any) []any {

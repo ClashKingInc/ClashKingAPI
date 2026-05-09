@@ -216,3 +216,14 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 		t.Fatalf("expected clan_war_stats wars slice, got %T", clanWarStat["wars"])
 	}
 }
+
+func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
+	filter := mobileInitializationWarHitsFilter()
+
+	if filter.Limit != 50 {
+		t.Fatalf("expected startup war stats limit to stay at 50, got %d", filter.Limit)
+	}
+	if filter.TimestampStart <= 0 || filter.TimestampEnd <= 0 {
+		t.Fatalf("expected initialization filter timestamps to be initialized, got start=%d end=%d", filter.TimestampStart, filter.TimestampEnd)
+	}
+}

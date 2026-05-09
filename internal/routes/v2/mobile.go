@@ -373,38 +373,35 @@ func playerStringsOrEmpty(items []string) []string {
 func mobileFetchInitializationWarStats(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string) ([]any, []any) {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	clanTags = mobileNormalizeUniqueClanTags(clanTags)
-	filter := mobileWarHitsFilter{
+	playerFilter := mobileInitializationWarHitsFilter()
+	playerFilter.PlayerTags = playerTags
+
+	clanFilter := mobileInitializationWarHitsFilter()
+	clanFilter.ClanTags = clanTags
+
+	var playerStats []any
+	var clanStats []any
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		playerStats = mobileFetchPlayerWarStatsWithFilter(ctx, a, playerFilter)
+	}()
+	go func() {
+		defer wg.Done()
+		clanStats = mobileFetchClanWarStatsWithFilter(ctx, a, clanFilter)
+	}()
+	wg.Wait()
+
+	return playerStats, clanStats
+}
+
+func mobileInitializationWarHitsFilter() mobileWarHitsFilter {
+	return mobileWarHitsFilter{
 		TimestampStart: time.Now().UTC().AddDate(0, -6, 0).Unix(),
 		TimestampEnd:   time.Now().UTC().Unix(),
+		Limit:          50,
 	}
-	wars := mobileFindRelevantWarDocs(ctx, a, playerTags, clanTags, filter.TimestampStart, filter.TimestampEnd)
-	if len(wars) == 0 {
-		return []any{}, []any{}
-	}
-
-	selectedPlayers := make(map[string]bool, len(playerTags))
-	for _, tag := range playerTags {
-		selectedPlayers[tag] = true
-	}
-	selectedClans := make(map[string]bool, len(clanTags))
-	for _, tag := range clanTags {
-		selectedClans[tag] = true
-	}
-
-	playerAggregates := map[string]*mobilePlayerWarAggregate{}
-	clanAggregates := map[string]*mobileClanWarAggregate{}
-	for _, war := range wars {
-		if !mobileWarMatchesFilter(war, filter) {
-			continue
-		}
-		cleanWar := mobileCleanWarData(war)
-		freshOrders := mobileFreshAttackOrders(war)
-		mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, selectedPlayers, filter, playerAggregates)
-		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, selectedClans, filter, clanAggregates)
-	}
-
-	return mobileBuildPlayerWarResults(playerAggregates, playerTags, filter.TimestampStart, filter.TimestampEnd),
-		mobileBuildClanWarResults(clanAggregates, clanTags, filter.TimestampStart, filter.TimestampEnd)
 }
 
 func mobileNormalizeUniqueTags(tags []string) []string {

@@ -2,7 +2,6 @@ package v2
 
 import (
 	"context"
-	"encoding/json"
 	"math"
 	"net/url"
 	"sort"
@@ -284,28 +283,11 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 	warLeagueInfos := []any{}
 
 	if isCWLWindow() {
-		lg, lgErr := a.Clash.Client().GetLeagueGroup(ctx, tag)
-		if lgErr == nil && lg != nil && lg.State != "notInWar" && lg.State != "" {
-			var warTags []string
-			for _, round := range lg.Rounds {
-				for _, wt := range round.WarTags {
-					if wt != "#0" && wt != "" {
-						warTags = append(warTags, wt)
-					}
-				}
-			}
-
-			var leagueWars []clashy.ClanWar
-			if len(warTags) > 0 {
-				leagueWars, _ = a.Clash.Client().GetLeagueWars(ctx, warTags)
-			}
-
+		lg := fetchLeagueGroupProxy(tag)
+		if lg != nil && warAsString(lg["state"]) != "notInWar" && warAsString(lg["state"]) != "" {
+			leagueWars := fetchLeagueWarsProxy(extractLeagueWarTags(lg))
 			leagueInfo = enrichLeagueInfo(lg, leagueWars)
-			for i := range leagueWars {
-				if warMap := playerStructToMap(&leagueWars[i]); warMap != nil {
-					warLeagueInfos = append(warLeagueInfos, warMap)
-				}
-			}
+			warLeagueInfos = mobileMapsToAny(leagueWars)
 
 			if !isInWar {
 				isInCwl = true
@@ -404,18 +386,9 @@ type cwlClanStats struct {
 	warsPlayed       int
 }
 
-// enrichLeagueInfo converts a ClanWarLeagueGroup to a JSON map and adds per-clan
-// stats (total_stars, total_destruction, wars_played, rank) derived from the
-// individual CWL war results.
-func enrichLeagueInfo(lg *clashy.ClanWarLeagueGroup, wars []clashy.ClanWar) map[string]any {
-	b, err := json.Marshal(lg)
-	if err != nil {
-		return nil
-	}
-	var result map[string]any
-	if err := json.Unmarshal(b, &result); err != nil {
-		return nil
-	}
+// enrichLeagueInfo adds per-clan CWL stats derived from the individual league wars.
+func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[string]any {
+	result := mapsClone(leagueInfo)
 
 	statsMap := make(map[string]*cwlClanStats)
 	if clans, ok := result["clans"].([]any); ok {
@@ -429,21 +402,16 @@ func enrichLeagueInfo(lg *clashy.ClanWarLeagueGroup, wars []clashy.ClanWar) map[
 	}
 
 	for _, war := range wars {
-		state := string(war.State)
+		state := warAsString(war["state"])
 		if state != "inWar" && state != "warEnded" {
 			continue
 		}
-		if war.Clan != nil {
-			if s, ok := statsMap[war.Clan.Tag]; ok {
-				s.totalStars += war.Clan.Stars
-				s.totalDestruction += war.Clan.Destruction
-				s.warsPlayed++
-			}
-		}
-		if war.Opponent != nil {
-			if s, ok := statsMap[war.Opponent.Tag]; ok {
-				s.totalStars += war.Opponent.Stars
-				s.totalDestruction += war.Opponent.Destruction
+		for _, sideKey := range []string{"clan", "opponent"} {
+			clan := mobileMap(war[sideKey])
+			tag := warAsString(clan["tag"])
+			if s, ok := statsMap[tag]; ok {
+				s.totalStars += mobileInt(clan["stars"])
+				s.totalDestruction += mobileFloat(clan["destructionPercentage"])
 				s.warsPlayed++
 			}
 		}
@@ -485,6 +453,69 @@ func enrichLeagueInfo(lg *clashy.ClanWarLeagueGroup, wars []clashy.ClanWar) map[
 	}
 
 	return result
+}
+
+func fetchLeagueGroupProxy(tag string) map[string]any {
+	url := "https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(tag, "#", "%23") + "/currentwar/leaguegroup"
+	data := mobileHTTPGetJSON(url)
+	if len(data) == 0 {
+		return nil
+	}
+	return data
+}
+
+func extractLeagueWarTags(leagueInfo map[string]any) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, rawRound := range mobileList(leagueInfo["rounds"]) {
+		round := mobileMap(rawRound)
+		for _, rawTag := range mobileList(round["warTags"]) {
+			tag := warFixTag(warAsString(rawTag))
+			if tag == "" || tag == "#0" || seen[tag] {
+				continue
+			}
+			seen[tag] = true
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
+func fetchLeagueWarsProxy(warTags []string) []map[string]any {
+	if len(warTags) == 0 {
+		return nil
+	}
+
+	results := make([]map[string]any, len(warTags))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10)
+
+	for idx, warTag := range warTags {
+		wg.Add(1)
+		go func(i int, tag string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			url := "https://proxy.clashk.ing/v1/clanwarleagues/wars/" + strings.ReplaceAll(tag, "#", "%23")
+			data := mobileHTTPGetJSON(url)
+			if len(data) == 0 || warAsString(data["state"]) == "notInWar" {
+				return
+			}
+			data["war_tag"] = tag
+			results[i] = data
+		}(idx, warTag)
+	}
+
+	wg.Wait()
+
+	out := make([]map[string]any, 0, len(results))
+	for _, item := range results {
+		if item != nil {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func timestampString(raw string, fallback int64) string {

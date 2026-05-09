@@ -59,3 +59,60 @@ func TestWarSummaryInfoMapRemovesInvalidCurrentWarInfo(t *testing.T) {
 		t.Fatalf("expected bypass to be preserved, got %v", got)
 	}
 }
+
+func TestExtractLeagueWarTagsFiltersZerosAndDuplicates(t *testing.T) {
+	tags := extractLeagueWarTags(map[string]any{
+		"rounds": []any{
+			map[string]any{"warTags": []any{"#AAA", "#0", "#BBB"}},
+			map[string]any{"warTags": []any{"#BBB", "#CCC"}},
+		},
+	})
+
+	if len(tags) != 3 {
+		t.Fatalf("expected 3 unique war tags, got %d (%v)", len(tags), tags)
+	}
+	if tags[0] != "#AAA" || tags[1] != "#BBB" || tags[2] != "#CCC" {
+		t.Fatalf("unexpected war tag order/content: %v", tags)
+	}
+}
+
+func TestEnrichLeagueInfoBuildsRanksFromProxyWars(t *testing.T) {
+	result := enrichLeagueInfo(
+		map[string]any{
+			"state": "inWar",
+			"clans": []any{
+				map[string]any{"tag": "#A", "name": "A"},
+				map[string]any{"tag": "#B", "name": "B"},
+			},
+		},
+		[]map[string]any{
+			{
+				"state": "warEnded",
+				"clan": map[string]any{
+					"tag":                   "#A",
+					"stars":                 30,
+					"destructionPercentage": 95.5,
+				},
+				"opponent": map[string]any{
+					"tag":                   "#B",
+					"stars":                 28,
+					"destructionPercentage": 90.1,
+				},
+			},
+		},
+	)
+
+	clans := result["clans"].([]any)
+	first := clans[0].(map[string]any)
+	second := clans[1].(map[string]any)
+
+	if first["tag"] != "#A" || first["rank"] != 1 {
+		t.Fatalf("expected #A to rank first, got %+v", first)
+	}
+	if second["tag"] != "#B" || second["rank"] != 2 {
+		t.Fatalf("expected #B to rank second, got %+v", second)
+	}
+	if first["wars_played"] != 1 || second["wars_played"] != 1 {
+		t.Fatalf("expected wars_played to be populated, got first=%v second=%v", first["wars_played"], second["wars_played"])
+	}
+}

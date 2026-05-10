@@ -381,25 +381,349 @@ func isCWLWindow() bool {
 }
 
 type cwlClanStats struct {
-	totalStars       int
-	totalDestruction float64
-	warsPlayed       int
+	totalStars                int
+	attackCount               int
+	missedAttacks             int
+	missedDefenses            int
+	totalDestruction          float64
+	totalDestructionInflicted float64
+	warsPlayed                int
+	members                   map[string]*cwlMemberStats
+}
+
+type cwlMemberStats struct {
+	name                       string
+	avgTownHallLevel           float64
+	mapPositionList            []float64
+	opponentPositionList       []float64
+	attackOrderList            []float64
+	opponentTHLevelList        []float64
+	attackerPositionList       []float64
+	defenseOrderList           []float64
+	attackerTHLevelList        []float64
+	ownTHLevelListAttack       []int
+	opponentTHLevelListAttack  []int
+	ownTHLevelListDefense      []int
+	attackerTHLevelListDefense []int
+	stars                      int
+	starsByTH                  map[int]map[int]int
+	totalDestruction           float64
+	attackCount                int
+	missedAttacks              int
+	defenseStarsTaken          int
+	defenseStarsByTH           map[int]map[int]int
+	defenseTotalDestruction    float64
+	defenseCount               int
+	missedDefenses             int
+}
+
+func initCWLClanStats(leagueInfo map[string]any) map[string]*cwlClanStats {
+	statsMap := make(map[string]*cwlClanStats)
+	for _, rawClan := range mobileList(leagueInfo["clans"]) {
+		clan := mobileMap(rawClan)
+		tag := warAsString(clan["tag"])
+		if tag == "" {
+			continue
+		}
+		summary := &cwlClanStats{
+			members: make(map[string]*cwlMemberStats),
+		}
+		for _, rawMember := range mobileList(clan["members"]) {
+			member := mobileMap(rawMember)
+			memberTag := warAsString(member["tag"])
+			if memberTag == "" {
+				continue
+			}
+			summary.members[memberTag] = newCWLMemberStats(member)
+		}
+		statsMap[tag] = summary
+	}
+	return statsMap
+}
+
+func newCWLMemberStats(member map[string]any) *cwlMemberStats {
+	stats := &cwlMemberStats{
+		name:             warAsString(member["name"]),
+		starsByTH:        make(map[int]map[int]int),
+		defenseStarsByTH: make(map[int]map[int]int),
+	}
+	if townHallLevel := cwlTownHallLevel(member); townHallLevel > 0 {
+		stats.avgTownHallLevel = float64(townHallLevel)
+	}
+	return stats
+}
+
+func cwlTownHallLevel(member map[string]any) int {
+	if value, ok := member["townHallLevel"]; ok {
+		return mobileInt(value)
+	}
+	return mobileInt(member["townhallLevel"])
+}
+
+func cwlMembersByTag(value any) map[string]map[string]any {
+	out := make(map[string]map[string]any)
+	for _, rawMember := range mobileList(value) {
+		member := mobileMap(rawMember)
+		tag := warAsString(member["tag"])
+		if tag == "" {
+			continue
+		}
+		out[tag] = member
+	}
+	return out
+}
+
+func cwlEnsureMemberStats(summary *cwlClanStats, member map[string]any) *cwlMemberStats {
+	tag := warAsString(member["tag"])
+	if tag == "" {
+		return newCWLMemberStats(member)
+	}
+	stats, ok := summary.members[tag]
+	if !ok {
+		stats = newCWLMemberStats(member)
+		summary.members[tag] = stats
+	}
+	if name := warAsString(member["name"]); name != "" {
+		stats.name = name
+	}
+	if townHallLevel := cwlTownHallLevel(member); townHallLevel > 0 {
+		stats.avgTownHallLevel = float64(townHallLevel)
+	}
+	return stats
+}
+
+func cwlAppendMemberContext(stats *cwlMemberStats, member map[string]any) {
+	if position, ok := member["mapPosition"]; ok {
+		stats.mapPositionList = append(stats.mapPositionList, float64(mobileInt(position)))
+	}
+}
+
+func cwlFirstMap(value any) map[string]any {
+	if mapped := mobileMap(value); len(mapped) > 0 {
+		return mapped
+	}
+	items := mobileList(value)
+	if len(items) == 0 {
+		return nil
+	}
+	mapped := mobileMap(items[0])
+	if len(mapped) == 0 {
+		return nil
+	}
+	return mapped
+}
+
+func cwlIncrementTownHallBucket(buckets map[int]map[int]int, stars int, townHallLevel int) {
+	if townHallLevel <= 0 {
+		return
+	}
+	if buckets[stars] == nil {
+		buckets[stars] = make(map[int]int)
+	}
+	buckets[stars][townHallLevel]++
+}
+
+func cwlProcessMemberAttack(stats *cwlMemberStats, summary *cwlClanStats, member map[string]any, opponentMembers map[string]map[string]any, warState string) {
+	attack := cwlFirstMap(member["attacks"])
+	if attack == nil {
+		if warState == "warEnded" {
+			stats.missedAttacks++
+			summary.missedAttacks++
+		}
+		return
+	}
+
+	stars := mobileInt(attack["stars"])
+	destruction := mobileFloat(attack["destructionPercentage"])
+	stats.stars += stars
+	stats.totalDestruction += destruction
+	stats.attackCount++
+	summary.totalDestructionInflicted += destruction
+	summary.attackCount++
+
+	if order, ok := attack["order"]; ok {
+		stats.attackOrderList = append(stats.attackOrderList, float64(mobileInt(order)))
+	}
+
+	defenderTag := warAsString(attack["defenderTag"])
+	defender, ok := opponentMembers[defenderTag]
+	if !ok {
+		return
+	}
+
+	if position, ok := defender["mapPosition"]; ok {
+		stats.opponentPositionList = append(stats.opponentPositionList, float64(mobileInt(position)))
+	}
+
+	ownTownHallLevel := cwlTownHallLevel(member)
+	defenderTownHallLevel := cwlTownHallLevel(defender)
+	if defenderTownHallLevel <= 0 {
+		return
+	}
+
+	cwlIncrementTownHallBucket(stats.starsByTH, stars, defenderTownHallLevel)
+	if ownTownHallLevel > 0 {
+		stats.ownTHLevelListAttack = append(stats.ownTHLevelListAttack, ownTownHallLevel)
+	}
+	stats.opponentTHLevelListAttack = append(stats.opponentTHLevelListAttack, defenderTownHallLevel)
+	stats.opponentTHLevelList = append(stats.opponentTHLevelList, float64(defenderTownHallLevel))
+}
+
+func cwlProcessMemberDefense(stats *cwlMemberStats, summary *cwlClanStats, member map[string]any, opponentMembers map[string]map[string]any) {
+	defense := mobileMap(member["bestOpponentAttack"])
+	if len(defense) == 0 {
+		stats.missedDefenses++
+		summary.missedDefenses++
+		return
+	}
+
+	stars := mobileInt(defense["stars"])
+	destruction := mobileFloat(defense["destructionPercentage"])
+	stats.defenseStarsTaken += stars
+	stats.defenseTotalDestruction += destruction
+	stats.defenseCount++
+	summary.totalDestruction += destruction
+
+	if order, ok := defense["order"]; ok {
+		stats.defenseOrderList = append(stats.defenseOrderList, float64(mobileInt(order)))
+	}
+
+	attackerTag := warAsString(defense["attackerTag"])
+	attacker, ok := opponentMembers[attackerTag]
+	if !ok {
+		return
+	}
+
+	if position, ok := attacker["mapPosition"]; ok {
+		stats.attackerPositionList = append(stats.attackerPositionList, float64(mobileInt(position)))
+	}
+
+	defenderTownHallLevel := cwlTownHallLevel(member)
+	attackerTownHallLevel := cwlTownHallLevel(attacker)
+	if attackerTownHallLevel <= 0 {
+		return
+	}
+
+	cwlIncrementTownHallBucket(stats.defenseStarsByTH, stars, attackerTownHallLevel)
+	if defenderTownHallLevel > 0 {
+		stats.ownTHLevelListDefense = append(stats.ownTHLevelListDefense, defenderTownHallLevel)
+	}
+	stats.attackerTHLevelListDefense = append(stats.attackerTHLevelListDefense, attackerTownHallLevel)
+	stats.attackerTHLevelList = append(stats.attackerTHLevelList, float64(attackerTownHallLevel))
+}
+
+func cwlAverage(values []float64) any {
+	if len(values) == 0 {
+		return nil
+	}
+	total := 0.0
+	for _, value := range values {
+		total += value
+	}
+	return math.Round((total/float64(len(values)))*10) / 10
+}
+
+func cwlCountTownHallMatchups(ownLevels []int, opponentLevels []int, comparator func(int, int) bool) int {
+	limit := len(ownLevels)
+	if len(opponentLevels) < limit {
+		limit = len(opponentLevels)
+	}
+	total := 0
+	for index := 0; index < limit; index++ {
+		if comparator(opponentLevels[index], ownLevels[index]) {
+			total++
+		}
+	}
+	return total
+}
+
+func cwlTownHallBucketJSON(buckets map[int]map[int]int, stars int) map[string]int {
+	out := make(map[string]int)
+	for townHallLevel, count := range buckets[stars] {
+		out[strconv.Itoa(townHallLevel)] = count
+	}
+	return out
+}
+
+func cwlRoundToTwo(value float64) float64 {
+	return math.Round(value*100) / 100
+}
+
+func cwlBuildMemberEnrichment(stats *cwlMemberStats) map[string]any {
+	var avgTownHallLevel any
+	if stats.avgTownHallLevel > 0 {
+		avgTownHallLevel = stats.avgTownHallLevel
+	}
+
+	return map[string]any{
+		"avgMapPosition":           cwlAverage(stats.mapPositionList),
+		"avgOpponentPosition":      cwlAverage(stats.opponentPositionList),
+		"avgAttackOrder":           cwlAverage(stats.attackOrderList),
+		"avgTownHallLevel":         avgTownHallLevel,
+		"avgOpponentTownHallLevel": cwlAverage(stats.opponentTHLevelList),
+		"avgAttackerPosition":      cwlAverage(stats.attackerPositionList),
+		"avgDefenseOrder":          cwlAverage(stats.defenseOrderList),
+		"avgAttackerTownHallLevel": cwlAverage(stats.attackerTHLevelList),
+		"attackLowerTHLevel": cwlCountTownHallMatchups(
+			stats.ownTHLevelListAttack,
+			stats.opponentTHLevelListAttack,
+			func(opponent int, own int) bool { return opponent < own },
+		),
+		"attackUpperTHLevel": cwlCountTownHallMatchups(
+			stats.ownTHLevelListAttack,
+			stats.opponentTHLevelListAttack,
+			func(opponent int, own int) bool { return opponent > own },
+		),
+		"defenseLowerTHLevel": cwlCountTownHallMatchups(
+			stats.ownTHLevelListDefense,
+			stats.attackerTHLevelListDefense,
+			func(opponent int, own int) bool { return opponent < own },
+		),
+		"defenseUpperTHLevel": cwlCountTownHallMatchups(
+			stats.ownTHLevelListDefense,
+			stats.attackerTHLevelListDefense,
+			func(opponent int, own int) bool { return opponent > own },
+		),
+		"attacks": map[string]any{
+			"stars":             stats.stars,
+			"3_stars":           cwlTownHallBucketJSON(stats.starsByTH, 3),
+			"2_stars":           cwlTownHallBucketJSON(stats.starsByTH, 2),
+			"1_star":            cwlTownHallBucketJSON(stats.starsByTH, 1),
+			"0_star":            cwlTownHallBucketJSON(stats.starsByTH, 0),
+			"total_destruction": cwlRoundToTwo(stats.totalDestruction),
+			"attack_count":      stats.attackCount,
+			"missed_attacks":    stats.missedAttacks,
+		},
+		"defense": map[string]any{
+			"stars":             stats.defenseStarsTaken,
+			"3_stars":           cwlTownHallBucketJSON(stats.defenseStarsByTH, 3),
+			"2_stars":           cwlTownHallBucketJSON(stats.defenseStarsByTH, 2),
+			"1_star":            cwlTownHallBucketJSON(stats.defenseStarsByTH, 1),
+			"0_star":            cwlTownHallBucketJSON(stats.defenseStarsByTH, 0),
+			"total_destruction": cwlRoundToTwo(stats.defenseTotalDestruction),
+			"defense_count":     stats.defenseCount,
+			"missed_defenses":   stats.missedDefenses,
+		},
+	}
+}
+
+func cwlBuildTownHallLevels(members []any) map[string]int {
+	out := make(map[string]int)
+	for _, rawMember := range members {
+		townHallLevel := cwlTownHallLevel(mobileMap(rawMember))
+		if townHallLevel <= 0 {
+			continue
+		}
+		out[strconv.Itoa(townHallLevel)]++
+	}
+	return out
 }
 
 // enrichLeagueInfo adds per-clan CWL stats derived from the individual league wars.
 func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[string]any {
 	result := mapsClone(leagueInfo)
 
-	statsMap := make(map[string]*cwlClanStats)
-	if clans, ok := result["clans"].([]any); ok {
-		for _, c := range clans {
-			if clan, ok := c.(map[string]any); ok {
-				if tag, ok := clan["tag"].(string); ok && tag != "" {
-					statsMap[tag] = &cwlClanStats{}
-				}
-			}
-		}
-	}
+	statsMap := initCWLClanStats(result)
 
 	for _, war := range wars {
 		state := warAsString(war["state"])
@@ -409,10 +733,25 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 		for _, sideKey := range []string{"clan", "opponent"} {
 			clan := mobileMap(war[sideKey])
 			tag := warAsString(clan["tag"])
-			if s, ok := statsMap[tag]; ok {
-				s.totalStars += mobileInt(clan["stars"])
-				s.totalDestruction += mobileFloat(clan["destructionPercentage"])
-				s.warsPlayed++
+			summary, ok := statsMap[tag]
+			if !ok {
+				continue
+			}
+
+			summary.totalStars += mobileInt(clan["stars"])
+			summary.warsPlayed++
+
+			opponentKey := "opponent"
+			if sideKey == "opponent" {
+				opponentKey = "clan"
+			}
+			opponentMembers := cwlMembersByTag(mobileMap(war[opponentKey])["members"])
+			for _, rawMember := range mobileList(clan["members"]) {
+				member := mobileMap(rawMember)
+				stats := cwlEnsureMemberStats(summary, member)
+				cwlAppendMemberContext(stats, member)
+				cwlProcessMemberAttack(stats, summary, member, opponentMembers, state)
+				cwlProcessMemberDefense(stats, summary, member, opponentMembers)
 			}
 		}
 	}
@@ -424,7 +763,7 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 	}
 	ranking := make([]rankEntry, 0, len(statsMap))
 	for tag, s := range statsMap {
-		ranking = append(ranking, rankEntry{tag: tag, stars: s.totalStars, destruction: s.totalDestruction})
+		ranking = append(ranking, rankEntry{tag: tag, stars: s.totalStars, destruction: s.totalDestructionInflicted})
 	}
 	sort.Slice(ranking, func(i, j int) bool {
 		if ranking[i].stars != ranking[j].stars {
@@ -437,20 +776,43 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 		rankMap[r.tag] = i + 1
 	}
 
-	if clans, ok := result["clans"].([]any); ok {
-		for _, c := range clans {
-			if clan, ok := c.(map[string]any); ok {
-				if tag, ok := clan["tag"].(string); ok {
-					if s, ok := statsMap[tag]; ok {
-						clan["total_stars"] = s.totalStars
-						clan["total_destruction"] = math.Round(s.totalDestruction*100) / 100
-						clan["wars_played"] = s.warsPlayed
-						clan["rank"] = rankMap[tag]
-					}
-				}
+	clans := mobileList(result["clans"])
+	totalStars := 0
+	totalDestruction := 0.0
+	for _, rawClan := range clans {
+		clan := mobileMap(rawClan)
+		tag := warAsString(clan["tag"])
+		summary, ok := statsMap[tag]
+		if !ok {
+			continue
+		}
+
+		clan["total_stars"] = summary.totalStars
+		clan["attack_count"] = summary.attackCount
+		clan["missed_attacks"] = summary.missedAttacks
+		clan["total_destruction"] = cwlRoundToTwo(summary.totalDestruction)
+		clan["total_destruction_inflicted"] = cwlRoundToTwo(summary.totalDestructionInflicted)
+		clan["wars_played"] = summary.warsPlayed
+		clan["rank"] = rankMap[tag]
+
+		members := mobileList(clan["members"])
+		clan["town_hall_levels"] = cwlBuildTownHallLevels(members)
+		for _, rawMember := range members {
+			member := mobileMap(rawMember)
+			stats, ok := summary.members[warAsString(member["tag"])]
+			if !ok {
+				continue
+			}
+			for key, value := range cwlBuildMemberEnrichment(stats) {
+				member[key] = value
 			}
 		}
+		totalStars += summary.totalStars
+		totalDestruction += summary.totalDestructionInflicted
 	}
+	result["clans"] = clans
+	result["total_stars"] = totalStars
+	result["total_destruction"] = cwlRoundToTwo(totalDestruction)
 
 	return result
 }

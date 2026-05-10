@@ -1,4 +1,4 @@
-package v2
+package api_test
 
 import (
 	"encoding/json"
@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
 func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
 	app := fiber.New()
-	app.Get("/v2/public-config", publicMobileConfig(apptypes.Deps{
+	app.Get("/v2/public-config", routesv2.PublicMobileConfigForTest(apptypes.Deps{
 		Config: apptypes.Config{
 			SentryDSNMobile: "mobile-dsn",
 		},
@@ -36,7 +37,7 @@ func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
 }
 
 func TestMobileInitializationResponseMatchesAppContract(t *testing.T) {
-	response := mobileInitializationResponse(
+	response := routesv2.MobileInitializationResponseForTest(
 		[]string{"#AAA", "#BBB"},
 		nil,
 		nil,
@@ -82,7 +83,7 @@ func TestMobileInitializationResponseMatchesAppContract(t *testing.T) {
 }
 
 func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
-	player := mobilePlayerExtendedContract(map[string]any{
+	player := routesv2.MobilePlayerExtendedContractForTest(map[string]any{
 		"tag": "#AAA",
 		"war_data": map[string]any{
 			"clan_tag": "#CLAN",
@@ -141,7 +142,7 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 }
 
 func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
-	bundle := mobileClanBundleContract(map[string]any{
+	bundle := routesv2.MobileClanBundleContractForTest(map[string]any{
 		"war_data": []any{
 			map[string]any{
 				"clan_tag": "#CLAN",
@@ -218,7 +219,7 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 }
 
 func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
-	filter := mobileInitializationWarHitsFilter()
+	filter := routesv2.MobileInitializationWarHitsFilterForTest()
 
 	if filter.Limit != 50 {
 		t.Fatalf("expected startup war stats limit to stay at 50, got %d", filter.Limit)

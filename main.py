@@ -5,6 +5,7 @@ import coc
 import linkd
 import hikari
 import typing as t
+from pathlib import Path
 from datetime import datetime, timezone
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from startup import define_app
@@ -98,10 +99,13 @@ middleware = [
     Middleware(GZipMiddleware, minimum_size=500),
 ]
 
+STATIC_DIR = Path(__file__).resolve().parent / 'static'
+STATIC_DIR.mkdir(exist_ok=True)
+
 app = FastAPI(middleware=middleware, lifespan=lifespan)
 app.state.di = manager
 linkd.ext.fastapi.use_di_context_middleware(app, manager)
-app.mount('/static', StaticFiles(directory='static'), name='static')
+app.mount('/static', StaticFiles(directory=str(STATIC_DIR)), name='static')
 define_app(app=app)
 
 if __name__ == '__main__':

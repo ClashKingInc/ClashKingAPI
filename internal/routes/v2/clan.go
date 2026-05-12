@@ -188,6 +188,7 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 		if len(body.ClanTags) == 0 {
 			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
 		}
+		icons := leagueIconLookup(a)
 		items := make([]any, 0, len(body.ClanTags))
 		for _, tag := range body.ClanTags {
 			clan, err := a.Clash.GetClan(c.UserContext(), tag)
@@ -195,7 +196,7 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 				items = append(items, nil)
 				continue
 			}
-			items = append(items, clan)
+			items = append(items, enrichClanLeagueIcons(clan, icons))
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
@@ -217,7 +218,7 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 		if err != nil || clan == nil {
 			return apptypes.Error(fiber.StatusNotFound, "Clan not found")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, clan)
+		return apptypes.JSON(c, fiber.StatusOK, enrichClanLeagueIcons(clan, leagueIconLookup(a)))
 	}
 }
 

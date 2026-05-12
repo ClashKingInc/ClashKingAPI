@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
 	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
@@ -226,5 +228,334 @@ func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
 	}
 	if filter.TimestampStart <= 0 || filter.TimestampEnd <= 0 {
 		t.Fatalf("expected initialization filter timestamps to be initialized, got start=%d end=%d", filter.TimestampStart, filter.TimestampEnd)
+	}
+}
+
+func TestMobileInitializationWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
+	playerFilter := routesv2.MobileInitializationWarHitsFilterForTest()
+	playerFilter.PlayerTags = []string{"#P1"}
+	playerFilter.Limit = 1
+
+	clanFilter := routesv2.MobileInitializationWarHitsFilterForTest()
+	clanFilter.ClanTags = []string{"#C1"}
+	clanFilter.Limit = 1
+
+	wars := []map[string]any{
+		{
+			"preparationStartTime": "20260510T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#C1",
+				"members": []any{
+					map[string]any{
+						"tag":           "#C1M1",
+						"name":          "ClanOnly",
+						"townhallLevel": 16,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#O1",
+				"members": []any{
+					map[string]any{
+						"tag":           "#O1M1",
+						"name":          "Opp1",
+						"townhallLevel": 16,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+		},
+		{
+			"preparationStartTime": "20260509T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#O2",
+				"members": []any{
+					map[string]any{
+						"tag":           "#P1",
+						"name":          "PlayerOne",
+						"townhallLevel": 15,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#O3",
+				"members": []any{
+					map[string]any{
+						"tag":           "#O3M1",
+						"name":          "Opp2",
+						"townhallLevel": 15,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+		},
+	}
+
+	playerStats, clanStats := routesv2.MobileBuildInitializationWarStatsFromDocsForTest(wars, playerFilter, clanFilter)
+
+	if len(playerStats) != 1 {
+		t.Fatalf("expected one player stat result, got %d", len(playerStats))
+	}
+	playerResult := playerStats[0].(map[string]any)
+	if playerResult["tag"] != "#P1" {
+		t.Fatalf("expected player result for #P1, got %+v", playerResult)
+	}
+	playerWars := playerResult["wars"].([]map[string]any)
+	playerWarData := playerWars[0]["war_data"].(map[string]any)
+	if playerWarData["preparationStartTime"] != "20260509T120000.000Z" {
+		t.Fatalf("expected player limit to ignore clan-only war, got %v", playerWarData["preparationStartTime"])
+	}
+
+	if len(clanStats) != 1 {
+		t.Fatalf("expected one clan stat result, got %d", len(clanStats))
+	}
+	clanResult := clanStats[0].(map[string]any)
+	if clanResult["clan_tag"] != "#C1" {
+		t.Fatalf("expected clan result for #C1, got %+v", clanResult)
+	}
+	clanWars := clanResult["wars"].([]map[string]any)
+	clanWarData := clanWars[0]["war_data"].(map[string]any)
+	if clanWarData["preparationStartTime"] != "20260510T120000.000Z" {
+		t.Fatalf("expected clan limit to use clan war, got %v", clanWarData["preparationStartTime"])
+	}
+}
+
+func TestMobilePlayerWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
+	filter := routesv2.MobileInitializationWarHitsFilterForTest()
+	filter.PlayerTags = []string{"#P1", "#P2"}
+	filter.Limit = 1
+
+	wars := []map[string]any{
+		{
+			"preparationStartTime": "20260510T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#C1",
+				"members": []any{
+					map[string]any{
+						"tag":           "#P1",
+						"name":          "PlayerOne",
+						"townhallLevel": 16,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#O1",
+				"members": []any{
+					map[string]any{
+						"tag":           "#O1M1",
+						"name":          "Opp1",
+						"townhallLevel": 16,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+		},
+		{
+			"preparationStartTime": "20260509T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#C2",
+				"members": []any{
+					map[string]any{
+						"tag":           "#P2",
+						"name":          "PlayerTwo",
+						"townhallLevel": 15,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#O2",
+				"members": []any{
+					map[string]any{
+						"tag":           "#O2M1",
+						"name":          "Opp2",
+						"townhallLevel": 15,
+						"mapPosition":   1,
+						"attacks":       []any{},
+					},
+				},
+			},
+		},
+	}
+
+	results := routesv2.MobileBuildPlayerWarStatsFromDocsForTest(filter.PlayerTags, wars, filter)
+	if len(results) != 2 {
+		t.Fatalf("expected two player results, got %d", len(results))
+	}
+
+	first := results[0].(map[string]any)
+	firstWar := first["wars"].([]map[string]any)[0]["war_data"].(map[string]any)
+	if first["tag"] != "#P1" || firstWar["preparationStartTime"] != "20260510T120000.000Z" {
+		t.Fatalf("expected #P1 to keep its own newest war, got %+v", first)
+	}
+
+	second := results[1].(map[string]any)
+	secondWar := second["wars"].([]map[string]any)[0]["war_data"].(map[string]any)
+	if second["tag"] != "#P2" || secondWar["preparationStartTime"] != "20260509T120000.000Z" {
+		t.Fatalf("expected #P2 to keep its own newest war, got %+v", second)
+	}
+}
+
+func TestMobileClanWarStatsFromSharedDocsKeepsPerTargetLimitsAndEmptyRows(t *testing.T) {
+	filter := routesv2.MobileInitializationWarHitsFilterForTest()
+	filter.ClanTags = []string{"#C1", "#C2", "#C3"}
+	filter.Limit = 1
+
+	wars := []map[string]any{
+		{
+			"preparationStartTime": "20260510T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#C1",
+				"members": []any{
+					map[string]any{"tag": "#C1M1", "name": "ClanOne", "townhallLevel": 16, "mapPosition": 1, "attacks": []any{}},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#O1",
+				"members": []any{
+					map[string]any{"tag": "#O1M1", "name": "Opp1", "townhallLevel": 16, "mapPosition": 1, "attacks": []any{}},
+				},
+			},
+		},
+		{
+			"preparationStartTime": "20260509T120000.000Z",
+			"attacksPerMember":     1,
+			"clan": map[string]any{
+				"tag": "#O2",
+				"members": []any{
+					map[string]any{"tag": "#O2M1", "name": "Opp2", "townhallLevel": 15, "mapPosition": 1, "attacks": []any{}},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#C2",
+				"members": []any{
+					map[string]any{"tag": "#C2M1", "name": "ClanTwo", "townhallLevel": 15, "mapPosition": 1, "attacks": []any{}},
+				},
+			},
+		},
+	}
+
+	results := routesv2.MobileBuildClanWarStatsFromDocsForTest(filter.ClanTags, wars, filter)
+	if len(results) != 3 {
+		t.Fatalf("expected three clan rows including empty result, got %d", len(results))
+	}
+
+	first := results[0].(map[string]any)
+	firstWar := first["wars"].([]map[string]any)[0]["war_data"].(map[string]any)
+	if first["clan_tag"] != "#C1" || firstWar["preparationStartTime"] != "20260510T120000.000Z" {
+		t.Fatalf("expected #C1 to keep its own newest war, got %+v", first)
+	}
+
+	second := results[1].(map[string]any)
+	secondWar := second["wars"].([]map[string]any)[0]["war_data"].(map[string]any)
+	if second["clan_tag"] != "#C2" || secondWar["preparationStartTime"] != "20260509T120000.000Z" {
+		t.Fatalf("expected #C2 to keep its own newest war, got %+v", second)
+	}
+
+	third := results[2].(map[string]any)
+	if third["clan_tag"] != "#C3" {
+		t.Fatalf("expected empty row for #C3, got %+v", third)
+	}
+	if len(third["wars"].([]map[string]any)) != 0 || len(third["players"].([]any)) != 0 {
+		t.Fatalf("expected empty clan row for #C3, got %+v", third)
+	}
+}
+
+func TestMobileMergeWarDocBatchesDedupesAndSortsNewestFirst(t *testing.T) {
+	merged := routesv2.MobileMergeWarDocBatchesForTest([][]map[string]any{
+		{
+			{
+				"clan":                 map[string]any{"tag": "#A"},
+				"opponent":             map[string]any{"tag": "#B"},
+				"preparationStartTime": "20260509T120000.000Z",
+			},
+			{
+				"clan":                 map[string]any{"tag": "#A"},
+				"opponent":             map[string]any{"tag": "#C"},
+				"preparationStartTime": "20260510T120000.000Z",
+			},
+		},
+		{
+			{
+				"clan":                 map[string]any{"tag": "#B"},
+				"opponent":             map[string]any{"tag": "#A"},
+				"preparationStartTime": "20260509T120000.000Z",
+			},
+			{
+				"clan":                 map[string]any{"tag": "#D"},
+				"opponent":             map[string]any{"tag": "#E"},
+				"preparationStartTime": "20260508T120000.000Z",
+			},
+		},
+	})
+
+	if len(merged) != 3 {
+		t.Fatalf("expected 3 unique wars, got %d", len(merged))
+	}
+	if got := merged[0]["preparationStartTime"]; got != "20260510T120000.000Z" {
+		t.Fatalf("expected newest war first, got %v", got)
+	}
+	if got := merged[1]["preparationStartTime"]; got != "20260509T120000.000Z" {
+		t.Fatalf("expected deduped middle war, got %v", got)
+	}
+	if got := merged[2]["preparationStartTime"]; got != "20260508T120000.000Z" {
+		t.Fatalf("expected oldest war last, got %v", got)
+	}
+}
+
+func TestMobilePlayerWarDocsPipelineMatchesBothSidesAndAppliesEarlyLimit(t *testing.T) {
+	pipeline := routesv2.MobilePlayerWarDocsPipelineForTest("#P1", 100, 200, 50)
+	if len(pipeline) != 4 {
+		t.Fatalf("expected 4 stages, got %d", len(pipeline))
+	}
+
+	matchStage := pipeline[0].(bson.M)["$match"].(bson.M)
+	andStage := matchStage["$and"].(bson.A)
+	orStage := andStage[0].(bson.M)["$or"].(bson.A)
+	if len(orStage) != 2 {
+		t.Fatalf("expected player query to match both clan sides, got %+v", orStage)
+	}
+
+	if _, ok := pipeline[2].(bson.M)["$limit"]; !ok {
+		t.Fatalf("expected limit stage before projection, got %+v", pipeline)
+	}
+}
+
+func TestMobileClanWarDocsPipelineMatchesPythonShape(t *testing.T) {
+	pipeline := routesv2.MobileClanWarDocsPipelineForTest("#C1", 100, 200, 50)
+	if len(pipeline) != 4 {
+		t.Fatalf("expected 4 stages, got %d", len(pipeline))
+	}
+
+	matchStage := pipeline[0].(bson.M)["$match"].(bson.M)
+	if _, hasOpponent := matchStage["data.opponent.tag"]; hasOpponent {
+		t.Fatalf("expected clan query to ignore opponent tag like python, got %+v", matchStage)
+	}
+	if got := matchStage["data.clan.tag"]; got != "#C1" {
+		t.Fatalf("expected clan tag match, got %v", got)
+	}
+
+	expectedRange := bson.M{"$gte": "19700101T000140.000Z", "$lte": "19700101T000320.000Z"}
+	if !reflect.DeepEqual(matchStage["data.preparationStartTime"], expectedRange) {
+		t.Fatalf("unexpected time range: %+v", matchStage["data.preparationStartTime"])
+	}
+
+	if _, ok := pipeline[2].(bson.M)["$limit"]; !ok {
+		t.Fatalf("expected limit stage before projection, got %+v", pipeline)
 	}
 }

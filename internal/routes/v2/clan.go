@@ -3,11 +3,13 @@ package v2
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // clanRanking godoc
@@ -236,7 +238,11 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 // @Router /v2/clan/{clan_tag}/join-leave [get]
 func clanJoinLeaveSingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return joinLeaveResponse(c, a, []string{clanFixTag(c.Params("clan_tag"))})
+		item, err := joinLeaveSingleResponse(c, a, clanFixTag(c.Params("clan_tag")))
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, item)
 	}
 }
 
@@ -259,30 +265,153 @@ func clansJoinLeave(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		return joinLeaveResponse(c, a, clanFixTags(body.ClanTags))
+		if len(body.ClanTags) == 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
+		}
+		items, err := joinLeaveManyResponse(c, a, clanFixTags(body.ClanTags))
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileMapsToAny(items)})
 	}
 }
 
-func joinLeaveResponse(c *fiber.Ctx, a apptypes.Deps, clanTags []string) error {
-	limit := clanParseIntDefault(c.Query("limit"), 250)
-	after := clanParseInt64Default(c.Query("timestamp_start"), 0)
-	before := clanParseInt64Default(c.Query("time_stamp_end"), 9999999999)
+type joinLeaveWindow struct {
+	start       time.Time
+	end         time.Time
+	startUnix   int64
+	endUnix     int64
+	limitEvents bool
+}
+
+func joinLeaveSingleResponse(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[string]any, error) {
+	items, err := joinLeaveManyResponse(c, a, []string{clanTag})
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]any{}, nil
+	}
+	return items[0], nil
+}
+
+func joinLeaveManyResponse(c *fiber.Ctx, a apptypes.Deps, clanTags []string) ([]map[string]any, error) {
+	window, err := joinLeaveWindowFromQuery(c)
+	if err != nil {
+		return nil, err
+	}
+	limit := clanParseIntDefault(c.Query("limit"), 50)
+	if limit <= 0 {
+		limit = 50
+	}
 	filter := bson.M{
 		"clan": bson.M{"$in": clanTags},
-		"time": bson.M{"$gte": after, "$lte": before},
+		"time": bson.M{"$gte": window.start, "$lte": window.end},
 	}
-	cur, err := a.Store.DB.Looper.Collection("join_leave_history").Find(c.UserContext(), filter)
+	if joinLeaveType := strings.TrimSpace(c.Query("type")); joinLeaveType != "" {
+		filter["type"] = joinLeaveType
+	}
+	cur, err := a.Store.C.JoinLeaveHistory.Find(
+		c.UserContext(),
+		filter,
+		options.Find().SetSort(bson.M{"time": -1}),
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var rows []bson.M
 	if err := cur.All(c.UserContext(), &rows); err != nil {
-		return err
+		return nil, err
 	}
-	if len(rows) > limit {
-		rows = rows[:limit]
+	return joinLeaveItemsFromRows(rows, clanTags, window, limit), nil
+}
+
+func joinLeaveWindowFromQuery(c *fiber.Ctx) (joinLeaveWindow, error) {
+	season := strings.TrimSpace(c.Query("season"))
+	currentSeason := strings.EqualFold(strings.TrimSpace(c.Query("current_season")), "true")
+	if season == "" && currentSeason {
+		season = genSeasonDate(0, false).(string)
 	}
-	return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": clanStripIDs(rows)})
+	if season != "" {
+		start, end, err := joinLeaveSeasonBounds(season)
+		if err != nil {
+			return joinLeaveWindow{}, err
+		}
+		return joinLeaveWindow{
+			start:       start,
+			end:         end,
+			startUnix:   start.Unix(),
+			endUnix:     end.Unix(),
+			limitEvents: false,
+		}, nil
+	}
+	startUnix := clanParseInt64Default(c.Query("timestamp_start"), 0)
+	endUnix := clanParseInt64Default(c.Query("time_stamp_end"), 9999999999)
+	return joinLeaveWindow{
+		start:       time.Unix(startUnix, 0).UTC(),
+		end:         time.Unix(endUnix, 0).UTC(),
+		startUnix:   startUnix,
+		endUnix:     endUnix,
+		limitEvents: true,
+	}, nil
+}
+
+func joinLeaveSeasonBounds(season string) (time.Time, time.Time, error) {
+	startRaw, endRaw, err := resolveSeasonBounds(season, false)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	start, err := time.Parse(time.RFC3339, startRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	end, err := time.Parse(time.RFC3339, endRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return start.UTC(), end.UTC(), nil
+}
+
+func joinLeaveItemsFromRows(rows []bson.M, clanTags []string, window joinLeaveWindow, limit int) []map[string]any {
+	groupedDocs := map[string][]map[string]any{}
+	groupedStats := map[string][]mobileJoinLeaveEvent{}
+	for _, row := range rows {
+		clean, ok := sanitize(row).(map[string]any)
+		if !ok {
+			continue
+		}
+		clanTag := mobileString(clean["clan"])
+		if clanTag == "" {
+			continue
+		}
+		if window.limitEvents && len(groupedDocs[clanTag]) >= limit {
+			continue
+		}
+		eventTime, ok := mobileTime(clean["time"])
+		if !ok {
+			continue
+		}
+		clean["time"] = eventTime.UTC().Format(time.RFC3339)
+		groupedDocs[clanTag] = append(groupedDocs[clanTag], clean)
+		groupedStats[clanTag] = append(groupedStats[clanTag], mobileJoinLeaveEvent{
+			Tag:  mobileString(clean["tag"]),
+			Name: mobileString(clean["name"]),
+			Type: mobileString(clean["type"]),
+			Time: eventTime,
+		})
+	}
+
+	items := make([]map[string]any, 0, len(clanTags))
+	for _, clanTag := range clanTags {
+		items = append(items, map[string]any{
+			"clan_tag":        clanTag,
+			"timestamp_start": window.startUnix,
+			"timestamp_end":   window.endUnix,
+			"stats":           mobileBuildJoinLeaveStats(groupedStats[clanTag]),
+			"join_leave_list": mobileMapsToAny(groupedDocs[clanTag]),
+		})
+	}
+	return items
 }
 
 // clansCapitalRaids godoc

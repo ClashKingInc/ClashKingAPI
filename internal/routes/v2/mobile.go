@@ -379,21 +379,59 @@ func mobileFetchInitializationWarStats(ctx context.Context, a apptypes.Deps, pla
 	clanFilter := mobileInitializationWarHitsFilter()
 	clanFilter.ClanTags = clanTags
 
-	var playerStats []any
-	var clanStats []any
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		playerStats = mobileFetchPlayerWarStatsWithFilter(ctx, a, playerFilter)
-	}()
-	go func() {
-		defer wg.Done()
-		clanStats = mobileFetchClanWarStatsWithFilter(ctx, a, clanFilter)
-	}()
-	wg.Wait()
+	relevantWars := mobileFindInitializationWarDocs(ctx, a, playerFilter, clanFilter)
 
-	return playerStats, clanStats
+	return mobileBuildInitializationWarStatsFromDocs(relevantWars, playerFilter, clanFilter)
+}
+
+func mobileBuildInitializationWarStatsFromDocs(wars []map[string]any, playerFilter mobileWarHitsFilter, clanFilter mobileWarHitsFilter) ([]any, []any) {
+	playerOrder := mobileNormalizeUniqueTags(playerFilter.PlayerTags)
+	clanOrder := mobileNormalizeUniqueClanTags(clanFilter.ClanTags)
+	playerAggregates := map[string]*mobilePlayerWarAggregate{}
+	clanAggregates := map[string]*mobileClanWarAggregate{}
+	for _, clanTag := range clanOrder {
+		mobileGetOrCreateClanAggregate(clanAggregates, clanTag)
+	}
+
+	remainingPlayers := mobileBuildWarTargetSet(playerOrder)
+	remainingClans := mobileBuildWarTargetSet(clanOrder)
+	playerProcessed := make(map[string]int, len(playerOrder))
+	clanProcessed := make(map[string]int, len(clanOrder))
+
+	for _, war := range wars {
+		if len(remainingPlayers) == 0 && len(remainingClans) == 0 {
+			break
+		}
+
+		playerSelected := map[string]bool{}
+		if len(remainingPlayers) > 0 && mobileWarMatchesFilter(war, playerFilter) {
+			playerSelected = mobileSelectedPlayersInWar(war, remainingPlayers)
+		}
+
+		clanSelected := map[string]bool{}
+		if len(remainingClans) > 0 && mobileWarMatchesFilter(war, clanFilter) {
+			clanSelected = mobileSelectedClansInWar(war, remainingClans)
+		}
+
+		if len(playerSelected) == 0 && len(clanSelected) == 0 {
+			continue
+		}
+
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+
+		if len(playerSelected) > 0 {
+			mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, playerSelected, playerFilter, playerAggregates)
+			mobileUpdateProcessedWarTargets(remainingPlayers, playerProcessed, playerSelected, playerFilter.Limit)
+		}
+		if len(clanSelected) > 0 {
+			mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, clanSelected, clanFilter, clanAggregates)
+			mobileUpdateProcessedWarTargets(remainingClans, clanProcessed, clanSelected, clanFilter.Limit)
+		}
+	}
+
+	return mobileBuildPlayerWarResults(playerAggregates, playerOrder, playerFilter.TimestampStart, playerFilter.TimestampEnd),
+		mobileBuildClanWarResults(clanAggregates, clanOrder, clanFilter.TimestampStart, clanFilter.TimestampEnd)
 }
 
 func mobileInitializationWarHitsFilter() mobileWarHitsFilter {
@@ -758,6 +796,7 @@ func mobileFetchPlayerWarContext(ctx context.Context, a apptypes.Deps, playerTag
 	}
 
 	clans := mobileStringList(mobileMap(warTimer)["clans"])
+	clans = mobileNormalizeUniqueClanTags(clans)
 	if currentClanTag != "" && mobileContains(clans, currentClanTag) {
 		return map[string]any{}
 	}
@@ -832,6 +871,7 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 
 func mobileFetchClanDetails(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
 	out := make(map[string]any, len(clanTags))
+	icons := leagueIconLookup(a)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, tag := range clanTags {
@@ -843,6 +883,7 @@ func mobileFetchClanDetails(ctx context.Context, a apptypes.Deps, clanTags []str
 			if clan == nil {
 				return
 			}
+			clan = enrichClanPayloadLeagueIcons(clan, icons)
 			mu.Lock()
 			out[clanTag] = clan
 			mu.Unlock()
@@ -1167,24 +1208,32 @@ func mobileFetchPlayerWarStats(ctx context.Context, a apptypes.Deps, playerTags 
 
 func mobileFetchPlayerWarStatsWithFilter(ctx context.Context, a apptypes.Deps, filter mobileWarHitsFilter) []any {
 	playerTags := mobileNormalizeUniqueTags(filter.PlayerTags)
-	results := make([]any, len(playerTags))
-	var wg sync.WaitGroup
-	for idx, tag := range playerTags {
-		wg.Add(1)
-		go func(i int, playerTag string) {
-			defer wg.Done()
-			results[i] = mobileFetchSinglePlayerWarStats(ctx, a, playerTag, filter)
-		}(idx, tag)
-	}
-	wg.Wait()
+	wars := mobileFindRelevantWarDocs(ctx, a, playerTags, nil, filter.TimestampStart, filter.TimestampEnd)
+	return mobileBuildPlayerWarStatsFromDocs(playerTags, wars, filter)
+}
 
-	out := make([]any, 0, len(results))
-	for _, item := range results {
-		if item != nil {
-			out = append(out, item)
+func mobileBuildPlayerWarStatsFromDocs(playerTags []string, wars []map[string]any, filter mobileWarHitsFilter) []any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	aggregates := map[string]*mobilePlayerWarAggregate{}
+	remaining := mobileBuildWarTargetSet(playerTags)
+	processed := make(map[string]int, len(playerTags))
+
+	for _, war := range wars {
+		if len(remaining) == 0 {
+			break
 		}
+		selected := mobileSelectedPlayersInWar(war, remaining)
+		if len(selected) == 0 || !mobileWarMatchesFilter(war, filter) {
+			continue
+		}
+
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+		mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, selected, filter, aggregates)
+		mobileUpdateProcessedWarTargets(remaining, processed, selected, filter.Limit)
 	}
-	return out
+
+	return mobileBuildPlayerWarResults(aggregates, playerTags, filter.TimestampStart, filter.TimestampEnd)
 }
 
 func mobileFetchClanWarStats(ctx context.Context, a apptypes.Deps, clanTags []string) []any {
@@ -1193,24 +1242,35 @@ func mobileFetchClanWarStats(ctx context.Context, a apptypes.Deps, clanTags []st
 
 func mobileFetchClanWarStatsWithFilter(ctx context.Context, a apptypes.Deps, filter mobileWarHitsFilter) []any {
 	clanTags := mobileNormalizeUniqueClanTags(filter.ClanTags)
-	results := make([]any, len(clanTags))
-	var wg sync.WaitGroup
-	for idx, tag := range clanTags {
-		wg.Add(1)
-		go func(i int, clanTag string) {
-			defer wg.Done()
-			results[i] = mobileFetchSingleClanWarStats(ctx, a, clanTag, filter)
-		}(idx, tag)
-	}
-	wg.Wait()
+	wars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, filter.TimestampStart, filter.TimestampEnd, filter.Limit)
+	return mobileBuildClanWarStatsFromDocs(clanTags, wars, filter)
+}
 
-	out := make([]any, 0, len(results))
-	for _, item := range results {
-		if item != nil {
-			out = append(out, item)
-		}
+func mobileBuildClanWarStatsFromDocs(clanTags []string, wars []map[string]any, filter mobileWarHitsFilter) []any {
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	aggregates := make(map[string]*mobileClanWarAggregate, len(clanTags))
+	for _, clanTag := range clanTags {
+		mobileGetOrCreateClanAggregate(aggregates, clanTag)
 	}
-	return out
+	remaining := mobileBuildWarTargetSet(clanTags)
+	processed := make(map[string]int, len(clanTags))
+
+	for _, war := range wars {
+		if len(remaining) == 0 {
+			break
+		}
+		selected := mobileSelectedClansInWar(war, remaining)
+		if len(selected) == 0 || !mobileWarMatchesFilter(war, filter) {
+			continue
+		}
+
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, selected, filter, aggregates)
+		mobileUpdateProcessedWarTargets(remaining, processed, selected, filter.Limit)
+	}
+
+	return mobileBuildClanWarResults(aggregates, clanTags, filter.TimestampStart, filter.TimestampEnd)
 }
 
 func mobileFetchSinglePlayerWarStats(ctx context.Context, a apptypes.Deps, playerTag string, filter mobileWarHitsFilter) any {
@@ -1219,24 +1279,50 @@ func mobileFetchSinglePlayerWarStats(ctx context.Context, a apptypes.Deps, playe
 		return nil
 	}
 
-	wars := mobileFindWarDocs(ctx, a, bson.A{
-		bson.M{"$match": bson.M{"$and": bson.A{
-			bson.M{"$or": bson.A{
-				bson.M{"data.clan.members.tag": playerTag},
-				bson.M{"data.opponent.members.tag": playerTag},
-			}},
-			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(filter.TimestampStart)}},
-			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(filter.TimestampEnd)}},
-		}}},
-		bson.M{"$project": bson.M{"_id": 0, "data": "$data"}},
-		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
-	})
+	wars := mobileFindLimitedPlayerWarDocs(ctx, a, playerTag, filter.TimestampStart, filter.TimestampEnd, filter.Limit)
 
 	aggregates := map[string]*mobilePlayerWarAggregate{}
 	selected := map[string]bool{playerTag: true}
 	processedWars := 0
 
 	for _, war := range wars {
+		if !mobileWarContainsSelectedPlayers(war, selected) {
+			continue
+		}
+		if filter.Limit > 0 && processedWars >= filter.Limit {
+			break
+		}
+		if !mobileWarMatchesFilter(war, filter) {
+			continue
+		}
+		processedWars++
+
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+		mobileAccumulatePlayerWarAggregates(war, cleanWar, freshOrders, selected, filter, aggregates)
+	}
+
+	results := mobileBuildPlayerWarResults(aggregates, []string{playerTag}, filter.TimestampStart, filter.TimestampEnd)
+	if len(results) == 0 {
+		return nil
+	}
+	return results[0]
+}
+
+func mobileBuildSinglePlayerWarStatsFromDocs(playerTag string, wars []map[string]any, filter mobileWarHitsFilter) any {
+	playerTag = playerNormalizeTag(playerTag)
+	if playerTag == "" {
+		return nil
+	}
+
+	aggregates := map[string]*mobilePlayerWarAggregate{}
+	selected := map[string]bool{playerTag: true}
+	processedWars := 0
+
+	for _, war := range wars {
+		if !mobileWarContainsSelectedPlayers(war, selected) {
+			continue
+		}
 		if filter.Limit > 0 && processedWars >= filter.Limit {
 			break
 		}
@@ -1263,23 +1349,15 @@ func mobileFetchSingleClanWarStats(ctx context.Context, a apptypes.Deps, clanTag
 		return map[string]any{"clan_tag": "", "players": []any{}, "wars": []any{}}
 	}
 
-	wars := mobileFindWarDocs(ctx, a, bson.A{
-		bson.M{"$match": bson.M{"$and": bson.A{
-			bson.M{"$or": bson.A{
-				bson.M{"data.clan.tag": clanTag},
-				bson.M{"data.opponent.tag": clanTag},
-			}},
-			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(filter.TimestampStart)}},
-			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(filter.TimestampEnd)}},
-		}}},
-		bson.M{"$project": bson.M{"_id": 0, "data": "$data"}},
-		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
-	})
+	wars := mobileFindLimitedClanWarDocs(ctx, a, clanTag, filter.TimestampStart, filter.TimestampEnd, filter.Limit)
 
 	agg := mobileGetOrCreateClanAggregate(map[string]*mobileClanWarAggregate{}, clanTag)
 	processedWars := 0
 
 	for _, war := range wars {
+		if !mobileWarContainsSelectedClans(war, map[string]bool{clanTag: true}) {
+			continue
+		}
 		if filter.Limit > 0 && processedWars >= filter.Limit {
 			break
 		}
@@ -1291,6 +1369,40 @@ func mobileFetchSingleClanWarStats(ctx context.Context, a apptypes.Deps, clanTag
 		cleanWar := mobileCleanWarData(war)
 		freshOrders := mobileFreshAttackOrders(war)
 		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, map[string]bool{clanTag: true}, filter, map[string]*mobileClanWarAggregate{clanTag: agg})
+	}
+
+	results := mobileBuildClanWarResults(map[string]*mobileClanWarAggregate{clanTag: agg}, []string{clanTag}, filter.TimestampStart, filter.TimestampEnd)
+	if len(results) == 0 {
+		return map[string]any{"clan_tag": clanTag, "players": []any{}, "wars": []any{}}
+	}
+	return results[0]
+}
+
+func mobileBuildSingleClanWarStatsFromDocs(clanTag string, wars []map[string]any, filter mobileWarHitsFilter) any {
+	clanTag = warFixTag(clanTag)
+	if clanTag == "" {
+		return map[string]any{"clan_tag": "", "players": []any{}, "wars": []any{}}
+	}
+
+	selected := map[string]bool{clanTag: true}
+	agg := mobileGetOrCreateClanAggregate(map[string]*mobileClanWarAggregate{}, clanTag)
+	processedWars := 0
+
+	for _, war := range wars {
+		if !mobileWarContainsSelectedClans(war, selected) {
+			continue
+		}
+		if filter.Limit > 0 && processedWars >= filter.Limit {
+			break
+		}
+		if !mobileWarMatchesFilter(war, filter) {
+			continue
+		}
+		processedWars++
+
+		cleanWar := mobileCleanWarData(war)
+		freshOrders := mobileFreshAttackOrders(war)
+		mobileAccumulateClanWarAggregates(war, cleanWar, freshOrders, selected, filter, map[string]*mobileClanWarAggregate{clanTag: agg})
 	}
 
 	results := mobileBuildClanWarResults(map[string]*mobileClanWarAggregate{clanTag: agg}, []string{clanTag}, filter.TimestampStart, filter.TimestampEnd)
@@ -1355,6 +1467,121 @@ func mobileFindRelevantWarDocs(ctx context.Context, a apptypes.Deps, playerTags 
 		bson.M{"$project": bson.M{"_id": 0, "data": "$data"}},
 		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
 	})
+}
+
+func mobileFindLimitedPlayerWarDocs(ctx context.Context, a apptypes.Deps, playerTag string, startUnix int64, endUnix int64, limit int) []map[string]any {
+	return mobileFindWarDocs(ctx, a, mobilePlayerWarDocsPipeline(playerTag, startUnix, endUnix, limit))
+}
+
+func mobileFindLimitedClanWarDocs(ctx context.Context, a apptypes.Deps, clanTag string, startUnix int64, endUnix int64, limit int) []map[string]any {
+	return mobileFindWarDocs(ctx, a, mobileClanWarDocsPipeline(clanTag, startUnix, endUnix, limit))
+}
+
+func mobileFindInitializationWarDocs(ctx context.Context, a apptypes.Deps, playerFilter mobileWarHitsFilter, clanFilter mobileWarHitsFilter) []map[string]any {
+	playerTags := mobileNormalizeUniqueTags(playerFilter.PlayerTags)
+	clanTags := mobileNormalizeUniqueClanTags(clanFilter.ClanTags)
+
+	playerWars := mobileFindLimitedPlayerWarDocsForTargets(ctx, a, playerTags, playerFilter.TimestampStart, playerFilter.TimestampEnd, playerFilter.Limit)
+	clanWars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, clanFilter.TimestampStart, clanFilter.TimestampEnd, clanFilter.Limit)
+	return mobileMergeWarDocBatches([][]map[string]any{playerWars, clanWars})
+}
+
+func mobileFindLimitedPlayerWarDocsForTargets(ctx context.Context, a apptypes.Deps, playerTags []string, startUnix int64, endUnix int64, limit int) []map[string]any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	batches := make([][]map[string]any, 0, len(playerTags))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, playerTag := range playerTags {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			docs := mobileFindLimitedPlayerWarDocs(ctx, a, tag, startUnix, endUnix, limit)
+			if len(docs) == 0 {
+				return
+			}
+			mu.Lock()
+			batches = append(batches, docs)
+			mu.Unlock()
+		}(playerTag)
+	}
+	wg.Wait()
+	return mobileMergeWarDocBatches(batches)
+}
+
+func mobileFindLimitedClanWarDocsForTargets(ctx context.Context, a apptypes.Deps, clanTags []string, startUnix int64, endUnix int64, limit int) []map[string]any {
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	batches := make([][]map[string]any, 0, len(clanTags))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, clanTag := range clanTags {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			docs := mobileFindLimitedClanWarDocs(ctx, a, tag, startUnix, endUnix, limit)
+			if len(docs) == 0 {
+				return
+			}
+			mu.Lock()
+			batches = append(batches, docs)
+			mu.Unlock()
+		}(clanTag)
+	}
+	wg.Wait()
+	return mobileMergeWarDocBatches(batches)
+}
+
+func mobilePlayerWarDocsPipeline(playerTag string, startUnix int64, endUnix int64, limit int) bson.A {
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{"$and": bson.A{
+			bson.M{"$or": bson.A{
+				bson.M{"data.clan.members.tag": playerTag},
+				bson.M{"data.opponent.members.tag": playerTag},
+			}},
+			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix)}},
+			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(endUnix)}},
+		}}},
+		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
+	}
+	if limit > 0 {
+		pipeline = append(pipeline, bson.M{"$limit": limit})
+	}
+	pipeline = append(pipeline, bson.M{"$project": bson.M{"_id": 0, "data": "$data"}})
+	return pipeline
+}
+
+func mobileClanWarDocsPipeline(clanTag string, startUnix int64, endUnix int64, limit int) bson.A {
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{
+			"data.clan.tag":             clanTag,
+			"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix), "$lte": mobileTimestampString(endUnix)},
+		}},
+		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
+	}
+	if limit > 0 {
+		pipeline = append(pipeline, bson.M{"$limit": limit})
+	}
+	pipeline = append(pipeline, bson.M{"$project": bson.M{"_id": 0, "data": "$data"}})
+	return pipeline
+}
+
+func mobileMergeWarDocBatches(batches [][]map[string]any) []map[string]any {
+	seen := map[string]bool{}
+	out := make([]map[string]any, 0)
+	for _, docs := range batches {
+		for _, doc := range docs {
+			warID := mobileWarID(doc)
+			if warID == "" || seen[warID] {
+				continue
+			}
+			seen[warID] = true
+			out = append(out, doc)
+		}
+	}
+
+	sort.SliceStable(out, func(i int, j int) bool {
+		return mobileString(out[i]["preparationStartTime"]) > mobileString(out[j]["preparationStartTime"])
+	})
+	return out
 }
 
 func mobileFreshAttackOrders(war map[string]any) map[string]int {
@@ -1487,6 +1714,72 @@ func mobileWarID(war map[string]any) string {
 		clanTag, opponentTag = opponentTag, clanTag
 	}
 	return clanTag + "|" + opponentTag + "|" + prepTime
+}
+
+func mobileWarContainsSelectedPlayers(war map[string]any, selected map[string]bool) bool {
+	for _, sideKey := range []string{"clan", "opponent"} {
+		side := mobileMap(war[sideKey])
+		for _, rawMember := range mobileList(side["members"]) {
+			if selected[mobileString(mobileMap(rawMember)["tag"])] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func mobileSelectedPlayersInWar(war map[string]any, selected map[string]bool) map[string]bool {
+	out := map[string]bool{}
+	for _, sideKey := range []string{"clan", "opponent"} {
+		side := mobileMap(war[sideKey])
+		for _, rawMember := range mobileList(side["members"]) {
+			tag := mobileString(mobileMap(rawMember)["tag"])
+			if selected[tag] {
+				out[tag] = true
+			}
+		}
+	}
+	return out
+}
+
+func mobileWarContainsSelectedClans(war map[string]any, selected map[string]bool) bool {
+	for _, sideKey := range []string{"clan", "opponent"} {
+		if selected[mobileString(mobileMap(war[sideKey])["tag"])] {
+			return true
+		}
+	}
+	return false
+}
+
+func mobileSelectedClansInWar(war map[string]any, selected map[string]bool) map[string]bool {
+	out := map[string]bool{}
+	for _, sideKey := range []string{"clan", "opponent"} {
+		tag := mobileString(mobileMap(war[sideKey])["tag"])
+		if selected[tag] {
+			out[tag] = true
+		}
+	}
+	return out
+}
+
+func mobileBuildWarTargetSet(tags []string) map[string]bool {
+	out := make(map[string]bool, len(tags))
+	for _, tag := range tags {
+		out[tag] = true
+	}
+	return out
+}
+
+func mobileUpdateProcessedWarTargets(remaining map[string]bool, processed map[string]int, selected map[string]bool, limit int) {
+	if limit <= 0 {
+		return
+	}
+	for tag := range selected {
+		processed[tag]++
+		if processed[tag] >= limit {
+			delete(remaining, tag)
+		}
+	}
 }
 
 func mobileCleanWarData(war map[string]any) map[string]any {

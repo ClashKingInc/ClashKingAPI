@@ -286,7 +286,7 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		lg := fetchLeagueGroupProxy(tag)
 		if lg != nil && warAsString(lg["state"]) != "notInWar" && warAsString(lg["state"]) != "" {
 			leagueWars := fetchLeagueWarsProxy(extractLeagueWarTags(lg))
-			leagueInfo = enrichLeagueInfo(lg, leagueWars)
+			leagueInfo = enrichLeagueInfoIcons(enrichLeagueInfo(lg, leagueWars), leagueIconLookup(a))
 			warLeagueInfos = mobileMapsToAny(leagueWars)
 
 			if !isInWar {
@@ -779,6 +779,7 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 	clans := mobileList(result["clans"])
 	totalStars := 0
 	totalDestruction := 0.0
+	warLeagueName := warAsString(result["war_league"])
 	for _, rawClan := range clans {
 		clan := mobileMap(rawClan)
 		tag := warAsString(clan["tag"])
@@ -797,6 +798,9 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 
 		members := mobileList(clan["members"])
 		clan["town_hall_levels"] = cwlBuildTownHallLevels(members)
+		if warLeagueName == "" {
+			warLeagueName = warAsString(mobileMap(clan["warLeague"])["name"])
+		}
 		for _, rawMember := range members {
 			member := mobileMap(rawMember)
 			stats, ok := summary.members[warAsString(member["tag"])]
@@ -813,6 +817,9 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 	result["clans"] = clans
 	result["total_stars"] = totalStars
 	result["total_destruction"] = cwlRoundToTwo(totalDestruction)
+	if warLeagueName != "" {
+		result["war_league"] = warLeagueName
+	}
 
 	return result
 }

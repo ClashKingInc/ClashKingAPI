@@ -231,6 +231,44 @@ func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
 	}
 }
 
+func TestMobilePlayerWarHitsDefaultFilterMatchesPythonDefaultLimit(t *testing.T) {
+	filter := routesv2.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
+	if filter.Limit != 50 {
+		t.Fatalf("expected default player warhits limit=50, got %d", filter.Limit)
+	}
+}
+
+func TestMobileClanWarHitsDefaultFilterMatchesPythonDefaultLimit(t *testing.T) {
+	filter := routesv2.MobileDefaultClanWarHitsFilterForTest([]string{"#C1"})
+	if filter.Limit != 100 {
+		t.Fatalf("expected default clan warhits limit=100, got %d", filter.Limit)
+	}
+}
+
+func TestMobileDecodeWarHitsFilterAppliesPlayerDefaultLimit(t *testing.T) {
+	filter, err := routesv2.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
+		"player_tags": []string{"#P1"},
+	})
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if filter.Limit != 50 {
+		t.Fatalf("expected decoded player limit=50, got %d", filter.Limit)
+	}
+}
+
+func TestMobileDecodeWarHitsFilterAppliesClanDefaultLimit(t *testing.T) {
+	filter, err := routesv2.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
+		"clan_tags": []string{"#C1"},
+	})
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if filter.Limit != 100 {
+		t.Fatalf("expected decoded clan limit=100, got %d", filter.Limit)
+	}
+}
+
 func TestMobileInitializationWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
 	playerFilter := routesv2.MobileInitializationWarHitsFilterForTest()
 	playerFilter.PlayerTags = []string{"#P1"}

@@ -910,7 +910,10 @@ type mobileJoinLeaveEvent struct {
 }
 
 func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
-	seasonStart, seasonEnd := mobileCurrentMonthBounds()
+	seasonStart, seasonEnd, err := joinLeaveSeasonBounds(genSeasonDate(0, false).(string))
+	if err != nil {
+		return map[string]any{}
+	}
 	filter := bson.M{
 		"clan": bson.M{"$in": clanTags},
 		"time": bson.M{"$gte": seasonStart, "$lte": seasonEnd},
@@ -2473,13 +2476,6 @@ func mobileContains(items []string, target string) bool {
 		}
 	}
 	return false
-}
-
-func mobileCurrentMonthBounds() (time.Time, time.Time) {
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 1, 0).Add(-time.Second)
-	return start, end
 }
 
 func mobileRound(value float64, precision int) float64 {

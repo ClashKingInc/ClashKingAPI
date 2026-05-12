@@ -1,6 +1,9 @@
 package v2
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http/httptest"
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -47,6 +50,41 @@ func MobileClanBundleContractForTest(bundle map[string]any) map[string]any {
 
 func MobileInitializationWarHitsFilterForTest() MobileWarHitsFilterForTest {
 	return mobileInitializationWarHitsFilter()
+}
+
+func MobileDefaultPlayerWarHitsFilterForTest(playerTags []string) MobileWarHitsFilterForTest {
+	return mobileDefaultPlayerWarHitsFilter(playerTags)
+}
+
+func MobileDefaultClanWarHitsFilterForTest(clanTags []string) MobileWarHitsFilterForTest {
+	return mobileDefaultClanWarHitsFilter(clanTags)
+}
+
+func MobileDecodeWarHitsFilterBodyForTest(body map[string]any) (MobileWarHitsFilterForTest, error) {
+	app := fiber.New()
+	var (
+		filter mobileWarHitsFilter
+		errOut error
+	)
+	app.Post("/", func(c *fiber.Ctx) error {
+		filter, errOut = mobileDecodeWarHitsFilter(c)
+		if errOut != nil {
+			return errOut
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return mobileWarHitsFilter{}, err
+	}
+	req := httptest.NewRequest("POST", "/", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	_, err = app.Test(req)
+	if err != nil {
+		return mobileWarHitsFilter{}, err
+	}
+	return filter, errOut
 }
 
 func MobileBuildInitializationWarStatsFromDocsForTest(wars []map[string]any, playerFilter MobileWarHitsFilterForTest, clanFilter MobileWarHitsFilterForTest) ([]any, []any) {

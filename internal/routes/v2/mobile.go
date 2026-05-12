@@ -475,6 +475,7 @@ func mobileDefaultPlayerWarHitsFilter(playerTags []string) mobileWarHitsFilter {
 		PlayerTags:     mobileNormalizeUniqueTags(playerTags),
 		TimestampStart: time.Now().UTC().AddDate(0, -6, 0).Unix(),
 		TimestampEnd:   time.Now().UTC().Unix(),
+		Limit:          50,
 	}
 }
 
@@ -483,6 +484,7 @@ func mobileDefaultClanWarHitsFilter(clanTags []string) mobileWarHitsFilter {
 		ClanTags:       mobileNormalizeUniqueClanTags(clanTags),
 		TimestampStart: time.Now().UTC().AddDate(0, -6, 0).Unix(),
 		TimestampEnd:   time.Now().UTC().Unix(),
+		Limit:          100,
 	}
 }
 
@@ -506,6 +508,13 @@ func mobileDecodeWarHitsFilter(c *fiber.Ctx) (mobileWarHitsFilter, error) {
 	}
 	if value, ok := mobileOptionalInt(raw, "limit"); ok && value > 0 {
 		filter.Limit = value
+	}
+	if filter.Limit == 0 {
+		if len(filter.PlayerTags) > 0 {
+			filter.Limit = 50
+		} else if len(filter.ClanTags) > 0 {
+			filter.Limit = 100
+		}
 	}
 	filter.OwnTH = mobileIntSliceFlexible(raw["own_th"])
 	filter.EnemyTH = mobileIntSliceFlexible(raw["enemy_th"])

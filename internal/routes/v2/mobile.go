@@ -2247,6 +2247,7 @@ func mobileUpdateProcessedWarTargets(remaining map[string]bool, processed map[st
 
 func mobileCleanWarData(war map[string]any) map[string]any {
 	out := mobileCloneMap(war)
+	out["type"] = mobileWarType(war)
 	clan := mobileCloneMap(mobileMap(out["clan"]))
 	delete(clan, "members")
 	out["clan"] = clan
@@ -2953,13 +2954,16 @@ func mobileMax(a int, b int) int {
 }
 
 func mobileWarType(war map[string]any) string {
-	if value := mobileString(war["type"]); value != "" {
+	if value := strings.ToLower(strings.TrimSpace(mobileString(war["type"]))); value != "" {
 		return value
 	}
-	if value := mobileString(war["warType"]); value != "" {
+	if value := strings.ToLower(strings.TrimSpace(mobileString(war["warType"]))); value != "" {
 		return value
 	}
-	return "all"
+	if mobileString(war["tag"]) != "" || mobileString(war["war_tag"]) != "" || mobileString(war["season"]) != "" {
+		return "cwl"
+	}
+	return "random"
 }
 
 func mobileTimestampString(timestamp int64) string {

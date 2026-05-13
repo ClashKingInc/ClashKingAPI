@@ -409,6 +409,108 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 	}
 }
 
+func TestMobileBuildPlayerWarStatsInfersLegacyWarTypeForAppFilters(t *testing.T) {
+	filter := routesv2.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
+	results := routesv2.MobileBuildPlayerWarStatsFromDocsForTest([]string{"#P1"}, []map[string]any{
+		{
+			"tag":                  "#WAR1",
+			"season":               "2026-05",
+			"state":                "warEnded",
+			"teamSize":             15,
+			"attacksPerMember":     2,
+			"battleModifier":       "",
+			"preparationStartTime": "20260501T000000.000Z",
+			"startTime":            "20260502T000000.000Z",
+			"endTime":              "20260503T000000.000Z",
+			"clan": map[string]any{
+				"tag": "#C1",
+				"members": []any{
+					map[string]any{
+						"tag":             "#P1",
+						"name":            "Player One",
+						"townhallLevel":   16,
+						"mapPosition":     1,
+						"opponentAttacks": 1,
+						"attacks": []any{
+							map[string]any{
+								"attackerTag":           "#P1",
+								"defenderTag":           "#E1",
+								"stars":                 3,
+								"destructionPercentage": 100,
+								"order":                 1,
+								"duration":              90,
+							},
+						},
+					},
+				},
+			},
+			"opponent": map[string]any{
+				"tag": "#C2",
+				"members": []any{
+					map[string]any{
+						"tag":             "#E1",
+						"name":            "Enemy One",
+						"townhallLevel":   16,
+						"mapPosition":     1,
+						"opponentAttacks": 1,
+						"attacks": []any{
+							map[string]any{
+								"attackerTag":           "#E1",
+								"defenderTag":           "#P1",
+								"stars":                 2,
+								"destructionPercentage": 80,
+								"order":                 2,
+								"duration":              95,
+							},
+						},
+					},
+				},
+			},
+		},
+	}, filter)
+
+	if len(results) != 1 {
+		t.Fatalf("expected one player war result, got %d", len(results))
+	}
+
+	result := results[0].(map[string]any)
+	stats := result["stats"].(map[string]any)
+	cwlStats := stats["cwl"].(map[string]any)
+	if got := cwlStats["warsCounts"]; got != 1 {
+		t.Fatalf("expected inferred cwl bucket to contain one war, got %v", got)
+	}
+
+	var warEntry map[string]any
+	switch wars := result["wars"].(type) {
+	case []any:
+		if len(wars) != 1 {
+			t.Fatalf("expected one preserved war entry, got %d", len(wars))
+		}
+		warEntry = wars[0].(map[string]any)
+	case []map[string]any:
+		if len(wars) != 1 {
+			t.Fatalf("expected one preserved war entry, got %d", len(wars))
+		}
+		warEntry = wars[0]
+	default:
+		t.Fatalf("expected wars slice, got %T", result["wars"])
+	}
+
+	warData := warEntry["war_data"].(map[string]any)
+	if got := warData["type"]; got != "cwl" {
+		t.Fatalf("expected war_data.type=cwl for app filters, got %v", got)
+	}
+}
+
+func TestMobileWarTypeDefaultsLegacyUntypedWarsToRandom(t *testing.T) {
+	got := routesv2.MobileWarTypeForTest(map[string]any{
+		"battleModifier": "none",
+	})
+	if got != "random" {
+		t.Fatalf("expected missing legacy war type to default to random, got %q", got)
+	}
+}
+
 func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
 	filter := routesv2.MobileInitializationWarHitsFilterForTest()
 

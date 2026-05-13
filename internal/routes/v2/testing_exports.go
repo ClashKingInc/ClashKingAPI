@@ -131,6 +131,10 @@ func MobileIsRaidsWindowAtForTest(now time.Time) bool {
 	return mobileIsRaidsWindowAt(now)
 }
 
+func MobileWarTypeForTest(war map[string]any) string {
+	return mobileWarType(war)
+}
+
 func WarSummaryResponseForTest(tag string, isInWar bool, isInCwl bool, warInfo any, leagueInfo any, warLeagueInfos []any) map[string]any {
 	return warSummaryResponse(tag, isInWar, isInCwl, warInfo, leagueInfo, warLeagueInfos)
 }

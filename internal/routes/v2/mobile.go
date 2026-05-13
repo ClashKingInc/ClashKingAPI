@@ -2710,6 +2710,12 @@ func mobileList(value any) []any {
 	switch typed := value.(type) {
 	case []any:
 		return typed
+	case []map[string]any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, item)
+		}
+		return out
 	case bson.A:
 		out := make([]any, 0, len(typed))
 		for _, item := range typed {

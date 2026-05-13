@@ -143,6 +143,69 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 	}
 }
 
+func TestMobileWarContractsKeepWarLists(t *testing.T) {
+	response := routesv2.MobileInitializationResponseForTest(
+		[]string{"#P1"},
+		[]string{"#C1"},
+		nil,
+		nil,
+		map[string]any{
+			"clan_war_stats": []any{
+				map[string]any{
+					"clan_tag": "#C1",
+					"players": []any{
+						map[string]any{
+							"name":          "Player 1",
+							"tag":           "#P1",
+							"townhallLevel": 17,
+							"stats":         map[string]any{},
+							"timeRange":     map[string]any{"start": 1, "end": 2},
+							"wars": []map[string]any{
+								{"war_data": map[string]any{"type": "random"}},
+							},
+						},
+					},
+					"wars": []map[string]any{
+						{"war_data": map[string]any{"type": "random"}},
+					},
+				},
+			},
+		},
+		[]any{
+			map[string]any{
+				"name":          "Player 1",
+				"tag":           "#P1",
+				"townhallLevel": 17,
+				"stats":         map[string]any{},
+				"timeRange":     map[string]any{"start": 1, "end": 2},
+				"wars": []map[string]any{
+					{"war_data": map[string]any{"type": "random"}},
+				},
+			},
+		},
+		"user-123",
+		time.Date(2026, time.May, 9, 12, 0, 0, 0, time.UTC),
+	)
+
+	warStats := response["war_stats"].([]any)
+	playerWar := warStats[0].(map[string]any)
+	if got := len(playerWar["wars"].([]any)); got != 1 {
+		t.Fatalf("expected player war list to survive contract, got %d items", got)
+	}
+
+	clanBundle := response["clans"].(map[string]any)
+	clanWarStats := clanBundle["clan_war_stats"].([]any)
+	clanWar := clanWarStats[0].(map[string]any)
+	if got := len(clanWar["wars"].([]any)); got != 1 {
+		t.Fatalf("expected clan war list to survive contract, got %d items", got)
+	}
+
+	clanPlayer := clanWar["players"].([]any)[0].(map[string]any)
+	if got := len(clanPlayer["wars"].([]any)); got != 1 {
+		t.Fatalf("expected clan player war list to survive contract, got %d items", got)
+	}
+}
+
 func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
 	results := routesv2.MobileLegendRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2"},

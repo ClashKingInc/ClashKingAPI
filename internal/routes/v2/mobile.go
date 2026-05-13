@@ -28,6 +28,13 @@ type mobileMatchupStats struct {
 	starsCount  map[string]int
 }
 
+type mobilePlayersExtendedPreload struct {
+	statsMap            map[string]map[string]any
+	legendRankingsByTag map[string][]any
+	rankingsByTag       map[string]map[string]any
+	warTimerClansByTag  map[string][]string
+}
+
 type mobileWarHitsFilter struct {
 	PlayerTags     []string
 	ClanTags       []string
@@ -90,9 +97,26 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		}
 
 		ctx := c.UserContext()
+		playerFilter := mobileInitializationWarHitsFilter()
+		playerFilter.PlayerTags = playerTags
+		var (
+			playerWars       []map[string]any
+			playerWarsWG     sync.WaitGroup
+			playersPreloadCh = make(chan mobilePlayersExtendedPreload, 1)
+		)
+		playerWarsWG.Add(1)
+		go func() {
+			defer playerWarsWG.Done()
+			playerWars = mobileFindLimitedPlayerWarDocsForTargets(ctx, a, playerTags, playerFilter.TimestampStart, playerFilter.TimestampEnd, playerFilter.Limit)
+		}()
+		go func() {
+			playersPreloadCh <- mobileFetchPlayersExtendedPreload(ctx, a, playerTags)
+		}()
 		playersBasic := mobileFetchPlayersBasic(ctx, a, playerTags)
 
 		clanTags := mobileExtractClanTags(playersBasic)
+		clanFilter := mobileInitializationWarHitsFilter()
+		clanFilter.ClanTags = clanTags
 
 		var playersExtended []map[string]any
 		var clanBundle map[string]any
@@ -102,7 +126,7 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, playersBasic)
+			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, clanTags, playersBasic, <-playersPreloadCh)
 		}()
 		go func() {
 			defer wg.Done()
@@ -110,7 +134,9 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		}()
 		go func() {
 			defer wg.Done()
-			playerWarStats, clanWarStats = mobileFetchInitializationWarStats(ctx, a, playerTags, clanTags)
+			clanWars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, clanFilter.TimestampStart, clanFilter.TimestampEnd, clanFilter.Limit)
+			playerWarsWG.Wait()
+			playerWarStats, clanWarStats = mobileBuildInitializationWarStatsFromBatches(playerWars, clanWars, playerFilter, clanFilter)
 		}()
 		wg.Wait()
 		clanBundle = mobileClanBundleContract(clanBundle)
@@ -370,18 +396,12 @@ func playerStringsOrEmpty(items []string) []string {
 	return items
 }
 
-func mobileFetchInitializationWarStats(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string) ([]any, []any) {
-	playerTags = mobileNormalizeUniqueTags(playerTags)
-	clanTags = mobileNormalizeUniqueClanTags(clanTags)
-	playerFilter := mobileInitializationWarHitsFilter()
-	playerFilter.PlayerTags = playerTags
-
-	clanFilter := mobileInitializationWarHitsFilter()
-	clanFilter.ClanTags = clanTags
-
-	relevantWars := mobileFindInitializationWarDocs(ctx, a, playerFilter, clanFilter)
-
-	return mobileBuildInitializationWarStatsFromDocs(relevantWars, playerFilter, clanFilter)
+func mobileBuildInitializationWarStatsFromBatches(playerWars []map[string]any, clanWars []map[string]any, playerFilter mobileWarHitsFilter, clanFilter mobileWarHitsFilter) ([]any, []any) {
+	return mobileBuildInitializationWarStatsFromDocs(
+		mobileMergeWarDocBatches([][]map[string]any{playerWars, clanWars}),
+		playerFilter,
+		clanFilter,
+	)
 }
 
 func mobileBuildInitializationWarStatsFromDocs(wars []map[string]any, playerFilter mobileWarHitsFilter, clanFilter mobileWarHitsFilter) ([]any, []any) {
@@ -575,13 +595,16 @@ func mobileFetchPlayersBasic(ctx context.Context, a apptypes.Deps, playerTags []
 	return out
 }
 
-func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags []string, playersBasic []map[string]any) []map[string]any {
-	basicByTag := map[string]map[string]any{}
-	for _, player := range playersBasic {
-		tag := mobileString(player["tag"])
-		if tag != "" {
-			basicByTag[tag] = player
-		}
+func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, playerTags []string) mobilePlayersExtendedPreload {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	preload := mobilePlayersExtendedPreload{
+		statsMap:            map[string]map[string]any{},
+		legendRankingsByTag: map[string][]any{},
+		rankingsByTag:       map[string]map[string]any{},
+		warTimerClansByTag:  map[string][]string{},
+	}
+	if len(playerTags) == 0 {
+		return preload
 	}
 
 	proj := options.Find().SetProjection(bson.M{
@@ -591,198 +614,302 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		"season_trophies": 1, "last_updated": 1,
 	})
 
-	statsMap := map[string]map[string]any{}
-	if cur, err := a.Store.C.PlayerStats.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, proj); err == nil {
-		var rows []bson.M
-		if err := cur.All(ctx, &rows); err == nil {
-			for _, row := range rows {
-				clean := mobileMap(row)
-				tag := mobileString(clean["tag"])
-				if tag != "" {
-					statsMap[tag] = clean
-				}
-			}
-		}
-	}
-
-	raidDataByClan := mobileFetchPlayerRaidDataBatch(ctx, a, mobileExtractClanTags(playersBasic))
-
-	results := make([]map[string]any, len(playerTags))
-	var wg sync.WaitGroup
-	for idx, tag := range playerTags {
-		wg.Add(1)
-		go func(i int, playerTag string) {
-			defer wg.Done()
-			item := map[string]any{
-				"tag":                playerTag,
-				"legends_by_season":  map[string]any{},
-				"legend_eos_ranking": []any{},
-				"rankings": map[string]any{
-					"tag":                 playerTag,
-					"country_code":        nil,
-					"country_name":        nil,
-					"local_rank":          nil,
-					"global_rank":         nil,
-					"builder_global_rank": nil,
-					"builder_local_rank":  nil,
-				},
-				"raid_data": map[string]any{},
-				"war_data":  map[string]any{},
-			}
-
-			if stats := statsMap[playerTag]; stats != nil {
-				for key, value := range stats {
-					if key == "tag" {
-						continue
+	var setupWG sync.WaitGroup
+	setupWG.Add(4)
+	go func() {
+		defer setupWG.Done()
+		localStats := map[string]map[string]any{}
+		if cur, err := a.Store.C.PlayerStats.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, proj); err == nil {
+			var rows []bson.M
+			if err := cur.All(ctx, &rows); err == nil {
+				for _, row := range rows {
+					clean := mobileMap(row)
+					tag := mobileString(clean["tag"])
+					if tag != "" {
+						localStats[tag] = clean
 					}
-					item[key] = value
 				}
 			}
-
-			clanTag := ""
-			if basic := basicByTag[playerTag]; basic != nil {
-				clanTag = mobileString(mobileMap(basic["clan"])["tag"])
-			}
-
-			var legendRankings []any
-			var rankings map[string]any
-			var raidData map[string]any
-			var warData map[string]any
-			var itemWG sync.WaitGroup
-			itemWG.Add(4)
-			go func() {
-				defer itemWG.Done()
-				legendRankings = mobileFetchLegendRankings(ctx, a, playerTag, 10)
-			}()
-			go func() {
-				defer itemWG.Done()
-				rankings = mobileFetchCurrentRankings(ctx, a, playerTag)
-			}()
-			go func() {
-				defer itemWG.Done()
-				raidData = mobileLookupPlayerRaidData(raidDataByClan, playerTag, clanTag)
-			}()
-			go func() {
-				defer itemWG.Done()
-				warData = mobileFetchPlayerWarContext(ctx, a, playerTag, clanTag)
-			}()
-			itemWG.Wait()
-
-			if legendRankings != nil {
-				item["legend_eos_ranking"] = legendRankings
-			}
-			if rankings != nil {
-				item["rankings"] = rankings
-			}
-			if raidData != nil {
-				item["raid_data"] = raidData
-			}
-			if warData != nil {
-				item["war_data"] = warData
-			}
-			results[i] = item
-		}(idx, tag)
-	}
-	wg.Wait()
-
-	out := make([]map[string]any, 0, len(results))
-	for _, item := range results {
-		if item != nil {
-			out = append(out, item)
 		}
+		preload.statsMap = localStats
+	}()
+	go func() {
+		defer setupWG.Done()
+		preload.legendRankingsByTag = mobileFetchLegendRankingsBatch(ctx, a, playerTags, 10)
+	}()
+	go func() {
+		defer setupWG.Done()
+		preload.rankingsByTag = mobileFetchCurrentRankingsBatch(ctx, a, playerTags)
+	}()
+	go func() {
+		defer setupWG.Done()
+		preload.warTimerClansByTag = mobileFetchPlayerWarTimerClansBatch(ctx, a, playerTags)
+	}()
+	setupWG.Wait()
+	return preload
+}
+
+func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string, playersBasic []map[string]any, preload mobilePlayersExtendedPreload) []map[string]any {
+	basicByTag := map[string]map[string]any{}
+	for _, player := range playersBasic {
+		tag := mobileString(player["tag"])
+		if tag != "" {
+			basicByTag[tag] = player
+		}
+	}
+
+	var (
+		raidDataByClan map[string]map[string]map[string]any
+		warDataByTag   map[string]map[string]any
+		setupWG        sync.WaitGroup
+	)
+
+	setupWG.Add(2)
+	go func() {
+		defer setupWG.Done()
+		raidDataByClan = mobileFetchPlayerRaidDataBatch(ctx, a, clanTags)
+	}()
+	go func() {
+		defer setupWG.Done()
+		warDataByTag = mobileBuildPlayerWarContextsFromTimerClans(ctx, a, preload.warTimerClansByTag, basicByTag)
+	}()
+	setupWG.Wait()
+
+	out := make([]map[string]any, 0, len(playerTags))
+	for _, playerTag := range playerTags {
+		item := map[string]any{
+			"tag":                playerTag,
+			"legends_by_season":  map[string]any{},
+			"legend_eos_ranking": []any{},
+			"rankings":           mobilePlayerRankingsContract(nil, playerTag),
+			"raid_data":          map[string]any{},
+			"war_data":           map[string]any{},
+		}
+
+		if stats := preload.statsMap[playerTag]; stats != nil {
+			for key, value := range stats {
+				if key == "tag" {
+					continue
+				}
+				item[key] = value
+			}
+		}
+
+		clanTag := ""
+		if basic := basicByTag[playerTag]; basic != nil {
+			clanTag = mobileString(mobileMap(basic["clan"])["tag"])
+		}
+
+		if legendRankings := preload.legendRankingsByTag[playerTag]; legendRankings != nil {
+			item["legend_eos_ranking"] = legendRankings
+		}
+		if rankings := preload.rankingsByTag[playerTag]; rankings != nil {
+			item["rankings"] = rankings
+		}
+		if raidData := mobileLookupPlayerRaidData(raidDataByClan, playerTag, clanTag); raidData != nil {
+			item["raid_data"] = raidData
+		}
+		if warData := warDataByTag[playerTag]; warData != nil {
+			item["war_data"] = warData
+		}
+		out = append(out, item)
 	}
 	return out
 }
 
 func mobileFetchLegendRankings(ctx context.Context, a apptypes.Deps, tag string, limit int64) []any {
-	findOpts := options.Find().SetSort(bson.M{"season": -1}).SetLimit(limit).SetProjection(bson.M{"_id": 0})
-	cur, err := a.Store.DB.RankingHistory.Collection("history_db").Find(ctx, bson.M{"tag": tag}, findOpts)
-	if err != nil {
+	tag = playerNormalizeTag(tag)
+	if tag == "" {
 		return []any{}
 	}
+	if items := mobileFetchLegendRankingsBatch(ctx, a, []string{tag}, limit)[tag]; items != nil {
+		return items
+	}
+	return []any{}
+}
+
+func mobileFetchCurrentRankings(ctx context.Context, a apptypes.Deps, tag string) map[string]any {
+	tag = playerNormalizeTag(tag)
+	if tag == "" {
+		return map[string]any{}
+	}
+	return mobileFetchCurrentRankingsBatch(ctx, a, []string{tag})[tag]
+}
+
+func mobileFetchLegendRankingsBatch(ctx context.Context, a apptypes.Deps, playerTags []string, limit int64) map[string][]any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	if len(playerTags) == 0 || limit <= 0 {
+		return map[string][]any{}
+	}
+
 	var rows []bson.M
-	if err := cur.All(ctx, &rows); err != nil {
-		return []any{}
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "tag", Value: 1}, {Key: "season", Value: -1}}).
+		SetProjection(bson.M{"_id": 0})
+	if cur, err := a.Store.DB.RankingHistory.Collection("history_db").Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, findOpts); err == nil {
+		_ = cur.All(ctx, &rows)
 	}
-	out := make([]any, 0, len(rows))
+	return mobileLegendRankingsByTagFromRows(playerTags, rows, limit)
+}
+
+func mobileLegendRankingsByTagFromRows(playerTags []string, rows []bson.M, limit int64) map[string][]any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	if len(playerTags) == 0 || limit <= 0 {
+		return map[string][]any{}
+	}
+
+	allowed := make(map[string]bool, len(playerTags))
+	for _, tag := range playerTags {
+		allowed[tag] = true
+	}
+
+	out := make(map[string][]any, len(playerTags))
+	counts := make(map[string]int64, len(playerTags))
 	for _, row := range rows {
-		out = append(out, mobileMap(row))
+		clean := mobileMap(row)
+		tag := mobileString(clean["tag"])
+		if !allowed[tag] || counts[tag] >= limit {
+			continue
+		}
+		out[tag] = append(out[tag], clean)
+		counts[tag]++
 	}
 	return out
 }
 
-func mobileFetchCurrentRankings(ctx context.Context, a apptypes.Deps, tag string) map[string]any {
-	result := map[string]any{
-		"tag":                 tag,
-		"country_code":        nil,
-		"country_name":        nil,
-		"local_rank":          nil,
-		"global_rank":         nil,
-		"builder_global_rank": nil,
-		"builder_local_rank":  nil,
+func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playerTags []string) map[string]map[string]any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	if len(playerTags) == 0 {
+		return map[string]map[string]any{}
 	}
 
-	var leaderboard bson.M
-	if err := a.Store.C.LeaderboardDB.FindOne(ctx, bson.M{"tag": tag}, options.FindOne().SetProjection(bson.M{"_id": 0})).Decode(&leaderboard); err == nil {
-		clean := mobileMap(leaderboard)
-		for key, value := range clean {
-			result[key] = value
+	var leaderboardRows []bson.M
+	if cur, err := a.Store.C.LeaderboardDB.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, options.Find().SetProjection(bson.M{"_id": 0})); err == nil {
+		_ = cur.All(ctx, &leaderboardRows)
+	}
+
+	provisional := mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, nil)
+	missingGlobalRank := make([]string, 0, len(playerTags))
+	for _, tag := range playerTags {
+		if provisional[tag]["global_rank"] == nil {
+			missingGlobalRank = append(missingGlobalRank, tag)
 		}
 	}
 
-	if result["global_rank"] == nil {
-		var fallback bson.M
-		if err := a.Store.C.LegendRankings.FindOne(ctx, bson.M{"tag": tag}, options.FindOne().SetProjection(bson.M{"_id": 0, "rank": 1})).Decode(&fallback); err == nil {
-			result["global_rank"] = fallback["rank"]
+	var fallbackRows []bson.M
+	if len(missingGlobalRank) > 0 {
+		if cur, err := a.Store.C.LegendRankings.Find(ctx, bson.M{"tag": bson.M{"$in": missingGlobalRank}}, options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "rank": 1})); err == nil {
+			_ = cur.All(ctx, &fallbackRows)
 		}
 	}
 
-	return result
+	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, fallbackRows)
+}
+
+func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []bson.M, fallbackRows []bson.M) map[string]map[string]any {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	out := make(map[string]map[string]any, len(playerTags))
+	allowed := make(map[string]bool, len(playerTags))
+	for _, tag := range playerTags {
+		allowed[tag] = true
+		out[tag] = mobilePlayerRankingsContract(nil, tag)
+	}
+
+	for _, row := range leaderboardRows {
+		clean := mobileMap(row)
+		tag := mobileString(clean["tag"])
+		if !allowed[tag] {
+			continue
+		}
+		out[tag] = mobilePlayerRankingsContract(clean, tag)
+	}
+
+	for _, row := range fallbackRows {
+		clean := mobileMap(row)
+		tag := mobileString(clean["tag"])
+		if !allowed[tag] || out[tag]["global_rank"] != nil {
+			continue
+		}
+		out[tag]["global_rank"] = clean["rank"]
+	}
+	return out
 }
 
 func mobileFetchPlayerRaidDataBatch(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]map[string]map[string]any {
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	if len(clanTags) == 0 || !mobileIsRaidsWindow() {
+		return map[string]map[string]map[string]any{}
+	}
+
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{"clan_tag": bson.M{"$in": clanTags}}},
+		bson.M{"$sort": bson.D{{Key: "clan_tag", Value: 1}, {Key: "data.endTime", Value: -1}}},
+		bson.M{"$group": bson.M{
+			"_id":  "$clan_tag",
+			"data": bson.M{"$first": "$data"},
+		}},
+		bson.M{"$project": bson.M{"_id": 0, "clan_tag": "$_id", "data": 1}},
+	}
+
+	var rows []bson.M
+	if cur, err := a.Store.C.RaidWeekendDB.Aggregate(ctx, pipeline); err == nil {
+		_ = cur.All(ctx, &rows)
+	}
+	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
+}
+
+func mobilePlayerRaidDataByClanFromRows(clanTags []string, rows []bson.M) map[string]map[string]map[string]any {
 	clanTags = mobileNormalizeUniqueClanTags(clanTags)
 	if len(clanTags) == 0 {
 		return map[string]map[string]map[string]any{}
 	}
 
-	out := make(map[string]map[string]map[string]any, len(clanTags))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
+	allowed := make(map[string]bool, len(clanTags))
 	for _, clanTag := range clanTags {
-		wg.Add(1)
-		go func(tag string) {
-			defer wg.Done()
-			var row bson.M
-			err := a.Store.C.RaidWeekendDB.FindOne(
-				ctx,
-				bson.M{"clan_tag": tag},
-				options.FindOne().SetSort(bson.M{"data.endTime": -1}).SetProjection(bson.M{"_id": 0, "data.members": 1}),
-			).Decode(&row)
-			if err != nil {
-				return
-			}
-
-			members := make(map[string]map[string]any)
-			for _, rawMember := range mobileList(mobileMap(mobileMap(row)["data"])["members"]) {
-				member := mobileMap(rawMember)
-				playerTag := mobileString(member["tag"])
-				if playerTag == "" {
-					continue
-				}
-				members[playerTag] = map[string]any{
-					"attacks_done": mobileInt(member["attackCount"]),
-					"attack_limit": mobileInt(member["attackLimit"]) + mobileInt(member["bonusAttackLimit"]),
-				}
-			}
-
-			mu.Lock()
-			out[tag] = members
-			mu.Unlock()
-		}(clanTag)
+		allowed[clanTag] = true
 	}
-	wg.Wait()
+
+	out := make(map[string]map[string]map[string]any, len(clanTags))
+	for _, row := range rows {
+		clean := mobileMap(row)
+		clanTag := clanFixTag(mobileString(clean["clan_tag"]))
+		if clanTag == "" || !allowed[clanTag] || out[clanTag] != nil {
+			continue
+		}
+
+		members := make(map[string]map[string]any)
+		for _, rawMember := range mobileList(mobileMap(clean["data"])["members"]) {
+			member := mobileMap(rawMember)
+			playerTag := mobileString(member["tag"])
+			if playerTag == "" {
+				continue
+			}
+			members[playerTag] = map[string]any{
+				"attacks_done": mobileInt(member["attackCount"]),
+				"attack_limit": mobileInt(member["attackLimit"]) + mobileInt(member["bonusAttackLimit"]),
+			}
+		}
+		out[clanTag] = members
+	}
 	return out
+}
+
+func mobileIsRaidsWindow() bool {
+	return mobileIsRaidsWindowAt(time.Now().UTC())
+}
+
+func mobileIsRaidsWindowAt(now time.Time) bool {
+	now = now.UTC()
+	switch now.Weekday() {
+	case time.Friday:
+		return now.Hour() >= 7
+	case time.Saturday, time.Sunday:
+		return true
+	case time.Monday:
+		return now.Hour() < 7
+	default:
+		return false
+	}
 }
 
 func mobileLookupPlayerRaidData(raidDataByClan map[string]map[string]map[string]any, playerTag string, clanTag string) map[string]any {
@@ -804,15 +931,102 @@ func mobileFetchPlayerWarContext(ctx context.Context, a apptypes.Deps, playerTag
 		return map[string]any{}
 	}
 
-	clans := mobileStringList(mobileMap(warTimer)["clans"])
-	clans = mobileNormalizeUniqueClanTags(clans)
-	if currentClanTag != "" && mobileContains(clans, currentClanTag) {
+	targetClan := mobilePlayerWarContextTargetClan(mobileStringList(mobileMap(warTimer)["clans"]), currentClanTag)
+	if targetClan == "" {
 		return map[string]any{}
+	}
+	return currentWarSummary(ctx, a, targetClan)
+}
+
+func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, playerTags []string) map[string][]string {
+	playerTags = mobileNormalizeUniqueTags(playerTags)
+	if len(playerTags) == 0 {
+		return map[string][]string{}
+	}
+
+	var rows []bson.M
+	if cur, err := a.Store.C.WarTimer.Find(ctx, bson.M{"_id": bson.M{"$in": playerTags}}, options.Find().SetProjection(bson.M{"_id": 1, "clans": 1})); err == nil {
+		_ = cur.All(ctx, &rows)
+	}
+
+	out := make(map[string][]string, len(playerTags))
+	for _, row := range rows {
+		clean := mobileMap(row)
+		playerTag := mobileString(clean["_id"])
+		if playerTag == "" {
+			continue
+		}
+		out[playerTag] = mobileStringList(clean["clans"])
+	}
+	return out
+}
+
+func mobileBuildPlayerWarContextsFromTimerClans(ctx context.Context, a apptypes.Deps, warTimerClansByTag map[string][]string, basicByTag map[string]map[string]any) map[string]map[string]any {
+	uniqueTargetClans := map[string]bool{}
+	targetClanByPlayer := make(map[string]string, len(warTimerClansByTag))
+	for playerTag, clans := range warTimerClansByTag {
+		currentClanTag := ""
+		if basic := basicByTag[playerTag]; basic != nil {
+			currentClanTag = mobileString(mobileMap(basic["clan"])["tag"])
+		}
+
+		targetClan := mobilePlayerWarContextTargetClan(clans, currentClanTag)
+		if targetClan == "" {
+			continue
+		}
+
+		targetClanByPlayer[playerTag] = targetClan
+		uniqueTargetClans[targetClan] = true
+	}
+
+	targetClans := make([]string, 0, len(uniqueTargetClans))
+	for clanTag := range uniqueTargetClans {
+		targetClans = append(targetClans, clanTag)
+	}
+	summaryByClan := mobileFetchWarSummariesByClan(ctx, a, targetClans)
+
+	out := make(map[string]map[string]any, len(targetClanByPlayer))
+	for playerTag, clanTag := range targetClanByPlayer {
+		if summary := summaryByClan[clanTag]; summary != nil {
+			out[playerTag] = summary
+		}
+	}
+	return out
+}
+
+func mobileFetchWarSummariesByClan(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]map[string]any {
+	clanTags = mobileNormalizeUniqueClanTags(clanTags)
+	if len(clanTags) == 0 {
+		return map[string]map[string]any{}
+	}
+
+	out := make(map[string]map[string]any, len(clanTags))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, clanTag := range clanTags {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			summary := currentWarSummary(ctx, a, tag)
+			mu.Lock()
+			out[tag] = summary
+			mu.Unlock()
+		}(clanTag)
+	}
+	wg.Wait()
+	return out
+}
+
+func mobilePlayerWarContextTargetClan(clans []string, currentClanTag string) string {
+	clans = mobileNormalizeUniqueClanTags(clans)
+	currentClanTag = clanFixTag(currentClanTag)
+	if currentClanTag != "" && mobileContains(clans, currentClanTag) {
+		return ""
 	}
 	if len(clans) == 0 {
-		return map[string]any{}
+		return ""
 	}
-	return currentWarSummary(ctx, a, clans[0])
+	return clans[0]
 }
 
 func mobileExtractClanTags(playersBasic []map[string]any) []string {
@@ -1487,15 +1701,6 @@ func mobileFindLimitedPlayerWarDocs(ctx context.Context, a apptypes.Deps, player
 
 func mobileFindLimitedClanWarDocs(ctx context.Context, a apptypes.Deps, clanTag string, startUnix int64, endUnix int64, limit int) []map[string]any {
 	return mobileFindWarDocs(ctx, a, mobileClanWarDocsPipeline(clanTag, startUnix, endUnix, limit))
-}
-
-func mobileFindInitializationWarDocs(ctx context.Context, a apptypes.Deps, playerFilter mobileWarHitsFilter, clanFilter mobileWarHitsFilter) []map[string]any {
-	playerTags := mobileNormalizeUniqueTags(playerFilter.PlayerTags)
-	clanTags := mobileNormalizeUniqueClanTags(clanFilter.ClanTags)
-
-	playerWars := mobileFindLimitedPlayerWarDocsForTargets(ctx, a, playerTags, playerFilter.TimestampStart, playerFilter.TimestampEnd, playerFilter.Limit)
-	clanWars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, clanFilter.TimestampStart, clanFilter.TimestampEnd, clanFilter.Limit)
-	return mobileMergeWarDocBatches([][]map[string]any{playerWars, clanWars})
 }
 
 func mobileFindLimitedPlayerWarDocsForTargets(ctx context.Context, a apptypes.Deps, playerTags []string, startUnix int64, endUnix int64, limit int) []map[string]any {

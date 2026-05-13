@@ -111,6 +111,26 @@ func MobileClanWarDocsPipelineForTest(clanTag string, startUnix int64, endUnix i
 	return mobileClanWarDocsPipeline(clanTag, startUnix, endUnix, limit)
 }
 
+func MobileLegendRankingsByTagFromRowsForTest(playerTags []string, rows []bson.M, limit int64) map[string][]any {
+	return mobileLegendRankingsByTagFromRows(playerTags, rows, limit)
+}
+
+func MobileCurrentRankingsByTagFromRowsForTest(playerTags []string, leaderboardRows []bson.M, fallbackRows []bson.M) map[string]map[string]any {
+	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, fallbackRows)
+}
+
+func MobilePlayerWarContextTargetClanForTest(clans []string, currentClanTag string) string {
+	return mobilePlayerWarContextTargetClan(clans, currentClanTag)
+}
+
+func MobilePlayerRaidDataByClanFromRowsForTest(clanTags []string, rows []bson.M) map[string]map[string]map[string]any {
+	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
+}
+
+func MobileIsRaidsWindowAtForTest(now time.Time) bool {
+	return mobileIsRaidsWindowAt(now)
+}
+
 func WarSummaryResponseForTest(tag string, isInWar bool, isInCwl bool, warInfo any, leagueInfo any, warLeagueInfos []any) map[string]any {
 	return warSummaryResponse(tag, isInWar, isInCwl, warInfo, leagueInfo, warLeagueInfos)
 }

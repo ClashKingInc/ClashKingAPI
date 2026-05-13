@@ -143,6 +143,132 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 	}
 }
 
+func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
+	results := routesv2.MobileLegendRankingsByTagFromRowsForTest(
+		[]string{"#P1", "#P2"},
+		[]bson.M{
+			{"tag": "#P1", "season": "2026-05", "rank": 1},
+			{"tag": "#P1", "season": "2026-04", "rank": 2},
+			{"tag": "#P2", "season": "2026-05", "rank": 3},
+			{"tag": "#IGNORED", "season": "2026-05", "rank": 4},
+		},
+		1,
+	)
+
+	if got := len(results["#P1"]); got != 1 {
+		t.Fatalf("expected one legend ranking for #P1, got %d", got)
+	}
+	if got := len(results["#P2"]); got != 1 {
+		t.Fatalf("expected one legend ranking for #P2, got %d", got)
+	}
+	if season := results["#P1"][0].(map[string]any)["season"]; season != "2026-05" {
+		t.Fatalf("expected newest #P1 season to be kept, got %v", season)
+	}
+	if _, exists := results["#IGNORED"]; exists {
+		t.Fatalf("expected unknown tags to be ignored, got %+v", results)
+	}
+}
+
+func TestMobileCurrentRankingsByTagFromRowsUsesFallbackGlobalRank(t *testing.T) {
+	results := routesv2.MobileCurrentRankingsByTagFromRowsForTest(
+		[]string{"#P1", "#P2", "#P3"},
+		[]bson.M{
+			{"tag": "#P1", "country_code": "FR", "local_rank": 10},
+			{"tag": "#P2", "country_code": "US", "global_rank": 22},
+		},
+		[]bson.M{
+			{"tag": "#P1", "rank": 111},
+			{"tag": "#P2", "rank": 999},
+			{"tag": "#P3", "rank": 333},
+		},
+	)
+
+	if got := results["#P1"]["global_rank"]; got != 111 {
+		t.Fatalf("expected #P1 fallback global_rank=111, got %v", got)
+	}
+	if got := results["#P2"]["global_rank"]; got != 22 {
+		t.Fatalf("expected #P2 leaderboard global_rank to win, got %v", got)
+	}
+	if got := results["#P3"]["global_rank"]; got != 333 {
+		t.Fatalf("expected #P3 fallback-only global_rank=333, got %v", got)
+	}
+	if got := results["#P3"]["tag"]; got != "#P3" {
+		t.Fatalf("expected default tag fallback for #P3, got %v", got)
+	}
+}
+
+func TestMobilePlayerWarContextTargetClanSkipsCurrentClan(t *testing.T) {
+	if got := routesv2.MobilePlayerWarContextTargetClanForTest([]string{"#VY2J0LL", "#ALT"}, "#VY2J0LL"); got != "" {
+		t.Fatalf("expected current clan to suppress alternate war context, got %q", got)
+	}
+	if got := routesv2.MobilePlayerWarContextTargetClanForTest([]string{"alt", "#OTHER"}, "#VY2J0LL"); got != "#ALT" {
+		t.Fatalf("expected first normalized alternate clan, got %q", got)
+	}
+}
+
+func TestMobilePlayerRaidDataByClanFromRowsKeepsLatestPerClan(t *testing.T) {
+	results := routesv2.MobilePlayerRaidDataByClanFromRowsForTest(
+		[]string{"#C1", "#C2"},
+		[]bson.M{
+			{
+				"clan_tag": "#C1",
+				"data": bson.M{
+					"members": bson.A{
+						bson.M{"tag": "#P1", "attackCount": 4, "attackLimit": 5, "bonusAttackLimit": 1},
+					},
+				},
+			},
+			{
+				"clan_tag": "#C1",
+				"data": bson.M{
+					"members": bson.A{
+						bson.M{"tag": "#P1", "attackCount": 1, "attackLimit": 5, "bonusAttackLimit": 0},
+					},
+				},
+			},
+			{
+				"clan_tag": "c2",
+				"data": bson.M{
+					"members": bson.A{
+						bson.M{"tag": "#P2", "attackCount": 3, "attackLimit": 5, "bonusAttackLimit": 0},
+					},
+				},
+			},
+		},
+	)
+
+	if got := results["#C1"]["#P1"]["attacks_done"]; got != 4 {
+		t.Fatalf("expected first row for #C1 to win, got %v", got)
+	}
+	if got := results["#C1"]["#P1"]["attack_limit"]; got != 6 {
+		t.Fatalf("expected merged attack limit=6, got %v", got)
+	}
+	if got := results["#C2"]["#P2"]["attacks_done"]; got != 3 {
+		t.Fatalf("expected normalized clan #C2 member data, got %v", got)
+	}
+}
+
+func TestMobileIsRaidsWindowAtMatchesLegacySchedule(t *testing.T) {
+	testCases := []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{"friday-before-open", time.Date(2026, time.May, 15, 6, 59, 0, 0, time.UTC), false},
+		{"friday-open", time.Date(2026, time.May, 15, 7, 0, 0, 0, time.UTC), true},
+		{"saturday", time.Date(2026, time.May, 16, 12, 0, 0, 0, time.UTC), true},
+		{"monday-before-close", time.Date(2026, time.May, 18, 6, 59, 0, 0, time.UTC), true},
+		{"monday-close", time.Date(2026, time.May, 18, 7, 0, 0, 0, time.UTC), false},
+		{"wednesday", time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC), false},
+	}
+
+	for _, tc := range testCases {
+		if got := routesv2.MobileIsRaidsWindowAtForTest(tc.now); got != tc.want {
+			t.Fatalf("%s: expected %v, got %v", tc.name, tc.want, got)
+		}
+	}
+}
+
 func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 	bundle := routesv2.MobileClanBundleContractForTest(map[string]any{
 		"war_data": []any{

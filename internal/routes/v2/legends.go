@@ -2,6 +2,8 @@ package v2
 
 import (
 	"fmt"
+	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,9 +18,14 @@ import (
 )
 
 // legendStatsDay is a hidden route for legends day stats.
+var legendsDayParam = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
 func legendStatsDay(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		day := c.Params("day")
+		if !legendsDayParam.MatchString(day) {
+			return apptypes.Error(http.StatusBadRequest, "invalid day format, expected YYYY-MM-DD")
+		}
 		players := apptypes.QueryValues(c, "players")
 		pipeline := bson.A{
 			bson.M{"$match": bson.M{"tag": bson.M{"$in": players}}},

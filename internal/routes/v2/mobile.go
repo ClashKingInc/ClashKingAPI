@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -572,19 +573,18 @@ func mobileDecodeWarHitsFilter(c *fiber.Ctx) (mobileWarHitsFilter, error) {
 
 func mobileFetchPlayersBasic(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
 	results := make([]map[string]any, len(playerTags))
-	var mu sync.Mutex
+	sem := make(chan struct{}, 50)
 	var wg sync.WaitGroup
 	for idx, tag := range playerTags {
 		wg.Add(1)
 		go func(i int, playerTag string) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			player, err := a.Clash.GetPlayer(ctx, playerTag)
-			mu.Lock()
 			if err != nil || player == nil {
-				mu.Unlock()
 				return
 			}
-			mu.Unlock()
 			results[i] = playerStructToMap(player)
 		}(idx, tag)
 	}
@@ -750,8 +750,11 @@ func mobileFetchLegendRankingsBatch(ctx context.Context, a apptypes.Deps, player
 	findOpts := options.Find().
 		SetSort(bson.D{{Key: "tag", Value: 1}, {Key: "season", Value: -1}}).
 		SetProjection(bson.M{"_id": 0})
-	if cur, err := a.Store.DB.RankingHistory.Collection("history_db").Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, findOpts); err == nil {
-		_ = cur.All(ctx, &rows)
+	cur, err := a.Store.DB.RankingHistory.Collection("history_db").Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, findOpts)
+	if err == nil {
+		if err := cur.All(ctx, &rows); err != nil {
+			return map[string][]any{}
+		}
 	}
 	return mobileLegendRankingsByTagFromRows(playerTags, rows, limit)
 }
@@ -789,7 +792,9 @@ func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playe
 
 	var leaderboardRows []bson.M
 	if cur, err := a.Store.C.LeaderboardDB.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, options.Find().SetProjection(bson.M{"_id": 0})); err == nil {
-		_ = cur.All(ctx, &leaderboardRows)
+		if err := cur.All(ctx, &leaderboardRows); err != nil {
+			return map[string]map[string]any{}
+		}
 	}
 
 	provisional := mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, nil)
@@ -803,7 +808,9 @@ func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playe
 	var fallbackRows []bson.M
 	if len(missingGlobalRank) > 0 {
 		if cur, err := a.Store.C.LegendRankings.Find(ctx, bson.M{"tag": bson.M{"$in": missingGlobalRank}}, options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "rank": 1})); err == nil {
-			_ = cur.All(ctx, &fallbackRows)
+			if err := cur.All(ctx, &fallbackRows); err != nil {
+				fallbackRows = nil
+			}
 		}
 	}
 
@@ -856,8 +863,11 @@ func mobileFetchPlayerRaidDataBatch(ctx context.Context, a apptypes.Deps, clanTa
 	}
 
 	var rows []bson.M
-	if cur, err := a.Store.C.RaidWeekendDB.Aggregate(ctx, pipeline); err == nil {
-		_ = cur.All(ctx, &rows)
+	cur, err := a.Store.C.RaidWeekendDB.Aggregate(ctx, pipeline)
+	if err == nil {
+		if err := cur.All(ctx, &rows); err != nil {
+			return map[string]map[string]map[string]any{}
+		}
 	}
 	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
 }
@@ -949,25 +959,22 @@ func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, p
 	}
 
 	out := make(map[string][]string, len(playerTags))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, playerTag := range playerTags {
-		wg.Add(1)
-		go func(tag string) {
-			defer wg.Done()
-			var row bson.M
-			err := a.Store.C.WarTimer.FindOne(ctx, bson.M{"_id": tag}, options.FindOne().SetProjection(bson.M{"_id": 1, "clans": 1})).Decode(&row)
-			mu.Lock()
-			if err != nil {
-				mu.Unlock()
-				return
-			}
-			clean := mobileMap(row)
-			out[tag] = mobileStringList(clean["clans"])
-			mu.Unlock()
-		}(playerTag)
+	opts := options.Find().SetProjection(bson.M{"_id": 1, "clans": 1})
+	cur, err := a.Store.C.WarTimer.Find(ctx, bson.M{"_id": bson.M{"$in": playerTags}}, opts)
+	if err != nil {
+		return out
 	}
-	wg.Wait()
+	var rows []bson.M
+	if err := cur.All(ctx, &rows); err != nil {
+		return out
+	}
+	for _, row := range rows {
+		clean := mobileMap(row)
+		tag := mobileString(clean["_id"])
+		if tag != "" {
+			out[tag] = mobileStringList(clean["clans"])
+		}
+	}
 	return out
 }
 
@@ -1012,11 +1019,14 @@ func mobileFetchWarSummariesByClan(ctx context.Context, a apptypes.Deps, clanTag
 
 	out := make(map[string]map[string]any, len(clanTags))
 	var mu sync.Mutex
+	sem := make(chan struct{}, 20)
 	var wg sync.WaitGroup
 	for _, clanTag := range clanTags {
 		wg.Add(1)
 		go func(tag string) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			summary := currentWarSummary(ctx, a, tag)
 			mu.Lock()
 			out[tag] = summary
@@ -1111,7 +1121,7 @@ func mobileFetchClanDetails(ctx context.Context, a apptypes.Deps, clanTags []str
 		wg.Add(1)
 		go func(clanTag string) {
 			defer wg.Done()
-			url := "https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(clanTag, "#", "%23")
+			url := "https://proxy.clashk.ing/v1/clans/" + url.PathEscape(clanTag)
 			clan := mobileHTTPGetJSON(url)
 			if clan == nil {
 				return
@@ -1134,7 +1144,11 @@ type mobileJoinLeaveEvent struct {
 }
 
 func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
-	seasonStart, seasonEnd, err := joinLeaveSeasonBounds(genSeasonDate(0, false).(string))
+	seasonDateRaw, ok := genSeasonDate(0, false).(string)
+	if !ok {
+		return map[string]any{}
+	}
+	seasonStart, seasonEnd, err := joinLeaveSeasonBounds(seasonDateRaw)
 	if err != nil {
 		return map[string]any{}
 	}
@@ -1349,7 +1363,7 @@ func mobileFetchCapitalData(clanTags []string, limit int) []any {
 		wg.Add(1)
 		go func(i int, clanTag string) {
 			defer wg.Done()
-			url := "https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(clanTag, "#", "%23") + "/capitalraidseasons?limit=" + strconv.Itoa(limit)
+			url := "https://proxy.clashk.ing/v1/clans/" + url.PathEscape(clanTag) + "/capitalraidseasons?limit=" + strconv.Itoa(limit)
 			data := mobileHTTPGetJSON(url)
 			if data == nil {
 				results[i] = map[string]any{"clan_tag": clanTag, "history": []any{}}
@@ -1379,7 +1393,7 @@ func mobileFetchClanWarLogs(clanTags []string) []any {
 		wg.Add(1)
 		go func(i int, clanTag string) {
 			defer wg.Done()
-			url := "https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(clanTag, "#", "%23") + "/warlog"
+			url := "https://proxy.clashk.ing/v1/clans/" + url.PathEscape(clanTag) + "/warlog"
 			data := mobileHTTPGetJSON(url)
 			items := []any{}
 			if data != nil {

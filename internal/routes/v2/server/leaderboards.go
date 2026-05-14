@@ -40,7 +40,8 @@ func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 		ctx := c.UserContext()
 
 		// Get clans for this server
-		clanCur, err := a.Store.C.ClanDB.Find(ctx, bson.M{"server": serverID})
+		clanCur, err := a.Store.C.ClanDB.Find(ctx, bson.M{"server": serverID},
+			options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1}))
 		if err != nil {
 			return err
 		}
@@ -84,7 +85,8 @@ func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Fetch player rankings
-		rankCur, err := a.Store.C.LeaderboardDB.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}})
+		rankCur, err := a.Store.C.LeaderboardDB.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}},
+			options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "global_rank": 1, "local_rank": 1, "trophies": 1, "legend_trophies": 1, "country_code": 1}))
 		if err != nil {
 			return err
 		}

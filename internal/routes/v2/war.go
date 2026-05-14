@@ -267,7 +267,7 @@ func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[str
 		warInfo = map[string]any{"state": "notInWar"}
 	} else {
 		isInWar = true
-		currentWarInfo := mobileHTTPGetJSON("https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(tag, "#", "%23") + "/currentwar")
+		currentWarInfo := mobileHTTPGetJSON("https://proxy.clashk.ing/v1/clans/" + url.PathEscape(tag) + "/currentwar")
 		if currentWarInfo == nil {
 			currentWarInfo = playerStructToMap(war)
 		}
@@ -825,7 +825,7 @@ func enrichLeagueInfo(leagueInfo map[string]any, wars []map[string]any) map[stri
 }
 
 func fetchLeagueGroupProxy(tag string) map[string]any {
-	url := "https://proxy.clashk.ing/v1/clans/" + strings.ReplaceAll(tag, "#", "%23") + "/currentwar/leaguegroup"
+	url := "https://proxy.clashk.ing/v1/clans/" + url.PathEscape(tag) + "/currentwar/leaguegroup"
 	data := mobileHTTPGetJSON(url)
 	if len(data) == 0 {
 		return nil
@@ -866,7 +866,7 @@ func fetchLeagueWarsProxy(warTags []string) []map[string]any {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			url := "https://proxy.clashk.ing/v1/clanwarleagues/wars/" + strings.ReplaceAll(tag, "#", "%23")
+			url := "https://proxy.clashk.ing/v1/clanwarleagues/wars/" + url.PathEscape(tag)
 			data := mobileHTTPGetJSON(url)
 			if len(data) == 0 || warAsString(data["state"]) == "notInWar" {
 				return

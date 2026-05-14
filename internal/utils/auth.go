@@ -99,7 +99,7 @@ func (a *Authenticator) parseJWT(token string) (*Claims, error) {
 		return []byte(a.cfg.SecretKey), nil
 	})
 	if err != nil {
-		return nil, Error(fiber.StatusUnauthorized, "Invalid authentication token: "+err.Error())
+		return nil, Error(fiber.StatusUnauthorized, "Invalid or expired token")
 	}
 	if claims.Sub == "" {
 		return nil, Error(fiber.StatusUnauthorized, "User not found")

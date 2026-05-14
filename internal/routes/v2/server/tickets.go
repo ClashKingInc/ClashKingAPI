@@ -515,7 +515,9 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "player_tag": 1}))
 			if lerr == nil {
 				var linkDocs []bson.M
-				_ = linkCur.All(c.UserContext(), &linkDocs)
+				if err := linkCur.All(c.UserContext(), &linkDocs); err != nil {
+					return err
+				}
 				linkDocCount = len(linkDocs)
 				for _, ld := range linkDocs {
 					uid := serverAsString(ld["user_id"])
@@ -549,7 +551,9 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1, "town_hall": 1, "townhall": 1}))
 			if perr == nil {
 				var playerDocs []bson.M
-				_ = pCur.All(c.UserContext(), &playerDocs)
+				if err := pCur.All(c.UserContext(), &playerDocs); err != nil {
+					return err
+				}
 				playerDocCount = len(playerDocs)
 				for _, pd := range playerDocs {
 					if tag := serverAsString(pd["tag"]); tag != "" {
@@ -578,7 +582,9 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				options.Find().SetProjection(bson.M{"_id": 0, "linked_accounts.discord": 1}))
 			if uerr == nil {
 				var userDocs []bson.M
-				_ = userCur.All(c.UserContext(), &userDocs)
+				if err := userCur.All(c.UserContext(), &userDocs); err != nil {
+					return err
+				}
 				authUserDocCount = len(userDocs)
 				for _, userDoc := range userDocs {
 					discordAccount := mapMaybe(mapMaybe(userDoc["linked_accounts"])["discord"])

@@ -81,6 +81,7 @@ func New(ctx context.Context) (*App, error) {
 			Clash:     clashAdapter,
 			Discord:   discordAdapter,
 			Auth:      utils.NewAuthenticator(cfg, stores),
+			Cache:     utils.NewCacheAdapter(cfg),
 			StartedAt: time.Now().UTC(),
 		},
 		StartedAt: time.Now().UTC(),
@@ -162,6 +163,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.Clash != nil {
 		_ = a.Clash.Close()
+	}
+	if a.Cache != nil {
+		a.Cache.Close()
 	}
 	utils.FlushSentry(2 * time.Second)
 	if a.Store != nil {

@@ -10,5 +10,6 @@ type Deps struct {
 	Clash     *ClashAdapter
 	Discord   *DiscordAdapter
 	Auth      *Authenticator
+	Cache     *CacheAdapter
 	StartedAt time.Time
 }

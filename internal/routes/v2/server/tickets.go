@@ -611,6 +611,42 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			remainingMissingIdentityUserIDs = append(remainingMissingIdentityUserIDs, uid)
 		}
 		sort.Strings(remainingMissingIdentityUserIDs)
+
+		// Step 1: resolve from Valkey cache before hitting Discord API.
+		// The bot populates discord:guild_member:{guild_id}:{user_id} on member events.
+		cacheResolved := make([]string, 0, len(remainingMissingIdentityUserIDs))
+		for _, uid := range remainingMissingIdentityUserIDs {
+			entry, ok := a.Cache.GetDiscordMember(c.UserContext(), serverID, uid)
+			if !ok {
+				continue
+			}
+			cacheResolved = append(cacheResolved, uid)
+			if entry.NotOnServer {
+				// negative cache hit — user confirmed absent, no Discord call needed
+				userIdentityMap[uid] = ticketUserIdentity{}
+			} else {
+				userIdentityMap[uid] = ticketUserIdentity{
+					Username:    entry.Username,
+					DisplayName: entry.DisplayName,
+					AvatarURL:   entry.AvatarURL,
+				}
+			}
+		}
+		if len(cacheResolved) > 0 {
+			resolved := make(map[string]bool, len(cacheResolved))
+			for _, uid := range cacheResolved {
+				resolved[uid] = true
+			}
+			filtered := remainingMissingIdentityUserIDs[:0]
+			for _, uid := range remainingMissingIdentityUserIDs {
+				if !resolved[uid] {
+					filtered = append(filtered, uid)
+				}
+			}
+			remainingMissingIdentityUserIDs = filtered
+		}
+
+		// Step 2: fall back to live Discord API only for users not in cache.
 		discordLookupsAttempted := 0
 		discordLookupsSucceeded := 0
 		discordDuration := time.Duration(0)

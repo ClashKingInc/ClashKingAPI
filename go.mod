@@ -15,7 +15,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/xuri/excelize/v2 v2.10.1
 	go.mongodb.org/mongo-driver/v2 v2.5.0
-	golang.org/x/crypto v0.49.0
+	golang.org/x/crypto v0.50.0
 )
 
 require (
@@ -52,6 +52,7 @@ require (
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	github.com/swaggo/files v1.0.1 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
+	github.com/valkey-io/valkey-go v1.0.75 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.70.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
@@ -62,11 +63,11 @@ require (
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/tools v0.43.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

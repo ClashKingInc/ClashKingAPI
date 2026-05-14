@@ -87,7 +87,6 @@ func publicMobileConfig(a apptypes.Deps) fiber.Handler {
 // @Router /v2/initialization [post]
 func mobileInitialization(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		totalStartedAt := time.Now()
 		var body modelsv2.MobilePlayerTagsRequest
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
@@ -101,27 +100,19 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		playerFilter := mobileInitializationWarHitsFilter()
 		playerFilter.PlayerTags = playerTags
 		var (
-			playerWars        []map[string]any
-			playerWarsWG      sync.WaitGroup
-			playerWarsFetchMs int64
-			playersPreloadMs  int64
-			playersPreloadCh  = make(chan mobilePlayersExtendedPreload, 1)
+			playerWars       []map[string]any
+			playerWarsWG     sync.WaitGroup
+			playersPreloadCh = make(chan mobilePlayersExtendedPreload, 1)
 		)
 		playerWarsWG.Add(1)
 		go func() {
 			defer playerWarsWG.Done()
-			startedAt := time.Now()
 			playerWars = mobileFindLimitedPlayerWarDocsForTargets(ctx, a, playerTags, playerFilter.TimestampStart, playerFilter.TimestampEnd, playerFilter.Limit)
-			playerWarsFetchMs = time.Since(startedAt).Milliseconds()
 		}()
 		go func() {
-			startedAt := time.Now()
 			playersPreloadCh <- mobileFetchPlayersExtendedPreload(ctx, a, playerTags)
-			playersPreloadMs = time.Since(startedAt).Milliseconds()
 		}()
-		playersBasicStartedAt := time.Now()
 		playersBasic := mobileFetchPlayersBasic(ctx, a, playerTags)
-		playersBasicMs := time.Since(playersBasicStartedAt).Milliseconds()
 
 		clanTags := mobileExtractClanTags(playersBasic)
 		clanFilter := mobileInitializationWarHitsFilter()
@@ -131,58 +122,25 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		var clanBundle map[string]any
 		var playerWarStats []any
 		var clanWarStats []any
-		var playersExtendedMs int64
-		var clanBundleMs int64
-		var clanWarsFetchMs int64
-		var warStatsBuildMs int64
-		var warStatsTotalMs int64
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			startedAt := time.Now()
 			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, clanTags, playersBasic, <-playersPreloadCh)
-			playersExtendedMs = time.Since(startedAt).Milliseconds()
 		}()
 		go func() {
 			defer wg.Done()
-			startedAt := time.Now()
 			clanBundle = mobileFetchClanBundle(ctx, a, clanTags)
-			clanBundleMs = time.Since(startedAt).Milliseconds()
 		}()
 		go func() {
 			defer wg.Done()
-			startedAt := time.Now()
 			clanWars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, clanFilter.TimestampStart, clanFilter.TimestampEnd, clanFilter.Limit)
-			clanWarsFetchMs = time.Since(startedAt).Milliseconds()
 			playerWarsWG.Wait()
-			buildStartedAt := time.Now()
 			playerWarStats, clanWarStats = mobileBuildInitializationWarStatsFromBatches(playerWars, clanWars, playerFilter, clanFilter)
-			warStatsBuildMs = time.Since(buildStartedAt).Milliseconds()
-			warStatsTotalMs = time.Since(startedAt).Milliseconds()
 		}()
 		wg.Wait()
-		contractStartedAt := time.Now()
 		clanBundle = mobileClanBundleContract(clanBundle)
 		clanBundle["clan_war_stats"] = playerWarStatsOrEmpty(clanWarStats)
-		contractMs := time.Since(contractStartedAt).Milliseconds()
-		apptypes.Logger().Info("mobile_initialization_timing",
-			"request_id", apptypes.RequestID(c),
-			"user_id", apptypes.UserID(c.UserContext()),
-			"player_count", len(playerTags),
-			"players_basic_count", len(playersBasic),
-			"clan_count", len(clanTags),
-			"player_wars_fetch_ms", playerWarsFetchMs,
-			"players_preload_ms", playersPreloadMs,
-			"players_basic_ms", playersBasicMs,
-			"players_extended_ms", playersExtendedMs,
-			"clan_bundle_ms", clanBundleMs,
-			"clan_wars_fetch_ms", clanWarsFetchMs,
-			"war_stats_build_ms", warStatsBuildMs,
-			"war_stats_total_ms", warStatsTotalMs,
-			"contract_ms", contractMs,
-			"total_ms", time.Since(totalStartedAt).Milliseconds(),
-		)
 
 		return apptypes.JSON(c, fiber.StatusOK, mobileInitializationResponse(
 			playerTags,
@@ -241,58 +199,6 @@ func playerMapsOrEmpty(items []map[string]any) []map[string]any {
 		return []map[string]any{}
 	}
 	return items
-}
-
-func mobileTopDurations(timings map[string]int64, top int) []map[string]any {
-	keys := make([]string, 0, len(timings))
-	for key := range timings {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if timings[keys[i]] == timings[keys[j]] {
-			return keys[i] < keys[j]
-		}
-		return timings[keys[i]] > timings[keys[j]]
-	})
-	if top <= 0 || top > len(keys) {
-		top = len(keys)
-	}
-	out := make([]map[string]any, 0, top)
-	for _, key := range keys[:top] {
-		out = append(out, map[string]any{
-			"target": key,
-			"ms":     timings[key],
-		})
-	}
-	return out
-}
-
-func mobileTopDurationsWithCounts(timings map[string]int64, counts map[string]int, top int) []map[string]any {
-	keys := make([]string, 0, len(timings))
-	for key := range timings {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if timings[keys[i]] == timings[keys[j]] {
-			return keys[i] < keys[j]
-		}
-		return timings[keys[i]] > timings[keys[j]]
-	})
-	if top <= 0 || top > len(keys) {
-		top = len(keys)
-	}
-	out := make([]map[string]any, 0, top)
-	for _, key := range keys[:top] {
-		item := map[string]any{
-			"target": key,
-			"ms":     timings[key],
-		}
-		if counts != nil {
-			item["count"] = counts[key]
-		}
-		out = append(out, item)
-	}
-	return out
 }
 
 func mobilePlayerExtendedListContract(items []map[string]any) []map[string]any {
@@ -665,23 +571,16 @@ func mobileDecodeWarHitsFilter(c *fiber.Ctx) (mobileWarHitsFilter, error) {
 }
 
 func mobileFetchPlayersBasic(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
-	startedAt := time.Now()
 	results := make([]map[string]any, len(playerTags))
-	perTagMs := make(map[string]int64, len(playerTags))
-	failedTags := make([]string, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for idx, tag := range playerTags {
 		wg.Add(1)
 		go func(i int, playerTag string) {
 			defer wg.Done()
-			tagStartedAt := time.Now()
 			player, err := a.Clash.GetPlayer(ctx, playerTag)
-			durationMs := time.Since(tagStartedAt).Milliseconds()
 			mu.Lock()
-			perTagMs[playerTag] = durationMs
 			if err != nil || player == nil {
-				failedTags = append(failedTags, playerTag)
 				mu.Unlock()
 				return
 			}
@@ -697,19 +596,10 @@ func mobileFetchPlayersBasic(ctx context.Context, a apptypes.Deps, playerTags []
 			out = append(out, item)
 		}
 	}
-	apptypes.Logger().Info("mobile_players_basic_timing",
-		"player_count", len(playerTags),
-		"returned_count", len(out),
-		"failed_count", len(failedTags),
-		"failed_tags", failedTags,
-		"top_targets", mobileTopDurations(perTagMs, 10),
-		"total_ms", time.Since(startedAt).Milliseconds(),
-	)
 	return out
 }
 
 func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, playerTags []string) mobilePlayersExtendedPreload {
-	totalStartedAt := time.Now()
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	preload := mobilePlayersExtendedPreload{
 		statsMap:            map[string]map[string]any{},
@@ -729,14 +619,9 @@ func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, pla
 	})
 
 	var setupWG sync.WaitGroup
-	var statsFetchMs int64
-	var legendRankingsMs int64
-	var currentRankingsMs int64
-	var warTimerMs int64
 	setupWG.Add(4)
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		localStats := map[string]map[string]any{}
 		if cur, err := a.Store.C.PlayerStats.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, proj); err == nil {
 			var rows []bson.M
@@ -751,40 +636,24 @@ func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, pla
 			}
 		}
 		preload.statsMap = localStats
-		statsFetchMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		preload.legendRankingsByTag = mobileFetchLegendRankingsBatch(ctx, a, playerTags, 10)
-		legendRankingsMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		preload.rankingsByTag = mobileFetchCurrentRankingsBatch(ctx, a, playerTags)
-		currentRankingsMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		preload.warTimerClansByTag = mobileFetchPlayerWarTimerClansBatch(ctx, a, playerTags)
-		warTimerMs = time.Since(startedAt).Milliseconds()
 	}()
 	setupWG.Wait()
-	apptypes.Logger().Info("mobile_players_extended_preload_timing",
-		"player_count", len(playerTags),
-		"stats_fetch_ms", statsFetchMs,
-		"legend_rankings_ms", legendRankingsMs,
-		"current_rankings_ms", currentRankingsMs,
-		"war_timer_ms", warTimerMs,
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
 	return preload
 }
 
 func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string, playersBasic []map[string]any, preload mobilePlayersExtendedPreload) []map[string]any {
-	totalStartedAt := time.Now()
 	basicByTag := map[string]map[string]any{}
 	for _, player := range playersBasic {
 		tag := mobileString(player["tag"])
@@ -799,20 +668,14 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		setupWG        sync.WaitGroup
 	)
 
-	var raidBatchMs int64
-	var warContextBuildMs int64
 	setupWG.Add(2)
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		raidDataByClan = mobileFetchPlayerRaidDataBatch(ctx, a, clanTags)
-		raidBatchMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer setupWG.Done()
-		startedAt := time.Now()
 		warDataByTag = mobileBuildPlayerWarContextsFromTimerClans(ctx, a, preload.warTimerClansByTag, basicByTag)
-		warContextBuildMs = time.Since(startedAt).Milliseconds()
 	}()
 	setupWG.Wait()
 
@@ -855,14 +718,6 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		}
 		out = append(out, item)
 	}
-	apptypes.Logger().Info("mobile_players_extended_timing",
-		"player_count", len(playerTags),
-		"players_basic_count", len(playersBasic),
-		"clan_count", len(clanTags),
-		"raid_batch_ms", raidBatchMs,
-		"war_context_build_ms", warContextBuildMs,
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
 	return out
 }
 
@@ -1088,29 +943,22 @@ func mobileFetchPlayerWarContext(ctx context.Context, a apptypes.Deps, playerTag
 }
 
 func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, playerTags []string) map[string][]string {
-	totalStartedAt := time.Now()
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	if len(playerTags) == 0 {
 		return map[string][]string{}
 	}
 
 	out := make(map[string][]string, len(playerTags))
-	perTargetMs := make(map[string]int64, len(playerTags))
-	failedTags := make([]string, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, playerTag := range playerTags {
 		wg.Add(1)
 		go func(tag string) {
 			defer wg.Done()
-			startedAt := time.Now()
 			var row bson.M
 			err := a.Store.C.WarTimer.FindOne(ctx, bson.M{"_id": tag}, options.FindOne().SetProjection(bson.M{"_id": 1, "clans": 1})).Decode(&row)
-			durationMs := time.Since(startedAt).Milliseconds()
 			mu.Lock()
-			perTargetMs[tag] = durationMs
 			if err != nil {
-				failedTags = append(failedTags, tag)
 				mu.Unlock()
 				return
 			}
@@ -1120,14 +968,6 @@ func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, p
 		}(playerTag)
 	}
 	wg.Wait()
-	apptypes.Logger().Info("mobile_war_timer_batch_timing",
-		"player_count", len(playerTags),
-		"row_count", len(out),
-		"failed_count", len(failedTags),
-		"failed_tags", failedTags,
-		"top_targets", mobileTopDurations(perTargetMs, 10),
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
 	return out
 }
 
@@ -1214,7 +1054,6 @@ func mobileExtractClanTags(playersBasic []map[string]any) []string {
 }
 
 func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
-	totalStartedAt := time.Now()
 	bundle := map[string]any{
 		"clan_details":    map[string]any{},
 		"clan_stats":      map[string]any{},
@@ -1231,11 +1070,6 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var clanDetailsMs int64
-	var joinLeaveMs int64
-	var capitalMs int64
-	var warLogsMs int64
-	var warSummariesMs int64
 	set := func(key string, value any) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -1245,44 +1079,25 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 	wg.Add(5)
 	go func() {
 		defer wg.Done()
-		startedAt := time.Now()
 		set("clan_details", mobileFetchClanDetails(ctx, a, clanTags))
-		clanDetailsMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer wg.Done()
-		startedAt := time.Now()
 		set("join_leave_data", mobileFetchJoinLeaveData(ctx, a, clanTags))
-		joinLeaveMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer wg.Done()
-		startedAt := time.Now()
 		set("capital_data", mobileFetchCapitalData(clanTags, 10))
-		capitalMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer wg.Done()
-		startedAt := time.Now()
 		set("war_log_data", mobileFetchClanWarLogs(clanTags))
-		warLogsMs = time.Since(startedAt).Milliseconds()
 	}()
 	go func() {
 		defer wg.Done()
-		startedAt := time.Now()
 		set("war_data", mobileFetchClanWarSummaries(ctx, a, clanTags))
-		warSummariesMs = time.Since(startedAt).Milliseconds()
 	}()
 	wg.Wait()
-	apptypes.Logger().Info("mobile_clan_bundle_timing",
-		"clan_count", len(clanTags),
-		"clan_details_ms", clanDetailsMs,
-		"join_leave_ms", joinLeaveMs,
-		"capital_ms", capitalMs,
-		"war_logs_ms", warLogsMs,
-		"war_summaries_ms", warSummariesMs,
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
 
 	return bundle
 }
@@ -1319,7 +1134,6 @@ type mobileJoinLeaveEvent struct {
 }
 
 func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
-	totalStartedAt := time.Now()
 	seasonStart, seasonEnd, err := joinLeaveSeasonBounds(genSeasonDate(0, false).(string))
 	if err != nil {
 		return map[string]any{}
@@ -1330,21 +1144,16 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 	}
 
 	findOpts := options.Find().SetSort(bson.M{"time": -1})
-	queryStartedAt := time.Now()
 	cur, err := a.Store.C.JoinLeaveHistory.Find(ctx, filter, findOpts)
 	if err != nil {
 		return map[string]any{}
 	}
-	queryMs := time.Since(queryStartedAt).Milliseconds()
 
 	var rows []bson.M
-	decodeStartedAt := time.Now()
 	if err := cur.All(ctx, &rows); err != nil {
 		return map[string]any{}
 	}
-	decodeMs := time.Since(decodeStartedAt).Milliseconds()
 
-	groupStartedAt := time.Now()
 	groupedDocs := map[string][]map[string]any{}
 	groupedStats := map[string][]mobileJoinLeaveEvent{}
 	for _, row := range rows {
@@ -1370,16 +1179,12 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 		clean["time"] = eventTime.UTC().Format(time.RFC3339)
 		groupedDocs[clanTag] = append(groupedDocs[clanTag], clean)
 	}
-	groupMs := time.Since(groupStartedAt).Milliseconds()
 
 	out := map[string]any{}
 	startUnix := seasonStart.Unix()
 	endUnix := seasonEnd.Unix()
-	statsStartedAt := time.Now()
-	eventCounts := make(map[string]int, len(clanTags))
 	for _, clanTag := range clanTags {
 		events := groupedStats[clanTag]
-		eventCounts[clanTag] = len(events)
 		out[clanTag] = map[string]any{
 			"clan_tag":        clanTag,
 			"timestamp_start": startUnix,
@@ -1388,17 +1193,6 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 			"join_leave_list": mobileMapsToAny(groupedDocs[clanTag]),
 		}
 	}
-	statsMs := time.Since(statsStartedAt).Milliseconds()
-	apptypes.Logger().Info("mobile_join_leave_timing",
-		"clan_count", len(clanTags),
-		"row_count", len(rows),
-		"query_ms", queryMs,
-		"decode_ms", decodeMs,
-		"group_ms", groupMs,
-		"stats_ms", statsMs,
-		"event_counts", eventCounts,
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
 	return out
 }
 
@@ -1920,23 +1714,16 @@ func mobileFindLimitedClanWarDocs(ctx context.Context, a apptypes.Deps, clanTag 
 }
 
 func mobileFindLimitedPlayerWarDocsForTargets(ctx context.Context, a apptypes.Deps, playerTags []string, startUnix int64, endUnix int64, limit int) []map[string]any {
-	totalStartedAt := time.Now()
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	batches := make([][]map[string]any, 0, len(playerTags))
-	perTargetMs := make(map[string]int64, len(playerTags))
-	perTargetCounts := make(map[string]int, len(playerTags))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, playerTag := range playerTags {
 		wg.Add(1)
 		go func(tag string) {
 			defer wg.Done()
-			startedAt := time.Now()
 			docs := mobileFindLimitedPlayerWarDocs(ctx, a, tag, startUnix, endUnix, limit)
-			durationMs := time.Since(startedAt).Milliseconds()
 			mu.Lock()
-			perTargetMs[tag] = durationMs
-			perTargetCounts[tag] = len(docs)
 			if len(docs) == 0 {
 				mu.Unlock()
 				return
@@ -1946,34 +1733,20 @@ func mobileFindLimitedPlayerWarDocsForTargets(ctx context.Context, a apptypes.De
 		}(playerTag)
 	}
 	wg.Wait()
-	merged := mobileMergeWarDocBatches(batches)
-	apptypes.Logger().Info("mobile_player_war_docs_timing",
-		"player_count", len(playerTags),
-		"merged_doc_count", len(merged),
-		"top_targets", mobileTopDurationsWithCounts(perTargetMs, perTargetCounts, 10),
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
-	return merged
+	return mobileMergeWarDocBatches(batches)
 }
 
 func mobileFindLimitedClanWarDocsForTargets(ctx context.Context, a apptypes.Deps, clanTags []string, startUnix int64, endUnix int64, limit int) []map[string]any {
-	totalStartedAt := time.Now()
 	clanTags = mobileNormalizeUniqueClanTags(clanTags)
 	batches := make([][]map[string]any, 0, len(clanTags))
-	perTargetMs := make(map[string]int64, len(clanTags))
-	perTargetCounts := make(map[string]int, len(clanTags))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, clanTag := range clanTags {
 		wg.Add(1)
 		go func(tag string) {
 			defer wg.Done()
-			startedAt := time.Now()
 			docs := mobileFindLimitedClanWarDocs(ctx, a, tag, startUnix, endUnix, limit)
-			durationMs := time.Since(startedAt).Milliseconds()
 			mu.Lock()
-			perTargetMs[tag] = durationMs
-			perTargetCounts[tag] = len(docs)
 			if len(docs) == 0 {
 				mu.Unlock()
 				return
@@ -1983,14 +1756,7 @@ func mobileFindLimitedClanWarDocsForTargets(ctx context.Context, a apptypes.Deps
 		}(clanTag)
 	}
 	wg.Wait()
-	merged := mobileMergeWarDocBatches(batches)
-	apptypes.Logger().Info("mobile_clan_war_docs_timing",
-		"clan_count", len(clanTags),
-		"merged_doc_count", len(merged),
-		"top_targets", mobileTopDurationsWithCounts(perTargetMs, perTargetCounts, 10),
-		"total_ms", time.Since(totalStartedAt).Milliseconds(),
-	)
-	return merged
+	return mobileMergeWarDocBatches(batches)
 }
 
 func mobilePlayerWarDocsPipeline(playerTag string, startUnix int64, endUnix int64, limit int) bson.A {

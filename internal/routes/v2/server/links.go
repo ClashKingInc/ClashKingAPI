@@ -10,6 +10,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // getLinks godoc
@@ -63,18 +64,61 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 			})
 		}
 
-		links, err := findManyMaps(c.UserContext(), rt.Store.C.Links, bson.M{"user_id": bson.M{"$in": memberIDs}})
+		// Resolve internal ClashKing UUIDs → Discord user IDs.
+		// Accounts created via the Go API store an internal UUID as user_id,
+		// while legacy Python-bot accounts stored Discord snowflake IDs directly.
+		// We need both to show all linked accounts for server members.
+		internalToDiscord := map[string]string{}
+		internalIDs := make([]any, 0, len(memberIDs))
+		if cur, err := rt.Store.C.Users.Find(c.UserContext(),
+			bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": memberIDs}},
+			options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "linked_accounts.discord.discord_user_id": 1}),
+		); err == nil {
+			var userDocs []bson.M
+			if err := cur.All(c.UserContext(), &userDocs); err == nil {
+				for _, doc := range userDocs {
+					internalID := serverAsString(doc["user_id"])
+					discordAcc := mapMaybe(mapMaybe(doc["linked_accounts"])["discord"])
+					discordID := serverAsString(discordAcc["discord_user_id"])
+					if internalID != "" && discordID != "" {
+						internalToDiscord[internalID] = discordID
+						internalIDs = append(internalIDs, internalID)
+					}
+				}
+			}
+		}
+
+		// Query by both Discord IDs (legacy) and internal UUIDs (new accounts).
+		linkFilter := bson.M{"user_id": bson.M{"$in": memberIDs}}
+		if len(internalIDs) > 0 {
+			combined := make([]any, 0, len(memberIDs)+len(internalIDs))
+			for _, id := range memberIDs {
+				combined = append(combined, id)
+			}
+			combined = append(combined, internalIDs...)
+			linkFilter = bson.M{"user_id": bson.M{"$in": combined}}
+		}
+		links, err := findManyMaps(c.UserContext(), rt.Store.C.Links, linkFilter)
 		if err != nil {
 			return err
 		}
 
+		// Group by Discord ID, normalising internal UUIDs.
 		grouped := map[string][]map[string]any{}
 		for _, link := range links {
 			userID := serverAsString(link["user_id"])
 			if userID == "" {
 				continue
 			}
-			grouped[userID] = append(grouped[userID], link)
+			discordID := userID
+			if resolved, ok := internalToDiscord[userID]; ok {
+				discordID = resolved
+			}
+			// Only include users who are currently on the server.
+			if _, onServer := serverMembers[discordID]; !onServer {
+				continue
+			}
+			grouped[discordID] = append(grouped[discordID], link)
 		}
 
 		type groupedMember struct {

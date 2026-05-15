@@ -662,6 +662,7 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 		"start_time":               startTime,
 		"end_time":                 endTime,
 		"winners":                  winners,
+		"entries":                  bson.A{},
 		"mentions":                 mentions,
 		"text_above_embed":         c.FormValue("text_above_embed"),
 		"text_in_embed":            c.FormValue("text_in_embed"),

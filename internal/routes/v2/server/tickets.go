@@ -807,46 +807,52 @@ func updateTicketPanel(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		toIntOrNil := func(s *string) any {
-			if s == nil || *s == "" {
-				return nil
-			}
+		toInt := func(s string) int64 {
 			var n int64
-			fmt.Sscanf(*s, "%d", &n)
+			fmt.Sscanf(s, "%d", &n)
 			return n
 		}
 
-		updateFields := bson.M{}
-		if body.OpenCategory != nil {
-			updateFields["open-category"] = toIntOrNil(body.OpenCategory)
-		}
-		if body.SleepCategory != nil {
-			updateFields["sleep-category"] = toIntOrNil(body.SleepCategory)
-		}
-		if body.ClosedCategory != nil {
-			updateFields["closed-category"] = toIntOrNil(body.ClosedCategory)
-		}
-		if body.StatusChangeLog != nil {
-			updateFields["status_change_log"] = toIntOrNil(body.StatusChangeLog)
-		}
-		if body.TicketButtonClickLog != nil {
-			updateFields["ticket_button_click_log"] = toIntOrNil(body.TicketButtonClickLog)
-		}
-		if body.TicketCloseLog != nil {
-			updateFields["ticket_close_log"] = toIntOrNil(body.TicketCloseLog)
-		}
-		if body.EmbedName != nil {
-			if *body.EmbedName == "" {
-				updateFields["embed_name"] = nil
+		setFields := bson.M{}
+		unsetFields := bson.M{}
+
+		setOrUnset := func(key string, s *string) {
+			if s == nil {
+				return
+			}
+			if *s == "" {
+				unsetFields[key] = ""
 			} else {
-				updateFields["embed_name"] = *body.EmbedName
+				setFields[key] = toInt(*s)
 			}
 		}
 
-		if len(updateFields) > 0 {
+		setOrUnset("open-category", body.OpenCategory)
+		setOrUnset("sleep-category", body.SleepCategory)
+		setOrUnset("closed-category", body.ClosedCategory)
+		setOrUnset("status_change_log", body.StatusChangeLog)
+		setOrUnset("ticket_button_click_log", body.TicketButtonClickLog)
+		setOrUnset("ticket_close_log", body.TicketCloseLog)
+
+		if body.EmbedName != nil {
+			if *body.EmbedName == "" {
+				unsetFields["embed_name"] = ""
+			} else {
+				setFields["embed_name"] = *body.EmbedName
+			}
+		}
+
+		if len(setFields) > 0 || len(unsetFields) > 0 {
+			update := bson.M{}
+			if len(setFields) > 0 {
+				update["$set"] = setFields
+			}
+			if len(unsetFields) > 0 {
+				update["$unset"] = unsetFields
+			}
 			if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
 				bson.M{"server_id": serverID, "name": panelName},
-				bson.M{"$set": updateFields},
+				update,
 			); err != nil {
 				return err
 			}

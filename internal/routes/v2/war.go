@@ -187,6 +187,11 @@ func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 			wg.Add(1)
 			go func(idx int, t string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						results[idx] = warSummaryResponse(t, false, false, map[string]any{"state": "notInWar"}, nil, nil)
+					}
+				}()
 				results[idx] = currentWarSummary(ctx, a, t)
 			}(i, tag)
 		}

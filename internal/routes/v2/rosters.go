@@ -493,7 +493,7 @@ func listRosterGroups(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"groups": sanitize(groups), "count": len(groups)})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": sanitize(groups), "count": len(groups)})
 	}
 }
 

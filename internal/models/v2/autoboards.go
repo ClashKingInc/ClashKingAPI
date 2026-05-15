@@ -1,16 +1,17 @@
 package modelsv2
 
 type AutoBoardConfig struct {
-	ID        string   `json:"id"`
-	Type      string   `json:"type"`
-	BoardType string   `json:"board_type"`
-	ButtonID  string   `json:"button_id"`
-	WebhookID string   `json:"webhook_id"`
-	ThreadID  *string  `json:"thread_id,omitempty"`
-	ChannelID *string  `json:"channel_id,omitempty"`
-	Days      []string `json:"days,omitempty"`
-	Locale    string   `json:"locale,omitempty"`
-	CreatedAt *string  `json:"created_at,omitempty"`
+	ID             string   `json:"id"`
+	Type           string   `json:"type"`
+	BoardType      string   `json:"board_type"`
+	ButtonID       string   `json:"button_id"`
+	WebhookID      string   `json:"webhook_id"`
+	ThreadID       *string  `json:"thread_id,omitempty"`
+	ChannelID      *string  `json:"channel_id,omitempty"`
+	ChannelDeleted bool     `json:"channel_deleted,omitempty"`
+	Days           []string `json:"days,omitempty"`
+	Locale         string   `json:"locale,omitempty"`
+	CreatedAt      *string  `json:"created_at,omitempty"`
 }
 
 type ServerAutoBoardsResponse struct {

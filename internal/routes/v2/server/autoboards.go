@@ -76,9 +76,35 @@ func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 			}
 		}
 
+		// Collect all resolved channel IDs and check which ones still exist in Discord.
+		deletedChannels := map[string]bool{}
+		seenChannels := map[string]bool{}
+		for _, item := range items {
+			cfg := autoBoardConfigFromDoc(item, webhookChannelIDs)
+			if cfg.ChannelID == nil {
+				continue
+			}
+			chID := *cfg.ChannelID
+			if seenChannels[chID] {
+				continue
+			}
+			seenChannels[chID] = true
+			chInt := ticketParseInt64(chID)
+			if chInt == 0 {
+				continue
+			}
+			if _, err := rt.Discord.GetChannel(c.UserContext(), chInt); err != nil {
+				deletedChannels[chID] = true
+			}
+		}
+
 		responseItems := make([]modelsv2.AutoBoardConfig, 0, len(items))
 		for _, item := range items {
-			responseItems = append(responseItems, autoBoardConfigFromDoc(item, webhookChannelIDs))
+			cfg := autoBoardConfigFromDoc(item, webhookChannelIDs)
+			if cfg.ChannelID != nil && deletedChannels[*cfg.ChannelID] {
+				cfg.ChannelDeleted = true
+			}
+			responseItems = append(responseItems, cfg)
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerAutoBoardsResponse{
 			Autoboards:   responseItems,

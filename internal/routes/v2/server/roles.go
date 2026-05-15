@@ -311,10 +311,12 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		status := sanitizeRoleList(anyMapSlice(statusRoles["discord"]))
 		out["status"] = status
 		totalCount += len(status)
+		categoryRoles := mapMaybe(serverDoc["category_roles"])
 		return apptypes.JSON(c, http.StatusOK, modelsv2.AllRolesResponse{
-			ServerID:   serverID,
-			Roles:      out,
-			TotalCount: totalCount,
+			ServerID:      serverID,
+			Roles:         out,
+			CategoryRoles: categoryRoles,
+			TotalCount:    totalCount,
 		})
 	}
 }

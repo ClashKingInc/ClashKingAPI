@@ -51,7 +51,8 @@ type RoleSettingsUpdate struct {
 }
 
 type AllRolesResponse struct {
-	ServerID   int                         `json:"server_id"`
-	Roles      map[string][]map[string]any `json:"roles"`
-	TotalCount int                         `json:"total_count"`
+	ServerID      int                         `json:"server_id"`
+	Roles         map[string][]map[string]any `json:"roles"`
+	CategoryRoles map[string]any              `json:"category_roles,omitempty"`
+	TotalCount    int                         `json:"total_count"`
 }

@@ -5716,6 +5716,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/server/{server_id}/giveaways/{giveaway_id}/entries": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the list of users who entered a giveaway, with their entry count and win chance percentage.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Giveaways"
+                ],
+                "summary": "Get giveaway entrants",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Giveaway ID",
+                        "name": "giveaway_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v2/server/{server_id}/links": {
             "get": {
                 "security": [

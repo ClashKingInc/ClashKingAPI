@@ -105,7 +105,8 @@ func GetServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 
 func GetServerEmbeds(a apptypes.Deps) fiber.Handler { return getServerEmbeds(a) }
 
-func GetServerGiveaway(a apptypes.Deps) fiber.Handler { return getServerGiveaway(a) }
+func GetGiveawayEntries(a apptypes.Deps) fiber.Handler  { return getGiveawayEntries(a) }
+func GetServerGiveaway(a apptypes.Deps) fiber.Handler   { return getServerGiveaway(a) }
 
 func GetServerGiveaways(a apptypes.Deps) fiber.Handler { return getServerGiveaways(a) }
 

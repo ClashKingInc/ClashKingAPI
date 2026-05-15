@@ -647,6 +647,11 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Step 2: fall back to live Discord API only for users not in cache.
+		// Cap at 20 lookups per request to prevent slow responses on large servers.
+		const maxDiscordLookups = 20
+		if len(remainingMissingIdentityUserIDs) > maxDiscordLookups {
+			remainingMissingIdentityUserIDs = remainingMissingIdentityUserIDs[:maxDiscordLookups]
+		}
 		discordLookupsAttempted := 0
 		discordLookupsSucceeded := 0
 		discordDuration := time.Duration(0)

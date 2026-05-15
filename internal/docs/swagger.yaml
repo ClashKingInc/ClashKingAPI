@@ -4558,6 +4558,39 @@ paths:
       summary: Remove a family role
       tags:
       - Server Roles
+  /v2/server/{server_id}/giveaways/{giveaway_id}/entries:
+    get:
+      description: Returns the list of users who entered a giveaway, with their entry
+        count and win chance percentage.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Giveaway ID
+        in: path
+        name: giveaway_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get giveaway entrants
+      tags:
+      - Server Giveaways
   /v2/server/{server_id}/links:
     get:
       description: Returns all player-Discord account links for server members.

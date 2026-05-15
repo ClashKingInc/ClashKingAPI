@@ -51,6 +51,20 @@ type GiveawayMutationResponse struct {
 	ServerID   int    `json:"server_id"`
 }
 
+type GiveawayEntrant struct {
+	UserID    string  `json:"user_id"`
+	Entries   int     `json:"entries"`
+	WinChance float64 `json:"win_chance"`
+}
+
+type GiveawayEntriesResponse struct {
+	GiveawayID   string            `json:"giveaway_id"`
+	ServerID     int               `json:"server_id"`
+	TotalEntries int               `json:"total_entries"`
+	UniqueUsers  int               `json:"unique_users"`
+	Entrants     []GiveawayEntrant `json:"entrants"`
+}
+
 type GiveawayRerollRequest struct {
 	UserIDsToReplace []string `json:"user_ids_to_replace"`
 }

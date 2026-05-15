@@ -199,6 +199,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/server/:server_id/giveaways", wrap(serverroutes.CreateServerGiveaway(a)))
 	app.Put("/v2/server/:server_id/giveaways/:giveaway_id", wrap(serverroutes.UpdateServerGiveaway(a)))
 	app.Delete("/v2/server/:server_id/giveaways/:giveaway_id", wrap(serverroutes.DeleteServerGiveaway(a)))
+	app.Get("/v2/server/:server_id/giveaways/:giveaway_id/entries", wrap(serverroutes.GetGiveawayEntries(a)))
 	app.Post("/v2/server/:server_id/giveaways/:giveaway_id/reroll", wrap(serverroutes.RerollGiveawayWinners(a)))
 
 	app.Get("/v2/server/:server_id/leaderboards", serverroutes.GetServerLeaderboards(a))

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -229,6 +230,77 @@ func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway deleted successfully", GiveawayID: giveawayID, ServerID: serverID})
+	}
+}
+
+// getGiveawayEntries godoc
+// @Summary Get giveaway entrants
+// @Description Returns the list of users who entered a giveaway, with their entry count and win chance percentage.
+// @Tags Server Giveaways
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param giveaway_id path string true "Giveaway ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/giveaways/{giveaway_id}/entries [get]
+func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		serverID, err := pathInt(c, "server_id")
+		if err != nil {
+			return err
+		}
+		giveawayID := c.Params("giveaway_id")
+		var doc bson.M
+		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
+			bson.M{"_id": giveawayID, "server_id": serverID},
+		).Decode(&doc)
+		if err != nil {
+			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
+		}
+
+		rawEntries, _ := doc["entries"].(bson.A)
+		entryCounts := make(map[string]int, len(rawEntries))
+		order := make([]string, 0, len(rawEntries))
+		for _, e := range rawEntries {
+			var uid string
+			switch typed := e.(type) {
+			case string:
+				uid = typed
+			case bson.M:
+				uid = fmt.Sprint(typed["user_id"])
+			}
+			if uid == "" {
+				continue
+			}
+			if _, seen := entryCounts[uid]; !seen {
+				order = append(order, uid)
+			}
+			entryCounts[uid]++
+		}
+
+		total := len(rawEntries)
+		entrants := make([]modelsv2.GiveawayEntrant, 0, len(order))
+		for _, uid := range order {
+			count := entryCounts[uid]
+			var winChance float64
+			if total > 0 {
+				winChance = float64(count) / float64(total) * 100
+			}
+			entrants = append(entrants, modelsv2.GiveawayEntrant{
+				UserID:    uid,
+				Entries:   count,
+				WinChance: math.Round(winChance*100) / 100,
+			})
+		}
+
+		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayEntriesResponse{
+			GiveawayID:   giveawayID,
+			ServerID:     serverID,
+			TotalEntries: total,
+			UniqueUsers:  len(order),
+			Entrants:     entrants,
+		})
 	}
 }
 

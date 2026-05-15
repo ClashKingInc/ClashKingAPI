@@ -563,7 +563,7 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 }
 
 func giveawayBoosters(value any) []modelsv2.GiveawayBooster {
-	raw, ok := value.([]any)
+	raw, ok := value.(bson.A)
 	if !ok {
 		return []modelsv2.GiveawayBooster{}
 	}
@@ -608,7 +608,7 @@ func giveawayWinners(value any, winnerIdentities map[string]ticketUserIdentity) 
 }
 
 func giveawayEntryCount(value any) int {
-	if raw, ok := value.([]any); ok {
+	if raw, ok := value.(bson.A); ok {
 		return len(raw)
 	}
 	return 0

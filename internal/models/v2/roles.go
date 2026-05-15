@@ -30,8 +30,19 @@ type DiscordRolesResponse struct {
 }
 
 type RoleSettingsResponse struct {
-	ServerID         int            `json:"server_id"`
+	ServerID         int               `json:"server_id"`
+	AutoEvalStatus   *bool             `json:"auto_eval_status,omitempty"`
+	AutoEvalNickname *bool             `json:"auto_eval_nickname,omitempty"`
+	AutoevalTriggers []string          `json:"autoeval_triggers,omitempty"`
+	AutoevalLog      any               `json:"autoeval_log,omitempty"`
+	BlacklistedRoles []any             `json:"blacklisted_roles,omitempty"`
+	RoleTreatment    []string          `json:"role_treatment,omitempty"`
+	CategoryRoles    map[string]string `json:"category_roles,omitempty"`
+}
+
+type RoleSettingsUpdate struct {
 	AutoEvalStatus   *bool          `json:"auto_eval_status,omitempty"`
+	Autoeval         *bool          `json:"autoeval,omitempty"`
 	AutoEvalNickname *bool          `json:"auto_eval_nickname,omitempty"`
 	AutoevalTriggers []string       `json:"autoeval_triggers,omitempty"`
 	AutoevalLog      any            `json:"autoeval_log,omitempty"`
@@ -40,19 +51,9 @@ type RoleSettingsResponse struct {
 	CategoryRoles    map[string]any `json:"category_roles,omitempty"`
 }
 
-type RoleSettingsUpdate struct {
-	AutoEvalStatus   *bool    `json:"auto_eval_status,omitempty"`
-	Autoeval         *bool    `json:"autoeval,omitempty"`
-	AutoEvalNickname *bool    `json:"auto_eval_nickname,omitempty"`
-	AutoevalTriggers []string `json:"autoeval_triggers,omitempty"`
-	AutoevalLog      any      `json:"autoeval_log,omitempty"`
-	BlacklistedRoles []any    `json:"blacklisted_roles,omitempty"`
-	RoleTreatment    []string `json:"role_treatment,omitempty"`
-}
-
 type AllRolesResponse struct {
 	ServerID      int                         `json:"server_id"`
 	Roles         map[string][]map[string]any `json:"roles"`
-	CategoryRoles map[string]any              `json:"category_roles,omitempty"`
+	CategoryRoles map[string]string           `json:"category_roles,omitempty"`
 	TotalCount    int                         `json:"total_count"`
 }

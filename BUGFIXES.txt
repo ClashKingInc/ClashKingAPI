@@ -1,0 +1,340 @@
+
+ClashKing API & Dashboard — Bug Fixes
+======================================
+Generated: 2026-05-15
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #300 — Giveaway entry count stays at 0
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/giveaways.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  When creating a giveaway, the "entries" array was never initialised in
+  MongoDB. The bot pushes entries into that array when users join, but
+  $push on a missing field fails silently, so entry_count stayed at 0
+  even after participants joined.
+
+ROOT CAUSE
+  giveawayBuildDocument() built the BSON document without including an
+  "entries" field. MongoDB stores only what is explicitly set.
+
+FIX
+  Added `"entries": bson.A{}` to the document returned by
+  giveawayBuildDocument(). The array is now initialised as empty on
+  creation, and the bot can safely $push into it.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #275 — Cannot disable log / category channels in tickets
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/tickets.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  Setting a ticket panel channel (e.g. open_category, status_change_log)
+  to an empty string from the dashboard had no effect — the old channel ID
+  remained active in the bot.
+
+ROOT CAUSE
+  The updateTicketPanel handler always used $set for every field in the
+  request body, including empty strings. MongoDB's $set with an empty
+  string sets the field to "" (not removing it), so the bot kept seeing
+  the old channel ID.
+
+FIX
+  Introduced a setOrUnset helper that splits fields into two maps:
+  - Fields with a non-empty value go into $set (channel ID to activate).
+  - Fields with an empty string go into $unset (remove the field entirely).
+  The update document now only includes $set / $unset as needed, so
+  sending "" correctly removes the channel from the document.
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #267 — Roster groups disappear after page refresh
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/rosters.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  Creating a new roster group in the dashboard worked, but refreshing the
+  page made all groups disappear.
+
+ROOT CAUSE
+  The listRosterGroups API handler returned the groups array under the key
+  "groups":
+    { "groups": [...], "count": N }
+  The dashboard's fetchGroups function only handled "items" or a direct
+  array:
+    return Array.isArray(data) ? data : data.items || [];
+  Since neither matched, data.items was undefined, and the function
+  returned []. Groups were created correctly in MongoDB but never
+  displayed after reload.
+
+FIX
+  Changed the response key in listRosterGroups from "groups" to "items":
+    { "items": [...], "count": N }
+  This aligns with the convention used by other list endpoints and matches
+  what the dashboard already expects.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #277 — Cannot load members for a type=clan roster
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: app/[locale]/dashboard/[guildId]/rosters/_lib/api.ts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  For a roster of type "clan", the "Add members" dialog showed no clan
+  members to choose from, even when the linked clan had active members
+  in Clash of Clans.
+
+ROOT CAUSE
+  fetchClanMembers() calls the CoC proxy at:
+    https://proxy.clashk.ing/v1/clans/{tag}/members
+  That endpoint returns: { "items": [...], "paging": {...} }
+  But the function only looked for a "members" key:
+    return Array.isArray(data) ? data : data.members || [];
+  Since "members" is always undefined in that response, the function
+  always returned [].
+
+FIX (dashboard-side)
+  Added "items" as a first-priority fallback before "members":
+    return Array.isArray(data) ? data : data.items || data.members || [];
+  The clan member list is now populated correctly.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #273 — War page returns HTTP 500
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/war.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  The war page occasionally returned a 500 error when loading war
+  summaries for server clans.
+
+ROOT CAUSE
+  warSummaryBulk spawns one goroutine per clan tag to fetch war data
+  concurrently. Go's runtime does not propagate panics across goroutine
+  boundaries — a panic inside a spawned goroutine crashes the entire
+  process instead of being caught by Fiber's recover middleware (which
+  only protects the main request goroutine).
+
+FIX
+  Added a deferred recover() inside each goroutine. On panic, the slot
+  is filled with a safe "notInWar" response so the overall request
+  still returns a valid 200 payload:
+    defer func() {
+        if r := recover(); r != nil {
+            results[idx] = warSummaryResponse(t, false, false,
+                map[string]any{"state": "notInWar"}, nil, nil)
+        }
+    }()
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #209 — Clan category roles missing from all-roles endpoint
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/roles.go
+          internal/models/v2/roles.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  The GET /v2/server/{id}/all-roles endpoint did not include clan category
+  roles, so the dashboard could not display them alongside other role types.
+
+ROOT CAUSE
+  getAllRoles iterated over serverRoleCollections (a static map of role
+  types backed by dedicated MongoDB collections) and then added status_roles
+  from the server document. category_roles is also stored in the server
+  document (not in a separate collection), so it was never added to the
+  response.
+
+FIX
+  After the existing status_roles block, read serverDoc["category_roles"]
+  with mapMaybe() and include it as the CategoryRoles field of
+  AllRolesResponse. The model was extended with:
+    CategoryRoles map[string]any `json:"category_roles,omitempty"`
+  This mirrors what getRoleSettings already returns for the same field.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #266 — Autoboard still shows channel ID after channel is deleted
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/autoboards.go
+          internal/models/v2/autoboards.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  When a Discord channel linked to an autoboard was deleted, the dashboard
+  still displayed the old channel ID with no indication that it was gone.
+
+ROOT CAUSE
+  getAutoboards resolved channel IDs (from direct storage or via webhook
+  lookup) but never verified whether each channel still exists in Discord.
+  There was no way for the dashboard to distinguish a live channel from a
+  deleted one.
+
+FIX
+  After resolving all channel IDs, getAutoboards now calls
+  rt.Discord.GetChannel() for each unique channel ID. If the call returns
+  an error the channel no longer exists, and the autoboard entry is returned
+  with channel_deleted: true. The AutoBoardConfig model gains:
+    ChannelDeleted bool `json:"channel_deleted,omitempty"`
+  Duplicate channel IDs are deduplicated before the Discord calls to avoid
+  redundant requests.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #299 — Layout shift on /servers page after loading
+Repo: ClashKingDashboard
+Label: good first issue, UI
+Fixed in: components/servers-header.tsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  The /servers page shifted slightly downward right after loading, with
+  the header appearing after a brief moment.
+
+ROOT CAUSE
+  ServersHeader returned null when the user had not yet been loaded from
+  localStorage. Since localStorage is only accessible after hydration
+  (inside useEffect), the first render always produced no header. Once
+  useEffect ran and set the user state, the header appeared, causing the
+  page content to shift down by ~65 px.
+
+FIX
+  Added an early return that renders a fixed-height empty <nav> placeholder
+  when mounted is false (i.e. before the first useEffect has run). This
+  reserves the exact same space as the real header from the very first
+  paint, so no shift occurs when the real header replaces the placeholder.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #274 — Import of multiple-message embed says "invalid link"
+Repo: ClashKingDashboard
+Label: UI
+Fixed in: components/dashboard/embed-editor.tsx
+          messages/en.json, fr.json, nl.json
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  Pasting a Discohook URL that contains multiple messages into the import
+  dialog showed "Invalid Discohook URL" even though the URL was valid.
+
+ROOT CAUSE
+  Two problems:
+  1. parseDiscohookUrl called atob() directly on the raw query-string
+     value. When the base64 payload contains URL-encoded characters
+     (%2B, %3D, etc.), atob() throws and the function returns null.
+  2. No special handling existed for payloads with multiple messages,
+     so even a successfully decoded multi-message payload produced
+     confusing behaviour.
+
+FIX
+  1. Added decodeURIComponent() before atob() so URL-encoded base64 is
+     decoded correctly before parsing.
+  2. After a successful import, if the payload contains more than one
+     message, the first message is loaded into the editor and an amber
+     warning is displayed: "This link contains multiple messages. Only
+     the first message was imported." The dialog stays open so the user
+     can read the warning before closing.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #207 — Giveaway entries list
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/giveaways.go
+          internal/models/v2/giveaways.go
+          internal/routes/v2/register.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  There was no API endpoint to list who had entered a giveaway, how many
+  entries they had, or their win probability.
+
+ROOT CAUSE
+  Missing endpoint — the entries array existed in MongoDB but was never
+  exposed via the API.
+
+FIX
+  Added GET /v2/server/:server_id/giveaways/:giveaway_id/entries.
+  - Iterates the entries array (entries can be raw user_id strings or
+    subdocuments with a user_id field; users with boosters appear
+    multiple times in the array, which is how weighted probability works).
+  - Groups by user_id, counts appearances, computes win_chance (%)
+    as user_entries / total_entries × 100, rounded to 2 decimal places.
+  Response: { giveaway_id, server_id, total_entries, unique_users,
+              entrants: [{ user_id, entries, win_chance }] }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ISSUE #263 — Slow ticket loading on large servers
+Repo: ClashKingDashboard
+Label: need api fix
+Fixed in: internal/routes/v2/server/tickets.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUG
+  On servers with many open tickets, GET /v2/server/:server_id/tickets/open
+  was very slow.
+
+ROOT CAUSE
+  getOpenTickets resolves user display names in three passes:
+  1. MongoDB (auth users / linked accounts)
+  2. Valkey cache (populated by the bot on member events)
+  3. Live Discord API fallback (GetMember call per user)
+  On large servers with many tickets and a cold or sparse cache, pass 3
+  could make 50–100+ live Discord API calls (each ~50–200 ms), blocking
+  the entire response.
+
+FIX
+  Capped live Discord API lookups at 20 per request. Users beyond that
+  limit are still included in the response, just without a display name.
+  The existing semaphore (10 concurrent goroutines) is unchanged — the
+  cap bounds the total number of calls, not just concurrency.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ADDITIONAL SECURITY & QUALITY FIXES (no issue number)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- BSON injection via dynamic legend day field (legends.go)
+    Day parameter validated with regex ^\d{4}-\d{2}-\d{2}$ before use
+    as a MongoDB field name.
+
+- JWT error message leakage (auth.go)
+    "Invalid authentication token: <internal error>" replaced with
+    "Invalid or expired token" to avoid exposing internal details.
+
+- url.PathEscape instead of strings.ReplaceAll (mobile.go, war.go)
+    Replaced manual # → %23 substitution with url.PathEscape() for
+    correct percent-encoding of all special characters in clan tags.
+
+- Race condition in mobileFetchPlayersBasic (mobile.go)
+    Removed a mutex that was acquired before writing to results[i] but
+    released outside the critical section. Since each goroutine writes
+    to a unique index, no mutex is needed; wg.Wait() provides the
+    required happens-before guarantee.
+
+- N+1 MongoDB queries in mobileFetchPlayerWarTimerClansBatch (mobile.go)
+    Replaced N individual FindOne calls with a single Find + $in query.
+
+- Concurrency semaphores added (mobile.go)
+    mobileFetchPlayersBasic: capped at 50 concurrent goroutines.
+    mobileFetchWarSummariesByClan: capped at 20 concurrent goroutines.
+
+- Ignored cursor errors fixed (mobile.go, tickets.go)
+    cur.All() return values were previously discarded with _ = ...
+    Changed to proper error checks.

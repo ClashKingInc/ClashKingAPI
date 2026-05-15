@@ -207,7 +207,7 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			AutoevalLog:      serverDoc["autoeval_log"],
 			BlacklistedRoles: anySlice(serverDoc["blacklisted_roles"]),
 			RoleTreatment:    stringSlice(serverDoc["role_treatment"]),
-			CategoryRoles:    mapMaybe(serverDoc["category_roles"]),
+			CategoryRoles:    categoryRolesStrings(serverDoc["category_roles"]),
 		})
 	}
 }
@@ -234,31 +234,48 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		updateDoc := bson.M{}
+		setDoc := bson.M{}
+		unsetDoc := bson.M{}
 		if body.AutoEvalStatus != nil {
-			updateDoc["autoeval"] = *body.AutoEvalStatus
+			setDoc["autoeval"] = *body.AutoEvalStatus
 		} else if body.Autoeval != nil {
-			updateDoc["autoeval"] = *body.Autoeval
+			setDoc["autoeval"] = *body.Autoeval
 		}
 		if body.AutoEvalNickname != nil {
-			updateDoc["auto_eval_nickname"] = *body.AutoEvalNickname
+			setDoc["auto_eval_nickname"] = *body.AutoEvalNickname
 		}
 		if body.AutoevalTriggers != nil {
-			updateDoc["autoeval_triggers"] = body.AutoevalTriggers
+			setDoc["autoeval_triggers"] = body.AutoevalTriggers
 		}
 		if body.AutoevalLog != nil {
-			updateDoc["autoeval_log"] = body.AutoevalLog
+			setDoc["autoeval_log"] = body.AutoevalLog
 		}
 		if body.BlacklistedRoles != nil {
-			updateDoc["blacklisted_roles"] = body.BlacklistedRoles
+			setDoc["blacklisted_roles"] = body.BlacklistedRoles
 		}
 		if body.RoleTreatment != nil {
-			updateDoc["role_treatment"] = body.RoleTreatment
+			setDoc["role_treatment"] = body.RoleTreatment
 		}
-		if len(updateDoc) == 0 {
+		for category, roleVal := range body.CategoryRoles {
+			key := "category_roles." + category
+			roleStr := serverAsString(roleVal)
+			if roleStr == "" || roleVal == nil {
+				unsetDoc[key] = ""
+			} else {
+				setDoc[key] = numericMaybe(roleStr)
+			}
+		}
+		if len(setDoc) == 0 && len(unsetDoc) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$set": updateDoc})
+		update := bson.M{}
+		if len(setDoc) > 0 {
+			update["$set"] = setDoc
+		}
+		if len(unsetDoc) > 0 {
+			update["$unset"] = unsetDoc
+		}
+		result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, update)
 		if err != nil {
 			return err
 		}
@@ -311,11 +328,10 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		status := sanitizeRoleList(anyMapSlice(statusRoles["discord"]))
 		out["status"] = status
 		totalCount += len(status)
-		categoryRoles := mapMaybe(serverDoc["category_roles"])
 		return apptypes.JSON(c, http.StatusOK, modelsv2.AllRolesResponse{
 			ServerID:      serverID,
 			Roles:         out,
-			CategoryRoles: categoryRoles,
+			CategoryRoles: categoryRolesStrings(serverDoc["category_roles"]),
 			TotalCount:    totalCount,
 		})
 	}
@@ -503,6 +519,15 @@ func mapMaybe(value any) map[string]any {
 		return sanitized
 	}
 	return map[string]any{}
+}
+
+func categoryRolesStrings(value any) map[string]string {
+	raw := mapMaybe(value)
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		out[k] = serverAsString(v)
+	}
+	return out
 }
 
 func anyMapSlice(value any) []map[string]any {

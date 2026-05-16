@@ -959,22 +959,33 @@ func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, p
 	}
 
 	out := make(map[string][]string, len(playerTags))
-	opts := options.Find().SetProjection(bson.M{"_id": 1, "clans": 1})
-	cur, err := a.Store.C.WarTimer.Find(ctx, bson.M{"_id": bson.M{"$in": playerTags}}, opts)
-	if err != nil {
-		return out
-	}
-	var rows []bson.M
-	if err := cur.All(ctx, &rows); err != nil {
-		return out
-	}
-	for _, row := range rows {
-		clean := mobileMap(row)
-		tag := mobileString(clean["_id"])
-		if tag != "" {
+	findOpts := options.FindOne().SetProjection(bson.M{"_id": 1, "clans": 1})
+	sem := make(chan struct{}, 50)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, playerTag := range playerTags {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			var row bson.M
+			if err := a.Store.C.WarTimer.FindOne(ctx, bson.M{"_id": tag}, findOpts).Decode(&row); err != nil {
+				return
+			}
+
+			clean := mobileMap(row)
+			if len(clean) == 0 {
+				return
+			}
+
+			mu.Lock()
 			out[tag] = mobileStringList(clean["clans"])
-		}
+			mu.Unlock()
+		}(playerTag)
 	}
+	wg.Wait()
 	return out
 }
 

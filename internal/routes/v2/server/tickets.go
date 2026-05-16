@@ -1022,15 +1022,22 @@ func updateOpenTicketStatus(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 
+		if status == "delete" {
+			result, err := a.Store.C.OpenTickets.DeleteOne(c.UserContext(), ticketChannelQuery(serverID, channelID))
+			if err != nil {
+				return err
+			}
+			if result.DeletedCount == 0 {
+				return apptypes.Error(http.StatusNotFound, "Open ticket not found")
+			}
+			return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket deleted successfully"})
+		}
+
 		if _, err := a.Store.C.OpenTickets.UpdateOne(c.UserContext(),
 			ticketChannelQuery(serverID, channelID),
 			bson.M{"$set": bson.M{"status": status}},
 		); err != nil {
 			return err
-		}
-
-		if status == "delete" {
-			return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket deleted successfully"})
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket status updated successfully"})
 	}
@@ -1109,11 +1116,12 @@ func deleteOpenTicket(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 
-		if _, err := a.Store.C.OpenTickets.UpdateOne(c.UserContext(),
-			ticketChannelQuery(serverID, channelID),
-			bson.M{"$set": bson.M{"status": "delete"}},
-		); err != nil {
+		result, err := a.Store.C.OpenTickets.DeleteOne(c.UserContext(), ticketChannelQuery(serverID, channelID))
+		if err != nil {
 			return err
+		}
+		if result.DeletedCount == 0 {
+			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket deleted successfully"})
 	}

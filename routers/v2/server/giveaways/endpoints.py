@@ -1,6 +1,7 @@
 import json
 import random
 import uuid
+from collections import Counter
 
 import linkd
 import pendulum as pend
@@ -12,7 +13,7 @@ from utils.database import MongoClient
 from utils.security import check_authentication
 from utils.sentry_utils import capture_endpoint_errors
 from utils.utils import upload_to_cdn, delete_from_cdn
-from .models import GiveawayBooster, GiveawayConfig, GiveawayWinner, ServerGiveawaysResponse, GiveawayMutationResponse, GiveawayRerollRequest, GiveawayRerollResponse
+from .models import GiveawayBooster, GiveawayConfig, GiveawayWinner, GiveawayEntriesResponse, GiveawayEntrant, ServerGiveawaysResponse, GiveawayMutationResponse, GiveawayRerollRequest, GiveawayRerollResponse
 
 
 security = HTTPBearer()
@@ -427,6 +428,40 @@ def _get_entry_user_id(entry) -> str | None:
     if isinstance(entry, dict):
         return str(entry["user_id"]) if entry.get("user_id") else None
     return None
+
+
+@router.get("/{server_id}/giveaways/{giveaway_id}/entries", name="Get giveaway entries")
+@linkd.ext.fastapi.inject
+@check_authentication
+@capture_endpoint_errors
+async def get_giveaway_entries(
+    server_id: int,
+    giveaway_id: str,
+    _user_id: str = None,
+    _credentials: HTTPAuthorizationCredentials = Depends(security),
+    *,
+    mongo: MongoClient,
+) -> GiveawayEntriesResponse:
+    giveaway = await mongo.giveaways.find_one({"_id": giveaway_id, "server_id": server_id})
+    if not giveaway:
+        raise HTTPException(status_code=404, detail="Giveaway not found")
+
+    raw_entries = giveaway.get("entries") or []
+    all_entry_ids = [_get_entry_user_id(e) for e in raw_entries if _get_entry_user_id(e)]
+
+    counts: Counter[str] = Counter(all_entry_ids)
+    total = sum(counts.values())
+
+    entrants = [
+        GiveawayEntrant(user_id=uid, entries=count, win_chance=count / total if total > 0 else 0.0)
+        for uid, count in counts.most_common()
+    ]
+
+    return GiveawayEntriesResponse(
+        giveaway_id=giveaway_id,
+        total_entries=total,
+        entrants=entrants,
+    )
 
 
 @router.post("/{server_id}/giveaways/{giveaway_id}/reroll", name="Reroll giveaway winners")

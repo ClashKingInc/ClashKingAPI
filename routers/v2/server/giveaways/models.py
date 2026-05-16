@@ -56,6 +56,18 @@ class GiveawayMutationResponse(BaseModel):
     server_id: int
 
 
+class GiveawayEntrant(BaseModel):
+    user_id: str
+    entries: int
+    win_chance: float
+
+
+class GiveawayEntriesResponse(BaseModel):
+    giveaway_id: str
+    total_entries: int
+    entrants: List[GiveawayEntrant] = []
+
+
 class GiveawayRerollRequest(BaseModel):
     user_ids_to_replace: List[str]
 

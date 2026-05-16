@@ -471,11 +471,7 @@ def serialize_panel(doc: dict) -> TicketPanel:
         )
 
     raw_approve = doc.get("approve_messages") or []
-    approve_messages = [
-        ApproveMessage(name=m.get("name", ""), message=m.get("message", ""))
-        for m in raw_approve
-        if isinstance(m, dict)
-    ]
+    approve_messages = normalize_approve_message_payload(raw_approve)
 
     return TicketPanel(
         name=doc.get("name", ""),
@@ -491,6 +487,22 @@ def serialize_panel(doc: dict) -> TicketPanel:
         ticket_close_log=_str_or_none(doc.get("ticket_close_log")),
         approve_messages=approve_messages,
     )
+
+
+def normalize_approve_messages(messages: list[ApproveMessage]) -> list[ApproveMessage]:
+    for message in messages:
+        if message.name.strip():
+            return [message]
+    return []
+
+
+def normalize_approve_message_payload(messages: list[dict]) -> list[ApproveMessage]:
+    parsed = [
+        ApproveMessage(name=m.get("name", ""), message=m.get("message", ""))
+        for m in messages
+        if isinstance(m, dict)
+    ]
+    return normalize_approve_messages(parsed)
 
 
 @router.get("/{server_id}/tickets")
@@ -819,7 +831,10 @@ async def update_approve_messages(
     *,
     mongo: MongoClient,
 ) -> MessageResponse:
-    messages = [{"name": m.name, "message": m.message} for m in body.messages if m.name]
+    messages = [
+        {"name": m.name, "message": m.message}
+        for m in normalize_approve_messages(body.messages)
+    ]
 
     await mongo.ticketing.update_one(
         {"server_id": server_id, "name": panel_name},

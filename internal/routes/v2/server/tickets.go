@@ -955,11 +955,10 @@ func updateTicketApproveMessages(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		messages := make(bson.A, 0, len(body.Messages))
-		for _, m := range body.Messages {
-			if m.Name != "" {
-				messages = append(messages, bson.M{"name": m.Name, "message": m.Message})
-			}
+		approveMessages := normalizeApproveMessages(body.Messages)
+		messages := make(bson.A, 0, len(approveMessages))
+		for _, m := range approveMessages {
+			messages = append(messages, bson.M{"name": m.Name, "message": m.Message})
 		}
 		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
 			bson.M{"server_id": serverID, "name": panelName},
@@ -969,6 +968,21 @@ func updateTicketApproveMessages(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Approve messages updated successfully"})
 	}
+}
+
+func normalizeApproveMessages(messages []modelsv2.ApproveMessage) []modelsv2.ApproveMessage {
+	out := make([]modelsv2.ApproveMessage, 0, 1)
+	for _, m := range messages {
+		if trimSpaceStr(m.Name) == "" {
+			continue
+		}
+		out = append(out, modelsv2.ApproveMessage{
+			Name:    m.Name,
+			Message: m.Message,
+		})
+		break
+	}
+	return out
 }
 
 // updateOpenTicketStatus updates the status of an open ticket.
@@ -1318,7 +1332,7 @@ func ticketApproveMessages(value any) []modelsv2.ApproveMessage {
 			out = append(out, modelsv2.ApproveMessage{Name: asStringOr(doc["name"], ""), Message: asStringOr(doc["message"], "")})
 		}
 	}
-	return out
+	return normalizeApproveMessages(out)
 }
 
 func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {

@@ -126,7 +126,12 @@ func getTicketPanels(a apptypes.Deps) fiber.Handler {
 		for _, panel := range panels {
 			items = append(items, ticketPanelFromDoc(panel))
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.TicketPanelsResponse{Items: items, Total: len(items), AvailableEmbeds: availableEmbeds})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.TicketPanelsResponse{
+			Items:                     items,
+			Total:                     len(items),
+			AvailableEmbeds:           availableEmbeds,
+			TownhallRequirementFields: ticketTownhallRequirementFields(),
+		})
 	}
 }
 
@@ -1341,6 +1346,10 @@ func ticketApproveMessages(value any) []modelsv2.ApproveMessage {
 		}
 	}
 	return normalizeApproveMessages(out)
+}
+
+func ticketTownhallRequirementFields() []string {
+	return []string{"BK", "AQ", "GW", "RC", "WARST"}
 }
 
 func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {

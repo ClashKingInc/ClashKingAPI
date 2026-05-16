@@ -52,6 +52,7 @@ class TicketPanelsResponse(BaseModel):
     items: List[TicketPanel]
     total: int
     available_embeds: List[str] = []
+    townhall_requirement_fields: List[str] = ["BK", "AQ", "GW", "RC", "WARST"]
 
 
 class OpenTicket(BaseModel):

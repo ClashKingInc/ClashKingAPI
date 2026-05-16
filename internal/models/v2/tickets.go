@@ -46,9 +46,10 @@ type TicketPanel struct {
 }
 
 type TicketPanelsResponse struct {
-	Items           []TicketPanel `json:"items"`
-	Total           int           `json:"total"`
-	AvailableEmbeds []string      `json:"available_embeds"`
+	Items                     []TicketPanel `json:"items"`
+	Total                     int           `json:"total"`
+	AvailableEmbeds           []string      `json:"available_embeds"`
+	TownhallRequirementFields []string      `json:"townhall_requirement_fields"`
 }
 
 type LinkedAccount struct {

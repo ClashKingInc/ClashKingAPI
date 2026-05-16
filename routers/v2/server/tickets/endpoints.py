@@ -505,6 +505,10 @@ def normalize_approve_message_payload(messages: list[dict]) -> list[ApproveMessa
     return normalize_approve_messages(parsed)
 
 
+def ticket_townhall_requirement_fields() -> list[str]:
+    return ["BK", "AQ", "GW", "RC", "WARST"]
+
+
 @router.get("/{server_id}/tickets")
 @linkd.ext.fastapi.inject
 @check_authentication
@@ -519,7 +523,12 @@ async def get_ticket_panels(
     panels = [serialize_panel(p) for p in panels_raw]
     embed_docs = await mongo.embeds.find({"server": server_id}, {"_id": 0, "name": 1}).to_list(length=None)
     available_embeds = sorted([doc.get("name") for doc in embed_docs if doc.get("name")])
-    return TicketPanelsResponse(items=panels, total=len(panels), available_embeds=available_embeds)
+    return TicketPanelsResponse(
+        items=panels,
+        total=len(panels),
+        available_embeds=available_embeds,
+        townhall_requirement_fields=ticket_townhall_requirement_fields(),
+    )
 
 
 @router.post("/{server_id}/tickets")

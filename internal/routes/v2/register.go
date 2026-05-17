@@ -248,4 +248,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	app.Get("/v2/exports/war/cwl-summary", wrap(exportCWLSummary(a)))
 	app.Post("/v2/exports/war/player-stats", wrap(exportPlayerWarStats(a)))
+
+	app.Post("/v2/cdn/upload", wrap(uploadFileToCDN(a)))
 }

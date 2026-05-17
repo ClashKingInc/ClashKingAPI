@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -1163,7 +1164,7 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
 		for _, d := range docs {
 			if _, ok := d["name"].(string); ok {
-				sanitizedData, _ := sanitize(d["data"]).(map[string]any)
+				sanitizedData, _ := normalizeEmbedPayload(sanitize(d["data"])).(map[string]any)
 				if sanitizedData == nil {
 					sanitizedData = map[string]any{}
 				}
@@ -1202,6 +1203,7 @@ func createServerEmbed(a apptypes.Deps) fiber.Handler {
 		if existing != nil {
 			return apptypes.Error(http.StatusConflict, "An embed with this name already exists")
 		}
+		body.Data, _ = normalizeEmbedPayload(body.Data).(map[string]any)
 		if _, err := a.Store.C.Embeds.InsertOne(c.UserContext(), bson.M{
 			"server": serverID,
 			"name":   body.Name,
@@ -1235,6 +1237,7 @@ func updateServerEmbed(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
+		body.Data, _ = normalizeEmbedPayload(body.Data).(map[string]any)
 		upsertOpts := options.UpdateOne().SetUpsert(true)
 		if _, err := a.Store.C.Embeds.UpdateOne(c.UserContext(),
 			bson.M{"server": serverID, "name": embedName},
@@ -1272,6 +1275,30 @@ func deleteServerEmbed(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusNotFound, "Embed not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Embed deleted successfully"})
+	}
+}
+
+func normalizeEmbedPayload(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[key] = normalizeEmbedPayload(item)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, normalizeEmbedPayload(item))
+		}
+		return out
+	case float64:
+		if !math.IsNaN(typed) && !math.IsInf(typed, 0) && math.Trunc(typed) == typed {
+			return int64(typed)
+		}
+		return typed
+	default:
+		return typed
 	}
 }
 

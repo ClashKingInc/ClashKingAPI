@@ -29,6 +29,8 @@ async def live_legend_rankings(player_tag: str, request: Request, response: Resp
          name="Top 200 Daily Leaderboard History. Date: yyyy-mm-dd")
 @cache(expire=300)
 async def player_trophies_ranking(location: Union[int, str], date: str, request: Request, response: Response):
+    if location.isnumeric():
+        location = int(location)
     r = await db_client.player_trophies.find_one({"$and" : [{"location" : location}, {"date" : date}]})
     return r.get("data")
 
@@ -37,6 +39,8 @@ async def player_trophies_ranking(location: Union[int, str], date: str, request:
          name="Top 200 Daily Leaderboard History. Date: yyyy-mm-dd")
 @cache(expire=300)
 async def player_builder_ranking(location: Union[int, str], date: str, request: Request, response: Response):
+    if location.isnumeric():
+        location = int(location)
     r = await db_client.player_versus_trophies.find_one({"$and" : [{"date" : date}, {"location" : location}]})
     return r.get("data")
 
@@ -45,6 +49,8 @@ async def player_builder_ranking(location: Union[int, str], date: str, request: 
          name="Top 200 Daily Leaderboard History. Date: yyyy-mm-dd")
 @cache(expire=300)
 async def clan_trophies_ranking(location: Union[int, str], date: str, request: Request, response: Response):
+    if location.isnumeric():
+        location = int(location)
     r = await db_client.clan_trophies.find_one({"$and" : [{"date" : date}, {"location" : location}]})
     return r.get("data")
 
@@ -53,6 +59,8 @@ async def clan_trophies_ranking(location: Union[int, str], date: str, request: R
          name="Top 200 Daily Leaderboard History. Date: yyyy-mm-dd")
 @cache(expire=300)
 async def clan_builder_ranking(location: Union[int, str], date: str, request: Request, response: Response):
+    if location.isnumeric():
+        location = int(location)
     r = await db_client.clan_versus_trophies.find_one({"$and" : [{"date" : date}, {"location" : location}]})
     return r.get("data")
 
@@ -61,5 +69,7 @@ async def clan_builder_ranking(location: Union[int, str], date: str, request: Re
          name="Top 200 Daily Leaderboard History. Date: yyyy-mm-dd")
 @cache(expire=300)
 async def clan_capital_ranking(location: Union[int, str], date: str, request: Request, response: Response):
+    if location.isnumeric():
+        location = int(location)
     r = await db_client.capital_trophies.find_one({"$and" : [{"date" : date}, {"location" : location}]})
     return r.get("data")

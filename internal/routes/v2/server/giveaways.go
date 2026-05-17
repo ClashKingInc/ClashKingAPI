@@ -765,15 +765,22 @@ func bunnyUploadFile(accessKey, title string, data []byte) (string, error) {
 	if resp.StatusCode >= 300 {
 		return "", fmt.Errorf("BunnyCDN upload failed: status %d", resp.StatusCode)
 	}
-	return fmt.Sprintf("https://cdn.clashking.xyz/%s.png", title), nil
+	return fmt.Sprintf("https://cdn.clashk.ing/%s.png", title), nil
 }
 
 func bunnyDeleteFile(accessKey, imageURL string) error {
-	const prefix = "https://cdn.clashking.xyz/"
-	if !strings.HasPrefix(imageURL, prefix) {
+	const prefix = "https://cdn.clashk.ing/"
+	// Also handle legacy cdn.clashking.xyz URLs so old records can still be deleted.
+	const legacyPrefix = "https://cdn.clashking.xyz/"
+	var filePath string
+	switch {
+	case strings.HasPrefix(imageURL, prefix):
+		filePath = imageURL[len(prefix):]
+	case strings.HasPrefix(imageURL, legacyPrefix):
+		filePath = imageURL[len(legacyPrefix):]
+	default:
 		return nil
 	}
-	filePath := imageURL[len(prefix):]
 	deleteURL := fmt.Sprintf("https://storage.bunnycdn.com/clashking-files/%s", filePath)
 	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
 	if err != nil {

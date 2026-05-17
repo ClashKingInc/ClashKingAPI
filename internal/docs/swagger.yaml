@@ -870,6 +870,50 @@ paths:
       summary: Get static categories
       tags:
       - Static Data
+  /v2/cdn/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads an arbitrary file and returns its public CDN URL. Requires
+        authentication.
+      parameters:
+      - description: File to upload (max 25 MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Request Entity Too Large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "415":
+          description: Unsupported Media Type
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Upload a file to the ClashKing CDN
+      tags:
+      - CDN
   /v2/clan/{clan_tag}/board/totals:
     get:
       description: Returns aggregate board totals for one or more player tags.

@@ -29,7 +29,7 @@ async def list_townhalls(request: Request, response: Response):
 async def list_seasons(request: Request, response: Response, last: int = 12):
     last = min(last, 1000)
     dates = []
-    for x in range(0, last + 1):
+    for x in range(0, last):
         end = coc.utils.get_season_end().replace(tzinfo=utc) - dateutil.relativedelta.relativedelta(months=x)
         month = end.month
         if end.month <= 9:

@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"reflect"
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type MobileWarHitsFilterForTest = mobileWarHitsFilter
+type MobileWarQueryForTest = mobileWarQuery
 
 func PublicMobileConfigForTest(a apptypes.Deps) fiber.Handler {
 	return publicMobileConfig(a)
@@ -103,28 +104,28 @@ func MobileMergeWarDocBatchesForTest(batches [][]map[string]any) []map[string]an
 	return mobileMergeWarDocBatches(batches)
 }
 
-func MobilePlayerWarDocsPipelineForTest(playerTag string, startUnix int64, endUnix int64, limit int) bson.A {
+func MobilePlayerWarDocsPipelineForTest(playerTag string, startUnix int64, endUnix int64, limit int) MobileWarQueryForTest {
 	return mobilePlayerWarDocsPipeline(playerTag, startUnix, endUnix, limit)
 }
 
-func MobileClanWarDocsPipelineForTest(clanTag string, startUnix int64, endUnix int64, limit int) bson.A {
+func MobileClanWarDocsPipelineForTest(clanTag string, startUnix int64, endUnix int64, limit int) MobileWarQueryForTest {
 	return mobileClanWarDocsPipeline(clanTag, startUnix, endUnix, limit)
 }
 
-func MobileLegendRankingsByTagFromRowsForTest(playerTags []string, rows []bson.M, limit int64) map[string][]any {
-	return mobileLegendRankingsByTagFromRows(playerTags, rows, limit)
+func MobileLegendRankingsByTagFromRowsForTest[T ~map[string]any](playerTags []string, rows []T, limit int64) map[string][]any {
+	return mobileLegendRankingsByTagFromRows(playerTags, mobileRowsForTest(rows), limit)
 }
 
-func MobileCurrentRankingsByTagFromRowsForTest(playerTags []string, leaderboardRows []bson.M, fallbackRows []bson.M) map[string]map[string]any {
-	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, fallbackRows)
+func MobileCurrentRankingsByTagFromRowsForTest[T ~map[string]any, U ~map[string]any](playerTags []string, leaderboardRows []T, fallbackRows []U) map[string]map[string]any {
+	return mobileCurrentRankingsByTagFromRows(playerTags, mobileRowsForTest(leaderboardRows), mobileRowsForTest(fallbackRows))
 }
 
 func MobilePlayerWarContextTargetClanForTest(clans []string, currentClanTag string) string {
 	return mobilePlayerWarContextTargetClan(clans, currentClanTag)
 }
 
-func MobilePlayerRaidDataByClanFromRowsForTest(clanTags []string, rows []bson.M) map[string]map[string]map[string]any {
-	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
+func MobilePlayerRaidDataByClanFromRowsForTest[T ~map[string]any](clanTags []string, rows []T) map[string]map[string]map[string]any {
+	return mobilePlayerRaidDataByClanFromRows(clanTags, mobileRowsForTest(rows))
 }
 
 func MobileIsRaidsWindowAtForTest(now time.Time) bool {
@@ -165,4 +166,39 @@ func EnrichClanPayloadLeagueIconsForTest(clan map[string]any, icons map[string]*
 
 func EnrichLeagueInfoIconsForTest(leagueInfo map[string]any, icons map[string]*clashy.Icon) map[string]any {
 	return enrichLeagueInfoIcons(leagueInfo, icons)
+}
+
+func mobileRowsForTest[T ~map[string]any](rows []T) []map[string]any {
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, mobileAnyForTest(map[string]any(row)).(map[string]any))
+	}
+	return out
+}
+
+func mobileAnyForTest(value any) any {
+	if value == nil {
+		return nil
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return value
+		}
+		out := make(map[string]any, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			out[iter.Key().String()] = mobileAnyForTest(iter.Value().Interface())
+		}
+		return out
+	case reflect.Slice, reflect.Array:
+		out := make([]any, 0, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			out = append(out, mobileAnyForTest(rv.Index(i).Interface()))
+		}
+		return out
+	default:
+		return value
+	}
 }

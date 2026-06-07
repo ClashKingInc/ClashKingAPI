@@ -13,6 +13,7 @@ import (
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Router /v2/public [get]
+// @Router /v2/config/public [get]
 func publicConfig(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{

@@ -2,10 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type serverPlayerSnapshot struct {
@@ -17,9 +16,9 @@ type serverPlayerSnapshot struct {
 	Trophies *int
 }
 
-func fetchPlayerSnapshots(ctx context.Context, coll, clanColl *mongo.Collection, tags []string) map[string]serverPlayerSnapshot {
+func fetchPlayerSnapshots(ctx context.Context, sql *pgxpool.Pool, tags []string) map[string]serverPlayerSnapshot {
 	out := map[string]serverPlayerSnapshot{}
-	if coll == nil || len(tags) == 0 {
+	if sql == nil || len(tags) == 0 {
 		return out
 	}
 
@@ -40,32 +39,38 @@ func fetchPlayerSnapshots(ctx context.Context, coll, clanColl *mongo.Collection,
 		return out
 	}
 
-	cur, err := coll.Find(ctx, bson.M{"tag": bson.M{"$in": queryTags}},
-		options.Find().SetProjection(bson.M{
-			"_id":       0,
-			"tag":       1,
-			"name":      1,
-			"town_hall": 1,
-			"townhall":  1,
-			"trophies":  1,
-			"role":      1,
-			"clan":      1,
-			"clan_tag":  1,
-			"clan_name": 1,
-		}))
+	rows, err := sql.Query(ctx, `
+		SELECT p.player_tag, p.name, p.townhall_level, p.data, b.name
+		FROM player_current_stats p
+		LEFT JOIN basic_clan b ON b.tag = p.clan_tag
+		WHERE p.player_tag = ANY($1)
+	`, queryTags)
 	if err != nil {
 		return out
 	}
+	defer rows.Close()
 
-	var docs []bson.M
-	if err := cur.All(ctx, &docs); err != nil {
-		return out
-	}
-
-	for _, doc := range docs {
-		tag := serverNormalizeTag(serverAsString(doc["tag"]))
+	for rows.Next() {
+		var tag, name string
+		var townhall *int
+		var raw []byte
+		var basicClanName *string
+		if err := rows.Scan(&tag, &name, &townhall, &raw, &basicClanName); err != nil {
+			return out
+		}
+		tag = serverNormalizeTag(tag)
 		if tag == "" {
 			continue
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		doc["tag"] = tag
+		if name != "" {
+			doc["name"] = name
+		}
+		if townhall != nil {
+			doc["townhall"] = *townhall
+			doc["town_hall"] = *townhall
 		}
 
 		snapshot := serverPlayerSnapshot{}
@@ -95,6 +100,9 @@ func fetchPlayerSnapshots(ctx context.Context, coll, clanColl *mongo.Collection,
 		if clanName == "" {
 			clanName = serverAsString(doc["clan_name"])
 		}
+		if clanName == "" && basicClanName != nil {
+			clanName = *basicClanName
+		}
 		if clanName != "" {
 			snapshot.ClanName = &clanName
 		}
@@ -106,59 +114,6 @@ func fetchPlayerSnapshots(ctx context.Context, coll, clanColl *mongo.Collection,
 			snapshot.ClanRole = &clanRole
 		}
 
-		out[tag] = snapshot
-	}
-
-	if clanColl == nil {
-		return out
-	}
-
-	missingClanNameTags := make([]string, 0)
-	missingClanNameSet := map[string]struct{}{}
-	for _, snapshot := range out {
-		if snapshot.ClanTag == nil || snapshot.ClanName != nil {
-			continue
-		}
-		if _, seen := missingClanNameSet[*snapshot.ClanTag]; seen {
-			continue
-		}
-		missingClanNameSet[*snapshot.ClanTag] = struct{}{}
-		missingClanNameTags = append(missingClanNameTags, *snapshot.ClanTag)
-	}
-	if len(missingClanNameTags) == 0 {
-		return out
-	}
-
-	clanCur, err := clanColl.Find(ctx, bson.M{"tag": bson.M{"$in": missingClanNameTags}},
-		options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1}))
-	if err != nil {
-		return out
-	}
-
-	var clanDocs []bson.M
-	if err := clanCur.All(ctx, &clanDocs); err != nil {
-		return out
-	}
-
-	clanNameByTag := map[string]string{}
-	for _, doc := range clanDocs {
-		clanTag := serverNormalizeTag(serverAsString(doc["tag"]))
-		clanName := serverAsString(doc["name"])
-		if clanTag == "" || clanName == "" {
-			continue
-		}
-		clanNameByTag[clanTag] = clanName
-	}
-
-	for tag, snapshot := range out {
-		if snapshot.ClanTag == nil || snapshot.ClanName != nil {
-			continue
-		}
-		clanName := clanNameByTag[*snapshot.ClanTag]
-		if clanName == "" {
-			continue
-		}
-		snapshot.ClanName = &clanName
 		out[tag] = snapshot
 	}
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,22 +14,12 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // ticketServerID extracts server_id path param as int64.
 func ticketServerID(c *fiber.Ctx) (int64, error) {
 	serverID, err := pathInt(c, "server_id")
 	return int64(serverID), err
-}
-
-// ticketChannelQuery builds the MongoDB filter for an open ticket by server+channel.
-func ticketChannelQuery(serverID int64, channelID string) bson.M {
-	return bson.M{
-		"channel": bson.M{"$in": bson.A{channelID, ticketParseInt64(channelID)}},
-		"server":  bson.M{"$in": bson.A{fmt.Sprint(serverID), serverID}},
-	}
 }
 
 func ticketParseInt64(s string) int64 {
@@ -43,7 +34,7 @@ type ticketUserIdentity struct {
 	AvatarURL   *string
 }
 
-func ticketIdentityFromAuthUser(doc bson.M) ticketUserIdentity {
+func ticketIdentityFromAuthUser(doc map[string]any) ticketUserIdentity {
 	discord := mapMaybe(mapMaybe(doc["linked_accounts"])["discord"])
 	username := stringPtrMaybe(discord["username"])
 	avatarURL := stringPtrMaybe(discord["avatar_url"])
@@ -52,6 +43,106 @@ func ticketIdentityFromAuthUser(doc bson.M) ticketUserIdentity {
 		DisplayName: username,
 		AvatarURL:   avatarURL,
 	}
+}
+
+func sqlAuthUserIdentities(c *fiber.Ctx, a apptypes.Deps, discordIDs []string) (map[string]ticketUserIdentity, int, error) {
+	out := map[string]ticketUserIdentity{}
+	if len(discordIDs) == 0 || a.Store.SQL == nil {
+		return out, 0, nil
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT discord_user_id, username, data
+		FROM auth_users
+		WHERE discord_user_id = ANY($1)
+	`, discordIDs)
+	if err != nil {
+		return out, 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var discordID, username string
+		var raw []byte
+		if err := rows.Scan(&discordID, &username, &raw); err != nil {
+			return out, count, err
+		}
+		count++
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		linked := mapMaybe(doc["linked_accounts"])
+		discordDoc := mapMaybe(linked["discord"])
+		discordDoc["discord_user_id"] = discordID
+		if discordDoc["username"] == nil && username != "" {
+			discordDoc["username"] = username
+		}
+		linked["discord"] = discordDoc
+		doc["linked_accounts"] = linked
+		out[discordID] = ticketIdentityFromAuthUser(doc)
+	}
+	if err := rows.Err(); err != nil {
+		return out, count, err
+	}
+	return out, count, nil
+}
+
+func sqlPlayerLinksForTickets(c *fiber.Ctx, a apptypes.Deps, userIDs []string) (map[string][]string, int, error) {
+	out := map[string][]string{}
+	if len(userIDs) == 0 || a.Store.SQL == nil {
+		return out, 0, nil
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT COALESCE(user_id, discord_id, ''), tag
+		FROM player_links
+		WHERE user_id = ANY($1) OR discord_id = ANY($1)
+	`, userIDs)
+	if err != nil {
+		return out, 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var userID, tag string
+		if err := rows.Scan(&userID, &tag); err != nil {
+			return out, count, err
+		}
+		count++
+		if userID != "" && tag != "" {
+			out[userID] = append(out[userID], tag)
+		}
+	}
+	return out, count, rows.Err()
+}
+
+func sqlTicketPlayerMap(c *fiber.Ctx, a apptypes.Deps, tags []string) (map[string]map[string]any, int, error) {
+	out := map[string]map[string]any{}
+	if len(tags) == 0 || a.Store.SQL == nil {
+		return out, 0, nil
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, name, townhall_level
+		FROM player_current_stats
+		WHERE player_tag = ANY($1)
+	`, tags)
+	if err != nil {
+		return out, 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var tag, name string
+		var townhall *int
+		if err := rows.Scan(&tag, &name, &townhall); err != nil {
+			return out, count, err
+		}
+		count++
+		doc := map[string]any{"tag": tag, "name": name}
+		if townhall != nil {
+			doc["town_hall"] = *townhall
+			doc["townhall"] = *townhall
+		}
+		out[tag] = doc
+	}
+	return out, count, rows.Err()
 }
 
 func ticketIdentityFromMember(member discord.Member) ticketUserIdentity {
@@ -80,6 +171,205 @@ func ticketIdentityFromMember(member discord.Member) ticketUserIdentity {
 	}
 }
 
+func ticketPanelList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT server_id, name, components, data, created_at, updated_at
+		FROM ticket_panels
+		WHERE server_id = $1
+		ORDER BY name
+	`, fmt.Sprint(serverID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		item, err := ticketPanelScan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func ticketPanelGet(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string) (map[string]any, error) {
+	return ticketPanelScan(a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT server_id, name, components, data, created_at, updated_at
+		FROM ticket_panels
+		WHERE server_id = $1 AND name = $2
+	`, fmt.Sprint(serverID), name))
+}
+
+type sqlScanner interface {
+	Scan(dest ...any) error
+}
+
+func ticketPanelScan(row sqlScanner) (map[string]any, error) {
+	var serverID, name string
+	var componentsRaw, dataRaw []byte
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&serverID, &name, &componentsRaw, &dataRaw, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	item := mapMaybe(decodeJSONAny(dataRaw))
+	item["server_id"] = ticketParseInt64(serverID)
+	item["name"] = name
+	item["components"] = decodeJSONAny(componentsRaw)
+	item["created_at"] = createdAt
+	item["updated_at"] = updatedAt
+	return item, nil
+}
+
+func ticketPanelSave(c *fiber.Ctx, a apptypes.Deps, panel map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO ticket_panels (server_id, name, components, data, created_at, updated_at)
+		VALUES ($1, $2, $3::jsonb, $4::jsonb, COALESCE($5, now()), now())
+		ON CONFLICT (server_id, name) DO UPDATE SET
+			components = EXCLUDED.components,
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, fmt.Sprint(asInt64(panel["server_id"])), serverAsString(panel["name"]), apptypes.Marshal(anySlice(panel["components"])), apptypes.Marshal(panel), panel["created_at"])
+	return err
+}
+
+func ticketPanelDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string) (int64, error) {
+	cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+		DELETE FROM ticket_panels
+		WHERE server_id = $1 AND name = $2
+	`, fmt.Sprint(serverID), name)
+	return cmd.RowsAffected(), err
+}
+
+func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT name, data, created_at, updated_at
+		FROM custom_embeds
+		WHERE server_id = $1
+		ORDER BY name
+	`, fmt.Sprint(serverID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var name string
+		var dataRaw []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&name, &dataRaw, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := map[string]any{"name": name, "data": mapMaybe(decodeJSONAny(dataRaw)), "created_at": createdAt, "updated_at": updatedAt}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO custom_embeds (server_id, name, data, created_at, updated_at)
+		VALUES ($1, $2, $3::jsonb, now(), now())
+		ON CONFLICT (server_id, name) DO UPDATE SET
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, fmt.Sprint(serverID), name, apptypes.Marshal(data))
+	return err
+}
+
+func ticketEmbedDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string) (int64, error) {
+	cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+		DELETE FROM custom_embeds
+		WHERE server_id = $1 AND name = $2
+	`, fmt.Sprint(serverID), name)
+	return cmd.RowsAffected(), err
+}
+
+func openTicketList(c *fiber.Ctx, a apptypes.Deps, serverID int64, status string) ([]map[string]any, error) {
+	args := []any{fmt.Sprint(serverID)}
+	where := "server_id = $1"
+	if status != "" {
+		args = append(args, status)
+		where += " AND status = $2"
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT server_id, channel_id, panel_name, status, user_id, set_clan, data, created_at, updated_at
+		FROM open_tickets
+		WHERE `+where+`
+		ORDER BY created_at DESC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		item, err := openTicketScan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func openTicketGet(c *fiber.Ctx, a apptypes.Deps, serverID int64, channelID string) (map[string]any, error) {
+	return openTicketScan(a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT server_id, channel_id, panel_name, status, user_id, set_clan, data, created_at, updated_at
+		FROM open_tickets
+		WHERE server_id = $1 AND channel_id = $2
+	`, fmt.Sprint(serverID), channelID))
+}
+
+func openTicketScan(row sqlScanner) (map[string]any, error) {
+	var serverID, channelID, status string
+	var panelName, userID, setClan *string
+	var dataRaw []byte
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&serverID, &channelID, &panelName, &status, &userID, &setClan, &dataRaw, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	item := mapMaybe(decodeJSONAny(dataRaw))
+	item["server"] = serverID
+	item["channel"] = channelID
+	item["status"] = status
+	if panelName != nil {
+		item["panel"] = *panelName
+	}
+	if userID != nil {
+		item["user"] = *userID
+	}
+	if setClan != nil {
+		item["set_clan"] = *setClan
+	}
+	item["created_at"] = createdAt
+	item["updated_at"] = updatedAt
+	return item, nil
+}
+
+func openTicketSave(c *fiber.Ctx, a apptypes.Deps, ticket map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO open_tickets (server_id, channel_id, panel_name, status, user_id, set_clan, data, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), NULLIF($6, ''), $7::jsonb, COALESCE($8, now()), now())
+		ON CONFLICT (server_id, channel_id) DO UPDATE SET
+			panel_name = EXCLUDED.panel_name,
+			status = EXCLUDED.status,
+			user_id = EXCLUDED.user_id,
+			set_clan = EXCLUDED.set_clan,
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, fmt.Sprint(asInt64(ticket["server"])), serverAsString(ticket["channel"]), serverAsString(ticket["panel"]), serverAsString(ticket["status"]), serverAsString(ticket["user"]), serverAsString(ticket["set_clan"]), apptypes.Marshal(ticket), ticket["created_at"])
+	return err
+}
+
+func openTicketDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, channelID string) (int64, error) {
+	cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+		DELETE FROM open_tickets
+		WHERE server_id = $1 AND channel_id = $2
+	`, fmt.Sprint(serverID), channelID)
+	return cmd.RowsAffected(), err
+}
+
 // getTicketPanels returns all ticket panels for a server.
 //
 // @Summary Get ticket panels for a server
@@ -95,23 +385,13 @@ func getTicketPanels(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		proj := options.Find().SetProjection(bson.M{"_id": 0})
-		cur, err := a.Store.C.Ticketing.Find(c.UserContext(), bson.M{"server_id": serverID}, proj)
+		panels, err := ticketPanelList(c, a, serverID)
 		if err != nil {
-			return err
-		}
-		var panels []bson.M
-		if err := cur.All(c.UserContext(), &panels); err != nil {
 			return err
 		}
 
-		embedProj := options.Find().SetProjection(bson.M{"_id": 0, "name": 1})
-		embedCur, err := a.Store.C.Embeds.Find(c.UserContext(), bson.M{"server": serverID}, embedProj)
+		embedDocs, err := ticketEmbedList(c, a, serverID)
 		if err != nil {
-			return err
-		}
-		var embedDocs []bson.M
-		if err := embedCur.All(c.UserContext(), &embedDocs); err != nil {
 			return err
 		}
 		availableEmbeds := make([]string, 0, len(embedDocs))
@@ -160,14 +440,13 @@ func createTicketPanel(a apptypes.Deps) fiber.Handler {
 		if name == "" {
 			return apptypes.Error(http.StatusBadRequest, "Panel name cannot be empty")
 		}
-		existing, _ := findOneMap(c.UserContext(), a.Store.C.Ticketing, bson.M{"server_id": serverID, "name": name})
-		if existing != nil {
+		if existing, _ := ticketPanelGet(c, a, serverID, name); existing != nil {
 			return apptypes.Error(http.StatusConflict, "A panel with this name already exists")
 		}
-		if _, err := a.Store.C.Ticketing.InsertOne(c.UserContext(), bson.M{
+		if err := ticketPanelSave(c, a, map[string]any{
 			"server_id":  serverID,
 			"name":       name,
-			"components": bson.A{},
+			"components": []any{},
 		}); err != nil {
 			return err
 		}
@@ -192,11 +471,11 @@ func deleteTicketPanel(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		panelName := c.Params("panel_name")
-		result, err := a.Store.C.Ticketing.DeleteOne(c.UserContext(), bson.M{"server_id": serverID, "name": panelName})
+		deleted, err := ticketPanelDelete(c, a, serverID, panelName)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Panel deleted successfully"})
@@ -226,17 +505,17 @@ func createTicketButton(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		panel, err := findOneMap(c.UserContext(), a.Store.C.Ticketing, bson.M{"server_id": serverID, "name": panelName})
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
 		if err != nil || panel == nil {
 			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
-		components, _ := panel["components"].(bson.A)
+		components := anySlice(panel["components"])
 		if len(components) >= 5 {
 			return apptypes.Error(http.StatusBadRequest, "A panel can have at most 5 buttons")
 		}
 
 		customID := fmt.Sprintf("%s_%d", panelName, time.Now().UnixMilli())
-		newComp := bson.M{
+		newComp := map[string]any{
 			"type":      2,
 			"style":     body.Style,
 			"label":     body.Label,
@@ -245,10 +524,8 @@ func createTicketButton(a apptypes.Deps) fiber.Handler {
 		if body.Emoji != nil {
 			newComp["emoji"] = body.Emoji
 		}
-		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-			bson.M{"server_id": serverID, "name": panelName},
-			bson.M{"$push": bson.M{"components": newComp}},
-		); err != nil {
+		panel["components"] = append(components, newComp)
+		if err := ticketPanelSave(c, a, panel); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Button added successfully"})
@@ -275,17 +552,21 @@ func deleteTicketButton(a apptypes.Deps) fiber.Handler {
 		panelName := c.Params("panel_name")
 		customID := c.Params("custom_id")
 
-		panel, err := findOneMap(c.UserContext(), a.Store.C.Ticketing, bson.M{"server_id": serverID, "name": panelName})
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
 		if err != nil || panel == nil {
 			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
-		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-			bson.M{"server_id": serverID, "name": panelName},
-			bson.M{
-				"$pull":  bson.M{"components": bson.M{"custom_id": customID}},
-				"$unset": bson.M{customID + "_settings": ""},
-			},
-		); err != nil {
+		components := anySlice(panel["components"])
+		kept := make([]any, 0, len(components))
+		for _, component := range components {
+			if serverAsString(mapMaybe(component)["custom_id"]) == customID {
+				continue
+			}
+			kept = append(kept, component)
+		}
+		panel["components"] = kept
+		delete(panel, customID+"_settings")
+		if err := ticketPanelSave(c, a, panel); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Button deleted successfully"})
@@ -317,24 +598,23 @@ func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		panel, err := findOneMap(c.UserContext(), a.Store.C.Ticketing, bson.M{"server_id": serverID, "name": panelName})
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
 		if err != nil || panel == nil {
 			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
 
-		updateFields := bson.M{
-			"components.$[elem].label": body.Label,
-			"components.$[elem].style": body.Style,
-			"components.$[elem].emoji": body.Emoji,
+		components := anySlice(panel["components"])
+		for _, component := range components {
+			doc := mapMaybe(component)
+			if serverAsString(doc["custom_id"]) != customID {
+				continue
+			}
+			doc["label"] = body.Label
+			doc["style"] = body.Style
+			doc["emoji"] = body.Emoji
 		}
-		arrayFilters := options.UpdateOne().SetArrayFilters([]any{
-			bson.M{"elem.custom_id": customID},
-		})
-		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-			bson.M{"server_id": serverID, "name": panelName},
-			bson.M{"$set": updateFields},
-			arrayFilters,
-		); err != nil {
+		panel["components"] = components
+		if err := ticketPanelSave(c, a, panel); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Button appearance updated successfully"})
@@ -392,23 +672,14 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		statusFilter := c.Query("status")
-		query := bson.M{"server": bson.M{"$in": bson.A{fmt.Sprint(serverID), serverID}}}
-		if statusFilter != "" {
-			query["status"] = statusFilter
-		}
-		proj := options.Find().SetProjection(bson.M{"_id": 0})
 		openTicketsStartedAt := time.Now()
-		cur, err := a.Store.C.OpenTickets.Find(c.UserContext(), query, proj)
+		tickets, err := openTicketList(c, a, serverID, statusFilter)
 		if err != nil {
-			return err
-		}
-		var tickets []bson.M
-		if err := cur.All(c.UserContext(), &tickets); err != nil {
 			return err
 		}
 		openTicketsDuration := time.Since(openTicketsStartedAt)
 
-		panelCategoryMap := map[string]bson.M{}
+		panelCategoryMap := map[string]map[string]any{}
 		panelNames := make([]string, 0)
 		panelNameSet := map[string]struct{}{}
 		for _, ticket := range tickets {
@@ -423,17 +694,12 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			panelNames = append(panelNames, panelName)
 		}
 		if len(panelNames) > 0 {
-			panelCur, perr := a.Store.C.Ticketing.Find(c.UserContext(),
-				bson.M{"server_id": serverID, "name": bson.M{"$in": panelNames}},
-				options.Find().SetProjection(bson.M{"_id": 0, "name": 1, "open-category": 1, "sleep-category": 1, "closed-category": 1}))
+			panelDocs, perr := ticketPanelList(c, a, serverID)
 			if perr == nil {
-				var panelDocs []bson.M
-				if err := panelCur.All(c.UserContext(), &panelDocs); err == nil {
-					for _, panelDoc := range panelDocs {
-						panelName := serverAsString(panelDoc["name"])
-						if panelName != "" {
-							panelCategoryMap[panelName] = panelDoc
-						}
+				for _, panelDoc := range panelDocs {
+					panelName := serverAsString(panelDoc["name"])
+					if panelName != "" {
+						panelCategoryMap[panelName] = panelDoc
 					}
 				}
 			}
@@ -501,12 +767,9 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				}
 			}
 		}
-		userIDs := make([]any, 0, len(userIDSet))
+		userIDs := make([]string, 0, len(userIDSet))
 		for uid := range userIDSet {
 			userIDs = append(userIDs, uid)
-			if n := ticketParseInt64(uid); n != 0 {
-				userIDs = append(userIDs, n)
-			}
 		}
 
 		// user_id → []player_tag
@@ -515,28 +778,16 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		linksDuration := time.Duration(0)
 		if len(userIDs) > 0 {
 			linksStartedAt := time.Now()
-			linkCur, lerr := a.Store.C.Links.Find(c.UserContext(),
-				bson.M{"user_id": bson.M{"$in": userIDs}},
-				options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "player_tag": 1}))
-			if lerr == nil {
-				var linkDocs []bson.M
-				if err := linkCur.All(c.UserContext(), &linkDocs); err != nil {
-					return err
-				}
-				linkDocCount = len(linkDocs)
-				for _, ld := range linkDocs {
-					uid := serverAsString(ld["user_id"])
-					tag := serverAsString(ld["player_tag"])
-					if uid != "" && tag != "" {
-						userTagMap[uid] = append(userTagMap[uid], tag)
-					}
-				}
+			var lerr error
+			userTagMap, linkDocCount, lerr = sqlPlayerLinksForTickets(c, a, userIDs)
+			if lerr != nil {
+				return lerr
 			}
 			linksDuration = time.Since(linksStartedAt)
 		}
 
 		// Collect all tags to batch-fetch player info
-		allTags := []any{}
+		allTags := []string{}
 		tagSet := map[string]struct{}{}
 		for _, tags := range userTagMap {
 			for _, tag := range tags {
@@ -546,62 +797,37 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				}
 			}
 		}
-		playerMap := map[string]bson.M{}
+		playerMap := map[string]map[string]any{}
 		playerDocCount := 0
 		playersDuration := time.Duration(0)
 		if len(allTags) > 0 {
 			playersStartedAt := time.Now()
-			pCur, perr := a.Store.C.PlayerStats.Find(c.UserContext(),
-				bson.M{"tag": bson.M{"$in": allTags}},
-				options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "name": 1, "town_hall": 1, "townhall": 1}))
-			if perr == nil {
-				var playerDocs []bson.M
-				if err := pCur.All(c.UserContext(), &playerDocs); err != nil {
-					return err
-				}
-				playerDocCount = len(playerDocs)
-				for _, pd := range playerDocs {
-					if tag := serverAsString(pd["tag"]); tag != "" {
-						playerMap[tag] = pd
-					}
-				}
+			var perr error
+			playerMap, playerDocCount, perr = sqlTicketPlayerMap(c, a, allTags)
+			if perr != nil {
+				return perr
 			}
 			playersDuration = time.Since(playersStartedAt)
 		}
 
 		userIdentityMap := map[string]ticketUserIdentity{}
-		missingIdentityIDs := make([]any, 0, len(missingIdentityUserSet)*2)
+		missingIdentityIDs := make([]string, 0, len(missingIdentityUserSet))
 		for uid := range missingIdentityUserSet {
 			missingIdentityIDs = append(missingIdentityIDs, uid)
-			if n := ticketParseInt64(uid); n != 0 {
-				missingIdentityIDs = append(missingIdentityIDs, n)
-			}
 		}
 		authUserDocCount := 0
 		authIdentityHits := 0
 		authUsersDuration := time.Duration(0)
 		if len(missingIdentityIDs) > 0 {
 			authUsersStartedAt := time.Now()
-			userCur, uerr := a.Store.C.Users.Find(c.UserContext(),
-				bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": missingIdentityIDs}},
-				options.Find().SetProjection(bson.M{"_id": 0, "linked_accounts.discord": 1}))
-			if uerr == nil {
-				var userDocs []bson.M
-				if err := userCur.All(c.UserContext(), &userDocs); err != nil {
-					return err
-				}
-				authUserDocCount = len(userDocs)
-				for _, userDoc := range userDocs {
-					discordAccount := mapMaybe(mapMaybe(userDoc["linked_accounts"])["discord"])
-					uid := serverAsString(discordAccount["discord_user_id"])
-					if uid == "" {
-						continue
-					}
-					identity := ticketIdentityFromAuthUser(userDoc)
-					if identity.Username != nil || identity.DisplayName != nil || identity.AvatarURL != nil {
-						userIdentityMap[uid] = identity
-						authIdentityHits++
-					}
+			var uerr error
+			userIdentityMap, authUserDocCount, uerr = sqlAuthUserIdentities(c, a, missingIdentityIDs)
+			if uerr != nil {
+				return uerr
+			}
+			for _, identity := range userIdentityMap {
+				if identity.Username != nil || identity.DisplayName != nil || identity.AvatarURL != nil {
+					authIdentityHits++
 				}
 			}
 			authUsersDuration = time.Since(authUsersStartedAt)
@@ -823,17 +1049,19 @@ func updateTicketPanel(a apptypes.Deps) fiber.Handler {
 			return n
 		}
 
-		setFields := bson.M{}
-		unsetFields := bson.M{}
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
+		if err != nil || panel == nil {
+			return apptypes.Error(http.StatusNotFound, "Panel not found")
+		}
 
 		setOrUnset := func(key string, s *string) {
 			if s == nil {
 				return
 			}
 			if *s == "" {
-				unsetFields[key] = ""
+				delete(panel, key)
 			} else {
-				setFields[key] = toInt(*s)
+				panel[key] = toInt(*s)
 			}
 		}
 
@@ -846,26 +1074,13 @@ func updateTicketPanel(a apptypes.Deps) fiber.Handler {
 
 		if body.EmbedName != nil {
 			if *body.EmbedName == "" {
-				unsetFields["embed_name"] = ""
+				delete(panel, "embed_name")
 			} else {
-				setFields["embed_name"] = *body.EmbedName
+				panel["embed_name"] = *body.EmbedName
 			}
 		}
-
-		if len(setFields) > 0 || len(unsetFields) > 0 {
-			update := bson.M{}
-			if len(setFields) > 0 {
-				update["$set"] = setFields
-			}
-			if len(unsetFields) > 0 {
-				update["$unset"] = unsetFields
-			}
-			if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-				bson.M{"server_id": serverID, "name": panelName},
-				update,
-			); err != nil {
-				return err
-			}
+		if err := ticketPanelSave(c, a, panel); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Panel updated successfully"})
 	}
@@ -892,7 +1107,7 @@ func updateTicketButtonSettings(a apptypes.Deps) fiber.Handler {
 		panelName := c.Params("panel_name")
 		customID := c.Params("custom_id")
 
-		panel, err := findOneMap(c.UserContext(), a.Store.C.Ticketing, bson.M{"server_id": serverID, "name": panelName})
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
 		if err != nil || panel == nil {
 			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
@@ -911,7 +1126,7 @@ func updateTicketButtonSettings(a apptypes.Deps) fiber.Handler {
 			numApply = 25
 		}
 
-		settings := bson.M{
+		settings := map[string]any{
 			"questions":             body.Questions,
 			"mod_role":              body.ModRole,
 			"no_ping_mod_role":      body.NoPingModRole,
@@ -928,10 +1143,8 @@ func updateTicketButtonSettings(a apptypes.Deps) fiber.Handler {
 			"new_message":           body.NewMessage,
 		}
 
-		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-			bson.M{"server_id": serverID, "name": panelName},
-			bson.M{"$set": bson.M{customID + "_settings": settings}},
-		); err != nil {
+		panel[customID+"_settings"] = settings
+		if err := ticketPanelSave(c, a, panel); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Button settings updated successfully"})
@@ -961,14 +1174,16 @@ func updateTicketApproveMessages(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		approveMessages := normalizeApproveMessages(body.Messages)
-		messages := make(bson.A, 0, len(approveMessages))
-		for _, m := range approveMessages {
-			messages = append(messages, bson.M{"name": m.Name, "message": m.Message})
+		panel, err := ticketPanelGet(c, a, serverID, panelName)
+		if err != nil || panel == nil {
+			return apptypes.Error(http.StatusNotFound, "Panel not found")
 		}
-		if _, err := a.Store.C.Ticketing.UpdateOne(c.UserContext(),
-			bson.M{"server_id": serverID, "name": panelName},
-			bson.M{"$set": bson.M{"approve_messages": messages}},
-		); err != nil {
+		messages := make([]any, 0, len(approveMessages))
+		for _, m := range approveMessages {
+			messages = append(messages, map[string]any{"name": m.Name, "message": m.Message})
+		}
+		panel["approve_messages"] = messages
+		if err := ticketPanelSave(c, a, panel); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Approve messages updated successfully"})
@@ -1022,26 +1237,24 @@ func updateOpenTicketStatus(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "Invalid ticket status")
 		}
 
-		ticket, err := findOneMap(c.UserContext(), a.Store.C.OpenTickets, ticketChannelQuery(serverID, channelID))
+		ticket, err := openTicketGet(c, a, serverID, channelID)
 		if err != nil || ticket == nil {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 
 		if status == "delete" {
-			result, err := a.Store.C.OpenTickets.DeleteMany(c.UserContext(), ticketChannelQuery(serverID, channelID))
+			deleted, err := openTicketDelete(c, a, serverID, channelID)
 			if err != nil {
 				return err
 			}
-			if result.DeletedCount == 0 {
+			if deleted == 0 {
 				return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 			}
 			return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket deleted successfully"})
 		}
 
-		if _, err := a.Store.C.OpenTickets.UpdateMany(c.UserContext(),
-			ticketChannelQuery(serverID, channelID),
-			bson.M{"$set": bson.M{"status": status}},
-		); err != nil {
+		ticket["status"] = status
+		if err := openTicketSave(c, a, ticket); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket status updated successfully"})
@@ -1071,7 +1284,7 @@ func updateOpenTicketClan(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		ticket, err := findOneMap(c.UserContext(), a.Store.C.OpenTickets, ticketChannelQuery(serverID, channelID))
+		ticket, err := openTicketGet(c, a, serverID, channelID)
 		if err != nil || ticket == nil {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
@@ -1082,16 +1295,14 @@ func updateOpenTicketClan(a apptypes.Deps) fiber.Handler {
 		}
 		if clanTag != "" {
 			clanTag = serverNormalizeTag(clanTag)
-			existing, _ := findOneMap(c.UserContext(), a.Store.C.Clans, bson.M{"server": serverID, "tag": clanTag})
+			existing, _ := sqlServerClanDoc(c, a, int(serverID), clanTag)
 			if existing == nil {
 				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 			}
 		}
 
-		if _, err := a.Store.C.OpenTickets.UpdateMany(c.UserContext(),
-			ticketChannelQuery(serverID, channelID),
-			bson.M{"$set": bson.M{"set_clan": clanTag}},
-		); err != nil {
+		ticket["set_clan"] = clanTag
+		if err := openTicketSave(c, a, ticket); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket clan updated successfully"})
@@ -1116,16 +1327,16 @@ func deleteOpenTicket(a apptypes.Deps) fiber.Handler {
 		}
 		channelID := c.Params("channel_id")
 
-		ticket, err := findOneMap(c.UserContext(), a.Store.C.OpenTickets, ticketChannelQuery(serverID, channelID))
+		ticket, err := openTicketGet(c, a, serverID, channelID)
 		if err != nil || ticket == nil {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 
-		result, err := a.Store.C.OpenTickets.DeleteMany(c.UserContext(), ticketChannelQuery(serverID, channelID))
+		deleted, err := openTicketDelete(c, a, serverID, channelID)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Open ticket not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Ticket deleted successfully"})
@@ -1151,13 +1362,8 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		proj := options.Find().SetProjection(bson.M{"_id": 0, "name": 1, "data": 1})
-		cur, err := a.Store.C.Embeds.Find(c.UserContext(), bson.M{"server": serverID}, proj)
+		docs, err := ticketEmbedList(c, a, serverID)
 		if err != nil {
-			return err
-		}
-		var docs []bson.M
-		if err := cur.All(c.UserContext(), &docs); err != nil {
 			return err
 		}
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
@@ -1198,15 +1404,13 @@ func createServerEmbed(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		existing, _ := findOneMap(c.UserContext(), a.Store.C.Embeds, bson.M{"server": serverID, "name": body.Name})
-		if existing != nil {
-			return apptypes.Error(http.StatusConflict, "An embed with this name already exists")
+		existing, _ := ticketEmbedList(c, a, serverID)
+		for _, item := range existing {
+			if serverAsString(item["name"]) == body.Name {
+				return apptypes.Error(http.StatusConflict, "An embed with this name already exists")
+			}
 		}
-		if _, err := a.Store.C.Embeds.InsertOne(c.UserContext(), bson.M{
-			"server": serverID,
-			"name":   body.Name,
-			"data":   body.Data,
-		}); err != nil {
+		if err := ticketEmbedSave(c, a, serverID, body.Name, body.Data); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Embed created successfully"})
@@ -1235,12 +1439,7 @@ func updateServerEmbed(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		upsertOpts := options.UpdateOne().SetUpsert(true)
-		if _, err := a.Store.C.Embeds.UpdateOne(c.UserContext(),
-			bson.M{"server": serverID, "name": embedName},
-			bson.M{"$set": bson.M{"data": body.Data}},
-			upsertOpts,
-		); err != nil {
+		if err := ticketEmbedSave(c, a, serverID, embedName, body.Data); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Embed updated successfully"})
@@ -1264,18 +1463,18 @@ func deleteServerEmbed(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		embedName := c.Params("embed_name")
-		result, err := a.Store.C.Embeds.DeleteOne(c.UserContext(), bson.M{"server": serverID, "name": embedName})
+		deleted, err := ticketEmbedDelete(c, a, serverID, embedName)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Embed not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.MessageResponse{Message: "Embed deleted successfully"})
 	}
 }
 
-func ticketPanelFromDoc(panel bson.M) modelsv2.TicketPanel {
+func ticketPanelFromDoc(panel map[string]any) modelsv2.TicketPanel {
 	result := modelsv2.TicketPanel{
 		Name:                 asStringOr(panel["name"], ""),
 		ServerID:             ticketParseInt64(serverAsString(panel["server_id"])),
@@ -1310,7 +1509,7 @@ func ticketButtons(value any) []modelsv2.TicketButton {
 	return out
 }
 
-func ticketButtonSettings(panel bson.M) map[string]modelsv2.TicketButtonSettings {
+func ticketButtonSettings(panel map[string]any) map[string]modelsv2.TicketButtonSettings {
 	out := map[string]modelsv2.TicketButtonSettings{}
 	for key, value := range panel {
 		if !strings.HasSuffix(key, "_settings") {
@@ -1352,7 +1551,7 @@ func ticketTownhallRequirementFields() []string {
 	return []string{"BK", "AQ", "GW", "RC", "WARST"}
 }
 
-func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {
+func openTicketFromDoc(ticket map[string]any) modelsv2.OpenTicket {
 	return modelsv2.OpenTicket{
 		Channel:            serverAsString(ticket["channel"]),
 		ChannelExists:      !strings.EqualFold(serverAsString(ticket["status"]), "delete"),
@@ -1372,7 +1571,7 @@ func openTicketFromDoc(ticket bson.M) modelsv2.OpenTicket {
 	}
 }
 
-func ticketPanelCategoryID(panel bson.M, status string) *string {
+func ticketPanelCategoryID(panel map[string]any, status string) *string {
 	field := "open-category"
 	switch strings.ToLower(status) {
 	case "sleep":

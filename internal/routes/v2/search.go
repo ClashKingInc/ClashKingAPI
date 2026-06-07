@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -9,8 +10,6 @@ import (
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
@@ -136,28 +135,11 @@ func searchBannedPlayers(a apptypes.Deps) fiber.Handler {
 		}
 		query := c.Query("query")
 
-		var filter bson.M
-		if query == "" {
-			filter = bson.M{"server": guildID}
-		} else {
-			escaped := regexp.QuoteMeta(query)
-			filter = bson.M{
-				"$and": bson.A{
-					bson.M{"server": guildID},
-					bson.M{"VillageName": bson.M{"$regex": "(?i).*" + escaped + ".*"}},
-				},
-			}
-		}
-
-		cur, err := a.Store.C.Banlist.Find(c.UserContext(), filter, options.Find().SetLimit(25))
+		_ = regexp.QuoteMeta(query)
+		docs, err := searchBans(c, a, guildID, query)
 		if err != nil {
 			return err
 		}
-		var docs []bson.M
-		if err := cur.All(c.UserContext(), &docs); err != nil {
-			return err
-		}
-
 		items := make([]map[string]any, 0, len(docs))
 		for _, doc := range docs {
 			name := "Missing"
@@ -198,25 +180,7 @@ func bookmarkSearch(a apptypes.Deps) fiber.Handler {
 			typeField = "clan"
 		}
 		tag := accountsNormalizeTag(c.Params("tag"))
-		ctx := c.UserContext()
-
-		// Remove if already exists
-		_, _ = a.Store.C.UserSettings.UpdateOne(ctx,
-			bson.M{"discord_user": userID},
-			bson.M{"$pull": bson.M{fmt.Sprintf("search.%s.bookmarked", typeField): tag}},
-		)
-		// Add to front with limit of 20
-		_, err = a.Store.C.UserSettings.UpdateOne(ctx,
-			bson.M{"discord_user": userID},
-			bson.M{"$push": bson.M{
-				fmt.Sprintf("search.%s.bookmarked", typeField): bson.M{
-					"$each":     bson.A{tag},
-					"$position": 0,
-					"$slice":    20,
-				},
-			}},
-			options.UpdateOne().SetUpsert(true),
-		)
+		err = searchUpsertTag(c, a, userID, typeField, "bookmarked", tag)
 		if err != nil {
 			return err
 		}
@@ -249,25 +213,7 @@ func recentSearch(a apptypes.Deps) fiber.Handler {
 			typeField = "clan"
 		}
 		tag := accountsNormalizeTag(c.Params("tag"))
-		ctx := c.UserContext()
-
-		// Remove if already exists
-		_, _ = a.Store.C.UserSettings.UpdateOne(ctx,
-			bson.M{"discord_user": userID},
-			bson.M{"$pull": bson.M{fmt.Sprintf("search.%s.recent", typeField): tag}},
-		)
-		// Add to front with limit of 20
-		_, err = a.Store.C.UserSettings.UpdateOne(ctx,
-			bson.M{"discord_user": userID},
-			bson.M{"$push": bson.M{
-				fmt.Sprintf("search.%s.recent", typeField): bson.M{
-					"$each":     bson.A{tag},
-					"$position": 0,
-					"$slice":    20,
-				},
-			}},
-			options.UpdateOne().SetUpsert(true),
-		)
+		err = searchUpsertTag(c, a, userID, typeField, "recent", tag)
 		if err != nil {
 			return err
 		}
@@ -301,14 +247,7 @@ func groupCreate(a apptypes.Deps) fiber.Handler {
 			typeField = "clan"
 		}
 
-		// Check if group already exists
-		count, err := a.Store.C.Groups.CountDocuments(c.UserContext(), bson.M{
-			"$and": bson.A{
-				bson.M{"user_id": userID},
-				bson.M{"type": typeField},
-				bson.M{"name": name},
-			},
-		})
+		count, err := searchGroupCount(c, a, userID, typeField, name)
 		if err != nil {
 			return err
 		}
@@ -319,13 +258,10 @@ func groupCreate(a apptypes.Deps) fiber.Handler {
 		// Generate a unique group ID
 		groupID := strconv.FormatInt(time.Now().UnixNano(), 36) + strconv.FormatInt(userID, 36)
 
-		if _, err := a.Store.C.Groups.InsertOne(c.UserContext(), bson.M{
-			"group_id": groupID,
-			"user_id":  userID,
-			"type":     typeField,
-			"name":     name,
-			"tags":     bson.A{},
-		}); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO search_groups (group_id, user_id, type, name, tags, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, '{}', now(), now())
+		`, groupID, strconv.FormatInt(userID, 10), typeField, name); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true, "group_id": groupID})
@@ -348,10 +284,14 @@ func groupAdd(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
 		tag := accountsNormalizeTag(c.Params("tag"))
-		if _, err := a.Store.C.Groups.UpdateOne(c.UserContext(),
-			bson.M{"group_id": groupID},
-			bson.M{"$addToSet": bson.M{"tags": tag}},
-		); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			UPDATE search_groups
+			SET tags = (
+				SELECT array_agg(DISTINCT value)
+				FROM unnest(tags || $2::text[]) AS value
+			), updated_at = now()
+			WHERE group_id = $1
+		`, groupID, []string{tag}); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true})
@@ -374,10 +314,7 @@ func groupRemove(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
 		tag := accountsNormalizeTag(c.Params("tag"))
-		if _, err := a.Store.C.Groups.UpdateOne(c.UserContext(),
-			bson.M{"group_id": groupID},
-			bson.M{"$pull": bson.M{"tags": tag}},
-		); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `UPDATE search_groups SET tags = array_remove(tags, $2), updated_at = now() WHERE group_id = $1`, groupID, tag); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true})
@@ -398,11 +335,7 @@ func groupRemove(a apptypes.Deps) fiber.Handler {
 func groupGet(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
-		var doc bson.M
-		err := a.Store.C.Groups.FindOne(c.UserContext(),
-			bson.M{"group_id": groupID},
-			options.FindOne().SetProjection(bson.M{"_id": 0}),
-		).Decode(&doc)
+		doc, err := searchGroup(c, a, groupID)
 		if err != nil {
 			return apptypes.Error(fiber.StatusNotFound, "Group not found")
 		}
@@ -427,19 +360,12 @@ func groupList(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid user_id")
 		}
-		cur, err := a.Store.C.Groups.Find(c.UserContext(),
-			bson.M{"user_id": userID},
-			options.Find().SetProjection(bson.M{"_id": 0}),
-		)
+		groups, err := searchGroups(c, a, userID)
 		if err != nil {
 			return err
 		}
-		var groups []bson.M
-		if err := cur.All(c.UserContext(), &groups); err != nil {
-			return err
-		}
 		if groups == nil {
-			groups = []bson.M{}
+			groups = []map[string]any{}
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": groups})
 	}
@@ -459,7 +385,7 @@ func groupList(a apptypes.Deps) fiber.Handler {
 func groupDelete(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
-		if _, err := a.Store.C.Groups.DeleteOne(c.UserContext(), bson.M{"group_id": groupID}); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `DELETE FROM search_groups WHERE group_id = $1`, groupID); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true})
@@ -472,19 +398,11 @@ func searchFetchUserData(c *fiber.Ctx, a apptypes.Deps, userID int64) (recentTag
 	if userID == 0 {
 		return nil, nil
 	}
-	var doc bson.M
-	err := a.Store.C.UserSettings.FindOne(c.UserContext(),
-		bson.M{"discord_user": userID},
-		options.FindOne().SetProjection(bson.M{"search.clan": 1, "_id": 0}),
-	).Decode(&doc)
+	searchData, err := searchUserSettings(c, a, userID)
 	if err != nil {
 		return nil, nil
 	}
-	search, _ := doc["search"].(bson.M)
-	if search == nil {
-		return nil, nil
-	}
-	clan, _ := search["clan"].(bson.M)
+	clan, _ := searchData["clan"].(map[string]any)
 	if clan == nil {
 		return nil, nil
 	}
@@ -497,47 +415,68 @@ func searchFetchGuildClans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query s
 	if guildID == 0 {
 		return nil
 	}
-	filter := bson.M{"server": guildID}
-	opts := options.Find().SetSort(bson.M{"name": 1}).SetLimit(25)
+	sqlQuery := `
+		SELECT tag
+		FROM server_clans
+		WHERE server_id = $1
+	`
+	args := []any{strconv.FormatInt(guildID, 10)}
 	if len(query) > 1 {
-		opts = options.Find().SetLimit(25)
+		sqlQuery += ` AND (name ILIKE $2 OR tag = $3)`
+		args = append(args, "%"+query+"%", accountsNormalizeTag(query))
 	}
-	cur, err := a.Store.C.ClanDB.Find(c.UserContext(), filter, opts)
+	sqlQuery += ` ORDER BY name ASC LIMIT 25`
+	rows, err := a.Store.SQL.Query(c.UserContext(), sqlQuery, args...)
 	if err != nil {
 		return nil
 	}
-	var docs []bson.M
-	if err := cur.All(c.UserContext(), &docs); err != nil {
-		return nil
-	}
-	tags := make([]string, 0, len(docs))
-	for _, doc := range docs {
-		if tag, ok := doc["tag"].(string); ok && tag != "" {
+	defer rows.Close()
+	tags := []string{}
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil
+		}
+		if tag != "" {
 			tags = append(tags, tag)
 		}
 	}
 	return tags
 }
 
-func searchFetchLocalClans(c *fiber.Ctx, a apptypes.Deps, tags []string) []bson.M {
+func searchFetchLocalClans(c *fiber.Ctx, a apptypes.Deps, tags []string) []map[string]any {
 	if len(tags) == 0 {
 		return nil
 	}
-	cur, err := a.Store.C.BasicClan.Find(c.UserContext(),
-		bson.M{"tag": bson.M{"$in": tags}},
-		options.Find().SetProjection(bson.M{"name": 1, "tag": 1, "members": 1, "level": 1, "warLeague": 1, "_id": 0}),
-	)
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT tag, name, member_count, clan_level, data
+		FROM basic_clan
+		WHERE tag = ANY($1)
+	`, tags)
 	if err != nil {
 		return nil
 	}
-	var docs []bson.M
-	if err := cur.All(c.UserContext(), &docs); err != nil {
-		return nil
+	defer rows.Close()
+	docs := []map[string]any{}
+	for rows.Next() {
+		var tag, name string
+		var members, level int
+		var raw []byte
+		if err := rows.Scan(&tag, &name, &members, &level, &raw); err != nil {
+			return nil
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		doc["tag"] = tag
+		doc["name"] = name
+		doc["members"] = members
+		doc["level"] = level
+		docs = append(docs, doc)
 	}
 	return docs
 }
 
-func searchBuildClanFromDB(doc bson.M, findType string) map[string]any {
+func searchBuildClanFromDB(doc map[string]any, findType string) map[string]any {
 	memberCount := int(asInt64(doc["members"]))
 	level := int(asInt64(doc["level"]))
 	warLeague := "Unranked"
@@ -599,14 +538,6 @@ func searchGetString(m map[string]any, key string) string {
 
 func searchExtractStringSlice(v any) []string {
 	switch typed := v.(type) {
-	case bson.A:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {
@@ -617,4 +548,126 @@ func searchExtractStringSlice(v any) []string {
 		return out
 	}
 	return nil
+}
+
+func searchBans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query string) ([]map[string]any, error) {
+	sqlQuery := `
+		SELECT player_tag, player_name
+		FROM server_bans
+		WHERE server_id = $1
+	`
+	args := []any{strconv.FormatInt(guildID, 10)}
+	if query != "" {
+		sqlQuery += ` AND player_name ILIKE $2`
+		args = append(args, "%"+query+"%")
+	}
+	sqlQuery += ` ORDER BY player_name ASC LIMIT 25`
+	rows, err := a.Store.SQL.Query(c.UserContext(), sqlQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag, name string
+		if err := rows.Scan(&tag, &name); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{"VillageTag": tag, "VillageName": name})
+	}
+	return out, rows.Err()
+}
+
+func searchUserSettings(c *fiber.Ctx, a apptypes.Deps, userID int64) (map[string]any, error) {
+	var raw []byte
+	err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT search FROM user_settings WHERE user_id = $1`, strconv.FormatInt(userID, 10)).Scan(&raw)
+	if err != nil {
+		return map[string]any{}, err
+	}
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	return out, nil
+}
+
+func searchSaveUserSettings(c *fiber.Ctx, a apptypes.Deps, userID int64, searchData map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO user_settings (user_id, search, updated_at)
+		VALUES ($1, $2::jsonb, now())
+		ON CONFLICT (user_id) DO UPDATE SET search = EXCLUDED.search, updated_at = now()
+	`, strconv.FormatInt(userID, 10), apptypes.Marshal(searchData))
+	return err
+}
+
+func searchUpsertTag(c *fiber.Ctx, a apptypes.Deps, userID int64, typeField, listName, tag string) error {
+	searchData, _ := searchUserSettings(c, a, userID)
+	typeData, _ := searchData[typeField].(map[string]any)
+	if typeData == nil {
+		typeData = map[string]any{}
+	}
+	current := searchExtractStringSlice(typeData[listName])
+	next := []string{tag}
+	for _, item := range current {
+		if item != tag {
+			next = append(next, item)
+		}
+		if len(next) == 20 {
+			break
+		}
+	}
+	typeData[listName] = next
+	searchData[typeField] = typeData
+	return searchSaveUserSettings(c, a, userID, searchData)
+}
+
+func searchGroupCount(c *fiber.Ctx, a apptypes.Deps, userID int64, groupType, name string) (int, error) {
+	var count int
+	err := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT count(*) FROM search_groups WHERE user_id = $1 AND type = $2 AND name = $3
+	`, strconv.FormatInt(userID, 10), groupType, name).Scan(&count)
+	return count, err
+}
+
+func searchGroup(c *fiber.Ctx, a apptypes.Deps, groupID string) (map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT group_id, user_id, type, name, tags
+		FROM search_groups
+		WHERE group_id = $1
+		LIMIT 1
+	`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, fmt.Errorf("group not found")
+	}
+	var userID, groupType, name string
+	var tags []string
+	if err := rows.Scan(&groupID, &userID, &groupType, &name, &tags); err != nil {
+		return nil, err
+	}
+	return map[string]any{"group_id": groupID, "user_id": userID, "type": groupType, "name": name, "tags": tags}, nil
+}
+
+func searchGroups(c *fiber.Ctx, a apptypes.Deps, userID int64) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT group_id, user_id, type, name, tags
+		FROM search_groups
+		WHERE user_id = $1
+		ORDER BY name ASC
+	`, strconv.FormatInt(userID, 10))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	groups := []map[string]any{}
+	for rows.Next() {
+		var groupID, rawUserID, groupType, name string
+		var tags []string
+		if err := rows.Scan(&groupID, &rawUserID, &groupType, &name, &tags); err != nil {
+			return nil, err
+		}
+		groups = append(groups, map[string]any{"group_id": groupID, "user_id": rawUserID, "type": groupType, "name": name, "tags": tags})
+	}
+	return groups, rows.Err()
 }

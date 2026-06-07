@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -10,8 +11,7 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // playerNormalizeTag converts a raw tag string to #TAG format.
@@ -100,13 +100,34 @@ func playersLocation(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		proj := options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "country_name": 1, "country_code": 1})
-		cur, err := a.Store.C.LeaderboardDB.Find(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}}, proj)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT player_tag, country_name, country_code, data
+			FROM player_rankings_current
+			WHERE player_tag = ANY($1)
+		`, tags)
 		if err != nil {
 			return err
 		}
-		var items []bson.M
-		if err := cur.All(c.UserContext(), &items); err != nil {
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			var tag string
+			var countryName, countryCode pgtype.Text
+			var rawData []byte
+			if err := rows.Scan(&tag, &countryName, &countryCode, &rawData); err != nil {
+				return err
+			}
+			item := playerDecodeJSONObject(rawData)
+			item["tag"] = tag
+			if countryName.Valid {
+				item["country_name"] = countryName.String
+			}
+			if countryCode.Valid {
+				item["country_code"] = countryCode.String
+			}
+			items = append(items, item)
+		}
+		if err := rows.Err(); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": sanitize(items)})
@@ -223,12 +244,8 @@ func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tags cannot be empty")
 		}
 
-		cur, err := a.Store.C.PlayerStats.Find(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}})
+		rows, err := playerSeasonStatsByTags(c.UserContext(), a, tags, season)
 		if err != nil {
-			return err
-		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
 			return err
 		}
 
@@ -256,7 +273,7 @@ func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 		}
 
 		for _, opt := range opts {
-			sorted := make([]bson.M, len(rows))
+			sorted := make([]map[string]any, len(rows))
 			copy(sorted, rows)
 			sort.Slice(sorted, func(i, j int) bool {
 				vi := playerToFloat(playerDotGet(sorted[i], opt.path))
@@ -278,63 +295,34 @@ func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 			newData[opt.name] = entries
 		}
 
-		// War stars aggregation via ClanWars collection
-		pipeline := bson.A{
-			bson.M{"$match": bson.M{
-				"$or": bson.A{
-					bson.M{"data.clan.members.tag": bson.M{"$in": tags}},
-					bson.M{"data.opponent.members.tag": bson.M{"$in": tags}},
-				},
-				"type": bson.M{"$ne": "friendly"},
-			}},
-			bson.M{"$project": bson.M{
-				"_id": 0,
-				"uniqueKey": bson.M{"$concat": bson.A{
-					bson.M{"$cond": bson.M{
-						"if":   bson.M{"$lt": bson.A{"$data.clan.tag", "$data.opponent.tag"}},
-						"then": "$data.clan.tag",
-						"else": "$data.opponent.tag",
-					}},
-					bson.M{"$cond": bson.M{
-						"if":   bson.M{"$lt": bson.A{"$data.opponent.tag", "$data.clan.tag"}},
-						"then": "$data.opponent.tag",
-						"else": "$data.clan.tag",
-					}},
-					"$data.preparationStartTime",
-				}},
-				"data": 1,
-			}},
-			bson.M{"$group": bson.M{"_id": "$uniqueKey", "data": bson.M{"$first": "$data"}}},
-			bson.M{"$project": bson.M{"members": bson.M{"$concatArrays": bson.A{"$data.clan.members", "$data.opponent.members"}}}},
-			bson.M{"$unwind": "$members"},
-			bson.M{"$match": bson.M{"members.tag": bson.M{"$in": tags}}},
-			bson.M{"$project": bson.M{
-				"_id":        0,
-				"tag":        "$members.tag",
-				"totalStars": bson.M{"$sum": "$members.attacks.stars"},
-			}},
-			bson.M{"$group": bson.M{
-				"_id":        "$tag",
-				"totalStars": bson.M{"$sum": "$totalStars"},
-			}},
-			bson.M{"$sort": bson.M{"totalStars": -1}},
-			bson.M{"$limit": limit},
+		warRows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT attacker_tag, COALESCE(sum(stars), 0)::bigint AS total_stars
+			FROM war_attack_events
+			WHERE attacker_tag = ANY($1)
+			  AND war_type <> 'friendly'
+			GROUP BY attacker_tag
+			ORDER BY total_stars DESC
+			LIMIT $2
+		`, tags, limit)
+		if err != nil {
+			return err
 		}
-		warCur, err := a.Store.C.ClanWars.Aggregate(c.UserContext(), pipeline)
-		if err == nil {
-			var warResults []bson.M
-			if err := warCur.All(c.UserContext(), &warResults); err == nil {
-				warEntries := make([]catEntry, 0, len(warResults))
-				for count, r := range warResults {
-					warEntries = append(warEntries, catEntry{
-						Tag:   serverAsString(r["_id"]),
-						Value: r["totalStars"],
-						Count: count + 1,
-					})
-				}
-				newData["war_stars"] = warEntries
+		defer warRows.Close()
+		warEntries := []catEntry{}
+		count := 1
+		for warRows.Next() {
+			var tag string
+			var stars int64
+			if err := warRows.Scan(&tag, &stars); err != nil {
+				return err
 			}
+			warEntries = append(warEntries, catEntry{Tag: tag, Value: stars, Count: count})
+			count++
 		}
+		if err := warRows.Err(); err != nil {
+			return err
+		}
+		newData["war_stars"] = warEntries
 
 		items := make([]map[string]any, 0, len(newData))
 		for key, val := range newData {
@@ -409,22 +397,11 @@ func playersExtended(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tags cannot be empty")
 		}
 
-		// Fetch tracking stats from MongoDB
-		proj := options.Find().SetProjection(bson.M{
-			"_id": 0, "tag": 1, "donations": 1, "clan_games": 1,
-			"season_pass": 1, "activity": 1, "last_online": 1, "last_online_time": 1,
-			"attack_wins": 1, "dark_elixir": 1, "gold": 1, "capital_gold": 1,
-			"season_trophies": 1, "last_updated": 1, "legends": 1,
-		})
-		cur, err := a.Store.C.PlayerStats.Find(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}}, proj)
+		statsDocs, err := playerCurrentStatsByTags(c.UserContext(), a, tags)
 		if err != nil {
 			return err
 		}
-		var statsDocs []bson.M
-		if err := cur.All(c.UserContext(), &statsDocs); err != nil {
-			return err
-		}
-		statsMap := make(map[string]bson.M, len(statsDocs))
+		statsMap := make(map[string]map[string]any, len(statsDocs))
 		for _, doc := range statsDocs {
 			if tag, ok := doc["tag"].(string); ok {
 				statsMap[tag] = doc
@@ -483,14 +460,14 @@ func playerExtendedSingle(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tag is required")
 		}
 
-		proj := options.FindOne().SetProjection(bson.M{
-			"_id": 0, "tag": 1, "donations": 1, "clan_games": 1,
-			"season_pass": 1, "activity": 1, "last_online": 1, "last_online_time": 1,
-			"attack_wins": 1, "dark_elixir": 1, "gold": 1, "capital_gold": 1,
-			"season_trophies": 1, "last_updated": 1, "legends": 1,
-		})
-		var statsDoc bson.M
-		_ = a.Store.C.PlayerStats.FindOne(c.UserContext(), bson.M{"tag": tag}, proj).Decode(&statsDoc)
+		statsDocs, err := playerCurrentStatsByTags(c.UserContext(), a, []string{tag})
+		if err != nil {
+			return err
+		}
+		statsDoc := map[string]any{}
+		if len(statsDocs) > 0 {
+			statsDoc = statsDocs[0]
+		}
 
 		player, err := a.Clash.GetPlayer(c.UserContext(), tag)
 		if err != nil || player == nil {
@@ -528,13 +505,8 @@ func playersLegendDays(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tags cannot be empty")
 		}
 
-		proj := options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "legends": 1})
-		cur, err := a.Store.C.PlayerStats.Find(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}}, proj)
+		rows, err := playerCurrentStatsByTags(c.UserContext(), a, tags)
 		if err != nil {
-			return err
-		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
 			return err
 		}
 
@@ -571,34 +543,138 @@ func playersLegendRankings(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tags cannot be empty")
 		}
 
-		historyCol := a.Store.DB.RankingHistory.Collection("history_db")
 		items := make([]modelsv2.PlayerLegendRankingItem, 0, len(tags))
 
 		for _, tag := range tags {
-			findOpts := options.Find().SetSort(bson.M{"season": -1}).SetLimit(int64(limit))
-			cur, err := historyCol.Find(c.UserContext(), bson.M{"tag": tag}, findOpts)
+			rankRows, err := a.Store.SQL.Query(c.UserContext(), `
+				SELECT season, rank, trophies, data
+				FROM legend_history_snapshots
+				WHERE player_tag = $1
+				ORDER BY season DESC
+				LIMIT $2
+			`, tag, limit)
 			if err != nil {
 				items = append(items, modelsv2.PlayerLegendRankingItem{Tag: tag, Rankings: []any{}})
 				continue
 			}
-			var rankDocs []bson.M
-			if err := cur.All(c.UserContext(), &rankDocs); err != nil {
-				items = append(items, modelsv2.PlayerLegendRankingItem{Tag: tag, Rankings: []any{}})
-				continue
-			}
-			sanitized := sanitize(rankDocs)
-			var rankingsAny []any
-			if arr, ok := sanitized.([]bson.M); ok {
-				rankingsAny = make([]any, len(arr))
-				for i, r := range arr {
-					rankingsAny[i] = r
+			rankingsAny := []any{}
+			for rankRows.Next() {
+				var season string
+				var rank, trophies int
+				var rawData []byte
+				if err := rankRows.Scan(&season, &rank, &trophies, &rawData); err != nil {
+					continue
 				}
+				item := playerDecodeJSONObject(rawData)
+				item["tag"] = tag
+				item["season"] = season
+				item["rank"] = rank
+				item["trophies"] = trophies
+				rankingsAny = append(rankingsAny, item)
 			}
-			if rankingsAny == nil {
-				rankingsAny = []any{}
-			}
+			rankRows.Close()
 			items = append(items, modelsv2.PlayerLegendRankingItem{Tag: tag, Rankings: rankingsAny})
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
 	}
+}
+
+func playerCurrentStatsByTags(ctx context.Context, a apptypes.Deps, tags []string) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT player_tag, clan_tag, name, townhall_level, legends, donations, activity, data, updated_at
+		FROM player_current_stats
+		WHERE player_tag = ANY($1)
+	`, tags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var tag, name string
+		var clanTag pgtype.Text
+		var townhall pgtype.Int4
+		var legendsRaw, donationsRaw, activityRaw, dataRaw []byte
+		var updatedAt pgtype.Timestamptz
+		if err := rows.Scan(&tag, &clanTag, &name, &townhall, &legendsRaw, &donationsRaw, &activityRaw, &dataRaw, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["tag"] = tag
+		item["name"] = name
+		if clanTag.Valid {
+			item["clan_tag"] = clanTag.String
+		}
+		if townhall.Valid {
+			item["townhall"] = townhall.Int32
+		}
+		item["legends"] = playerDecodeJSONObject(legendsRaw)
+		item["donations"] = playerDecodeJSONObject(donationsRaw)
+		item["activity"] = playerDecodeJSONObject(activityRaw)
+		if updatedAt.Valid {
+			item["last_updated"] = updatedAt.Time
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func playerSeasonStatsByTags(ctx context.Context, a apptypes.Deps, tags []string, season string) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT player_tag, clan_tag, season, name, townhall_level, donations, clan_games, activity, data, updated_at
+		FROM player_season_stats
+		WHERE player_tag = ANY($1) AND season = $2
+	`, tags, season)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var tag, clanTag, rowSeason, name string
+		var townhall pgtype.Int4
+		var donationsRaw, clanGamesRaw, activityRaw, dataRaw []byte
+		var updatedAt pgtype.Timestamptz
+		if err := rows.Scan(&tag, &clanTag, &rowSeason, &name, &townhall, &donationsRaw, &clanGamesRaw, &activityRaw, &dataRaw, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["tag"] = tag
+		item["clan_tag"] = clanTag
+		item["season"] = rowSeason
+		item["name"] = name
+		if townhall.Valid {
+			item["townhall"] = townhall.Int32
+		}
+		item["donations"] = map[string]any{rowSeason: playerDecodeJSONObject(donationsRaw)}
+		item["clan_games"] = map[string]any{rowSeason: playerDecodeJSONObject(clanGamesRaw)}
+		item["activity"] = map[string]any{rowSeason: playerDecodeJSONValue(activityRaw, 0)}
+		if updatedAt.Valid {
+			item["last_updated"] = updatedAt.Time
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func playerDecodeJSONObject(raw []byte) map[string]any {
+	value := playerDecodeJSONValue(raw, map[string]any{})
+	if obj, ok := value.(map[string]any); ok {
+		return obj
+	}
+	return map[string]any{}
+}
+
+func playerDecodeJSONValue(raw []byte, fallback any) any {
+	if len(raw) == 0 {
+		return fallback
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fallback
+	}
+	if value == nil {
+		return fallback
+	}
+	return value
 }

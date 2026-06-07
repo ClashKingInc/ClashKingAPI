@@ -12,7 +12,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/sync/errgroup"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getUserGuilds returns the authenticated user's guilds where they have Manage Guild permission.
@@ -157,39 +156,38 @@ func getGuildDetails(a apptypes.Deps) fiber.Handler {
 // looking up the Discord OAuth token with the current device ID when available,
 // then falling back to the user-wide token for older records.
 func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID string) (string, error) {
-	var doc struct {
-		AccessToken  string    `bson:"discord_access_token"`
-		RefreshToken string    `bson:"discord_refresh_token"`
-		ExpiresAt    time.Time `bson:"expires_at"`
+	if a.Store.SQL == nil {
+		return "", apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 
 	deviceID := apptypes.DeviceID(c.UserContext())
-	query := discordTokenQuery(userID, deviceID)
-
-	if err := a.Store.C.DiscordTokens.FindOne(c.UserContext(), query).Decode(&doc); err != nil {
-		if deviceID == "" {
+	tokenDeviceID := deviceID
+	accessCipher, refreshCipher, expiresAt, err := sqlDiscordToken(c, a, userID, tokenDeviceID)
+	if err != nil {
+		if tokenDeviceID == "" {
 			return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token - please link your Discord account")
 		}
-		query = discordTokenQuery(userID, "")
-		if fallbackErr := a.Store.C.DiscordTokens.FindOne(c.UserContext(), query).Decode(&doc); fallbackErr != nil {
+		tokenDeviceID = ""
+		accessCipher, refreshCipher, expiresAt, err = sqlDiscordToken(c, a, userID, tokenDeviceID)
+		if err != nil {
 			return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token - please link your Discord account")
 		}
 	}
 
-	if doc.AccessToken == "" || doc.RefreshToken == "" {
+	if accessCipher == "" || refreshCipher == "" {
 		return "", apptypes.Error(http.StatusUnauthorized, "Invalid stored Discord tokens")
 	}
 
-	accessToken, err := apptypes.DecryptString(doc.AccessToken)
+	accessToken, err := apptypes.DecryptString(accessCipher)
 	if err != nil {
 		return "", apptypes.Error(http.StatusUnauthorized, "Failed to decrypt Discord access token")
 	}
 
-	if time.Now().UTC().Before(doc.ExpiresAt.Add(-60 * time.Second)) {
+	if expiresAt != nil && time.Now().UTC().Before(expiresAt.Add(-60*time.Second)) {
 		return accessToken, nil
 	}
 
-	refreshToken, err := apptypes.DecryptString(doc.RefreshToken)
+	refreshToken, err := apptypes.DecryptString(refreshCipher)
 	if err != nil {
 		return "", apptypes.Error(http.StatusUnauthorized, "Failed to decrypt Discord refresh token")
 	}
@@ -200,37 +198,30 @@ func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID string
 	}
 
 	newEncryptedAccess := apptypes.EncryptToString(newAuth.AccessToken)
-	_, _ = a.Store.C.DiscordTokens.UpdateOne(c.UserContext(),
-		query,
-		bson.M{"$set": bson.M{
-			"discord_access_token": newEncryptedAccess,
-			"expires_at":           time.Now().UTC().Add(newAuth.ExpiresIn),
-		}},
-	)
+	_, _ = a.Store.SQL.Exec(c.UserContext(), `
+		UPDATE auth_discord_tokens
+		SET access_token_ciphertext = $1,
+			expires_at = $2,
+			updated_at = now()
+		WHERE user_id = $3 AND device_id = $4
+	`, newEncryptedAccess, time.Now().UTC().Add(newAuth.ExpiresIn), userID, tokenDeviceID)
 
 	return newAuth.AccessToken, nil
 }
 
-func discordTokenQuery(userID, deviceID string) bson.M {
-	userClauses := []bson.M{{"user_id": userID}}
-	if parsed, err := strconv.ParseInt(userID, 10, 64); err == nil {
-		userClauses = append(userClauses, bson.M{"user_id": parsed})
+func sqlDiscordToken(c *fiber.Ctx, a apptypes.Deps, userID, deviceID string) (string, string, *time.Time, error) {
+	var accessCipher string
+	var refreshCipher *string
+	var expiresAt *time.Time
+	err := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT access_token_ciphertext, refresh_token_ciphertext, expires_at
+		FROM auth_discord_tokens
+		WHERE user_id = $1 AND device_id = $2
+	`, userID, deviceID).Scan(&accessCipher, &refreshCipher, &expiresAt)
+	if refreshCipher == nil {
+		return accessCipher, "", expiresAt, err
 	}
-
-	if deviceID == "" {
-		return bson.M{"$or": userClauses}
-	}
-
-	deviceClauses := make([]bson.M, 0, len(userClauses))
-	for _, clause := range userClauses {
-		deviceClauses = append(deviceClauses, bson.M{
-			"$and": []bson.M{
-				clause,
-				{"device_id": deviceID},
-			},
-		})
-	}
-	return bson.M{"$or": deviceClauses}
+	return accessCipher, *refreshCipher, expiresAt, err
 }
 
 func guildRole(g discord.OAuth2Guild) string {

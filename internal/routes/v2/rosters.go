@@ -11,8 +11,7 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5"
 )
 
 // rosterQueryServerID extracts server_id from query param (int).
@@ -76,7 +75,7 @@ func createRoster(a apptypes.Deps) fiber.Handler {
 		if _, ok := body["members"]; !ok {
 			body["members"] = []any{}
 		}
-		if _, err := a.Store.C.Rosters.InsertOne(c.UserContext(), body); err != nil {
+		if err := rosterSave(c, a, body); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
@@ -109,13 +108,13 @@ func getMissingMembers(a apptypes.Deps) fiber.Handler {
 		if rosterID == "" && groupID == "" {
 			return apptypes.Error(http.StatusBadRequest, "Must provide roster_id or group_id")
 		}
-		filter := bson.M{"server_id": serverID}
+		filter := rosterFilter{serverID: &serverID}
 		if rosterID != "" {
-			filter["custom_id"] = rosterID
+			filter.customID = rosterID
 		} else {
-			filter["group_id"] = groupID
+			filter.groupID = groupID
 		}
-		rosters, err := findManyMaps(c.UserContext(), a.Store.C.Rosters, filter)
+		rosters, err := rosterList(c, a, filter)
 		if err != nil {
 			return err
 		}
@@ -197,14 +196,7 @@ func updateRoster(a apptypes.Deps) fiber.Handler {
 		body["updated_at"] = time.Now().UTC()
 		delete(body, "custom_id")
 		delete(body, "server_id")
-		opts := options.FindOneAndUpdate().SetReturnDocument(options.After).SetProjection(bson.M{"_id": 0})
-		var updated map[string]any
-		err = a.Store.C.Rosters.FindOneAndUpdate(
-			c.UserContext(),
-			bson.M{"custom_id": rosterID, "server_id": serverID},
-			bson.M{"$set": body},
-			opts,
-		).Decode(&updated)
+		updated, err := rosterUpdate(c, a, rosterID, serverID, body)
 		if err != nil {
 			return notFoundErr(err, "Roster not found")
 		}
@@ -229,7 +221,7 @@ func getRoster(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		rosterID := c.Params("roster_id")
-		doc, err := findOneMap(c.UserContext(), a.Store.C.Rosters, bson.M{"custom_id": rosterID, "server_id": serverID})
+		doc, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster not found")
 		}
@@ -255,11 +247,11 @@ func deleteRoster(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		rosterID := c.Params("roster_id")
-		res, err := a.Store.C.Rosters.DeleteOne(c.UserContext(), bson.M{"custom_id": rosterID, "server_id": serverID})
+		deleted, err := rosterDelete(c, a, rosterID, serverID)
 		if err != nil {
 			return err
 		}
-		if res.DeletedCount == 0 {
+		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Roster not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Roster deleted successfully"})
@@ -285,19 +277,22 @@ func removeRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		rosterID := c.Params("roster_id")
 		tag := rosterNormalizeTag(c.Params("player_tag"))
-		res, err := a.Store.C.Rosters.UpdateOne(
-			c.UserContext(),
-			bson.M{"custom_id": rosterID, "server_id": serverID},
-			bson.M{
-				"$pull": bson.M{"members": bson.M{"tag": tag}},
-				"$set":  bson.M{"updated_at": time.Now().UTC()},
-			},
-		)
+		doc, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
-			return err
+			return notFoundErr(err, "Roster not found")
 		}
-		if res.MatchedCount == 0 {
-			return apptypes.Error(http.StatusNotFound, "Roster not found")
+		members := rosterMemberList(doc["members"])
+		filtered := make([]any, 0, len(members))
+		for _, member := range members {
+			if serverAsString(member["tag"]) == tag {
+				continue
+			}
+			filtered = append(filtered, member)
+		}
+		doc["members"] = filtered
+		doc["updated_at"] = time.Now().UTC()
+		if err := rosterSave(c, a, doc); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member removed from roster"})
 	}
@@ -320,21 +315,21 @@ func refreshRosters(a apptypes.Deps) fiber.Handler {
 		rosterID := c.Query("roster_id")
 		groupID := c.Query("group_id")
 		serverIDRaw := c.Query("server_id")
-		filter := bson.M{}
+		filter := rosterFilter{}
 		if rosterID != "" {
-			filter["custom_id"] = rosterID
+			filter.customID = rosterID
 		} else if groupID != "" {
-			filter["group_id"] = groupID
+			filter.groupID = groupID
 		} else if serverIDRaw != "" {
 			sid, err := strconv.ParseInt(serverIDRaw, 10, 64)
 			if err != nil {
 				return apptypes.Error(http.StatusBadRequest, "invalid server_id")
 			}
-			filter["server_id"] = sid
+			filter.serverID = &sid
 		} else {
 			return apptypes.Error(http.StatusBadRequest, "Must provide roster_id, group_id, or server_id")
 		}
-		rosters, err := findManyMaps(c.UserContext(), a.Store.C.Rosters, filter)
+		rosters, err := rosterList(c, a, filter)
 		if err != nil {
 			return err
 		}
@@ -369,7 +364,7 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 			CopyMembers bool   `json:"copy_members"`
 		}
 		_ = apptypes.DecodeJSON(c, &body)
-		src, err := findOneMap(c.UserContext(), a.Store.C.Rosters, bson.M{"custom_id": rosterID})
+		src, err := rosterGet(c, a, rosterID, nil)
 		if err != nil {
 			return notFoundErr(err, "Source roster not found")
 		}
@@ -377,7 +372,6 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		for k, v := range src {
 			cloned[k] = v
 		}
-		delete(cloned, "_id")
 		cloned["custom_id"] = rosterGenID()
 		cloned["server_id"] = serverID
 		cloned["created_at"] = time.Now().UTC()
@@ -388,7 +382,7 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		if !body.CopyMembers {
 			cloned["members"] = []any{}
 		}
-		if _, err := a.Store.C.Rosters.InsertOne(c.UserContext(), cloned); err != nil {
+		if err := rosterSave(c, a, cloned); err != nil {
 			return err
 		}
 		memberCount := 0
@@ -423,14 +417,14 @@ func listRosters(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusBadRequest, "invalid server_id")
 		}
-		filter := bson.M{"server_id": serverID}
+		filter := rosterFilter{serverID: &serverID}
 		if groupID := c.Query("group_id"); groupID != "" {
-			filter["group_id"] = groupID
+			filter.groupID = groupID
 		}
 		if clanTag := c.Query("clan_tag"); clanTag != "" {
-			filter["clan_tag"] = clanTag
+			filter.clanTag = clanTag
 		}
-		rosters, err := findManyMaps(c.UserContext(), a.Store.C.Rosters, filter)
+		rosters, err := rosterList(c, a, filter)
 		if err != nil {
 			return err
 		}
@@ -465,7 +459,8 @@ func createRosterGroup(a apptypes.Deps) fiber.Handler {
 		body["server_id"] = serverID
 		body["group_id"] = rosterGenID()
 		body["created_at"] = time.Now().UTC()
-		if _, err := a.Store.C.RosterGroups.InsertOne(c.UserContext(), body); err != nil {
+		body["updated_at"] = time.Now().UTC()
+		if err := rosterGroupSave(c, a, body); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
@@ -489,7 +484,7 @@ func listRosterGroups(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		groups, err := findManyMaps(c.UserContext(), a.Store.C.RosterGroups, bson.M{"server_id": serverID})
+		groups, err := rosterGroups(c, a, &serverID, "")
 		if err != nil {
 			return err
 		}
@@ -509,12 +504,12 @@ func listRosterGroups(a apptypes.Deps) fiber.Handler {
 func getRosterGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
-		doc, err := findOneMap(c.UserContext(), a.Store.C.RosterGroups, bson.M{"group_id": groupID})
+		doc, err := rosterGroupGet(c, a, groupID, nil)
 		if err != nil {
 			return notFoundErr(err, "Roster group not found")
 		}
 		serverID := asInt64(doc["server_id"])
-		rosters, _ := findManyMaps(c.UserContext(), a.Store.C.Rosters, bson.M{"group_id": groupID, "server_id": serverID})
+		rosters, _ := rosterList(c, a, rosterFilter{groupID: groupID, serverID: &serverID})
 		doc["rosters"] = sanitize(rosters)
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"group": sanitize(doc)})
 	}
@@ -545,16 +540,16 @@ func updateRosterGroup(a apptypes.Deps) fiber.Handler {
 		}
 		delete(body, "group_id")
 		delete(body, "server_id")
-		opts := options.FindOneAndUpdate().SetReturnDocument(options.After).SetProjection(bson.M{"_id": 0})
-		var updated map[string]any
-		err = a.Store.C.RosterGroups.FindOneAndUpdate(
-			c.UserContext(),
-			bson.M{"group_id": groupID, "server_id": serverID},
-			bson.M{"$set": body},
-			opts,
-		).Decode(&updated)
+		updated, err := rosterGroupGet(c, a, groupID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster group not found")
+		}
+		for k, v := range body {
+			updated[k] = v
+		}
+		updated["updated_at"] = time.Now().UTC()
+		if err := rosterGroupSave(c, a, updated); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Group updated", "group": sanitize(updated)})
 	}
@@ -578,32 +573,36 @@ func deleteRosterGroup(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		groupID := c.Params("group_id")
-		group, err := findOneMap(c.UserContext(), a.Store.C.RosterGroups, bson.M{"group_id": groupID, "server_id": serverID})
+		group, err := rosterGroupGet(c, a, groupID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster group not found")
 		}
 		_ = group
-
-		res, err := a.Store.C.Rosters.UpdateMany(
-			c.UserContext(),
-			bson.M{"group_id": groupID, "server_id": serverID},
-			bson.M{
-				"$unset": bson.M{"group_id": ""},
-				"$set":   bson.M{"updated_at": time.Now().UTC()},
-			},
-		)
+		cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+			UPDATE rosters
+			SET group_id = NULL,
+			    data = data - 'group_id',
+			    updated_at = now()
+			WHERE group_id = $1 AND server_id = $2
+		`, groupID, rosterServerIDText(serverID))
 		if err != nil {
 			return err
 		}
-		if _, err := a.Store.C.RosterAutomation.DeleteMany(c.UserContext(), bson.M{"group_id": groupID, "server_id": serverID}); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM roster_automation_rules
+			WHERE group_id = $1 AND server_id = $2
+		`, groupID, rosterServerIDText(serverID)); err != nil {
 			return err
 		}
-		if _, err := a.Store.C.RosterGroups.DeleteOne(c.UserContext(), bson.M{"group_id": groupID, "server_id": serverID}); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM roster_groups
+			WHERE group_id = $1 AND server_id = $2
+		`, groupID, rosterServerIDText(serverID)); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{
 			"message":          "Roster group deleted successfully",
-			"affected_rosters": res.ModifiedCount,
+			"affected_rosters": cmd.RowsAffected(),
 		})
 	}
 }
@@ -633,12 +632,12 @@ func createRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 		if customID == "" {
 			body["custom_id"] = rosterGenID()
 		}
-		if existing, _ := findOneMap(c.UserContext(), a.Store.C.SignupCats, bson.M{"server_id": serverID, "custom_id": body["custom_id"]}); existing != nil {
+		if existing, _ := rosterSignupList(c, a, serverID, serverAsString(body["custom_id"])); len(existing) > 0 {
 			return apptypes.Error(http.StatusBadRequest, "Signup category with this custom_id already exists")
 		}
 		body["created_at"] = time.Now().UTC()
 		body["updated_at"] = time.Now().UTC()
-		if _, err := a.Store.C.SignupCats.InsertOne(c.UserContext(), body); err != nil {
+		if err := rosterSignupSave(c, a, body); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
@@ -663,7 +662,7 @@ func listRosterSignupCategories(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		cats, err := findManyMaps(c.UserContext(), a.Store.C.SignupCats, bson.M{"server_id": serverID})
+		cats, err := rosterSignupList(c, a, serverID, "")
 		if err != nil {
 			return err
 		}
@@ -697,16 +696,20 @@ func updateRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 		}
 		delete(body, "custom_id")
 		delete(body, "server_id")
-		opts := options.FindOneAndUpdate().SetReturnDocument(options.After).SetProjection(bson.M{"_id": 0})
-		var updated map[string]any
-		err = a.Store.C.SignupCats.FindOneAndUpdate(
-			c.UserContext(),
-			bson.M{"custom_id": customID, "server_id": serverID},
-			bson.M{"$set": body},
-			opts,
-		).Decode(&updated)
+		existing, err := rosterSignupList(c, a, serverID, customID)
 		if err != nil {
-			return notFoundErr(err, "Signup category not found")
+			return err
+		}
+		if len(existing) == 0 {
+			return apptypes.Error(http.StatusNotFound, "Signup category not found")
+		}
+		updated := existing[0]
+		for k, v := range body {
+			updated[k] = v
+		}
+		updated["updated_at"] = time.Now().UTC()
+		if err := rosterSignupSave(c, a, updated); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Category updated", "category": sanitize(updated)})
 	}
@@ -730,11 +733,14 @@ func deleteRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		customID := c.Params("custom_id")
-		res, err := a.Store.C.SignupCats.DeleteOne(c.UserContext(), bson.M{"custom_id": customID, "server_id": serverID})
+		cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM roster_signup_categories
+			WHERE custom_id = $1 AND server_id = $2
+		`, customID, rosterServerIDText(serverID))
 		if err != nil {
 			return err
 		}
-		if res.DeletedCount == 0 {
+		if cmd.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Signup category not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Signup category deleted"})
@@ -767,42 +773,35 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		existing, err := findOneMap(c.UserContext(), a.Store.C.Rosters, bson.M{"custom_id": rosterID, "server_id": serverID})
+		existing, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster not found")
 		}
-		_ = existing
+		members := rosterMemberList(existing["members"])
 
 		switch body.Operation {
 		case "remove":
-			tags := make([]string, 0, len(body.PlayerTags))
+			removeTags := map[string]struct{}{}
 			for _, t := range body.PlayerTags {
-				tags = append(tags, rosterNormalizeTag(t))
+				removeTags[rosterNormalizeTag(t)] = struct{}{}
 			}
-			_, err = a.Store.C.Rosters.UpdateOne(
-				c.UserContext(),
-				bson.M{"custom_id": rosterID},
-				bson.M{
-					"$pull": bson.M{"members": bson.M{"tag": bson.M{"$in": tags}}},
-					"$set":  bson.M{"updated_at": time.Now().UTC()},
-				},
-			)
+			kept := make([]any, 0, len(members))
+			for _, member := range members {
+				if _, ok := removeTags[serverAsString(member["tag"])]; ok {
+					continue
+				}
+				kept = append(kept, member)
+			}
+			existing["members"] = kept
 		default: // "add" or unspecified
-			newMembers := make([]any, 0, len(body.Members))
 			for _, m := range body.Members {
 				m["added_at"] = time.Now().UTC()
-				newMembers = append(newMembers, m)
+				members = append(members, m)
 			}
-			_, err = a.Store.C.Rosters.UpdateOne(
-				c.UserContext(),
-				bson.M{"custom_id": rosterID, "server_id": serverID},
-				bson.M{
-					"$push": bson.M{"members": bson.M{"$each": newMembers}},
-					"$set":  bson.M{"updated_at": time.Now().UTC()},
-				},
-			)
+			existing["members"] = rosterMembersAny(members)
 		}
-		if err != nil {
+		existing["updated_at"] = time.Now().UTC()
+		if err := rosterSave(c, a, existing); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Members updated"})
@@ -833,20 +832,28 @@ func updateRosterMember(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		setFields := bson.M{"updated_at": time.Now().UTC()}
-		for k, v := range body {
-			setFields["members.$."+k] = v
-		}
-		res, err := a.Store.C.Rosters.UpdateOne(
-			c.UserContext(),
-			bson.M{"custom_id": rosterID, "server_id": serverID, "members.tag": memberTag},
-			bson.M{"$set": setFields},
-		)
+		doc, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
-			return err
+			return notFoundErr(err, "Roster not found")
 		}
-		if res.MatchedCount == 0 {
+		members := rosterMemberList(doc["members"])
+		found := false
+		for _, member := range members {
+			if serverAsString(member["tag"]) != memberTag {
+				continue
+			}
+			for k, v := range body {
+				member[k] = v
+			}
+			found = true
+		}
+		if !found {
 			return apptypes.Error(http.StatusNotFound, "Member not found in roster")
+		}
+		doc["members"] = rosterMembersAny(members)
+		doc["updated_at"] = time.Now().UTC()
+		if err := rosterSave(c, a, doc); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member updated"})
 	}
@@ -871,30 +878,36 @@ func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		rosterID := c.Params("roster_id")
 		memberTag := rosterNormalizeTag(c.Params("member_tag"))
-		var update bson.M
+		update := map[string]any{}
 		if a.Clash != nil {
 			if player, err := a.Clash.GetPlayer(c.UserContext(), memberTag); err == nil && player != nil {
-				update = bson.M{
-					"members.$.name":      player.Name,
-					"members.$.trophies":  player.Trophies,
-					"members.$.town_hall": player.TownHall,
-					"updated_at":          time.Now().UTC(),
-				}
+				update["name"] = player.Name
+				update["trophies"] = player.Trophies
+				update["town_hall"] = player.TownHall
 			}
 		}
-		if update == nil {
-			update = bson.M{"updated_at": time.Now().UTC()}
-		}
-		res, err := a.Store.C.Rosters.UpdateOne(
-			c.UserContext(),
-			bson.M{"custom_id": rosterID, "server_id": serverID, "members.tag": memberTag},
-			bson.M{"$set": update},
-		)
+		doc, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
-			return err
+			return notFoundErr(err, "Roster not found")
 		}
-		if res.MatchedCount == 0 {
+		members := rosterMemberList(doc["members"])
+		found := false
+		for _, member := range members {
+			if serverAsString(member["tag"]) != memberTag {
+				continue
+			}
+			for k, v := range update {
+				member[k] = v
+			}
+			found = true
+		}
+		if !found {
 			return apptypes.Error(http.StatusNotFound, "Member not found in roster")
+		}
+		doc["members"] = rosterMembersAny(members)
+		doc["updated_at"] = time.Now().UTC()
+		if err := rosterSave(c, a, doc); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member refreshed"})
 	}
@@ -926,7 +939,7 @@ func createRosterAutomation(a apptypes.Deps) fiber.Handler {
 		body["executed"] = false
 		body["created_at"] = time.Now().UTC()
 		body["updated_at"] = time.Now().UTC()
-		if _, err := a.Store.C.RosterAutomation.InsertOne(c.UserContext(), body); err != nil {
+		if err := rosterAutomationSave(c, a, body); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
@@ -951,13 +964,8 @@ func listRosterAutomation(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		filter := bson.M{"server_id": serverID}
-		if rosterID := c.Query("roster_id"); rosterID != "" {
-			filter["roster_id"] = rosterID
-		}
-		if groupID := c.Query("group_id"); groupID != "" {
-			filter["group_id"] = groupID
-		}
+		rosterID := c.Query("roster_id")
+		groupID := c.Query("group_id")
 		activeOnly := true
 		if raw := c.Query("active_only"); raw != "" {
 			parsed, parseErr := strconv.ParseBool(raw)
@@ -966,10 +974,7 @@ func listRosterAutomation(a apptypes.Deps) fiber.Handler {
 			}
 			activeOnly = parsed
 		}
-		if activeOnly {
-			filter["active"] = true
-		}
-		rules, err := findManyMaps(c.UserContext(), a.Store.C.RosterAutomation, filter)
+		rules, err := rosterAutomationList(c, a, serverID, rosterID, groupID, activeOnly)
 		if err != nil {
 			return err
 		}
@@ -1010,16 +1015,25 @@ func updateRosterAutomation(a apptypes.Deps) fiber.Handler {
 		delete(body, "automation_id")
 		delete(body, "server_id")
 		body["updated_at"] = time.Now().UTC()
-		opts := options.FindOneAndUpdate().SetReturnDocument(options.After).SetProjection(bson.M{"_id": 0})
-		var updated map[string]any
-		err = a.Store.C.RosterAutomation.FindOneAndUpdate(
-			c.UserContext(),
-			bson.M{"automation_id": automationID, "server_id": serverID},
-			bson.M{"$set": body},
-			opts,
-		).Decode(&updated)
+		existing, err := rosterAutomationList(c, a, serverID, "", "", false)
 		if err != nil {
-			return notFoundErr(err, "Automation rule not found")
+			return err
+		}
+		var updated map[string]any
+		for _, item := range existing {
+			if serverAsString(item["automation_id"]) == automationID {
+				updated = item
+				break
+			}
+		}
+		if updated == nil {
+			return apptypes.Error(http.StatusNotFound, "Automation rule not found")
+		}
+		for k, v := range body {
+			updated[k] = v
+		}
+		if err := rosterAutomationSave(c, a, updated); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Automation updated", "rule": sanitize(updated)})
 	}
@@ -1043,11 +1057,14 @@ func deleteRosterAutomation(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		automationID := c.Params("automation_id")
-		res, err := a.Store.C.RosterAutomation.DeleteOne(c.UserContext(), bson.M{"automation_id": automationID, "server_id": serverID})
+		cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM roster_automation_rules
+			WHERE automation_id = $1 AND server_id = $2
+		`, automationID, rosterServerIDText(serverID))
 		if err != nil {
 			return err
 		}
-		if res.DeletedCount == 0 {
+		if cmd.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Automation rule not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Automation rule deleted"})
@@ -1069,7 +1086,7 @@ func getServerClanMembers(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusBadRequest, "invalid server_id")
 		}
-		clans, err := findManyMaps(c.UserContext(), a.Store.DB.Usafam.Collection("clans"), bson.M{"server": serverID})
+		clans, err := serverClans(c, a, serverID)
 		if err != nil {
 			return err
 		}
@@ -1121,19 +1138,18 @@ func generateRosterToken(a apptypes.Deps) fiber.Handler {
 		rosterID := c.Query("roster_id")
 		token := rosterAccessToken()
 		expiresAt := time.Now().UTC().Add(time.Hour)
-		tokenDoc := bson.M{
-			"server_id":  serverID,
-			"token":      token,
-			"type":       "roster",
-			"expires_at": expiresAt,
-		}
+		tokenDoc := map[string]any{"server_id": serverID, "type": "roster", "expires_at": expiresAt}
 		if rosterID != "" {
 			tokenDoc["roster_id"] = rosterID
 		}
-		if _, err := a.Store.C.Tokens.InsertOne(c.UserContext(), tokenDoc); err != nil {
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO api_tokens (token_hash, user_id, server_id, token_type, expires_at, metadata, created_at)
+			VALUES ($1, '', $2, 'roster', $3, $4::jsonb, now())
+		`, tokenHash(token), strconv.FormatInt(serverID, 10), expiresAt, apptypes.Marshal(tokenDoc)); err != nil {
 			return err
 		}
-		rosterCount, _ := a.Store.C.Rosters.CountDocuments(c.UserContext(), bson.M{"server_id": serverID})
+		var rosterCount int
+		_ = a.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM rosters WHERE server_id = $1`, strconv.FormatInt(serverID, 10)).Scan(&rosterCount)
 		baseURL := "https://api.clashk.ing"
 		if a.Config.Local {
 			baseURL = "http://localhost:8000"
@@ -1155,4 +1171,360 @@ func generateRosterToken(a apptypes.Deps) fiber.Handler {
 			"expires_at": expiresAt.Format(time.RFC3339),
 		})
 	}
+}
+
+type rosterFilter struct {
+	serverID *int64
+	customID string
+	groupID  string
+	clanTag  string
+}
+
+func rosterServerIDText(serverID int64) string {
+	return strconv.FormatInt(serverID, 10)
+}
+
+func rosterOptionalString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return serverAsString(value)
+}
+
+func rosterMemberList(value any) []map[string]any {
+	raw, ok := value.([]any)
+	if !ok {
+		return []map[string]any{}
+	}
+	members := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if member, ok := item.(map[string]any); ok {
+			members = append(members, member)
+		}
+	}
+	return members
+}
+
+func rosterMembersAny(members []map[string]any) []any {
+	out := make([]any, 0, len(members))
+	for _, member := range members {
+		out = append(out, member)
+	}
+	return out
+}
+
+func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	customID := serverAsString(doc["custom_id"])
+	serverID := rosterServerIDText(asInt64(doc["server_id"]))
+	groupID := rosterOptionalString(doc["group_id"])
+	clanTag := rosterOptionalString(doc["clan_tag"])
+	alias := rosterOptionalString(doc["alias"])
+	members := doc["members"]
+	if members == nil {
+		members = []any{}
+	}
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO rosters (custom_id, server_id, group_id, clan_tag, alias, members, data, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6::jsonb, $7::jsonb, COALESCE($8, now()), COALESCE($9, now()))
+		ON CONFLICT (custom_id) DO UPDATE SET
+			server_id = EXCLUDED.server_id,
+			group_id = EXCLUDED.group_id,
+			clan_tag = EXCLUDED.clan_tag,
+			alias = EXCLUDED.alias,
+			members = EXCLUDED.members,
+			data = EXCLUDED.data,
+			updated_at = EXCLUDED.updated_at
+	`, customID, serverID, groupID, clanTag, alias, apptypes.Marshal(members), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	return err
+}
+
+func rosterGet(c *fiber.Ctx, a apptypes.Deps, customID string, serverID *int64) (map[string]any, error) {
+	filter := rosterFilter{customID: customID, serverID: serverID}
+	rows, err := rosterList(c, a, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	return rows[0], nil
+}
+
+func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[string]any, error) {
+	args := []any{}
+	where := []string{"true"}
+	if filter.serverID != nil {
+		args = append(args, rosterServerIDText(*filter.serverID))
+		where = append(where, "server_id = $"+strconv.Itoa(len(args)))
+	}
+	if filter.customID != "" {
+		args = append(args, filter.customID)
+		where = append(where, "custom_id = $"+strconv.Itoa(len(args)))
+	}
+	if filter.groupID != "" {
+		args = append(args, filter.groupID)
+		where = append(where, "group_id = $"+strconv.Itoa(len(args)))
+	}
+	if filter.clanTag != "" {
+		args = append(args, filter.clanTag)
+		where = append(where, "clan_tag = $"+strconv.Itoa(len(args)))
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT custom_id, server_id, group_id, clan_tag, alias, members, data, created_at, updated_at
+		FROM rosters
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY updated_at DESC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var customID, serverID, alias string
+		var groupID, clanTag *string
+		var membersRaw, dataRaw []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&customID, &serverID, &groupID, &clanTag, &alias, &membersRaw, &dataRaw, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["custom_id"] = customID
+		if parsed, err := strconv.ParseInt(serverID, 10, 64); err == nil {
+			item["server_id"] = parsed
+		} else {
+			item["server_id"] = serverID
+		}
+		if groupID != nil {
+			item["group_id"] = *groupID
+		}
+		if clanTag != nil {
+			item["clan_tag"] = *clanTag
+		}
+		item["alias"] = alias
+		item["members"] = playerDecodeJSONValue(membersRaw, []any{})
+		item["created_at"] = createdAt
+		item["updated_at"] = updatedAt
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func rosterDelete(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64) (int64, error) {
+	tag, err := a.Store.SQL.Exec(c.UserContext(), `
+		DELETE FROM rosters
+		WHERE custom_id = $1 AND server_id = $2
+	`, customID, rosterServerIDText(serverID))
+	return tag.RowsAffected(), err
+}
+
+func rosterUpdate(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64, patch map[string]any) (map[string]any, error) {
+	doc, err := rosterGet(c, a, customID, &serverID)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range patch {
+		doc[k] = v
+	}
+	doc["updated_at"] = time.Now().UTC()
+	delete(doc, "custom_id")
+	delete(doc, "server_id")
+	doc["custom_id"] = customID
+	doc["server_id"] = serverID
+	if err := rosterSave(c, a, doc); err != nil {
+		return nil, err
+	}
+	return rosterGet(c, a, customID, &serverID)
+}
+
+func rosterGroupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	groupID := serverAsString(doc["group_id"])
+	serverID := rosterServerIDText(asInt64(doc["server_id"]))
+	name := rosterOptionalString(doc["name"])
+	description := rosterOptionalString(doc["description"])
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO roster_groups (group_id, server_id, name, description, data, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5::jsonb, COALESCE($6, now()), COALESCE($7, now()))
+		ON CONFLICT (group_id) DO UPDATE SET
+			server_id = EXCLUDED.server_id,
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			data = EXCLUDED.data,
+			updated_at = EXCLUDED.updated_at
+	`, groupID, serverID, name, description, apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	return err
+}
+
+func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string) ([]map[string]any, error) {
+	args := []any{}
+	where := []string{"true"}
+	if serverID != nil {
+		args = append(args, rosterServerIDText(*serverID))
+		where = append(where, "server_id = $"+strconv.Itoa(len(args)))
+	}
+	if groupID != "" {
+		args = append(args, groupID)
+		where = append(where, "group_id = $"+strconv.Itoa(len(args)))
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT group_id, server_id, name, description, data, created_at, updated_at
+		FROM roster_groups
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY created_at DESC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var gid, sid, name, description string
+		var dataRaw []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&gid, &sid, &name, &description, &dataRaw, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["group_id"] = gid
+		if parsed, err := strconv.ParseInt(sid, 10, 64); err == nil {
+			item["server_id"] = parsed
+		} else {
+			item["server_id"] = sid
+		}
+		item["name"] = name
+		item["description"] = description
+		item["created_at"] = createdAt
+		item["updated_at"] = updatedAt
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func rosterGroupGet(c *fiber.Ctx, a apptypes.Deps, groupID string, serverID *int64) (map[string]any, error) {
+	groups, err := rosterGroups(c, a, serverID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if len(groups) == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	return groups[0], nil
+}
+
+func rosterSignupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO roster_signup_categories (custom_id, server_id, name, description, sort_order, data, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, COALESCE($7, now()), COALESCE($8, now()))
+		ON CONFLICT (custom_id) DO UPDATE SET
+			server_id = EXCLUDED.server_id,
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			sort_order = EXCLUDED.sort_order,
+			data = EXCLUDED.data,
+			updated_at = EXCLUDED.updated_at
+	`, serverAsString(doc["custom_id"]), rosterServerIDText(asInt64(doc["server_id"])), rosterOptionalString(doc["name"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	return err
+}
+
+func rosterSignupList(c *fiber.Ctx, a apptypes.Deps, serverID int64, customID string) ([]map[string]any, error) {
+	args := []any{rosterServerIDText(serverID)}
+	where := []string{"server_id = $1"}
+	if customID != "" {
+		args = append(args, customID)
+		where = append(where, "custom_id = $2")
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT custom_id, server_id, name, description, sort_order, data, created_at, updated_at
+		FROM roster_signup_categories
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY sort_order, created_at
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var cid, sid, name, description string
+		var sortOrder int
+		var dataRaw []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&cid, &sid, &name, &description, &sortOrder, &dataRaw, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["custom_id"] = cid
+		item["server_id"] = serverID
+		item["name"] = name
+		item["description"] = description
+		item["sort_order"] = sortOrder
+		item["created_at"] = createdAt
+		item["updated_at"] = updatedAt
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO roster_automation_rules (automation_id, server_id, group_id, enabled, trigger_type, data, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6::jsonb, COALESCE($7, now()), COALESCE($8, now()))
+		ON CONFLICT (automation_id) DO UPDATE SET
+			server_id = EXCLUDED.server_id,
+			group_id = EXCLUDED.group_id,
+			enabled = EXCLUDED.enabled,
+			trigger_type = EXCLUDED.trigger_type,
+			data = EXCLUDED.data,
+			updated_at = EXCLUDED.updated_at
+	`, serverAsString(doc["automation_id"]), rosterServerIDText(asInt64(doc["server_id"])), rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"), rosterOptionalString(doc["trigger_type"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	return err
+}
+
+func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterID, groupID string, activeOnly bool) ([]map[string]any, error) {
+	args := []any{rosterServerIDText(serverID)}
+	where := []string{"server_id = $1"}
+	if rosterID != "" {
+		args = append(args, rosterID)
+		where = append(where, "data->>'roster_id' = $"+strconv.Itoa(len(args)))
+	}
+	if groupID != "" {
+		args = append(args, groupID)
+		where = append(where, "group_id = $"+strconv.Itoa(len(args)))
+	}
+	if activeOnly {
+		where = append(where, "enabled = true")
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT automation_id, server_id, group_id, enabled, trigger_type, data, created_at, updated_at
+		FROM roster_automation_rules
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY created_at DESC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var automationID, sid, triggerType string
+		var group *string
+		var enabled bool
+		var dataRaw []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&automationID, &sid, &group, &enabled, &triggerType, &dataRaw, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["automation_id"] = automationID
+		item["server_id"] = serverID
+		if group != nil {
+			item["group_id"] = *group
+		}
+		item["active"] = enabled
+		item["trigger_type"] = triggerType
+		item["created_at"] = createdAt
+		item["updated_at"] = updatedAt
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }

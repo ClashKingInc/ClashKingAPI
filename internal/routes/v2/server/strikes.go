@@ -1,14 +1,16 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getStrikes godoc
@@ -29,19 +31,15 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		query := bson.M{"server": serverID}
-		if playerTag := strings.TrimSpace(c.Query("player_tag")); playerTag != "" {
-			query["tag"] = serverNormalizeTag(playerTag)
+		playerTag := strings.TrimSpace(c.Query("player_tag"))
+		if playerTag != "" {
+			playerTag = serverNormalizeTag(playerTag)
 		}
 		viewExpired, err := apptypes.QueryBool(c, "view_expired", false)
 		if err != nil {
 			return err
 		}
-		if !viewExpired {
-			now := time.Now().UTC().Unix()
-			query["$or"] = []bson.M{{"rollover_date": nil}, {"rollover_date": bson.M{"$gte": now}}}
-		}
-		items, err := findManyMaps(c.UserContext(), rt.Store.C.StrikeList, query)
+		items, err := sqlStrikes(c, rt, serverID, playerTag, viewExpired)
 		if err != nil {
 			return err
 		}
@@ -51,7 +49,7 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 				playerTags = append(playerTags, tag)
 			}
 		}
-		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.C.PlayerStats, rt.Store.C.ClanDB, playerTags)
+		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.SQL, playerTags)
 		if members, err := fetchAllServerMembers(c, rt, int64(serverID)); err == nil {
 			for _, item := range items {
 				if addedBy := serverAsString(item["added_by"]); addedBy != "" {
@@ -150,32 +148,37 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 			playerName = tag
 		}
 		strikeID := strings.ToUpper(randomID(tag, 5))
-		doc := bson.M{
+		now := time.Now().UTC()
+		doc := map[string]any{
 			"tag":           tag,
-			"date_created":  time.Now().UTC().Format("2006-01-02 15:04:05"),
+			"date_created":  now.Format("2006-01-02 15:04:05"),
 			"reason":        body.Reason,
 			"server":        serverID,
 			"added_by":      body.AddedBy,
 			"strike_weight": max(1, body.StrikeWeight),
 			"strike_id":     strikeID,
 		}
+		var rolloverAt *time.Time
 		if body.RolloverDays > 0 {
-			doc["rollover_date"] = time.Now().UTC().Add(time.Duration(body.RolloverDays) * 24 * time.Hour).Unix()
+			value := now.Add(time.Duration(body.RolloverDays) * 24 * time.Hour)
+			rolloverAt = &value
+			doc["rollover_date"] = value.Unix()
 		}
 		if body.Image != "" {
 			doc["image"] = body.Image
 		}
-		if _, err := rt.Store.C.StrikeList.InsertOne(c.UserContext(), doc); err != nil {
+		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO strikes (id, server_id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+		`, strikeID, strconv.Itoa(serverID), tag, now, body.Reason, body.AddedBy, max(1, body.StrikeWeight), rolloverAt, body.Image, apptypes.Marshal(doc)); err != nil {
 			return err
 		}
-		activeQuery := bson.M{"tag": tag, "server": serverID, "$or": []bson.M{{"rollover_date": nil}, {"rollover_date": bson.M{"$gte": time.Now().UTC().Unix()}}}}
-		total, _ := rt.Store.C.StrikeList.CountDocuments(c.UserContext(), activeQuery)
-		activeItems, _ := findManyMaps(c.UserContext(), rt.Store.C.StrikeList, activeQuery)
+		activeItems, _ := sqlStrikes(c, rt, serverID, tag, false)
 		totalWeight := 0
 		for _, item := range activeItems {
 			totalWeight += asIntWithDefault(item["strike_weight"], 1)
 		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "created", "strike_id": strikeID, "player_tag": tag, "player_name": playerName, "server_id": serverID, "total_strikes": total, "total_weight": totalWeight})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "created", "strike_id": strikeID, "player_tag": tag, "player_name": playerName, "server_id": serverID, "total_strikes": len(activeItems), "total_weight": totalWeight})
 	}
 }
 
@@ -198,15 +201,15 @@ func deleteStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		strikeID := c.Params("strike_id")
-		existing, err := findOneMap(c.UserContext(), rt.Store.C.StrikeList, bson.M{"server": serverID, "strike_id": strikeID})
+		existing, err := sqlStrike(c, rt, serverID, strikeID)
 		if err != nil {
 			return notFoundErr(err, "Strike not found")
 		}
-		result, err := rt.Store.C.StrikeList.DeleteOne(c.UserContext(), bson.M{"server": serverID, "strike_id": strikeID})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM strikes WHERE server_id = $1 AND id = $2`, strconv.Itoa(serverID), strikeID)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Strike not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "deleted", "strike_id": strikeID, "player_tag": serverAsString(existing["tag"]), "server_id": serverID})
@@ -231,7 +234,7 @@ func strikeSummary(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("player_tag"))
-		items, err := findManyMaps(c.UserContext(), rt.Store.C.StrikeList, bson.M{"server": serverID, "tag": tag})
+		items, err := sqlStrikes(c, rt, serverID, tag, true)
 		if err != nil {
 			return err
 		}
@@ -247,4 +250,87 @@ func strikeSummary(rt apptypes.Deps) apptypes.HandlerFunc {
 			Strikes:      sanitize(items).([]map[string]any),
 		})
 	}
+}
+
+func sqlStrikes(c *fiber.Ctx, rt apptypes.Deps, serverID int, playerTag string, includeExpired bool) ([]map[string]any, error) {
+	query := `
+		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data
+		FROM strikes
+		WHERE server_id = $1
+	`
+	args := []any{strconv.Itoa(serverID)}
+	if playerTag != "" {
+		query += ` AND tag = $` + strconv.Itoa(len(args)+1)
+		args = append(args, playerTag)
+	}
+	if !includeExpired {
+		query += ` AND (rollover_date IS NULL OR rollover_date >= now())`
+	}
+	query += ` ORDER BY date_created DESC`
+	rows, err := rt.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		item, err := scanSQLStrike(rows, serverID)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func sqlStrike(c *fiber.Ctx, rt apptypes.Deps, serverID int, strikeID string) (map[string]any, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data
+		FROM strikes
+		WHERE server_id = $1 AND id = $2
+		LIMIT 1
+	`, strconv.Itoa(serverID), strikeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("strike not found")
+	}
+	return scanSQLStrike(rows, serverID)
+}
+
+type strikeScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanSQLStrike(row strikeScanner, serverID int) (map[string]any, error) {
+	var id, tag, reason, addedBy string
+	var weight int
+	var createdAt time.Time
+	var rolloverAt *time.Time
+	var image *string
+	var raw []byte
+	if err := row.Scan(&id, &tag, &createdAt, &reason, &addedBy, &weight, &rolloverAt, &image, &raw); err != nil {
+		return nil, err
+	}
+	item := map[string]any{}
+	_ = json.Unmarshal(raw, &item)
+	item["strike_id"] = id
+	item["tag"] = tag
+	item["server"] = serverID
+	item["date_created"] = createdAt.UTC().Format("2006-01-02 15:04:05")
+	item["reason"] = reason
+	item["added_by"] = addedBy
+	item["strike_weight"] = weight
+	if rolloverAt != nil {
+		item["rollover_date"] = rolloverAt.Unix()
+	}
+	if image != nil {
+		item["image"] = *image
+	}
+	return item, nil
 }

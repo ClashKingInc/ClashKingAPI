@@ -2,12 +2,11 @@ package server
 
 import (
 	"net/http"
+	"strconv"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // getServerPanel godoc
@@ -20,18 +19,14 @@ import (
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/panel [get]
+// @Router /v2/server/{server_id}/panel [get]
 func getServerPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		var doc bson.M
-		err = a.Store.C.ServerDB.FindOne(c.UserContext(),
-			bson.M{"server": serverID},
-			options.FindOne().SetProjection(bson.M{"_id": 0, "logs.welcome_link": 1}),
-		).Decode(&doc)
+		doc, err := sqlServerPanelDoc(c, a, serverID)
 		if err != nil {
 			// No document → return empty defaults
 			return apptypes.JSON(c, http.StatusOK, serverPanelResponse(doc))
@@ -52,7 +47,7 @@ func getServerPanel(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/panel [put]
+// @Router /v2/server/{server_id}/panel [put]
 func updateServerPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -71,16 +66,22 @@ func updateServerPanel(a apptypes.Deps) fiber.Handler {
 		if buttonColor == "" {
 			buttonColor = "Grey"
 		}
-		_, err = a.Store.C.ServerDB.UpdateOne(c.UserContext(),
-			bson.M{"server": serverID},
-			bson.M{"$set": bson.M{
-				"logs.welcome_link.embed_name":      body.EmbedName,
-				"logs.welcome_link.buttons":         buttons,
-				"logs.welcome_link.button_color":    buttonColor,
-				"logs.welcome_link.welcome_channel": body.WelcomeChannel,
-			}},
-			options.UpdateOne().SetUpsert(true),
-		)
+		payload := map[string]any{
+			"welcome_link": map[string]any{
+				"embed_name":      body.EmbedName,
+				"buttons":         buttons,
+				"button_color":    buttonColor,
+				"welcome_channel": body.WelcomeChannel,
+			},
+		}
+		_, err = a.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO servers (id, name, logs_config, data, updated_at)
+			VALUES ($1, '', $2::jsonb, jsonb_build_object('logs', $2::jsonb), now())
+			ON CONFLICT (id) DO UPDATE SET
+				logs_config = servers.logs_config || EXCLUDED.logs_config,
+				data = servers.data || jsonb_build_object('logs', servers.logs_config || EXCLUDED.logs_config),
+				updated_at = now()
+		`, strconv.Itoa(serverID), apptypes.Marshal(payload))
 		if err != nil {
 			return err
 		}
@@ -93,7 +94,7 @@ func updateServerPanel(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func serverPanelResponse(doc bson.M) map[string]any {
+func serverPanelResponse(doc map[string]any) map[string]any {
 	welcomeLink := mapMaybe(mapMaybe(doc["logs"])["welcome_link"])
 	return map[string]any{
 		"embed_name":      welcomeLink["embed_name"],
@@ -101,6 +102,16 @@ func serverPanelResponse(doc bson.M) map[string]any {
 		"button_color":    serverPanelString(welcomeLink["button_color"], "Grey"),
 		"welcome_channel": welcomeLink["welcome_channel"],
 	}
+}
+
+func sqlServerPanelDoc(c *fiber.Ctx, a apptypes.Deps, serverID int) (map[string]any, error) {
+	var raw []byte
+	err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT logs_config FROM servers WHERE id = $1`, strconv.Itoa(serverID)).Scan(&raw)
+	if err != nil {
+		return map[string]any{}, err
+	}
+	logs := jsonObject(raw)
+	return map[string]any{"logs": logs}, nil
 }
 
 func serverPanelButtonsSlice(v any) []string {

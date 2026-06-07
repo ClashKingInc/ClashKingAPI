@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/mail"
@@ -16,8 +17,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -36,6 +35,7 @@ const defaultAvatarURL = "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Gob
 // @Failure 401 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/verify-email-code [post]
+// @Router /v2/auth/verify-email-code [post]
 func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthEmailCodeRequest
@@ -49,21 +49,20 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid verification code format")
 		}
 		emailHash := hashEmail(a, body.Email)
-		var pending map[string]any
-		if err := a.Store.C.EmailVerify.FindOne(c.UserContext(), bson.M{"email_hash": emailHash, "verification_code": body.Code}).Decode(&pending); err != nil {
+		pending, err := findEmailVerification(c.UserContext(), a, emailHash, body.Code)
+		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid verification code")
 		}
 		expiresAt := asTime(pending["expires_at"])
 		if !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
-			_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending["_id"]})
+			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusUnauthorized, "Verification code expired. Please request a new one.")
 		}
 		userData, _ := pending["user_data"].(map[string]any)
 		if userData == nil {
 			return apptypes.Error(fiber.StatusInternalServerError, "Invalid verification record")
 		}
-		var existing map[string]any
-		_ = a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&existing)
+		existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
 		userID := authStringify(userData["user_id"])
 		if userID == "" {
 			if existing != nil {
@@ -72,7 +71,7 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 				userID = generateUserID()
 			}
 		}
-		update := bson.M{
+		update := map[string]any{
 			"user_id":         userID,
 			"email_encrypted": apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(body.Email))),
 			"email_hash":      emailHash,
@@ -85,16 +84,10 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 			authMethods := append(toStringSlice(existing["auth_methods"]), "email")
 			update["auth_methods"] = uniqueStrings(authMethods)
 		}
-		if existing != nil {
-			if _, err := a.Store.C.Users.UpdateOne(c.UserContext(), bson.M{"user_id": userID}, bson.M{"$set": update}); err != nil {
-				return err
-			}
-		} else {
-			if _, err := a.Store.C.Users.InsertOne(c.UserContext(), update); err != nil {
-				return err
-			}
+		if err := upsertAuthUser(c.UserContext(), a, update); err != nil {
+			return err
 		}
-		_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending["_id"]})
+		_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 		response, err := buildAuthResponse(a, userID, authStringify(update["username"]), authStringify(userData["device_id"]), defaultAvatarURL)
 		if err != nil {
 			return err
@@ -117,6 +110,7 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 // @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/me [get]
+// @Router /v2/auth/me [get]
 func currentUser(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
@@ -154,6 +148,7 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/discord [post]
+// @Router /v2/auth/discord [post]
 func discordAuth(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthDiscordOAuthRequest
@@ -212,6 +207,7 @@ func discordAuth(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Router /v2/refresh [post]
+// @Router /v2/auth/refresh [post]
 func refreshToken(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthRefreshTokenRequest
@@ -222,8 +218,8 @@ func refreshToken(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		var stored map[string]any
-		if err := a.Store.C.RefreshTokens.FindOne(c.UserContext(), bson.M{"refresh_token": body.RefreshToken}).Decode(&stored); err != nil {
+		stored, err := findRefreshToken(c.UserContext(), a, body.RefreshToken)
+		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token.")
 		}
 		if expiresAt := asTime(stored["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
@@ -253,6 +249,7 @@ func refreshToken(a apptypes.Deps) fiber.Handler {
 // @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/register [post]
+// @Router /v2/auth/register [post]
 func register(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthEmailRegisterRequest
@@ -263,28 +260,26 @@ func register(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		emailHash := hashEmail(a, body.Email)
-		var existing map[string]any
-		_ = a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&existing)
+		existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
 		if existing != nil && slicesContains(toStringSlice(existing["auth_methods"]), "email") {
 			return apptypes.Error(fiber.StatusBadRequest, "Email already registered. Please try logging in instead.")
 		}
-		var pending map[string]any
-		_ = a.Store.C.EmailVerify.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&pending)
+		pending, _ := findEmailVerification(c.UserContext(), a, emailHash, "")
 		if pending != nil {
 			if expiresAt := asTime(pending["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().Before(expiresAt) {
 				return apptypes.Error(fiber.StatusConflict, "A verification email was already sent to this address. Please check your email or request a resend.")
 			}
-			_, _ = a.Store.C.EmailVerify.DeleteMany(c.UserContext(), bson.M{"email_hash": emailHash})
+			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 		}
 		passwordHash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return err
 		}
 		code := generateVerificationCode()
-		record := bson.M{
+		record := map[string]any{
 			"email_hash":        emailHash,
 			"verification_code": code,
-			"user_data": bson.M{
+			"user_data": map[string]any{
 				"email_encrypted": apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(body.Email))),
 				"email_hash":      emailHash,
 				"username":        body.Username,
@@ -294,7 +289,7 @@ func register(a apptypes.Deps) fiber.Handler {
 			"created_at": time.Now().UTC(),
 			"expires_at": time.Now().UTC().Add(15 * time.Minute),
 		}
-		if _, err := a.Store.C.EmailVerify.InsertOne(c.UserContext(), record); err != nil {
+		if err := insertEmailVerification(c.UserContext(), a, record); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
@@ -317,6 +312,7 @@ func register(a apptypes.Deps) fiber.Handler {
 // @Failure 404 {object} map[string]interface{}
 // @Failure 410 {object} map[string]interface{}
 // @Router /v2/resend-verification [post]
+// @Router /v2/auth/resend-verification [post]
 func resendVerification(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthForgotPasswordRequest
@@ -327,22 +323,23 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		emailHash := hashEmail(a, body.Email)
-		var pending map[string]any
-		if err := a.Store.C.EmailVerify.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&pending); err != nil {
-			var existing map[string]any
-			_ = a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&existing)
+		pending, err := findEmailVerification(c.UserContext(), a, emailHash, "")
+		if err != nil {
+			existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
 			if existing != nil && slicesContains(toStringSlice(existing["auth_methods"]), "email") {
 				return apptypes.Error(fiber.StatusBadRequest, "This email is already verified. Please try logging in instead.")
 			}
 			return apptypes.Error(fiber.StatusNotFound, "No pending verification found for this email. Please register first.")
 		}
 		if expiresAt := asTime(pending["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
-			_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending["_id"]})
+			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusGone, "Verification expired. Please register again.")
 		}
 		code := generateVerificationCode()
-		_, err := a.Store.C.EmailVerify.UpdateOne(c.UserContext(), bson.M{"_id": pending["_id"]}, bson.M{"$set": bson.M{"verification_code": code, "created_at": time.Now().UTC(), "expires_at": time.Now().UTC().Add(15 * time.Minute)}})
-		if err != nil {
+		pending["verification_code"] = code
+		pending["created_at"] = time.Now().UTC()
+		pending["expires_at"] = time.Now().UTC().Add(15 * time.Minute)
+		if err := insertEmailVerification(c.UserContext(), a, pending); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
@@ -365,6 +362,7 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 // @Failure 401 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Router /v2/email [post]
+// @Router /v2/auth/email [post]
 func emailLogin(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthEmailAuthRequest
@@ -372,8 +370,8 @@ func emailLogin(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		emailHash := hashEmail(a, body.Email)
-		var user map[string]any
-		if err := a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&user); err != nil {
+		user, err := findUserByEmailHash(c.UserContext(), a, emailHash)
+		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid email or password")
 		}
 		passwordHash := authStringify(user["password"])
@@ -415,6 +413,7 @@ type linkDiscordPayload struct {
 // @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/link-discord [post]
+// @Router /v2/auth/link-discord [post]
 func linkDiscord(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
@@ -422,8 +421,8 @@ func linkDiscord(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusUnauthorized, "Missing or invalid authentication token")
 		}
 
-		var currentUser map[string]any
-		if err := a.Store.C.Users.FindOne(c.UserContext(), bson.M{"user_id": userID}).Decode(&currentUser); err != nil {
+		currentUser, err := findUserByID(c.UserContext(), a, userID)
+		if err != nil || currentUser == nil {
 			return apptypes.Error(fiber.StatusNotFound, "User not found")
 		}
 
@@ -442,24 +441,26 @@ func linkDiscord(a apptypes.Deps) fiber.Handler {
 
 		conflictFilter := discordAccountConflictFilter(discordUser.ID.String())
 		if len(conflictFilter) > 0 {
-			var conflictUser map[string]any
-			err = a.Store.C.Users.FindOne(c.UserContext(), conflictFilter).Decode(&conflictUser)
-			if err == nil && authStringify(conflictUser["user_id"]) != userID {
+			conflictUser, _ := findUserByDiscordID(c.UserContext(), a, discordUser.ID.String())
+			if conflictUser != nil && authStringify(conflictUser["user_id"]) != userID {
 				return apptypes.Error(fiber.StatusBadRequest, "Discord account already linked to another user")
 			}
 		}
 
-		linkedDiscord := bson.M{
+		linkedDiscord := map[string]any{
 			"linked_at":       time.Now().UTC(),
 			"discord_user_id": discordUser.ID.String(),
 			"username":        discordUser.Username,
 			"email":           discordUser.Email,
 		}
-		update := bson.M{
+		update := map[string]any{
 			"auth_methods":            uniqueStrings(append(toStringSlice(currentUser["auth_methods"]), "discord")),
 			"linked_accounts.discord": linkedDiscord,
 		}
-		if _, err := a.Store.C.Users.UpdateOne(c.UserContext(), bson.M{"user_id": userID}, bson.M{"$set": update}); err != nil {
+		for key, value := range update {
+			currentUser[key] = value
+		}
+		if err := upsertAuthUser(c.UserContext(), a, currentUser); err != nil {
 			return err
 		}
 
@@ -484,6 +485,7 @@ func linkDiscord(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Router /v2/link-email [post]
+// @Router /v2/auth/link-email [post]
 func linkEmail(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
@@ -499,14 +501,20 @@ func linkEmail(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		_, err = a.Store.C.Users.UpdateOne(c.UserContext(), bson.M{"user_id": userID}, bson.M{"$set": bson.M{
+		user, err := findUserByID(c.UserContext(), a, userID)
+		if err != nil || user == nil {
+			return apptypes.Error(fiber.StatusNotFound, "User not found")
+		}
+		for key, value := range map[string]any{
 			"email_encrypted": apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(body.Email))),
 			"email_hash":      emailHash,
 			"username":        body.Username,
 			"password":        string(passwordHash),
 			"auth_methods":    []string{"discord", "email"},
-		}})
-		if err != nil {
+		} {
+			user[key] = value
+		}
+		if err := upsertAuthUser(c.UserContext(), a, user); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"message": "Email linked successfully"})
@@ -525,6 +533,7 @@ func linkEmail(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/forgot-password [post]
+// @Router /v2/auth/forgot-password [post]
 func forgotPassword(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthForgotPasswordRequest
@@ -532,12 +541,12 @@ func forgotPassword(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		emailHash := hashEmail(a, body.Email)
-		var user map[string]any
-		if err := a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&user); err != nil {
+		user, err := findUserByEmailHash(c.UserContext(), a, emailHash)
+		if err != nil {
 			return apptypes.Error(fiber.StatusNotFound, "No account found with this email address.")
 		}
 		code := generateVerificationCode()
-		_, err := a.Store.C.PasswordResets.InsertOne(c.UserContext(), bson.M{
+		err = insertPasswordReset(c.UserContext(), a, map[string]any{
 			"user_id":    authStringify(user["user_id"]),
 			"email_hash": emailHash,
 			"reset_code": code,
@@ -567,6 +576,7 @@ func forgotPassword(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Router /v2/reset-password [post]
+// @Router /v2/auth/reset-password [post]
 func resetPassword(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthResetPasswordRequest
@@ -574,8 +584,8 @@ func resetPassword(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		emailHash := hashEmail(a, body.Email)
-		var record map[string]any
-		if err := a.Store.C.PasswordResets.FindOne(c.UserContext(), bson.M{"email_hash": emailHash, "reset_code": body.ResetCode, "used": false}).Decode(&record); err != nil {
+		record, err := findPasswordReset(c.UserContext(), a, emailHash, body.ResetCode)
+		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid password reset code.")
 		}
 		if expiresAt := asTime(record["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
@@ -586,13 +596,17 @@ func resetPassword(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		userID := authStringify(record["user_id"])
-		if _, err := a.Store.C.Users.UpdateOne(c.UserContext(), bson.M{"user_id": userID}, bson.M{"$set": bson.M{"password": string(passwordHash)}}); err != nil {
-			return err
-		}
-		if _, err := a.Store.C.PasswordResets.UpdateOne(c.UserContext(), bson.M{"_id": record["_id"]}, bson.M{"$set": bson.M{"used": true, "used_at": time.Now().UTC()}}); err != nil {
-			return err
-		}
 		user, _ := findUserByID(c.UserContext(), a, userID)
+		if user == nil {
+			return apptypes.Error(fiber.StatusNotFound, "User not found")
+		}
+		user["password"] = string(passwordHash)
+		if err := upsertAuthUser(c.UserContext(), a, user); err != nil {
+			return err
+		}
+		if err := markPasswordResetUsed(c.UserContext(), a, emailHash, body.ResetCode); err != nil {
+			return err
+		}
 		response, err := buildAuthResponse(a, userID, fallbackUserName(user), body.DeviceID, fallbackAvatar(user))
 		if err != nil {
 			return err
@@ -673,32 +687,23 @@ func buildAuthResponse(a apptypes.Deps, userID, username, deviceID, avatarURL st
 }
 
 func storeRefreshToken(ctx context.Context, a apptypes.Deps, userID, refreshToken string) error {
-	var existing map[string]any
-	err := a.Store.C.RefreshTokens.FindOne(ctx, bson.M{"user_id": userID}).Decode(&existing)
-	update := bson.M{
-		"user_id":       userID,
-		"refresh_token": refreshToken,
-		"expires_at":    time.Now().UTC().Add(30 * 24 * time.Hour),
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	if existing != nil {
-		_, err = a.Store.C.RefreshTokens.UpdateOne(ctx, bson.M{"user_id": userID}, bson.M{"$set": update})
-		return err
-	}
-	_, err = a.Store.C.RefreshTokens.InsertOne(ctx, update)
+	_, err := a.Store.SQL.Exec(ctx, `
+		INSERT INTO auth_refresh_tokens (token_hash, user_id, expires_at, data, created_at)
+		VALUES ($1, $2, $3, $4::jsonb, now())
+		ON CONFLICT (token_hash) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			expires_at = EXCLUDED.expires_at,
+			revoked_at = NULL,
+			data = EXCLUDED.data
+	`, tokenHash(refreshToken), userID, time.Now().UTC().Add(30*24*time.Hour), apptypes.Marshal(map[string]any{"refresh_token": refreshToken}))
 	return err
 }
 
 func findUserByID(ctx context.Context, a apptypes.Deps, userID string) (map[string]any, error) {
-	var user map[string]any
-	if err := a.Store.C.Users.FindOne(ctx, bson.M{"user_id": userID}).Decode(&user); err == nil {
-		return user, nil
-	}
-	if parsed, err := strconv.Atoi(userID); err == nil {
-		if err := a.Store.C.Users.FindOne(ctx, bson.M{"user_id": parsed}).Decode(&user); err == nil {
-			return user, nil
-		}
-	}
-	return nil, nil
+	return scanAuthUser(ctx, a, `WHERE user_id = $1`, userID)
 }
 
 func fallbackUserName(user map[string]any) string {
@@ -743,8 +748,6 @@ func asTime(value any) time.Time {
 	switch typed := value.(type) {
 	case time.Time:
 		return typed
-	case bson.DateTime:
-		return typed.Time()
 	default:
 		return time.Time{}
 	}
@@ -801,13 +804,10 @@ func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) 
 }
 
 func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discord.OAuth2User) (string, error) {
-	emailConditions := []bson.M{{"user_id": discordUser.ID.String()}}
-	if strings.TrimSpace(discordUser.Email) != "" {
-		emailConditions = append(emailConditions, bson.M{"email_hash": hashEmail(a, discordUser.Email)})
+	existingUser, _ := findUserByID(ctx, a, discordUser.ID.String())
+	if existingUser == nil && strings.TrimSpace(discordUser.Email) != "" {
+		existingUser, _ = findUserByEmailHash(ctx, a, hashEmail(a, discordUser.Email))
 	}
-
-	var existingUser map[string]any
-	_ = a.Store.C.Users.FindOne(ctx, bson.M{"$or": emailConditions}).Decode(&existingUser)
 
 	username := discordUser.EffectiveName()
 	if username == "" {
@@ -821,7 +821,7 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 			userID = discordUser.ID.String()
 		}
 		authMethods := append(toStringSlice(existingUser["auth_methods"]), "discord")
-		update := bson.M{
+		update := map[string]any{
 			"auth_methods": uniqueStrings(authMethods),
 			"username":     username,
 			"avatar_url":   avatarURL,
@@ -830,14 +830,17 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 			update["email_encrypted"] = apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(discordUser.Email)))
 			update["email_hash"] = hashEmail(a, discordUser.Email)
 		}
-		if _, err := a.Store.C.Users.UpdateOne(ctx, bson.M{"user_id": existingUser["user_id"]}, bson.M{"$set": update}); err != nil {
+		for key, value := range update {
+			existingUser[key] = value
+		}
+		if err := upsertAuthUser(ctx, a, existingUser); err != nil {
 			return "", err
 		}
 		return userID, nil
 	}
 
 	userID := discordUser.ID.String()
-	insert := bson.M{
+	insert := map[string]any{
 		"user_id":      userID,
 		"auth_methods": []string{"discord"},
 		"username":     username,
@@ -848,14 +851,17 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 		insert["email_encrypted"] = apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(discordUser.Email)))
 		insert["email_hash"] = hashEmail(a, discordUser.Email)
 	}
-	if _, err := a.Store.C.Users.InsertOne(ctx, insert); err != nil {
+	if err := upsertAuthUser(ctx, a, insert); err != nil {
 		return "", err
 	}
 	return userID, nil
 }
 
 func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, deviceName string, token *discord.AccessTokenResponse) error {
-	update := bson.M{
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	payload := map[string]any{
 		"user_id":               userID,
 		"device_id":             deviceID,
 		"device_name":           deviceName,
@@ -863,12 +869,17 @@ func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, 
 		"discord_refresh_token": apptypes.EncryptToString(token.RefreshToken),
 		"expires_at":            time.Now().UTC().Add(token.ExpiresIn),
 	}
-	_, err := a.Store.C.DiscordTokens.UpdateOne(
-		ctx,
-		bson.M{"user_id": userID, "device_id": deviceID, "device_name": deviceName},
-		bson.M{"$set": update},
-		options.UpdateOne().SetUpsert(true),
-	)
+	_, err := a.Store.SQL.Exec(ctx, `
+		INSERT INTO auth_discord_tokens (
+			user_id, device_id, access_token_ciphertext, refresh_token_ciphertext, expires_at, data, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6::jsonb, now(), now())
+		ON CONFLICT (user_id, device_id) DO UPDATE SET
+			access_token_ciphertext = EXCLUDED.access_token_ciphertext,
+			refresh_token_ciphertext = EXCLUDED.refresh_token_ciphertext,
+			expires_at = EXCLUDED.expires_at,
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, userID, deviceID, payload["discord_access_token"], payload["discord_refresh_token"], payload["expires_at"], apptypes.Marshal(payload))
 	return err
 }
 
@@ -897,12 +908,12 @@ func decodeLinkDiscordPayload(c *fiber.Ctx) (linkDiscordPayload, error) {
 	}, nil
 }
 
-func discordAccountConflictFilter(discordUserID string) bson.M {
-	clauses := []bson.M{{"linked_accounts.discord.discord_user_id": discordUserID}}
+func discordAccountConflictFilter(discordUserID string) map[string]any {
+	clauses := []map[string]any{{"linked_accounts.discord.discord_user_id": discordUserID}}
 	if parsed, err := strconv.ParseInt(discordUserID, 10, 64); err == nil {
-		clauses = append(clauses, bson.M{"linked_accounts.discord.discord_user_id": parsed})
+		clauses = append(clauses, map[string]any{"linked_accounts.discord.discord_user_id": parsed})
 	}
-	return bson.M{"$or": clauses}
+	return map[string]any{"$or": clauses}
 }
 
 func upsertLinkedDiscordTokens(ctx context.Context, a apptypes.Deps, userID string, payload linkDiscordPayload) error {
@@ -915,13 +926,14 @@ func upsertLinkedDiscordTokens(ctx context.Context, a apptypes.Deps, userID stri
 		expiresAt = time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
 	}
 
-	filter := bson.M{"user_id": userID}
-	if payload.DeviceID != "" || payload.DeviceName != "" {
-		filter["device_id"] = payload.DeviceID
-		filter["device_name"] = payload.DeviceName
+	token := &discord.AccessTokenResponse{
+		AccessToken: payload.AccessToken,
+		ExpiresIn:   time.Until(expiresAt),
 	}
-
-	update := bson.M{
+	if payload.RefreshToken != "" {
+		token.RefreshToken = payload.RefreshToken
+	}
+	record := map[string]any{
 		"user_id":              userID,
 		"device_id":            payload.DeviceID,
 		"device_name":          payload.DeviceName,
@@ -929,16 +941,260 @@ func upsertLinkedDiscordTokens(ctx context.Context, a apptypes.Deps, userID stri
 		"expires_at":           expiresAt,
 	}
 	if payload.RefreshToken != "" {
-		update["discord_refresh_token"] = apptypes.EncryptToString(payload.RefreshToken)
+		record["discord_refresh_token"] = apptypes.EncryptToString(payload.RefreshToken)
 	}
+	_ = record
+	return storeDiscordTokens(ctx, a, userID, payload.DeviceID, payload.DeviceName, token)
+}
 
-	_, err := a.Store.C.DiscordTokens.UpdateOne(
-		ctx,
-		filter,
-		bson.M{"$set": update},
-		options.UpdateOne().SetUpsert(true),
-	)
+func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string) (map[string]any, error) {
+	return scanAuthUser(ctx, a, `WHERE email_hash = $1`, emailHash)
+}
+
+func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (map[string]any, error) {
+	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1 OR data #>> '{linked_accounts,discord,discord_user_id}' = $1`, discordUserID)
+}
+
+func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	query := `
+		SELECT user_id, email_hash, discord_user_id, username, password_hash, verified, data
+		FROM auth_users ` + where + ` LIMIT 1`
+	var userID, username string
+	var emailHash, discordUserID, passwordHash *string
+	var verified bool
+	var raw []byte
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&userID, &emailHash, &discordUserID, &username, &passwordHash, &verified, &raw); err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	out["user_id"] = userID
+	out["username"] = username
+	out["verified"] = verified
+	if emailHash != nil {
+		out["email_hash"] = *emailHash
+	}
+	if discordUserID != nil {
+		out["discord_user_id"] = *discordUserID
+	}
+	if passwordHash != nil {
+		out["password"] = *passwordHash
+	}
+	return out, nil
+}
+
+func upsertAuthUser(ctx context.Context, a apptypes.Deps, user map[string]any) error {
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	expandDotted(user)
+	userID := authStringify(user["user_id"])
+	if userID == "" {
+		userID = generateUserID()
+		user["user_id"] = userID
+	}
+	username := fallbackUserName(user)
+	if username == "User" {
+		username = authStringify(user["username"])
+	}
+	emailHash := nullableString(authStringify(user["email_hash"]))
+	passwordHash := nullableString(authStringify(user["password"]))
+	discordID := nullableString(authStringify(user["discord_user_id"]))
+	if discordID == nil {
+		if linked, ok := user["linked_accounts"].(map[string]any); ok {
+			if discordAccount, ok := linked["discord"].(map[string]any); ok {
+				discordID = nullableString(authStringify(discordAccount["discord_user_id"]))
+			}
+		}
+	}
+	verified := slicesContains(toStringSlice(user["auth_methods"]), "email") || slicesContains(toStringSlice(user["auth_methods"]), "discord")
+	data := apptypes.Marshal(user)
+	_, err := a.Store.SQL.Exec(ctx, `
+		INSERT INTO auth_users (
+			user_id, email_hash, discord_user_id, username, password_hash, verified, data, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now(), now())
+		ON CONFLICT (user_id) DO UPDATE SET
+			email_hash = EXCLUDED.email_hash,
+			discord_user_id = EXCLUDED.discord_user_id,
+			username = EXCLUDED.username,
+			password_hash = EXCLUDED.password_hash,
+			verified = EXCLUDED.verified,
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, userID, emailHash, discordID, username, passwordHash, verified, data)
 	return err
+}
+
+func findEmailVerification(ctx context.Context, a apptypes.Deps, emailHash string, code string) (map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	query := `
+		SELECT email_hash, verification_code_hash, user_id, expires_at, data, created_at
+		FROM auth_email_verifications
+		WHERE email_hash = $1`
+	args := []any{emailHash}
+	if strings.TrimSpace(code) != "" {
+		query += ` AND verification_code_hash = $2`
+		args = append(args, code)
+	}
+	query += ` LIMIT 1`
+	var rowEmail, verificationCode string
+	var userID *string
+	var expiresAt, createdAt time.Time
+	var raw []byte
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&rowEmail, &verificationCode, &userID, &expiresAt, &raw, &createdAt); err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	out["email_hash"] = rowEmail
+	out["verification_code"] = verificationCode
+	out["expires_at"] = expiresAt
+	out["created_at"] = createdAt
+	if userID != nil {
+		out["user_id"] = *userID
+	}
+	return out, nil
+}
+
+func insertEmailVerification(ctx context.Context, a apptypes.Deps, record map[string]any) error {
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	emailHash := authStringify(record["email_hash"])
+	code := authStringify(record["verification_code"])
+	expiresAt := asTime(record["expires_at"])
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().UTC().Add(15 * time.Minute)
+	}
+	_, err := a.Store.SQL.Exec(ctx, `
+		INSERT INTO auth_email_verifications (
+			email_hash, verification_code_hash, user_id, expires_at, data, created_at
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5::jsonb, now())
+		ON CONFLICT (email_hash) DO UPDATE SET
+			verification_code_hash = EXCLUDED.verification_code_hash,
+			user_id = EXCLUDED.user_id,
+			expires_at = EXCLUDED.expires_at,
+			data = EXCLUDED.data,
+			created_at = now()
+	`, emailHash, code, authStringify(record["user_id"]), expiresAt, apptypes.Marshal(record))
+	return err
+}
+
+func deleteEmailVerification(ctx context.Context, a apptypes.Deps, emailHash string) error {
+	if a.Store.SQL == nil {
+		return nil
+	}
+	_, err := a.Store.SQL.Exec(ctx, `DELETE FROM auth_email_verifications WHERE email_hash = $1`, emailHash)
+	return err
+}
+
+func findRefreshToken(ctx context.Context, a apptypes.Deps, refreshToken string) (map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	var userID string
+	var expiresAt time.Time
+	var raw []byte
+	if err := a.Store.SQL.QueryRow(ctx, `
+		SELECT user_id, expires_at, data
+		FROM auth_refresh_tokens
+		WHERE token_hash = $1 AND revoked_at IS NULL
+	`, tokenHash(refreshToken)).Scan(&userID, &expiresAt, &raw); err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	out["user_id"] = userID
+	out["refresh_token"] = refreshToken
+	out["expires_at"] = expiresAt
+	return out, nil
+}
+
+func insertPasswordReset(ctx context.Context, a apptypes.Deps, record map[string]any) error {
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	_, err := a.Store.SQL.Exec(ctx, `
+		INSERT INTO auth_password_reset_tokens (
+			email_hash, reset_code_hash, user_id, used, expires_at, data, created_at
+		) VALUES ($1, $2, NULLIF($3, ''), false, $4, $5::jsonb, now())
+	`, authStringify(record["email_hash"]), authStringify(record["reset_code"]), authStringify(record["user_id"]), asTime(record["expires_at"]), apptypes.Marshal(record))
+	return err
+}
+
+func findPasswordReset(ctx context.Context, a apptypes.Deps, emailHash, code string) (map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	var userID string
+	var expiresAt time.Time
+	var raw []byte
+	if err := a.Store.SQL.QueryRow(ctx, `
+		SELECT user_id, expires_at, data
+		FROM auth_password_reset_tokens
+		WHERE email_hash = $1 AND reset_code_hash = $2 AND used = false
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, emailHash, code).Scan(&userID, &expiresAt, &raw); err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	out["user_id"] = userID
+	out["email_hash"] = emailHash
+	out["reset_code"] = code
+	out["expires_at"] = expiresAt
+	return out, nil
+}
+
+func markPasswordResetUsed(ctx context.Context, a apptypes.Deps, emailHash, code string) error {
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	_, err := a.Store.SQL.Exec(ctx, `
+		UPDATE auth_password_reset_tokens
+		SET used = true, data = jsonb_set(data, '{used}', 'true'::jsonb, true)
+		WHERE email_hash = $1 AND reset_code_hash = $2 AND used = false
+	`, emailHash, code)
+	return err
+}
+
+func tokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func nullableString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func expandDotted(values map[string]any) {
+	for key, value := range values {
+		if !strings.Contains(key, ".") {
+			continue
+		}
+		delete(values, key)
+		parts := strings.Split(key, ".")
+		current := values
+		for _, part := range parts[:len(parts)-1] {
+			next, _ := current[part].(map[string]any)
+			if next == nil {
+				next = map[string]any{}
+				current[part] = next
+			}
+			current = next
+		}
+		current[parts[len(parts)-1]] = value
+	}
 }
 
 func anyToInt(value any) int {

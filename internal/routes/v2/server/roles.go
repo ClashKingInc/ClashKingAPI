@@ -1,14 +1,13 @@
 package server
 
 import (
-	"context"
+	"encoding/json"
 	"net/http"
+	"strconv"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // listRoles godoc
@@ -32,7 +31,7 @@ func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		roleType := c.Params("role_type")
 		var items []map[string]any
 		if roleType == "status" {
-			serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 			if err != nil {
 				return notFoundErr(err, "Server not found")
 			}
@@ -47,11 +46,10 @@ func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 				}
 			}
 		} else {
-			collection := roleCollection(rt, roleType)
-			if collection == nil {
+			if serverRoleCollections[roleType] == "" {
 				return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
 			}
-			items, err = findManyMaps(c.UserContext(), collection, bson.M{"server": serverID})
+			items, err = sqlRoleBindings(c, rt, serverID, roleType)
 			if err != nil {
 				return err
 			}
@@ -90,13 +88,13 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
 		body["server"] = serverID
 		if roleType == "status" {
 			roleID := body["id"]
-			_, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$addToSet": bson.M{"status_roles.discord": body}})
+			err := sqlAddStatusRole(c, rt, serverID, body)
 			if err != nil {
 				return err
 			}
@@ -107,11 +105,18 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 				RoleID:   roleID,
 			})
 		}
-		collection := roleCollection(rt, roleType)
-		if collection == nil {
+		if serverRoleCollections[roleType] == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
 		}
-		result, err := collection.InsertOne(c.UserContext(), body)
+		roleID := serverAsString(firstNonNil(body["role"], body["id"]))
+		if roleID == "" {
+			return apptypes.Error(http.StatusBadRequest, "role is required")
+		}
+		_, err = rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO role_bindings (server_id, role_type, role_key, role_id, data, created_at, updated_at)
+			VALUES ($1, $2, '', $3, $4::jsonb, now(), now())
+			ON CONFLICT (server_id, role_type, role_key, role_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+		`, strconv.Itoa(serverID), roleType, roleID, apptypes.Marshal(body))
 		if err != nil {
 			return err
 		}
@@ -119,7 +124,7 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 			Message:  "Role created successfully",
 			ServerID: serverID,
 			RoleType: roleType,
-			RoleID:   sanitizeObjectID(result.InsertedID),
+			RoleID:   roleID,
 		})
 	}
 }
@@ -147,7 +152,7 @@ func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		roleType := c.Params("role_type")
 		roleID := c.Params("role_id")
 		if roleType == "status" {
-			_, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$pull": bson.M{"status_roles.discord": bson.M{"id": numericMaybe(roleID)}}})
+			err := sqlDeleteStatusRole(c, rt, serverID, roleID)
 			if err != nil {
 				return err
 			}
@@ -158,15 +163,14 @@ func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 				RoleID:   roleID,
 			})
 		}
-		collection := roleCollection(rt, roleType)
-		if collection == nil {
+		if serverRoleCollections[roleType] == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
 		}
-		result, err := collection.DeleteOne(c.UserContext(), bson.M{"server": serverID, "$or": []bson.M{{"role": roleID}, {"role": numericMaybe(roleID)}}})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM role_bindings WHERE server_id = $1 AND role_type = $2 AND role_id = $3`, strconv.Itoa(serverID), roleType, roleID)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Role not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
@@ -195,7 +199,7 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil {
 			return notFoundErr(err, "Server not found")
 		}
@@ -234,8 +238,8 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		setDoc := bson.M{}
-		unsetDoc := bson.M{}
+		setDoc := map[string]any{}
+		unsetDoc := map[string]any{}
 		if body.AutoEvalStatus != nil {
 			setDoc["autoeval"] = *body.AutoEvalStatus
 		} else if body.Autoeval != nil {
@@ -268,18 +272,14 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if len(setDoc) == 0 && len(unsetDoc) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		update := bson.M{}
-		if len(setDoc) > 0 {
-			update["$set"] = setDoc
+		for key := range unsetDoc {
+			delete(setDoc, key)
 		}
-		if len(unsetDoc) > 0 {
-			update["$unset"] = unsetDoc
-		}
-		result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, update)
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET data = data || $2::jsonb, updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(setDoc))
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Server not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
@@ -308,22 +308,18 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
 		out := map[string][]map[string]any{}
 		totalCount := 0
 		for roleType := range serverRoleCollections {
-			collection := roleCollection(rt, roleType)
-			items, _ := findManyMaps(c.UserContext(), collection, bson.M{"server": serverID})
+			items, _ := sqlRoleBindings(c, rt, serverID, roleType)
 			sanitized := sanitizeRoleList(items)
 			out[roleType] = sanitized
 			totalCount += len(sanitized)
 		}
-		serverDoc, _ := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
-		if sanitizedDoc, ok := sanitize(serverDoc).(map[string]any); ok {
-			serverDoc = sanitizedDoc
-		}
+		serverDoc, _ := sqlServerSettingsDoc(c, rt, serverID)
 		statusRoles, _ := serverDoc["status_roles"].(map[string]any)
 		status := sanitizeRoleList(anyMapSlice(statusRoles["discord"]))
 		out["status"] = status
@@ -354,14 +350,14 @@ func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
-		familyRoles, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection("generalrole"), bson.M{"server": serverID})
-		notFamilyRoles, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection("linkrole"), bson.M{"server": serverID})
-		onlyFamilyRoles, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection("familyexclusiveroles"), bson.M{"server": serverID})
-		ignoredRoles, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection("evalignore"), bson.M{"server": serverID})
-		positionRoles, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection("family_roles"), bson.M{"server": serverID})
+		familyRoles, _ := sqlRoleBindings(c, rt, serverID, "family")
+		notFamilyRoles, _ := sqlRoleBindings(c, rt, serverID, "not_family")
+		onlyFamilyRoles, _ := sqlRoleBindings(c, rt, serverID, "only_family")
+		ignoredRoles, _ := sqlRoleBindings(c, rt, serverID, "ignored")
+		positionRoles, _ := sqlRoleBindings(c, rt, serverID, "family_position")
 
 		resp := modelsv2.FamilyRolesResponse{
 			ServerID:            serverID,
@@ -396,7 +392,7 @@ func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
 		var body modelsv2.FamilyRoleRequest
@@ -407,18 +403,23 @@ func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		if collectionName == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unsupported family role type")
 		}
-		doc := bson.M{"server": serverID, "role": numericMaybe(serverAsString(body.Role))}
+		doc := map[string]any{"server": serverID, "role": numericMaybe(serverAsString(body.Role))}
 		if internalType != "" {
 			doc["type"] = internalType
 		}
-		if err := ensureFamilyRoleNotExists(c.UserContext(), rt.Store.DB.Usafam.Collection(collectionName), doc); err != nil {
-			return err
+		_ = collectionName
+		roleKey := internalType
+		if roleKey == "" {
+			roleKey = body.Type
 		}
-		result, err := rt.Store.DB.Usafam.Collection(collectionName).InsertOne(c.UserContext(), doc)
+		_, err = rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO role_bindings (server_id, role_type, role_key, role_id, data, created_at, updated_at)
+			VALUES ($1, 'family_position', $2, $3, $4::jsonb, now(), now())
+			ON CONFLICT (server_id, role_type, role_key, role_id) DO NOTHING
+		`, strconv.Itoa(serverID), roleKey, serverAsString(body.Role), apptypes.Marshal(doc))
 		if err != nil {
 			return err
 		}
-		_ = result
 		return apptypes.JSON(c, http.StatusOK, modelsv2.FamilyRoleOperationResponse{
 			Message:  "Family role added successfully",
 			ServerID: serverID,
@@ -454,15 +455,19 @@ func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 			return apptypes.Error(http.StatusBadRequest, "Unsupported family role type")
 		}
 		roleID := c.Params("role_id")
-		filter := bson.M{"server": serverID, "$or": []bson.M{{"role": roleID}, {"role": numericMaybe(roleID)}}}
-		if internalType != "" {
-			filter["type"] = internalType
+		_ = collectionName
+		roleKey := internalType
+		if roleKey == "" {
+			roleKey = roleType
 		}
-		result, err := rt.Store.DB.Usafam.Collection(collectionName).DeleteOne(c.UserContext(), filter)
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM role_bindings
+			WHERE server_id = $1 AND role_type = 'family_position' AND role_key = $2 AND role_id = $3
+		`, strconv.Itoa(serverID), roleKey, roleID)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Family role not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.FamilyRoleOperationResponse{
@@ -584,21 +589,83 @@ func familyRoleTarget(roleType string) (collection string, internalType string) 
 	}
 }
 
-func ensureFamilyRoleNotExists(ctx context.Context, collection *mongo.Collection, filter bson.M) error {
-	var query bson.M
-	query = bson.M{
-		"server": filter["server"],
-		"role":   filter["role"],
+func sqlRoleBindings(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleType string) ([]map[string]any, error) {
+	query := `
+		SELECT role_key, role_id, data
+		FROM role_bindings
+		WHERE server_id = $1 AND role_type = $2
+	`
+	args := []any{strconv.Itoa(serverID), roleType}
+	if roleType == "family_position" {
+		query = `
+			SELECT role_key, role_id, data
+			FROM role_bindings
+			WHERE server_id = $1 AND role_type = $2
+		`
 	}
-	if roleType, ok := filter["type"]; ok {
-		query["type"] = roleType
+	rows, err := rt.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
 	}
-	_, err := findOneMap(ctx, collection, query)
-	if err == nil {
-		return apptypes.Error(http.StatusBadRequest, "Family role already exists")
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var roleKey, roleID string
+		var raw []byte
+		if err := rows.Scan(&roleKey, &roleID, &raw); err != nil {
+			return nil, err
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		doc["server"] = serverID
+		doc["role"] = roleID
+		doc["id"] = roleID
+		if roleKey != "" {
+			doc["type"] = roleKey
+		}
+		items = append(items, doc)
 	}
-	if err != mongo.ErrNoDocuments {
+	return items, rows.Err()
+}
+
+func sqlAddStatusRole(c *fiber.Ctx, rt apptypes.Deps, serverID int, body map[string]any) error {
+	serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
+	if err != nil {
 		return err
 	}
-	return nil
+	statusRoles := mapMaybe(serverDoc["status_roles"])
+	discordRoles := anyMapSlice(statusRoles["discord"])
+	roleID := serverAsString(body["id"])
+	replaced := false
+	for i, role := range discordRoles {
+		if serverAsString(role["id"]) == roleID {
+			discordRoles[i] = body
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		discordRoles = append(discordRoles, body)
+	}
+	statusRoles["discord"] = discordRoles
+	_, err = rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET status_roles = $2::jsonb, data = data || jsonb_build_object('status_roles', $2::jsonb), updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(statusRoles))
+	return err
+}
+
+func sqlDeleteStatusRole(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleID string) error {
+	serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
+	if err != nil {
+		return err
+	}
+	statusRoles := mapMaybe(serverDoc["status_roles"])
+	discordRoles := anyMapSlice(statusRoles["discord"])
+	filtered := discordRoles[:0]
+	for _, role := range discordRoles {
+		if serverAsString(role["id"]) != roleID {
+			filtered = append(filtered, role)
+		}
+	}
+	statusRoles["discord"] = filtered
+	_, err = rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET status_roles = $2::jsonb, data = data || jsonb_build_object('status_roles', $2::jsonb), updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(statusRoles))
+	return err
 }

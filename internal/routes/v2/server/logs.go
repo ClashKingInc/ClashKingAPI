@@ -2,8 +2,8 @@ package server
 
 import (
 	"net/http"
-	"strconv"
 	"slices"
+	"strconv"
 	"strings"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
@@ -11,7 +11,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // getServerLogs godoc
@@ -30,15 +30,15 @@ func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		clans, err := findManyMaps(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID})
+		clans, err := sqlServerClanDocs(c, rt, serverID)
 		if err != nil {
 			return err
 		}
 		aggregated := map[string]modelsv2.LogConfig{}
 		for _, clanDoc := range clans {
-			logs := bsonToMap(clanDoc["logs"])
+			logs := anyToMap(clanDoc["logs"])
 			for dbName, apiName := range logMapping {
-				raw := bsonToMap(logs[dbName])
+				raw := anyToMap(logs[dbName])
 				webhook := serverAsString(raw["webhook"])
 				if webhook == "" {
 					continue
@@ -101,11 +101,11 @@ func updateServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 				}
 			}
 			for _, clanTag := range clans {
-				set := bson.M{}
+				logUpdate := map[string]any{}
 				for _, dbName := range dbNames {
-					set["logs."+dbName] = bson.M{"webhook": derefString(config.Webhook), "thread": derefString(config.Thread)}
+					logUpdate[dbName] = map[string]any{"webhook": derefString(config.Webhook), "thread": derefString(config.Thread)}
 				}
-				_, _ = rt.Store.C.ClanDB.UpdateOne(c.UserContext(), bson.M{"server": serverID, "tag": clanTag}, bson.M{"$set": set})
+				_, _ = updateSQLClanLogs(c, rt, serverID, clanTag, logUpdate)
 			}
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Server logs updated successfully", "server_id": serverID})
@@ -139,7 +139,12 @@ func patchServerLogType(rt apptypes.Deps) apptypes.HandlerFunc {
 		if _, ok := apiToDBLogMapping[logType]; !ok {
 			return apptypes.Error(http.StatusBadRequest, "Unknown log type")
 		}
-		_, err = rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$set": bson.M{"logs_config." + logType: body}})
+		_, err = rt.Store.SQL.Exec(c.UserContext(), `
+			UPDATE servers
+			SET logs_config = jsonb_set(logs_config, ARRAY[$2], $3::jsonb, true),
+				updated_at = now()
+			WHERE id = $1
+		`, strconv.Itoa(serverID), logType, apptypes.Marshal(body))
 		if err != nil {
 			return err
 		}
@@ -163,7 +168,7 @@ func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		clans, err := findManyMaps(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID})
+		clans, err := sqlServerClanDocs(c, rt, serverID)
 		if err != nil {
 			return err
 		}
@@ -182,7 +187,7 @@ func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 
 		items := make([]modelsv2.ClanLogsConfig, 0, len(clans))
 		for _, clanDoc := range clans {
-			logs := bsonToMap(clanDoc["logs"])
+			logs := anyToMap(clanDoc["logs"])
 			items = append(items, modelsv2.ClanLogsConfig{
 				Tag:                  serverAsString(clanDoc["tag"]),
 				Name:                 serverAsString(clanDoc["name"]),
@@ -254,11 +259,7 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 			return apptypes.Error(http.StatusBadRequest, "No log types provided")
 		}
 
-		filter := bson.M{"server": serverID, "tag": tag}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ClanDB, filter); err != nil {
-			if err.Error() == "mongo: no documents in result" {
-				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
-			}
+		if _, err := sqlServerClanDoc(c, rt, serverID, tag); err != nil {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
 
@@ -293,26 +294,27 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 			webhookID = &id
 		}
 
-		updateOps := bson.M{}
+		updateOps := map[string]any{}
 		for _, logType := range logTypes {
 			if webhookID != nil {
-				updateOps["logs."+logType+".webhook"] = *webhookID
+				entry := map[string]any{"webhook": *webhookID}
 				if threadID != nil {
-					updateOps["logs."+logType+".thread"] = *threadID
+					entry["thread"] = *threadID
 				} else {
-					updateOps["logs."+logType+".thread"] = nil
+					entry["thread"] = nil
 				}
+				updateOps[logType] = entry
 			}
 		}
 		if len(updateOps) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No updates to perform")
 		}
 
-		result, err := rt.Store.C.ClanDB.UpdateOne(c.UserContext(), filter, bson.M{"$set": updateOps})
+		result, err := updateSQLClanLogs(c, rt, serverID, tag, updateOps)
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
 
@@ -369,16 +371,11 @@ func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 			return apptypes.Error(http.StatusBadRequest, "No log types provided")
 		}
 
-		unsetOps := bson.M{}
-		for _, logType := range logTypes {
-			unsetOps["logs."+logType] = ""
-		}
-
-		result, err := rt.Store.C.ClanDB.UpdateOne(c.UserContext(), bson.M{"server": serverID, "tag": tag}, bson.M{"$unset": unsetOps})
+		result, err := deleteSQLClanLogs(c, rt, serverID, tag, logTypes)
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanLogsOperationResponse{
@@ -389,22 +386,16 @@ func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
-func bsonToMap(raw any) map[string]any {
+func anyToMap(raw any) map[string]any {
 	switch v := raw.(type) {
 	case map[string]any:
 		return v
-	case bson.D:
-		out := make(map[string]any, len(v))
-		for _, e := range v {
-			out[e.Key] = e.Value
-		}
-		return out
 	}
 	return nil
 }
 
 func parseClanLogType(raw any, webhookToChannel map[string]string) *modelsv2.ClanLogTypeConfig {
-	data := bsonToMap(raw)
+	data := anyToMap(raw)
 	if data == nil {
 		return nil
 	}
@@ -426,6 +417,36 @@ func parseClanLogType(raw any, webhookToChannel map[string]string) *modelsv2.Cla
 		out.Thread = &thread
 	}
 	return out
+}
+
+func updateSQLClanLogs(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag string, updates map[string]any) (pgconn.CommandTag, error) {
+	return rt.Store.SQL.Exec(c.UserContext(), `
+		UPDATE server_clans
+		SET logs_config = logs_config || $3::jsonb,
+			data = data || jsonb_build_object('logs', logs_config || $3::jsonb),
+			updated_at = now()
+		WHERE server_id = $1 AND tag = $2
+	`, strconv.Itoa(serverID), clanTag, apptypes.Marshal(updates))
+}
+
+func deleteSQLClanLogs(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag string, logTypes []string) (pgconn.CommandTag, error) {
+	updated := map[string]any{}
+	current, err := sqlServerClanDoc(c, rt, serverID, clanTag)
+	if err != nil {
+		return pgconn.CommandTag{}, err
+	}
+	for key, value := range mapMaybe(current["logs"]) {
+		if !slices.Contains(logTypes, key) {
+			updated[key] = value
+		}
+	}
+	return rt.Store.SQL.Exec(c.UserContext(), `
+		UPDATE server_clans
+		SET logs_config = $3::jsonb,
+			data = data || jsonb_build_object('logs', $3::jsonb),
+			updated_at = now()
+		WHERE server_id = $1 AND tag = $2
+	`, strconv.Itoa(serverID), clanTag, apptypes.Marshal(updated))
 }
 
 func derefString(value *string) any {

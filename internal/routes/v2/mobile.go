@@ -14,8 +14,6 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const mobileWarTimestampLayout = "20060102T150405.000Z"
@@ -611,27 +609,16 @@ func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, pla
 		return preload
 	}
 
-	proj := options.Find().SetProjection(bson.M{
-		"_id": 0, "tag": 1, "donations": 1, "clan_games": 1,
-		"season_pass": 1, "activity": 1, "last_online": 1, "last_online_time": 1,
-		"attack_wins": 1, "dark_elixir": 1, "gold": 1, "capital_gold": 1,
-		"season_trophies": 1, "last_updated": 1,
-	})
-
 	var setupWG sync.WaitGroup
 	setupWG.Add(4)
 	go func() {
 		defer setupWG.Done()
 		localStats := map[string]map[string]any{}
-		if cur, err := a.Store.C.PlayerStats.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, proj); err == nil {
-			var rows []bson.M
-			if err := cur.All(ctx, &rows); err == nil {
-				for _, row := range rows {
-					clean := mobileMap(row)
-					tag := mobileString(clean["tag"])
-					if tag != "" {
-						localStats[tag] = clean
-					}
+		if rows, err := playerCurrentStatsByTags(ctx, a, playerTags); err == nil {
+			for _, row := range rows {
+				tag := mobileString(row["tag"])
+				if tag != "" {
+					localStats[tag] = row
 				}
 			}
 		}
@@ -746,20 +733,11 @@ func mobileFetchLegendRankingsBatch(ctx context.Context, a apptypes.Deps, player
 		return map[string][]any{}
 	}
 
-	var rows []bson.M
-	findOpts := options.Find().
-		SetSort(bson.D{{Key: "tag", Value: 1}, {Key: "season", Value: -1}}).
-		SetProjection(bson.M{"_id": 0})
-	cur, err := a.Store.DB.RankingHistory.Collection("history_db").Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, findOpts)
-	if err == nil {
-		if err := cur.All(ctx, &rows); err != nil {
-			return map[string][]any{}
-		}
-	}
+	rows := mobileLegendHistoryRows(ctx, a, playerTags, limit)
 	return mobileLegendRankingsByTagFromRows(playerTags, rows, limit)
 }
 
-func mobileLegendRankingsByTagFromRows(playerTags []string, rows []bson.M, limit int64) map[string][]any {
+func mobileLegendRankingsByTagFromRows(playerTags []string, rows []map[string]any, limit int64) map[string][]any {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	if len(playerTags) == 0 || limit <= 0 {
 		return map[string][]any{}
@@ -784,18 +762,42 @@ func mobileLegendRankingsByTagFromRows(playerTags []string, rows []bson.M, limit
 	return out
 }
 
+func mobileLegendHistoryRows(ctx context.Context, a apptypes.Deps, playerTags []string, limit int64) []map[string]any {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT player_tag, season, rank, trophies, data
+		FROM legend_history_snapshots
+		WHERE player_tag = ANY($1)
+		ORDER BY player_tag, season DESC
+	`, playerTags)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag, season string
+		var rank, trophies int
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &season, &rank, &trophies, &dataRaw); err != nil {
+			continue
+		}
+		item := mobileMap(mobileDecodeJSONAny(dataRaw))
+		item["tag"] = tag
+		item["season"] = season
+		item["rank"] = rank
+		item["trophies"] = trophies
+		out = append(out, item)
+	}
+	return out
+}
+
 func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playerTags []string) map[string]map[string]any {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	if len(playerTags) == 0 {
 		return map[string]map[string]any{}
 	}
 
-	var leaderboardRows []bson.M
-	if cur, err := a.Store.C.LeaderboardDB.Find(ctx, bson.M{"tag": bson.M{"$in": playerTags}}, options.Find().SetProjection(bson.M{"_id": 0})); err == nil {
-		if err := cur.All(ctx, &leaderboardRows); err != nil {
-			return map[string]map[string]any{}
-		}
-	}
+	leaderboardRows := mobileCurrentRankingRows(ctx, a, playerTags)
 
 	provisional := mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, nil)
 	missingGlobalRank := make([]string, 0, len(playerTags))
@@ -805,19 +807,82 @@ func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playe
 		}
 	}
 
-	var fallbackRows []bson.M
+	var fallbackRows []map[string]any
 	if len(missingGlobalRank) > 0 {
-		if cur, err := a.Store.C.LegendRankings.Find(ctx, bson.M{"tag": bson.M{"$in": missingGlobalRank}}, options.Find().SetProjection(bson.M{"_id": 0, "tag": 1, "rank": 1})); err == nil {
-			if err := cur.All(ctx, &fallbackRows); err != nil {
-				fallbackRows = nil
-			}
-		}
+		fallbackRows = mobileLegendCurrentRankingRows(ctx, a, missingGlobalRank)
 	}
 
 	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, fallbackRows)
 }
 
-func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []bson.M, fallbackRows []bson.M) map[string]map[string]any {
+func mobileCurrentRankingRows(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT player_tag, country_code, country_name, rank, global_rank, local_rank, data
+		FROM player_rankings_current
+		WHERE player_tag = ANY($1)
+	`, playerTags)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag string
+		var countryCode, countryName *string
+		var rank, globalRank, localRank *int
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &countryCode, &countryName, &rank, &globalRank, &localRank, &dataRaw); err != nil {
+			continue
+		}
+		item := mobileMap(mobileDecodeJSONAny(dataRaw))
+		item["tag"] = tag
+		if countryCode != nil {
+			item["country_code"] = *countryCode
+		}
+		if countryName != nil {
+			item["country_name"] = *countryName
+		}
+		if rank != nil {
+			item["rank"] = *rank
+		}
+		if globalRank != nil {
+			item["global_rank"] = *globalRank
+		}
+		if localRank != nil {
+			item["local_rank"] = *localRank
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func mobileLegendCurrentRankingRows(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT player_tag, rank, data
+		FROM legend_rankings_current
+		WHERE player_tag = ANY($1)
+	`, playerTags)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag string
+		var rank int
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &rank, &dataRaw); err != nil {
+			continue
+		}
+		item := mobileMap(mobileDecodeJSONAny(dataRaw))
+		item["tag"] = tag
+		item["rank"] = rank
+		out = append(out, item)
+	}
+	return out
+}
+
+func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []map[string]any, fallbackRows []map[string]any) map[string]map[string]any {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	out := make(map[string]map[string]any, len(playerTags))
 	allowed := make(map[string]bool, len(playerTags))
@@ -846,33 +911,45 @@ func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []b
 	return out
 }
 
+func mobileRaidWeekendRows(ctx context.Context, a apptypes.Deps, clanTags []string) []map[string]any {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT DISTINCT ON (clan_tag) clan_tag, members, data
+		FROM raid_weekends
+		WHERE clan_tag = ANY($1)
+		ORDER BY clan_tag, start_time DESC
+	`, clanTags)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var clanTag string
+		var membersRaw, dataRaw []byte
+		if err := rows.Scan(&clanTag, &membersRaw, &dataRaw); err != nil {
+			continue
+		}
+		data := mobileMap(mobileDecodeJSONAny(dataRaw))
+		if len(data) == 0 {
+			data = map[string]any{}
+		}
+		data["members"] = mobileDecodeJSONAny(membersRaw)
+		out = append(out, map[string]any{"clan_tag": clanTag, "data": data})
+	}
+	return out
+}
+
 func mobileFetchPlayerRaidDataBatch(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]map[string]map[string]any {
 	clanTags = mobileNormalizeUniqueClanTags(clanTags)
 	if len(clanTags) == 0 || !mobileIsRaidsWindow() {
 		return map[string]map[string]map[string]any{}
 	}
 
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{"clan_tag": bson.M{"$in": clanTags}}},
-		bson.M{"$sort": bson.D{{Key: "clan_tag", Value: 1}, {Key: "data.endTime", Value: -1}}},
-		bson.M{"$group": bson.M{
-			"_id":  "$clan_tag",
-			"data": bson.M{"$first": "$data"},
-		}},
-		bson.M{"$project": bson.M{"_id": 0, "clan_tag": "$_id", "data": 1}},
-	}
-
-	var rows []bson.M
-	cur, err := a.Store.C.RaidWeekendDB.Aggregate(ctx, pipeline)
-	if err == nil {
-		if err := cur.All(ctx, &rows); err != nil {
-			return map[string]map[string]map[string]any{}
-		}
-	}
+	rows := mobileRaidWeekendRows(ctx, a, clanTags)
 	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
 }
 
-func mobilePlayerRaidDataByClanFromRows(clanTags []string, rows []bson.M) map[string]map[string]map[string]any {
+func mobilePlayerRaidDataByClanFromRows(clanTags []string, rows []map[string]any) map[string]map[string]map[string]any {
 	clanTags = mobileNormalizeUniqueClanTags(clanTags)
 	if len(clanTags) == 0 {
 		return map[string]map[string]map[string]any{}
@@ -939,13 +1016,8 @@ func mobileLookupPlayerRaidData(raidDataByClan map[string]map[string]map[string]
 }
 
 func mobileFetchPlayerWarContext(ctx context.Context, a apptypes.Deps, playerTag string, currentClanTag string) map[string]any {
-	var warTimer bson.M
-	err := a.Store.C.WarTimer.FindOne(ctx, bson.M{"_id": playerTag}, options.FindOne().SetProjection(bson.M{"_id": 0, "clans": 1})).Decode(&warTimer)
-	if err != nil {
-		return map[string]any{}
-	}
-
-	targetClan := mobilePlayerWarContextTargetClan(mobileStringList(mobileMap(warTimer)["clans"]), currentClanTag)
+	clansByTag := mobileFetchPlayerWarTimerClansBatch(ctx, a, []string{playerTag})
+	targetClan := mobilePlayerWarContextTargetClan(clansByTag[playerTag], currentClanTag)
 	if targetClan == "" {
 		return map[string]any{}
 	}
@@ -959,33 +1031,30 @@ func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, p
 	}
 
 	out := make(map[string][]string, len(playerTags))
-	findOpts := options.FindOne().SetProjection(bson.M{"_id": 1, "clans": 1})
-	sem := make(chan struct{}, 50)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, playerTag := range playerTags {
-		wg.Add(1)
-		go func(tag string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			var row bson.M
-			if err := a.Store.C.WarTimer.FindOne(ctx, bson.M{"_id": tag}, findOpts).Decode(&row); err != nil {
-				return
-			}
-
-			clean := mobileMap(row)
-			if len(clean) == 0 {
-				return
-			}
-
-			mu.Lock()
-			out[tag] = mobileStringList(clean["clans"])
-			mu.Unlock()
-		}(playerTag)
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT attacker_tag, attacking_clan_tag
+		FROM war_attack_events
+		WHERE attacker_tag = ANY($1)
+		GROUP BY attacker_tag, attacking_clan_tag
+	`, playerTags)
+	if err != nil {
+		return out
 	}
-	wg.Wait()
+	defer rows.Close()
+	seen := map[string]map[string]bool{}
+	for rows.Next() {
+		var tag, clanTag string
+		if err := rows.Scan(&tag, &clanTag); err != nil {
+			continue
+		}
+		if seen[tag] == nil {
+			seen[tag] = map[string]bool{}
+		}
+		if !seen[tag][clanTag] {
+			out[tag] = append(out[tag], clanTag)
+			seen[tag][clanTag] = true
+		}
+	}
 	return out
 }
 
@@ -1163,31 +1232,42 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 	if err != nil {
 		return map[string]any{}
 	}
-	filter := bson.M{
-		"clan": bson.M{"$in": clanTags},
-		"time": bson.M{"$gte": seasonStart, "$lte": seasonEnd},
-	}
-
-	findOpts := options.Find().SetSort(bson.M{"time": -1})
-	cur, err := a.Store.C.JoinLeaveHistory.Find(ctx, filter, findOpts)
+	rowsSQL, err := a.Store.SQL.Query(ctx, `
+		SELECT event_time, event_type, clan_tag, player_tag, player_name, townhall_level, clan_role, data
+		FROM join_leave_history
+		WHERE clan_tag = ANY($1)
+		  AND event_time >= $2
+		  AND event_time <= $3
+		ORDER BY event_time DESC
+	`, clanTags, seasonStart, seasonEnd)
 	if err != nil {
 		return map[string]any{}
 	}
-
-	var rows []bson.M
-	if err := cur.All(ctx, &rows); err != nil {
-		return map[string]any{}
-	}
+	defer rowsSQL.Close()
 
 	groupedDocs := map[string][]map[string]any{}
 	groupedStats := map[string][]mobileJoinLeaveEvent{}
-	for _, row := range rows {
-		cleanAny := sanitize(row)
-		clean, ok := cleanAny.(map[string]any)
-		if !ok {
+	for rowsSQL.Next() {
+		var eventTime time.Time
+		var eventType, clanTag, playerTag string
+		var playerName, clanRole *string
+		var townhall int
+		var dataRaw []byte
+		if err := rowsSQL.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanRole, &dataRaw); err != nil {
 			continue
 		}
-		clanTag := mobileString(clean["clan"])
+		clean := mobileMap(mobileDecodeJSONAny(dataRaw))
+		clean["clan"] = clanTag
+		clean["type"] = eventType
+		clean["tag"] = playerTag
+		clean["time"] = eventTime
+		clean["th"] = townhall
+		if playerName != nil {
+			clean["name"] = *playerName
+		}
+		if clanRole != nil {
+			clean["role"] = *clanRole
+		}
 		if clanTag == "" {
 			continue
 		}
@@ -1673,61 +1753,90 @@ func mobileBuildSingleClanWarStatsFromDocs(clanTag string, wars []map[string]any
 	return results[0]
 }
 
-func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, pipeline bson.A) []map[string]any {
-	cur, err := a.Store.C.ClanWars.Aggregate(ctx, pipeline)
+type mobileWarQuery struct {
+	PlayerTags []string
+	ClanTags   []string
+	StartUnix  int64
+	EndUnix    int64
+	Limit      int
+}
+
+func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, query mobileWarQuery) []map[string]any {
+	where := []string{"prep_time >= $1", "prep_time <= $2"}
+	args := []any{time.Unix(query.StartUnix, 0).UTC(), time.Unix(query.EndUnix, 0).UTC()}
+	if len(query.ClanTags) > 0 {
+		args = append(args, query.ClanTags)
+		where = append(where, "(clan_tag = ANY($"+strconv.Itoa(len(args))+") OR opponent_tag = ANY($"+strconv.Itoa(len(args))+"))")
+	}
+	if len(query.PlayerTags) > 0 {
+		args = append(args, query.PlayerTags)
+		where = append(where, `war_id IN (
+			SELECT DISTINCT war_id FROM war_attack_events
+			WHERE attacker_tag = ANY($`+strconv.Itoa(len(args))+`) OR defender_tag = ANY($`+strconv.Itoa(len(args))+`)
+		)`)
+	}
+	limitSQL := ""
+	if query.Limit > 0 {
+		args = append(args, query.Limit)
+		limitSQL = " LIMIT $" + strconv.Itoa(len(args))
+	}
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
+		FROM war_log_index
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY prep_time DESC
+	`+limitSQL, args...)
 	if err != nil {
 		return nil
 	}
-
-	var docs []bson.M
-	if err := cur.All(ctx, &docs); err != nil {
-		return nil
-	}
+	defer rows.Close()
 
 	seen := map[string]bool{}
-	out := make([]map[string]any, 0, len(docs))
-	for _, doc := range docs {
-		data := mobileMap(doc["data"])
-		if len(data) == 0 {
+	out := []map[string]any{}
+	for rows.Next() {
+		var warID, clanTag, opponentTag, warType, state, modifier string
+		var prepTime, endTime time.Time
+		var startTime *time.Time
+		var size int
+		var cwlWarTag, r2Key *string
+		if err := rows.Scan(&warID, &clanTag, &opponentTag, &prepTime, &startTime, &endTime, &size, &warType, &state, &modifier, &cwlWarTag, &r2Key); err != nil {
 			continue
 		}
-		warID := mobileWarID(data)
-		if warID == "" || seen[warID] {
+		data := map[string]any{
+			"war_id":               warID,
+			"clan":                 map[string]any{"tag": clanTag},
+			"opponent":             map[string]any{"tag": opponentTag},
+			"preparationStartTime": prepTime.UTC().Format(time.RFC3339),
+			"endTime":              endTime.UTC().Format(time.RFC3339),
+			"teamSize":             size,
+			"type":                 warType,
+			"state":                state,
+			"battleModifier":       modifier,
+		}
+		if startTime != nil {
+			data["startTime"] = startTime.UTC().Format(time.RFC3339)
+		}
+		if cwlWarTag != nil {
+			data["cwlWarTag"] = *cwlWarTag
+		}
+		if r2Key != nil {
+			data["r2_key"] = *r2Key
+		}
+		computedID := mobileWarID(data)
+		if computedID == "" || seen[computedID] {
 			continue
 		}
-		seen[warID] = true
+		seen[computedID] = true
 		out = append(out, data)
 	}
 	return out
 }
 
 func mobileFindRelevantWarDocs(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string, startUnix int64, endUnix int64) []map[string]any {
-	matchers := bson.A{}
-	if len(playerTags) > 0 {
-		matchers = append(matchers,
-			bson.M{"data.clan.members.tag": bson.M{"$in": playerTags}},
-			bson.M{"data.opponent.members.tag": bson.M{"$in": playerTags}},
-		)
-	}
-	if len(clanTags) > 0 {
-		matchers = append(matchers,
-			bson.M{"data.clan.tag": bson.M{"$in": clanTags}},
-			bson.M{"data.opponent.tag": bson.M{"$in": clanTags}},
-		)
-	}
-	if len(matchers) == 0 {
+	if len(playerTags) == 0 && len(clanTags) == 0 {
 		return nil
 	}
-
-	return mobileFindWarDocs(ctx, a, bson.A{
-		bson.M{"$match": bson.M{"$and": bson.A{
-			bson.M{"$or": matchers},
-			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix)}},
-			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(endUnix)}},
-		}}},
-		bson.M{"$project": bson.M{"_id": 0, "data": "$data"}},
-		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
-	})
+	return mobileFindWarDocs(ctx, a, mobileWarQuery{PlayerTags: playerTags, ClanTags: clanTags, StartUnix: startUnix, EndUnix: endUnix})
 }
 
 func mobileFindLimitedPlayerWarDocs(ctx context.Context, a apptypes.Deps, playerTag string, startUnix int64, endUnix int64, limit int) []map[string]any {
@@ -1784,38 +1893,12 @@ func mobileFindLimitedClanWarDocsForTargets(ctx context.Context, a apptypes.Deps
 	return mobileMergeWarDocBatches(batches)
 }
 
-func mobilePlayerWarDocsPipeline(playerTag string, startUnix int64, endUnix int64, limit int) bson.A {
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{"$and": bson.A{
-			bson.M{"$or": bson.A{
-				bson.M{"data.clan.members.tag": playerTag},
-				bson.M{"data.opponent.members.tag": playerTag},
-			}},
-			bson.M{"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix)}},
-			bson.M{"data.preparationStartTime": bson.M{"$lte": mobileTimestampString(endUnix)}},
-		}}},
-		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
-	}
-	if limit > 0 {
-		pipeline = append(pipeline, bson.M{"$limit": limit})
-	}
-	pipeline = append(pipeline, bson.M{"$project": bson.M{"_id": 0, "data": "$data"}})
-	return pipeline
+func mobilePlayerWarDocsPipeline(playerTag string, startUnix int64, endUnix int64, limit int) mobileWarQuery {
+	return mobileWarQuery{PlayerTags: []string{playerTag}, StartUnix: startUnix, EndUnix: endUnix, Limit: limit}
 }
 
-func mobileClanWarDocsPipeline(clanTag string, startUnix int64, endUnix int64, limit int) bson.A {
-	pipeline := bson.A{
-		bson.M{"$match": bson.M{
-			"data.clan.tag":             clanTag,
-			"data.preparationStartTime": bson.M{"$gte": mobileTimestampString(startUnix), "$lte": mobileTimestampString(endUnix)},
-		}},
-		bson.M{"$sort": bson.M{"data.preparationStartTime": -1}},
-	}
-	if limit > 0 {
-		pipeline = append(pipeline, bson.M{"$limit": limit})
-	}
-	pipeline = append(pipeline, bson.M{"$project": bson.M{"_id": 0, "data": "$data"}})
-	return pipeline
+func mobileClanWarDocsPipeline(clanTag string, startUnix int64, endUnix int64, limit int) mobileWarQuery {
+	return mobileWarQuery{ClanTags: []string{clanTag}, StartUnix: startUnix, EndUnix: endUnix, Limit: limit}
 }
 
 func mobileMergeWarDocBatches(batches [][]map[string]any) []map[string]any {
@@ -2498,6 +2581,17 @@ func mobileMap(value any) map[string]any {
 	return map[string]any{}
 }
 
+func mobileDecodeJSONAny(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil
+	}
+	return value
+}
+
 func mobileList(value any) []any {
 	switch typed := value.(type) {
 	case []any:
@@ -2506,12 +2600,6 @@ func mobileList(value any) []any {
 		out := make([]any, 0, len(typed))
 		for _, item := range typed {
 			out = append(out, item)
-		}
-		return out
-	case bson.A:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, sanitize(item))
 		}
 		return out
 	default:
@@ -2679,8 +2767,6 @@ func mobileTime(value any) (time.Time, bool) {
 	switch typed := value.(type) {
 	case time.Time:
 		return typed, true
-	case bson.DateTime:
-		return time.UnixMilli(int64(typed)).UTC(), true
 	case int64:
 		return time.Unix(typed, 0).UTC(), true
 	case int:

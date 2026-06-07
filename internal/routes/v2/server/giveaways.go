@@ -17,8 +17,6 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // getServerGiveaways godoc
@@ -31,19 +29,15 @@ import (
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways [get]
+// @Router /v2/server/{server_id}/giveaways [get]
 func getServerGiveaways(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		cur, err := a.Store.C.Giveaways.Find(c.UserContext(), bson.M{"server_id": serverID})
+		docs, err := giveawayList(c, a, int64(serverID))
 		if err != nil {
-			return err
-		}
-		var docs []bson.M
-		if err := cur.All(c.UserContext(), &docs); err != nil {
 			return err
 		}
 		winnerIdentities := giveawayWinnerIdentities(c, a, int64(serverID), docs)
@@ -79,7 +73,7 @@ func getServerGiveaways(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways/{giveaway_id} [get]
+// @Router /v2/server/{server_id}/giveaways/{giveaway_id} [get]
 func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -87,14 +81,11 @@ func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		giveawayID := c.Params("giveaway_id")
-		var doc bson.M
-		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&doc)
+		doc, err := giveawayGet(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
-		return apptypes.JSON(c, http.StatusOK, giveawayModel(doc, giveawayWinnerIdentities(c, a, int64(serverID), []bson.M{doc})))
+		return apptypes.JSON(c, http.StatusOK, giveawayModel(doc, giveawayWinnerIdentities(c, a, int64(serverID), []map[string]any{doc})))
 	}
 }
 
@@ -116,7 +107,7 @@ func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways [post]
+// @Router /v2/server/{server_id}/giveaways [post]
 func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -131,7 +122,7 @@ func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 		}
 		doc["status"] = "scheduled"
 
-		if _, err := a.Store.C.Giveaways.InsertOne(c.UserContext(), doc); err != nil {
+		if err := giveawaySave(c, a, doc); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway created successfully", GiveawayID: giveawayID, ServerID: serverID})
@@ -150,7 +141,7 @@ func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways/{giveaway_id} [put]
+// @Router /v2/server/{server_id}/giveaways/{giveaway_id} [put]
 func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -159,10 +150,7 @@ func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 		}
 		giveawayID := c.Params("giveaway_id")
 
-		var existing bson.M
-		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&existing)
+		existing, err := giveawayGet(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
@@ -174,15 +162,8 @@ func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 		doc["updated"] = "yes"
 		doc["status"] = asStringOr(existing["status"], "scheduled")
 
-		result, err := a.Store.C.Giveaways.UpdateOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-			bson.M{"$set": doc},
-		)
-		if err != nil {
+		if err := giveawaySave(c, a, doc); err != nil {
 			return err
-		}
-		if result.MatchedCount == 0 {
-			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway updated successfully", GiveawayID: giveawayID, ServerID: serverID})
 	}
@@ -199,7 +180,7 @@ func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways/{giveaway_id} [delete]
+// @Router /v2/server/{server_id}/giveaways/{giveaway_id} [delete]
 func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -208,10 +189,7 @@ func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 		}
 		giveawayID := c.Params("giveaway_id")
 
-		var existing bson.M
-		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&existing)
+		existing, err := giveawayGet(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
@@ -220,13 +198,11 @@ func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 			_ = bunnyDeleteFile(a.Config.BunnyAccessKey, imageURL)
 		}
 
-		result, err := a.Store.C.Giveaways.DeleteOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		)
+		deleted, err := giveawayDelete(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway deleted successfully", GiveawayID: giveawayID, ServerID: serverID})
@@ -251,15 +227,12 @@ func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		giveawayID := c.Params("giveaway_id")
-		var doc bson.M
-		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&doc)
+		doc, err := giveawayGet(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
 
-		rawEntries, _ := doc["entries"].(bson.A)
+		rawEntries, _ := doc["entries"].([]any)
 		entryCounts := make(map[string]int, len(rawEntries))
 		order := make([]string, 0, len(rawEntries))
 		for _, e := range rawEntries {
@@ -267,7 +240,7 @@ func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 			switch typed := e.(type) {
 			case string:
 				uid = typed
-			case bson.M:
+			case map[string]any:
 				uid = fmt.Sprint(typed["user_id"])
 			}
 			if uid == "" {
@@ -317,7 +290,7 @@ func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/{server_id}/giveaways/{giveaway_id}/reroll [post]
+// @Router /v2/server/{server_id}/giveaways/{giveaway_id}/reroll [post]
 func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -334,10 +307,7 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "No user IDs provided for replacement")
 		}
 
-		var giveaway bson.M
-		err = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&giveaway)
+		giveaway, err := giveawayGet(c, a, int64(serverID), giveawayID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
@@ -346,10 +316,10 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Build current winners set
-		winnersList, _ := giveaway["winners_list"].(bson.A)
+		winnersList, _ := giveaway["winners_list"].([]any)
 		currentWinners := make(map[string]struct{})
 		for _, w := range winnersList {
-			wm, ok := w.(bson.M)
+			wm, ok := w.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -366,14 +336,14 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Build eligible pool from entries
-		rawEntries, _ := giveaway["entries"].(bson.A)
+		rawEntries, _ := giveaway["entries"].([]any)
 		eligible := make([]string, 0, len(rawEntries))
 		for _, e := range rawEntries {
 			var uid string
 			switch typed := e.(type) {
 			case string:
 				uid = typed
-			case bson.M:
+			case map[string]any:
 				uid = fmt.Sprint(typed["user_id"])
 			}
 			if _, inWinners := currentWinners[uid]; !inWinners {
@@ -397,34 +367,30 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 		for _, uid := range body.UserIDsToReplace {
 			replaceSet[uid] = struct{}{}
 		}
-		_, err = a.Store.C.Giveaways.UpdateMany(c.UserContext(),
-			bson.M{"_id": giveawayID},
-			bson.M{"$set": bson.M{
-				"winners_list.$[elem].status":    "rerolled",
-				"winners_list.$[elem].timestamp": now,
-				"winners_list.$[elem].reason":    "dashboard_reroll",
-			}},
-			options.UpdateMany().SetArrayFilters([]interface{}{
-				bson.M{"elem.user_id": bson.M{"$in": body.UserIDsToReplace}},
-			}),
-		)
-		if err != nil {
-			return err
+		for _, winner := range winnersList {
+			wm, ok := winner.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, replace := replaceSet[fmt.Sprint(wm["user_id"])]; replace {
+				wm["status"] = "rerolled"
+				wm["timestamp"] = now
+				wm["reason"] = "dashboard_reroll"
+			}
 		}
 
 		// Append new winners
-		newWinnerDocs := make(bson.A, 0, len(newWinners))
+		newWinnerDocs := make([]any, 0, len(newWinners))
 		for _, uid := range newWinners {
-			newWinnerDocs = append(newWinnerDocs, bson.M{
+			newWinnerDocs = append(newWinnerDocs, map[string]any{
 				"user_id":   uid,
 				"status":    "winner",
 				"timestamp": now,
 			})
 		}
-		if _, err := a.Store.C.Giveaways.UpdateOne(c.UserContext(),
-			bson.M{"_id": giveawayID},
-			bson.M{"$push": bson.M{"winners_list": bson.M{"$each": newWinnerDocs}}},
-		); err != nil {
+		giveaway["winners_list"] = append(winnersList, newWinnerDocs...)
+		giveaway["updated_at"] = time.Now().UTC()
+		if err := giveawaySave(c, a, giveaway); err != nil {
 			return err
 		}
 
@@ -432,7 +398,126 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func giveawayModel(doc bson.M, winnerIdentities map[string]ticketUserIdentity) modelsv2.GiveawayConfig {
+func giveawayList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT id, server_id, status, prize, channel_id, start_time, end_time, winners,
+		       entries, winners_list, data, created_at, updated_at
+		FROM giveaways
+		WHERE server_id = $1
+		ORDER BY COALESCE(end_time, updated_at) DESC
+	`, strconv.FormatInt(serverID, 10))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		item, err := giveawayScan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func giveawayGet(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveawayID string) (map[string]any, error) {
+	row := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT id, server_id, status, prize, channel_id, start_time, end_time, winners,
+		       entries, winners_list, data, created_at, updated_at
+		FROM giveaways
+		WHERE id = $1 AND server_id = $2
+	`, giveawayID, strconv.FormatInt(serverID, 10))
+	return giveawayScan(row)
+}
+
+type giveawayRow interface {
+	Scan(dest ...any) error
+}
+
+func giveawayScan(row giveawayRow) (map[string]any, error) {
+	var giveawayID, serverID, status, prize, channelID string
+	var startTime, endTime *time.Time
+	var winners int
+	var entriesRaw, winnersRaw, dataRaw []byte
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&giveawayID, &serverID, &status, &prize, &channelID, &startTime, &endTime, &winners, &entriesRaw, &winnersRaw, &dataRaw, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	item, _ := decodeJSONAny(dataRaw).(map[string]any)
+	if item == nil {
+		item = map[string]any{}
+	}
+	item["_id"] = giveawayID
+	item["server_id"] = serverID
+	if parsed, err := strconv.ParseInt(serverID, 10, 64); err == nil {
+		item["server_id"] = parsed
+	}
+	item["status"] = status
+	item["prize"] = prize
+	item["channel_id"] = channelID
+	if startTime != nil {
+		item["start_time"] = *startTime
+	}
+	if endTime != nil {
+		item["end_time"] = *endTime
+	}
+	item["winners"] = winners
+	item["entries"] = decodeJSONAny(entriesRaw)
+	item["winners_list"] = decodeJSONAny(winnersRaw)
+	item["created_at"] = createdAt
+	item["updated_at"] = updatedAt
+	return item, nil
+}
+
+func giveawaySave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	giveawayID := serverAsString(doc["_id"])
+	serverID := strconv.FormatInt(asInt64(doc["server_id"]), 10)
+	status := asStringOr(doc["status"], "scheduled")
+	prize := asStringOr(doc["prize"], "")
+	channelID := serverAsString(doc["channel_id"])
+	winners := asIntWithDefault(doc["winners"], 1)
+	_, err := a.Store.SQL.Exec(c.UserContext(), `
+		INSERT INTO giveaways (id, server_id, status, prize, channel_id, start_time, end_time, winners,
+		                       entries, winners_list, data, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), now())
+		ON CONFLICT (id) DO UPDATE SET
+			server_id = EXCLUDED.server_id,
+			status = EXCLUDED.status,
+			prize = EXCLUDED.prize,
+			channel_id = EXCLUDED.channel_id,
+			start_time = EXCLUDED.start_time,
+			end_time = EXCLUDED.end_time,
+			winners = EXCLUDED.winners,
+			entries = EXCLUDED.entries,
+			winners_list = EXCLUDED.winners_list,
+			data = EXCLUDED.data,
+			updated_at = now()
+	`, giveawayID, serverID, status, prize, channelID, timeArg(doc["start_time"]), timeArg(doc["end_time"]), winners, apptypes.Marshal(anySlice(doc["entries"])), apptypes.Marshal(anySlice(doc["winners_list"])), apptypes.Marshal(doc), doc["created_at"])
+	return err
+}
+
+func giveawayDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveawayID string) (int64, error) {
+	cmd, err := a.Store.SQL.Exec(c.UserContext(), `
+		DELETE FROM giveaways
+		WHERE id = $1 AND server_id = $2
+	`, giveawayID, strconv.FormatInt(serverID, 10))
+	return cmd.RowsAffected(), err
+}
+
+func timeArg(value any) any {
+	switch typed := value.(type) {
+	case time.Time:
+		return typed
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, typed); err == nil {
+			return parsed
+		}
+	}
+	return nil
+}
+
+func giveawayModel(doc map[string]any, winnerIdentities map[string]ticketUserIdentity) modelsv2.GiveawayConfig {
 	out := modelsv2.GiveawayConfig{
 		ID:                     asStringOr(doc["_id"], ""),
 		Prize:                  asStringOr(doc["prize"], ""),
@@ -459,14 +544,14 @@ func giveawayModel(doc bson.M, winnerIdentities map[string]ticketUserIdentity) m
 	return out
 }
 
-func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, docs []bson.M) map[string]ticketUserIdentity {
+func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, docs []map[string]any) map[string]ticketUserIdentity {
 	identityMap := map[string]ticketUserIdentity{}
 	if len(docs) == 0 {
 		return identityMap
 	}
 
 	userIDSet := map[string]struct{}{}
-	lookupIDs := make([]any, 0)
+	lookupIDs := make([]string, 0)
 	for _, doc := range docs {
 		for _, winner := range anyMapSlice(doc["winners_list"]) {
 			userID := serverAsString(winner["user_id"])
@@ -478,31 +563,17 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 			}
 			userIDSet[userID] = struct{}{}
 			lookupIDs = append(lookupIDs, userID)
-			if numeric := ticketParseInt64(userID); numeric != 0 {
-				lookupIDs = append(lookupIDs, numeric)
-			}
 		}
 	}
 	if len(userIDSet) == 0 {
 		return identityMap
 	}
 
-	userCur, err := a.Store.C.Users.Find(c.UserContext(),
-		bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": lookupIDs}},
-		options.Find().SetProjection(bson.M{"_id": 0, "linked_accounts.discord": 1}))
+	sqlIdentities, _, err := sqlAuthUserIdentities(c, a, lookupIDs)
 	if err == nil {
-		var userDocs []bson.M
-		if err := userCur.All(c.UserContext(), &userDocs); err == nil {
-			for _, userDoc := range userDocs {
-				discordAccount := mapMaybe(mapMaybe(userDoc["linked_accounts"])["discord"])
-				userID := serverAsString(discordAccount["discord_user_id"])
-				if userID == "" {
-					continue
-				}
-				identity := ticketIdentityFromAuthUser(userDoc)
-				if identity.Username != nil || identity.AvatarURL != nil {
-					identityMap[userID] = identity
-				}
+		for userID, identity := range sqlIdentities {
+			if identity.Username != nil || identity.AvatarURL != nil {
+				identityMap[userID] = identity
 			}
 		}
 	}
@@ -563,13 +634,13 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 }
 
 func giveawayBoosters(value any) []modelsv2.GiveawayBooster {
-	raw, ok := value.(bson.A)
+	raw, ok := value.([]any)
 	if !ok {
 		return []modelsv2.GiveawayBooster{}
 	}
 	out := make([]modelsv2.GiveawayBooster, 0, len(raw))
 	for _, item := range raw {
-		if doc, ok := item.(bson.M); ok {
+		if doc, ok := item.(map[string]any); ok {
 			out = append(out, modelsv2.GiveawayBooster{
 				Value: lbAsFloat(doc["value"]),
 				Roles: stringSlice(doc["roles"]),
@@ -608,7 +679,7 @@ func giveawayWinners(value any, winnerIdentities map[string]ticketUserIdentity) 
 }
 
 func giveawayEntryCount(value any) int {
-	if raw, ok := value.(bson.A); ok {
+	if raw, ok := value.([]any); ok {
 		return len(raw)
 	}
 	return 0
@@ -618,8 +689,6 @@ func stringifyTime(value any) string {
 	switch typed := value.(type) {
 	case time.Time:
 		return typed.UTC().Format(time.RFC3339)
-	case bson.DateTime:
-		return time.UnixMilli(int64(typed)).UTC().Format(time.RFC3339)
 	case string:
 		return typed
 	default:
@@ -629,7 +698,7 @@ func stringifyTime(value any) string {
 
 // --- helpers ---
 
-func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveawayID string) (bson.M, error) {
+func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveawayID string) (map[string]any, error) {
 	prize := c.FormValue("prize")
 	if prize == "" {
 		return nil, apptypes.Error(http.StatusBadRequest, "prize is required")
@@ -694,10 +763,7 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 	removeImage := c.FormValue("remove_image")
 	if strings.EqualFold(removeImage, "true") || removeImage == "1" {
 		// Look up existing image URL and delete from CDN
-		var existing bson.M
-		_ = a.Store.C.Giveaways.FindOne(c.UserContext(),
-			bson.M{"_id": giveawayID, "server_id": serverID},
-		).Decode(&existing)
+		existing, _ := giveawayGet(c, a, serverID, giveawayID)
 		if existing != nil {
 			if oldURL, ok := existing["image_url"].(string); ok && oldURL != "" {
 				_ = bunnyDeleteFile(a.Config.BunnyAccessKey, oldURL)
@@ -726,7 +792,7 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 		imageURL = url
 	}
 
-	return bson.M{
+	return map[string]any{
 		"_id":                      giveawayID,
 		"server_id":                serverID,
 		"prize":                    prize,
@@ -734,7 +800,7 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 		"start_time":               startTime,
 		"end_time":                 endTime,
 		"winners":                  winners,
-		"entries":                  bson.A{},
+		"entries":                  []any{},
 		"mentions":                 mentions,
 		"text_above_embed":         c.FormValue("text_above_embed"),
 		"text_in_embed":            c.FormValue("text_in_embed"),
@@ -795,7 +861,7 @@ func bunnyDeleteFile(accessKey, imageURL string) error {
 	return nil
 }
 
-func giveawaySerialize(doc bson.M) map[string]any {
+func giveawaySerialize(doc map[string]any) map[string]any {
 	result := make(map[string]any, len(doc))
 	for k, v := range doc {
 		if k == "_id" {

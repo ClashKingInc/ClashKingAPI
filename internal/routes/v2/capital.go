@@ -1,14 +1,13 @@
 package v2
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // playerStats godoc
@@ -37,38 +36,13 @@ func playerStats(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "guild_id is required")
 		}
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
-				return apptypes.Error(fiber.StatusNotFound, "Server not found")
-			}
-			return err
+		if err := capitalEnsureServer(c, a, guildID); err != nil {
+			return apptypes.Error(fiber.StatusNotFound, "Server not found")
 		}
 
-		// Build the clan name map and fill clanTags if not provided.
-		clanNameMap := make(map[string]string)
-		{
-			fillClanTags := len(clanTags) == 0
-			clanFilter := bson.M{"server": guildID}
-			if !fillClanTags {
-				clanFilter["tag"] = bson.M{"$in": clanTags}
-			}
-			clanCur, err := a.Store.C.ClanDB.Find(c.UserContext(), clanFilter)
-			if err == nil {
-				var clanDocs []bson.M
-				if err := clanCur.All(c.UserContext(), &clanDocs); err == nil {
-					for _, clan := range clanDocs {
-						tag, _ := clan["tag"].(string)
-						name, _ := clan["name"].(string)
-						if tag != "" {
-							clanNameMap[tag] = name
-							if fillClanTags {
-								clanTags = append(clanTags, tag)
-							}
-						}
-					}
-				}
-			}
+		clanNameMap, clanTags, err := capitalGuildClanNames(c, a, guildID, clanTags)
+		if err != nil {
+			return err
 		}
 
 		if len(clanTags) == 0 {
@@ -77,48 +51,13 @@ func playerStats(a apptypes.Deps) fiber.Handler {
 			})
 		}
 
-		matchFilter := bson.M{"clan_tag": bson.M{"$in": clanTags}}
-		if season != "" {
-			matchFilter["data.startTime"] = bson.M{"$regex": strings.ReplaceAll(season, "-", "")}
-		}
-
-		// Count distinct players for total.
-		totalCount := 0
-		countPipeline := bson.A{
-			bson.M{"$match": matchFilter},
-			bson.M{"$unwind": "$data.members"},
-			bson.M{"$group": bson.M{"_id": "$data.members.tag"}},
-			bson.M{"$count": "total"},
-		}
-		if countCur, err := a.Store.C.RaidWeekendDB.Aggregate(c.UserContext(), countPipeline); err == nil {
-			var countResult []bson.M
-			if err := countCur.All(c.UserContext(), &countResult); err == nil && len(countResult) > 0 {
-				totalCount = capitalAsInt(countResult[0]["total"])
-			}
-		}
-
-		// Aggregate player stats grouped by player tag.
-		pipeline := bson.A{
-			bson.M{"$match": matchFilter},
-			bson.M{"$unwind": "$data.members"},
-			bson.M{"$group": bson.M{
-				"_id":                       "$data.members.tag",
-				"player_name":               bson.M{"$first": "$data.members.name"},
-				"clan_tag":                  bson.M{"$first": "$clan_tag"},
-				"total_attacks":             bson.M{"$sum": "$data.members.attacks"},
-				"total_capital_gold_looted": bson.M{"$sum": "$data.members.capitalResourcesLooted"},
-				"attack_logs":               bson.M{"$push": "$data.members.attackLog"},
-			}},
-			bson.M{"$sort": bson.M{"total_capital_gold_looted": -1}},
-			bson.M{"$skip": offset},
-			bson.M{"$limit": limit},
-		}
-		aggCur, err := a.Store.C.RaidWeekendDB.Aggregate(c.UserContext(), pipeline)
+		totalCount, err := capitalPlayerCount(c, a, clanTags, season)
 		if err != nil {
 			return err
 		}
-		var aggResults []bson.M
-		if err := aggCur.All(c.UserContext(), &aggResults); err != nil {
+
+		aggResults, err := capitalPlayerRows(c, a, clanTags, season, limit, offset)
+		if err != nil {
 			return err
 		}
 
@@ -132,25 +71,17 @@ func playerStats(a apptypes.Deps) fiber.Handler {
 
 			attacks := make([]modelsv2.RaidAttack, 0)
 			totalDestruction := 0.0
-			if attackLogsRaw, ok := result["attack_logs"].(bson.A); ok {
-				for _, attackLogRaw := range attackLogsRaw {
-					if attackLog, ok := attackLogRaw.(bson.A); ok {
-						for _, atkRaw := range attackLog {
-							if atk, ok := atkRaw.(bson.M); ok {
-								d := capitalAsFloat64(atk["destructionPercent"])
-								totalDestruction += d
-								attacks = append(attacks, modelsv2.RaidAttack{
-									AttackerTag:  pTag,
-									AttackerName: pName,
-									DefenderTag:  capitalAsString(atk["defenderTag"]),
-									DefenderName: capitalAsString(atk["defenderName"]),
-									Destruction:  d,
-									Stars:        capitalAsInt(atk["stars"]),
-								})
-							}
-						}
-					}
-				}
+			for _, atk := range capitalAttackRows(result["attack_logs"]) {
+				d := capitalAsFloat64(atk["destructionPercent"])
+				totalDestruction += d
+				attacks = append(attacks, modelsv2.RaidAttack{
+					AttackerTag:  pTag,
+					AttackerName: pName,
+					DefenderTag:  capitalAsString(atk["defenderTag"]),
+					DefenderName: capitalAsString(atk["defenderName"]),
+					Destruction:  d,
+					Stars:        capitalAsInt(atk["stars"]),
+				})
 			}
 			avgDestruction := 0.0
 			if len(attacks) > 0 {
@@ -198,62 +129,22 @@ func guildLeaderboard(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "guild_id is required")
 		}
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
-				return apptypes.Error(fiber.StatusNotFound, "Server not found")
-			}
-			return err
+		if err := capitalEnsureServer(c, a, guildID); err != nil {
+			return apptypes.Error(fiber.StatusNotFound, "Server not found")
 		}
 
-		clanCur, err := a.Store.C.ClanDB.Find(c.UserContext(), bson.M{"server": guildID})
+		clanNameMap, clanTags, err := capitalGuildClanNames(c, a, guildID, nil)
 		if err != nil {
 			return err
 		}
-		var clans []bson.M
-		if err := clanCur.All(c.UserContext(), &clans); err != nil {
-			return err
-		}
-		if len(clans) == 0 {
+		if len(clanTags) == 0 {
 			return apptypes.JSON(c, fiber.StatusOK, modelsv2.CapitalLeaderboardResponse{
 				GuildID: guildID, Season: season, Clans: []modelsv2.CapitalClanLeaderboardItem{}, TotalCount: 0,
 			})
 		}
 
-		clanTags := make([]string, 0, len(clans))
-		clanNameMap := make(map[string]string, len(clans))
-		for _, clan := range clans {
-			tag, _ := clan["tag"].(string)
-			name, _ := clan["name"].(string)
-			if tag != "" {
-				clanTags = append(clanTags, tag)
-				clanNameMap[tag] = name
-			}
-		}
-
-		matchFilter := bson.M{"clan_tag": bson.M{"$in": clanTags}}
-		if season != "" {
-			matchFilter["data.startTime"] = bson.M{"$regex": strings.ReplaceAll(season, "-", "")}
-		}
-
-		pipeline := bson.A{
-			bson.M{"$match": matchFilter},
-			bson.M{"$group": bson.M{
-				"_id":                       "$clan_tag",
-				"total_raids":               bson.M{"$sum": 1},
-				"total_capital_gold_looted": bson.M{"$sum": "$data.capitalTotalLoot"},
-				"total_raid_medals":         bson.M{"$sum": "$data.totalRaidMedals"},
-				"total_attacks":             bson.M{"$sum": "$data.totalAttacks"},
-				"total_destruction":         bson.M{"$sum": "$data.destructionPercent"},
-			}},
-			bson.M{"$sort": bson.M{"total_capital_gold_looted": -1}},
-		}
-		aggCur, err := a.Store.C.RaidWeekendDB.Aggregate(c.UserContext(), pipeline)
+		aggResults, err := capitalClanRows(c, a, clanTags, season)
 		if err != nil {
-			return err
-		}
-		var aggResults []bson.M
-		if err := aggCur.All(c.UserContext(), &aggResults); err != nil {
 			return err
 		}
 
@@ -369,21 +260,163 @@ func capitalAsFloat64(v any) float64 {
 	return 0
 }
 
-func asDocs(value any) []bson.M {
-	switch rows := value.(type) {
-	case []bson.M:
-		return rows
-	case bson.A:
-		out := make([]bson.M, 0, len(rows))
-		for _, row := range rows {
-			if doc, ok := row.(bson.M); ok {
+func capitalEnsureServer(c *fiber.Ctx, a apptypes.Deps, guildID int64) error {
+	var found int
+	return a.Store.SQL.QueryRow(c.UserContext(), `SELECT 1 FROM servers WHERE id = $1 LIMIT 1`, strconv.FormatInt(guildID, 10)).Scan(&found)
+}
+
+func capitalGuildClanNames(c *fiber.Ctx, a apptypes.Deps, guildID int64, requested []string) (map[string]string, []string, error) {
+	fillAll := len(requested) == 0
+	query := `SELECT tag, name FROM server_clans WHERE server_id = $1`
+	args := []any{strconv.FormatInt(guildID, 10)}
+	if !fillAll {
+		query += ` AND tag = ANY($2)`
+		args = append(args, requested)
+	}
+	query += ` ORDER BY name ASC`
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	clanNameMap := map[string]string{}
+	clanTags := []string{}
+	for rows.Next() {
+		var tag, name string
+		if err := rows.Scan(&tag, &name); err != nil {
+			return nil, nil, err
+		}
+		clanNameMap[tag] = name
+		clanTags = append(clanTags, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return clanNameMap, clanTags, nil
+}
+
+func capitalPlayerCount(c *fiber.Ctx, a apptypes.Deps, clanTags []string, season string) (int, error) {
+	query := `SELECT count(DISTINCT player_tag) FROM capital_raid_members WHERE clan_tag = ANY($1)`
+	args := []any{clanTags}
+	if season != "" {
+		query += ` AND to_char(start_time, 'YYYY-MM') = $2`
+		args = append(args, season)
+	}
+	var total int
+	err := a.Store.SQL.QueryRow(c.UserContext(), query, args...).Scan(&total)
+	return total, err
+}
+
+func capitalPlayerRows(c *fiber.Ctx, a apptypes.Deps, clanTags []string, season string, limit int, offset int) ([]map[string]any, error) {
+	query := `
+		SELECT player_tag,
+			COALESCE((array_agg(player_name ORDER BY start_time DESC))[1], '') AS player_name,
+			COALESCE((array_agg(clan_tag ORDER BY start_time DESC))[1], '') AS clan_tag,
+			sum(attack_count) AS total_attacks,
+			sum(capital_resources_looted) AS total_capital_gold_looted,
+			jsonb_agg(COALESCE(data->'attackLog', '[]'::jsonb)) AS attack_logs
+		FROM capital_raid_members
+		WHERE clan_tag = ANY($1)
+	`
+	args := []any{clanTags}
+	if season != "" {
+		query += ` AND to_char(start_time, 'YYYY-MM') = $2`
+		args = append(args, season)
+	}
+	query += `
+		GROUP BY player_tag
+		ORDER BY total_capital_gold_looted DESC
+		LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
+	args = append(args, limit, offset)
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag, name, clanTag string
+		var attacks int
+		var gold int64
+		var raw []byte
+		if err := rows.Scan(&tag, &name, &clanTag, &attacks, &gold, &raw); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{
+			"_id":                       tag,
+			"player_name":               name,
+			"clan_tag":                  clanTag,
+			"total_attacks":             attacks,
+			"total_capital_gold_looted": gold,
+			"attack_logs":               raw,
+		})
+	}
+	return out, rows.Err()
+}
+
+func capitalClanRows(c *fiber.Ctx, a apptypes.Deps, clanTags []string, season string) ([]map[string]any, error) {
+	query := `
+		SELECT clan_tag,
+			count(*) AS total_raids,
+			sum(capital_total_loot) AS total_capital_gold_looted,
+			sum(offensive_reward + defensive_reward) AS total_raid_medals,
+			sum(total_attacks) AS total_attacks,
+			sum(COALESCE(NULLIF(data->>'destructionPercent', '')::double precision, 0)) AS total_destruction
+		FROM raid_weekends
+		WHERE clan_tag = ANY($1)
+	`
+	args := []any{clanTags}
+	if season != "" {
+		query += ` AND to_char(start_time, 'YYYY-MM') = $2`
+		args = append(args, season)
+	}
+	query += ` GROUP BY clan_tag ORDER BY total_capital_gold_looted DESC`
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var clanTag string
+		var totalRaids, totalAttacks int
+		var totalGold, totalMedals int64
+		var totalDestruction float64
+		if err := rows.Scan(&clanTag, &totalRaids, &totalGold, &totalMedals, &totalAttacks, &totalDestruction); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{
+			"_id":                       clanTag,
+			"total_raids":               totalRaids,
+			"total_capital_gold_looted": totalGold,
+			"total_raid_medals":         totalMedals,
+			"total_attacks":             totalAttacks,
+			"total_destruction":         totalDestruction,
+		})
+	}
+	return out, rows.Err()
+}
+
+func capitalAttackRows(value any) []map[string]any {
+	raw, ok := value.([]byte)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	var groups []any
+	if err := json.Unmarshal(raw, &groups); err != nil {
+		return nil
+	}
+	out := []map[string]any{}
+	for _, group := range groups {
+		items, ok := group.([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range items {
+			if doc, ok := item.(map[string]any); ok {
 				out = append(out, doc)
 			}
 		}
-		return out
-	default:
-		return nil
 	}
+	return out
 }
-
-

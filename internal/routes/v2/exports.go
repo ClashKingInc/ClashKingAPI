@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/xuri/excelize/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // exportCWLSummary generates an Excel file with CWL stats for a clan.
@@ -29,23 +29,13 @@ func exportCWLSummary(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "tag is required")
 		}
 
-		pipeline := bson.A{
-			bson.M{"$match": bson.M{"clan_tag": tag}},
-			bson.M{"$sort": bson.M{"season": -1}},
-			bson.M{"$limit": 1},
-		}
-		cur, err := a.Store.C.ClanLeaderboardDB.Aggregate(c.UserContext(), pipeline)
+		cwl, members, err := sqlExportCWLSummary(c, a, tag)
 		if err != nil {
 			return err
 		}
-		var results []bson.M
-		if err := cur.All(c.UserContext(), &results); err != nil {
-			return err
-		}
-		if len(results) == 0 {
+		if cwl == nil {
 			return apptypes.Error(http.StatusNotFound, "No CWL data found for this clan")
 		}
-		cwl := results[0]
 
 		f := excelize.NewFile()
 		defer f.Close()
@@ -104,12 +94,7 @@ func exportCWLSummary(a apptypes.Deps) fiber.Handler {
 		}
 		row++
 
-		members, _ := cwl["members"].(bson.A)
-		for _, m := range members {
-			member, ok := m.(bson.M)
-			if !ok {
-				continue
-			}
+		for _, member := range members {
 			totalAttacks := excelInt(member["total_attacks"])
 			totalStars := excelInt(member["total_stars"])
 			totalDestruction := excelFloat(member["total_destruction"])
@@ -186,17 +171,8 @@ func exportPlayerWarStats(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "player_tag is required")
 		}
 
-		filter := bson.M{"tag": tag}
-		findOpts := options.Find()
-		if body.Limit > 0 {
-			findOpts.SetLimit(int64(body.Limit))
-		}
-		cur, err := a.Store.DB.Looper.Collection("warhits").Find(c.UserContext(), filter, findOpts)
+		hits, err := sqlExportPlayerWarHits(c, a, tag, body.TimestampStart, body.TimestampEnd, body.Limit)
 		if err != nil {
-			return err
-		}
-		var hits []bson.M
-		if err := cur.All(c.UserContext(), &hits); err != nil {
 			return err
 		}
 		if len(hits) == 0 {
@@ -305,4 +281,118 @@ func excelFloat(v any) float64 {
 		return float64(x)
 	}
 	return 0
+}
+
+func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[string]any, []map[string]any, error) {
+	var season, clanName string
+	err := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT to_char(max(war_end_time), 'YYYY-MM'), COALESCE((SELECT name FROM basic_clan WHERE tag = $1), $1)
+		FROM war_attack_events
+		WHERE attacking_clan_tag = $1 AND war_type = 'cwl'
+	`, clanTag).Scan(&season, &clanName)
+	if err != nil || season == "" {
+		return nil, nil, err
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT attacker_tag,
+			COALESCE((SELECT name FROM player_current_stats WHERE player_tag = attacker_tag), attacker_tag) AS name,
+			max(attacker_townhall),
+			count(*),
+			sum(stars),
+			sum(destruction_percentage)
+		FROM war_attack_events
+		WHERE attacking_clan_tag = $1 AND war_type = 'cwl' AND to_char(war_end_time, 'YYYY-MM') = $2
+		GROUP BY attacker_tag
+		ORDER BY sum(stars) DESC, sum(destruction_percentage) DESC
+	`, clanTag, season)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	members := []map[string]any{}
+	totalStars := 0
+	totalAttacks := 0
+	totalDestruction := 0
+	for rows.Next() {
+		var tag, name string
+		var townhall, attacks, stars, destruction int
+		if err := rows.Scan(&tag, &name, &townhall, &attacks, &stars, &destruction); err != nil {
+			return nil, nil, err
+		}
+		totalStars += stars
+		totalAttacks += attacks
+		totalDestruction += destruction
+		members = append(members, map[string]any{
+			"tag":               tag,
+			"name":              name,
+			"town_hall":         townhall,
+			"total_attacks":     attacks,
+			"total_stars":       stars,
+			"total_destruction": destruction,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return map[string]any{
+		"clan_tag":    clanTag,
+		"clan_name":   clanName,
+		"season":      season,
+		"league":      "Unknown",
+		"stars":       totalStars,
+		"attacks":     totalAttacks,
+		"destruction": totalDestruction,
+	}, members, nil
+}
+
+func sqlExportPlayerWarHits(c *fiber.Ctx, a apptypes.Deps, playerTag string, start float64, end float64, limit int) ([]map[string]any, error) {
+	query := `
+		SELECT e.war_end_time, e.attacking_clan_tag, e.attacker_tag,
+			COALESCE(p.name, e.attacker_tag), e.attacker_townhall,
+			e.defender_tag, e.defender_townhall, e.stars, e.destruction_percentage, e.attack_order
+		FROM war_attack_events e
+		LEFT JOIN player_current_stats p ON p.player_tag = e.attacker_tag
+		WHERE e.attacker_tag = $1
+	`
+	args := []any{playerTag}
+	if start > 0 {
+		query += ` AND e.war_end_time >= to_timestamp($` + strconv.Itoa(len(args)+1) + `)`
+		args = append(args, start)
+	}
+	if end > 0 {
+		query += ` AND e.war_end_time <= to_timestamp($` + strconv.Itoa(len(args)+1) + `)`
+		args = append(args, end)
+	}
+	query += ` ORDER BY e.war_end_time DESC`
+	if limit > 0 {
+		query += ` LIMIT $` + strconv.Itoa(len(args)+1)
+		args = append(args, limit)
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	hits := []map[string]any{}
+	for rows.Next() {
+		var warDate time.Time
+		var clanTag, attackerTag, name, defenderTag string
+		var attackerTH, defenderTH, stars, destruction, attackOrder int
+		if err := rows.Scan(&warDate, &clanTag, &attackerTag, &name, &attackerTH, &defenderTag, &defenderTH, &stars, &destruction, &attackOrder); err != nil {
+			return nil, err
+		}
+		hits = append(hits, map[string]any{
+			"war_date":               warDate.Format(time.RFC3339),
+			"clan_tag":               clanTag,
+			"tag":                    attackerTag,
+			"name":                   name,
+			"town_hall":              attackerTH,
+			"defender_tag":           defenderTag,
+			"defender_town_hall":     defenderTH,
+			"stars":                  stars,
+			"destruction_percentage": destruction,
+			"attack_order":           attackOrder,
+		})
+	}
+	return hits, rows.Err()
 }

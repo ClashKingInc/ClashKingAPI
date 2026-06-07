@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -12,14 +13,22 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5"
 )
 
-// legendStatsDay is a hidden route for legends day stats.
 var legendsDayParam = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+// legendStatsDay godoc
+// @Summary Get legend stats by day
+// @Description Returns legend stats for requested players on a specific day.
+// @Tags Bot Legends Endpoints
+// @Produce json
+// @Param day path string true "Legend day YYYY-MM-DD"
+// @Param players query []string false "Player tags"
+// @Success 200 {array} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/legends/players/day/{day} [get]
 func legendStatsDay(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		day := c.Params("day")
@@ -27,48 +36,36 @@ func legendStatsDay(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusBadRequest, "invalid day format, expected YYYY-MM-DD")
 		}
 		players := apptypes.QueryValues(c, "players")
-		pipeline := bson.A{
-			bson.M{"$match": bson.M{"tag": bson.M{"$in": players}}},
-			bson.M{"$project": bson.M{
-				"_id":            0,
-				"tag":            1,
-				"name":           1,
-				"townhall":       1,
-				"legends.streak": 1,
-				"legends." + day: 1,
-			}},
-			bson.M{"$lookup": bson.M{
-				"from":         "leaderboard_db",
-				"localField":   "tag",
-				"foreignField": "tag",
-				"as":           "leaderboard_data",
-			}},
-			bson.M{"$unwind": bson.M{"path": "$leaderboard_data", "preserveNullAndEmptyArrays": true}},
-			bson.M{"$lookup": bson.M{
-				"from":         "legend_rankings",
-				"localField":   "tag",
-				"foreignField": "tag",
-				"as":           "global_ranking_data",
-			}},
-			bson.M{"$unwind": bson.M{"path": "$global_ranking_data", "preserveNullAndEmptyArrays": true}},
-			bson.M{"$addFields": bson.M{
-				"leaderboard_data":    bson.M{"$ifNull": bson.A{"$leaderboard_data", bson.M{}}},
-				"global_ranking_data": bson.M{"$ifNull": bson.A{"$global_ranking_data", bson.M{}}},
-			}},
-		}
-		cur, err := a.Store.C.PlayerStats.Aggregate(c.UserContext(), pipeline)
+		rows, err := legendsStatsRows(c, a, players)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
-			return err
+		for _, row := range rows {
+			legends, _ := row["legends"].(map[string]any)
+			filtered := map[string]any{}
+			if streak, ok := legends["streak"]; ok {
+				filtered["streak"] = streak
+			}
+			if dayData, ok := legends[day]; ok {
+				filtered[day] = normalizeLegendDay(dayData)
+			}
+			row["legends"] = filtered
 		}
 		return apptypes.JSON(c, fiber.StatusOK, rows)
 	}
 }
 
-// legendStatsSeason is a hidden route for legends season stats.
+// legendStatsSeason godoc
+// @Summary Get legend stats by season
+// @Description Returns legend stats for requested players in a season.
+// @Tags Bot Legends Endpoints
+// @Produce json
+// @Param season path string true "Season YYYY-MM"
+// @Param players query []string false "Player tags"
+// @Success 200 {array} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/legends/players/season/{season} [get]
 func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -79,49 +76,17 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid season format, use YYYY-MM")
 		}
 
-		pipeline := bson.A{
-			bson.M{"$match": bson.M{"tag": bson.M{"$in": players}}},
-			bson.M{"$project": bson.M{
-				"_id":      0,
-				"tag":      1,
-				"name":     1,
-				"townhall": 1,
-				"legends":  1,
-			}},
-			bson.M{"$lookup": bson.M{
-				"from":         "leaderboard_db",
-				"localField":   "tag",
-				"foreignField": "tag",
-				"as":           "leaderboard_data",
-			}},
-			bson.M{"$unwind": bson.M{"path": "$leaderboard_data", "preserveNullAndEmptyArrays": true}},
-			bson.M{"$lookup": bson.M{
-				"from":         "legend_rankings",
-				"localField":   "tag",
-				"foreignField": "tag",
-				"as":           "global_ranking_data",
-			}},
-			bson.M{"$unwind": bson.M{"path": "$global_ranking_data", "preserveNullAndEmptyArrays": true}},
-			bson.M{"$addFields": bson.M{
-				"leaderboard_data":    bson.M{"$ifNull": bson.A{"$leaderboard_data", bson.M{}}},
-				"global_ranking_data": bson.M{"$ifNull": bson.A{"$global_ranking_data", bson.M{}}},
-			}},
-		}
-		cur, err := a.Store.C.PlayerStats.Aggregate(c.UserContext(), pipeline)
+		rows, err := legendsStatsRows(c, a, players)
 		if err != nil {
-			return err
-		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
 			return err
 		}
 
 		// Filter legends to season days only and normalise old field names.
 		for _, row := range rows {
-			legends, _ := row["legends"].(bson.M)
+			legends, _ := row["legends"].(map[string]any)
 			if legends == nil {
 				row["streak"] = 0
-				row["legends"] = bson.M{}
+				row["legends"] = map[string]any{}
 				continue
 			}
 			streak := legends["streak"]
@@ -129,7 +94,7 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 				streak = 0
 			}
 			row["streak"] = streak
-			filtered := bson.M{}
+			filtered := map[string]any{}
 			for dayKey, dayVal := range legends {
 				if dayKey == "streak" {
 					continue
@@ -137,17 +102,9 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 				if _, ok := seasonDays[dayKey]; !ok {
 					continue
 				}
-				dayData, ok := dayVal.(bson.M)
+				dayData, ok := normalizeLegendDay(dayVal).(map[string]any)
 				if !ok {
 					continue
-				}
-				if v, ok := dayData["new_attacks"]; ok {
-					dayData["attacks"] = v
-					delete(dayData, "new_attacks")
-				}
-				if v, ok := dayData["new_defenses"]; ok {
-					dayData["defenses"] = v
-					delete(dayData, "new_defenses")
 				}
 				filtered[dayKey] = dayData
 			}
@@ -179,20 +136,15 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "guild_id is required")
 		}
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
+		if err := activityRequireServer(c, a, guildID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return apptypes.Error(fiber.StatusNotFound, "Server not found")
 			}
 			return err
 		}
 
-		var clans []bson.M
-		clanCur, err := a.Store.C.ClanDB.Find(c.UserContext(), bson.M{"server": guildID})
+		clans, err := serverClans(c, a, guildID)
 		if err != nil {
-			return err
-		}
-		if err := clanCur.All(c.UserContext(), &clans); err != nil {
 			return err
 		}
 
@@ -202,10 +154,10 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 		}
 
 		type legendEntry struct {
-			tag     string
-			name    string
+			tag      string
+			name     string
 			trophies int
-			clanTag string
+			clanTag  string
 			clanName string
 		}
 		type clanData struct {
@@ -253,29 +205,22 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 			}
 		}
 
-		// Batch-query player_stats for attack/defense counts.
 		playerAttacks := make(map[string]int)
 		playerDefenses := make(map[string]int)
 		if len(allPlayerTags) > 0 {
-			statsCur, err := a.Store.C.PlayerStats.Find(
-				c.UserContext(),
-				bson.M{"tag": bson.M{"$in": allPlayerTags}},
-				options.Find().SetProjection(bson.M{"tag": 1, "legends": 1, "_id": 0}),
-			)
-			if err == nil {
-				var statsDocs []bson.M
-				if err := statsCur.All(c.UserContext(), &statsDocs); err == nil {
-					for _, doc := range statsDocs {
-						pTag, _ := doc["tag"].(string)
-						legends, _ := doc["legends"].(bson.M)
-						if legends == nil {
-							continue
-						}
-						atk, def := countLegendsAttacksDefenses(legends, seasonDays)
-						playerAttacks[pTag] = atk
-						playerDefenses[pTag] = def
-					}
+			statsDocs, err := playerCurrentStatsByTags(c.UserContext(), a, allPlayerTags)
+			if err != nil {
+				return err
+			}
+			for _, doc := range statsDocs {
+				pTag, _ := doc["tag"].(string)
+				legends, _ := doc["legends"].(map[string]any)
+				if legends == nil {
+					continue
 				}
+				atk, def := countLegendsAttacksDefenses(legends, seasonDays)
+				playerAttacks[pTag] = atk
+				playerDefenses[pTag] = def
 			}
 		}
 
@@ -386,9 +331,8 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid end_date format, use YYYY-MM-DD")
 		}
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
+		if err := activityRequireServer(c, a, guildID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return apptypes.Error(fiber.StatusNotFound, "Server not found")
 			}
 			return err
@@ -401,17 +345,18 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Collect member tags from the guild's clans (optionally filtered by clan_tag).
-		var clans []bson.M
-		clanFilter := bson.M{"server": guildID}
-		if clanTagFilter != "" {
-			clanFilter["tag"] = clanTagFilter
-		}
-		clanCur, err := a.Store.C.ClanDB.Find(c.UserContext(), clanFilter)
+		clans, err := serverClans(c, a, guildID)
 		if err != nil {
 			return err
 		}
-		if err := clanCur.All(c.UserContext(), &clans); err != nil {
-			return err
+		if clanTagFilter != "" {
+			filtered := make([]map[string]any, 0, len(clans))
+			for _, clan := range clans {
+				if legendsAsString(clan["tag"]) == clanTagFilter {
+					filtered = append(filtered, clan)
+				}
+			}
+			clans = filtered
 		}
 
 		memberTags := make([]string, 0)
@@ -438,22 +383,8 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 			})
 		}
 
-		// Build projection: only fetch the fields we actually need.
-		proj := bson.M{"tag": 1, "name": 1, "townhall": 1, "trophies": 1, "_id": 0}
-		for _, ds := range dateStrings {
-			proj["legends."+ds] = 1
-		}
-
-		statsCur, err := a.Store.C.PlayerStats.Find(
-			c.UserContext(),
-			bson.M{"tag": bson.M{"$in": memberTags}},
-			options.Find().SetProjection(proj),
-		)
+		statsDocs, err := playerCurrentStatsByTags(c.UserContext(), a, memberTags)
 		if err != nil {
-			return err
-		}
-		var statsDocs []bson.M
-		if err := statsCur.All(c.UserContext(), &statsDocs); err != nil {
 			return err
 		}
 
@@ -461,7 +392,7 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 		for _, doc := range statsDocs {
 			pTag, _ := doc["tag"].(string)
 			pName, _ := doc["name"].(string)
-			legends, _ := doc["legends"].(bson.M)
+			legends, _ := doc["legends"].(map[string]any)
 			if legends == nil {
 				continue
 			}
@@ -485,25 +416,15 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 				if !ok {
 					continue
 				}
-				dayData, ok := dayVal.(bson.M)
+				dayData, ok := normalizeLegendDay(dayVal).(map[string]any)
 				if !ok || len(dayData) == 0 {
 					continue
 				}
 				startT := legendsAsInt(dayData["start"])
 				endT := legendsAsInt(dayData["end"])
 
-				var atkArr bson.A
-				if v, ok := dayData["attacks"].(bson.A); ok {
-					atkArr = v
-				} else if v, ok := dayData["new_attacks"].(bson.A); ok {
-					atkArr = v
-				}
-				var defArr bson.A
-				if v, ok := dayData["defenses"].(bson.A); ok {
-					defArr = v
-				} else if v, ok := dayData["new_defenses"].(bson.A); ok {
-					defArr = v
-				}
+				atkArr := legendsArray(dayData["attacks"])
+				defArr := legendsArray(dayData["defenses"])
 				atkCount, atkWins := countDayAttacks(atkArr)
 				defCount, defWins := countDayDefenses(defArr)
 
@@ -558,21 +479,6 @@ func dailyTracking(a apptypes.Deps) fiber.Handler {
 			Offset:     offset,
 		})
 	}
-}
-
-func legendsStripIDs(rows []bson.M) []bson.M {
-	out := make([]bson.M, 0, len(rows))
-	for _, row := range rows {
-		clean := bson.M{}
-		for key, value := range row {
-			if key == "_id" {
-				continue
-			}
-			clean[key] = value
-		}
-		out = append(out, clean)
-	}
-	return out
 }
 
 func legendsAsString(v any) string {
@@ -645,9 +551,9 @@ func cocSeasonDays(season string) (map[string]struct{}, error) {
 	return days, nil
 }
 
-func countDayAttacks(arr bson.A) (count, wins int) {
+func countDayAttacks(arr []any) (count, wins int) {
 	for _, item := range arr {
-		attack, ok := item.(bson.M)
+		attack, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -659,9 +565,9 @@ func countDayAttacks(arr bson.A) (count, wins int) {
 	return
 }
 
-func countDayDefenses(arr bson.A) (count, wins int) {
+func countDayDefenses(arr []any) (count, wins int) {
 	for _, item := range arr {
-		defense, ok := item.(bson.M)
+		defense, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -675,7 +581,7 @@ func countDayDefenses(arr bson.A) (count, wins int) {
 
 // countLegendsAttacksDefenses sums attacks and defenses for all days in a legends map.
 // If seasonDays is non-nil only days within the season are counted.
-func countLegendsAttacksDefenses(legends bson.M, seasonDays map[string]struct{}) (attacks, defenses int) {
+func countLegendsAttacksDefenses(legends map[string]any, seasonDays map[string]struct{}) (attacks, defenses int) {
 	for key, val := range legends {
 		if key == "streak" {
 			continue
@@ -685,27 +591,139 @@ func countLegendsAttacksDefenses(legends bson.M, seasonDays map[string]struct{})
 				continue
 			}
 		}
-		dayData, ok := val.(bson.M)
+		dayData, ok := normalizeLegendDay(val).(map[string]any)
 		if !ok {
 			continue
 		}
-		var atkArr bson.A
-		if v, ok := dayData["attacks"].(bson.A); ok {
-			atkArr = v
-		} else if v, ok := dayData["new_attacks"].(bson.A); ok {
-			atkArr = v
-		}
+		atkArr := legendsArray(dayData["attacks"])
 		attacks += len(atkArr)
 
-		var defArr bson.A
-		if v, ok := dayData["defenses"].(bson.A); ok {
-			defArr = v
-		} else if v, ok := dayData["new_defenses"].(bson.A); ok {
-			defArr = v
-		}
+		defArr := legendsArray(dayData["defenses"])
 		defenses += len(defArr)
 	}
 	return
 }
 
+func legendsStatsRows(c *fiber.Ctx, a apptypes.Deps, players []string) ([]map[string]any, error) {
+	rows, err := playerCurrentStatsByTags(c.UserContext(), a, players)
+	if err != nil {
+		return nil, err
+	}
+	leaderboard, err := legendsPlayerRankings(c, a, players)
+	if err != nil {
+		return nil, err
+	}
+	global, err := legendsGlobalRankings(c, a, players)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		tag := legendsAsString(row["tag"])
+		row["leaderboard_data"] = leaderboard[tag]
+		if row["leaderboard_data"] == nil {
+			row["leaderboard_data"] = map[string]any{}
+		}
+		row["global_ranking_data"] = global[tag]
+		if row["global_ranking_data"] == nil {
+			row["global_ranking_data"] = map[string]any{}
+		}
+	}
+	return rows, nil
+}
 
+func legendsPlayerRankings(c *fiber.Ctx, a apptypes.Deps, players []string) (map[string]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, country_name, country_code, rank, global_rank, local_rank, data
+		FROM player_rankings_current
+		WHERE player_tag = ANY($1)
+	`, players)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]map[string]any{}
+	for rows.Next() {
+		var tag string
+		var countryName, countryCode *string
+		var rank, globalRank, localRank *int
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &countryName, &countryCode, &rank, &globalRank, &localRank, &dataRaw); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["tag"] = tag
+		if countryName != nil {
+			item["country_name"] = *countryName
+		}
+		if countryCode != nil {
+			item["country_code"] = *countryCode
+		}
+		if rank != nil {
+			item["rank"] = *rank
+		}
+		if globalRank != nil {
+			item["global_rank"] = *globalRank
+		}
+		if localRank != nil {
+			item["local_rank"] = *localRank
+		}
+		out[tag] = item
+	}
+	return out, rows.Err()
+}
+
+func legendsGlobalRankings(c *fiber.Ctx, a apptypes.Deps, players []string) (map[string]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, rank, trophies, player_name, clan_tag, clan_name, data
+		FROM legend_rankings_current
+		WHERE player_tag = ANY($1)
+	`, players)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]map[string]any{}
+	for rows.Next() {
+		var tag, playerName, clanName string
+		var clanTag *string
+		var rank, trophies int
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &rank, &trophies, &playerName, &clanTag, &clanName, &dataRaw); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["tag"] = tag
+		item["rank"] = rank
+		item["trophies"] = trophies
+		item["name"] = playerName
+		if clanTag != nil {
+			item["clan_tag"] = *clanTag
+		}
+		item["clan_name"] = clanName
+		out[tag] = item
+	}
+	return out, rows.Err()
+}
+
+func normalizeLegendDay(raw any) any {
+	dayData, ok := raw.(map[string]any)
+	if !ok {
+		return raw
+	}
+	if v, ok := dayData["new_attacks"]; ok {
+		dayData["attacks"] = v
+		delete(dayData, "new_attacks")
+	}
+	if v, ok := dayData["new_defenses"]; ok {
+		dayData["defenses"] = v
+		delete(dayData, "new_defenses")
+	}
+	return dayData
+}
+
+func legendsArray(raw any) []any {
+	if arr, ok := raw.([]any); ok {
+		return arr
+	}
+	return []any{}
+}

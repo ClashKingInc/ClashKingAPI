@@ -2,11 +2,12 @@ package server
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getServerClanSettings godoc
@@ -28,7 +29,7 @@ func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("clan_tag"))
-		doc, err := findOneMap(c.UserContext(), rt.Store.C.ClanDB, bson.M{"tag": tag, "server": serverID})
+		doc, err := sqlServerClanDoc(c, rt, serverID, tag)
 		if err != nil {
 			return notFoundErr(err, "Server or clan not found")
 		}
@@ -46,13 +47,14 @@ func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Success 200 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Router /v2/server/{server_id}/clans-basic [get]
+// @Router /v2/link/server/{server_id}/clan/list [get]
 func getServerClansBasic(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		clans, err := findManyMaps(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID})
+		clans, err := sqlServerClanDocs(c, rt, serverID)
 		if err != nil {
 			return err
 		}
@@ -82,12 +84,12 @@ func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 
-		serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil || serverDoc == nil {
 			return apptypes.Error(http.StatusNotFound, "Server not found")
 		}
 
-		clans, err := findManyMaps(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID})
+		clans, err := sqlServerClanDocs(c, rt, serverID)
 		if err != nil {
 			return err
 		}
@@ -146,11 +148,21 @@ func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		update := clanUpdateMap(body)
-		result, err := rt.Store.C.ClanDB.UpdateOne(c.UserContext(), bson.M{"server": serverID, "tag": tag}, bson.M{"$set": update})
+		dataUpdate := map[string]any(update)
+		expandDottedServerMap(dataUpdate)
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `
+			UPDATE server_clans
+			SET name = COALESCE($3, name),
+				abbreviation = COALESCE($4, abbreviation),
+				clan_channel_id = COALESCE($5, clan_channel_id),
+				data = data || $6::jsonb,
+				updated_at = now()
+			WHERE server_id = $1 AND tag = $2
+		`, strconv.Itoa(serverID), tag, optionalString(update["name"]), optionalString(update["abbreviation"]), optionalString(firstNonNil(update["clanChannel"], update["clan_channel"])), apptypes.Marshal(dataUpdate))
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Server or clan not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanSettingsResponse{Message: "Clan settings updated successfully", ServerID: serverID, ClanTag: tag, UpdatedFields: len(update)})
@@ -184,7 +196,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return apptypes.Error(http.StatusBadRequest, "tag is required")
 		}
 		clanName := body.Name
-		doc := bson.M{"tag": tag, "server": serverID}
+		doc := map[string]any{"tag": tag, "server": serverID}
 		if clanName != "" {
 			doc["name"] = clanName
 		}
@@ -194,7 +206,10 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 				doc["name"] = clanName
 			}
 		}
-		_, err = rt.Store.C.ClanDB.InsertOne(c.UserContext(), doc)
+		_, err = rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO server_clans (tag, server_id, name, data, updated_at)
+			VALUES ($1, $2, $3, $4::jsonb, now())
+		`, tag, strconv.Itoa(serverID), clanName, apptypes.Marshal(doc))
 		if err != nil {
 			return err
 		}
@@ -214,6 +229,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/server/{server_id}/clans/{clan_tag} [delete]
+// @Router /v2/server/{server_id}/clan/{clan_tag} [delete]
 func removeServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -221,14 +237,14 @@ func removeServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("clan_tag"))
-		result, err := rt.Store.C.ClanDB.DeleteOne(c.UserContext(), bson.M{"server": serverID, "tag": tag})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM server_clans WHERE server_id = $1 AND tag = $2`, strconv.Itoa(serverID), tag)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.RemoveClanResponse{Message: "Clan removed successfully", ServerID: serverID, ClanTag: tag, DeletedCount: result.DeletedCount})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.RemoveClanResponse{Message: "Clan removed successfully", ServerID: serverID, ClanTag: tag, DeletedCount: result.RowsAffected()})
 	}
 }
 
@@ -296,8 +312,8 @@ func clanSettingsDetailFromDoc(doc map[string]any) modelsv2.ClanSettingsDetail {
 	}
 }
 
-func clanUpdateMap(body modelsv2.ClanSettingsUpdate) bson.M {
-	update := bson.M{}
+func clanUpdateMap(body modelsv2.ClanSettingsUpdate) map[string]any {
+	update := map[string]any{}
 	if body.GeneralRole != nil {
 		update["generalRole"] = body.GeneralRole
 	} else if body.MemberRole != nil {
@@ -398,4 +414,33 @@ func boolAt(doc map[string]any, key string) any {
 		return value
 	}
 	return false
+}
+
+func firstNonNil(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
+func expandDottedServerMap(values map[string]any) {
+	for key, value := range values {
+		if !strings.Contains(key, ".") {
+			continue
+		}
+		delete(values, key)
+		parts := strings.Split(key, ".")
+		current := values
+		for _, part := range parts[:len(parts)-1] {
+			child, _ := current[part].(map[string]any)
+			if child == nil {
+				child = map[string]any{}
+				current[part] = child
+			}
+			current = child
+		}
+		current[parts[len(parts)-1]] = value
+	}
 }

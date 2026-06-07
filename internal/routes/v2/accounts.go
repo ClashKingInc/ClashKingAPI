@@ -11,8 +11,7 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	"github.com/jackc/pgx/v5"
 )
 
 var cocTagPattern = regexp.MustCompile(`^#[A-Z0-9]{5,12}$`)
@@ -71,7 +70,7 @@ func addAccount(a apptypes.Deps, requireVerification bool) fiber.Handler {
 		}
 
 		oldAccount, err := findAccountByTag(c.UserContext(), a, playerTag)
-		if err != nil && err != mongo.ErrNoDocuments {
+		if err != nil && err != pgx.ErrNoRows {
 			return err
 		}
 		if requireVerification {
@@ -94,25 +93,36 @@ func addAccount(a apptypes.Deps, requireVerification bool) fiber.Handler {
 			})
 		}
 		if oldAccount != nil && accountsStringify(oldAccount["user_id"]) != userID && requireVerification {
-			if _, err := a.Store.C.COCAccounts.DeleteOne(c.UserContext(), bson.M{"player_tag": playerTag}); err != nil {
+			oldUserID := accountsStringify(oldAccount["user_id"])
+			if _, err := a.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE tag = $1`, playerTag); err != nil {
 				return err
 			}
-			if err := reorderUserAccounts(c.UserContext(), a, accountsStringify(oldAccount["user_id"])); err != nil {
+			if err := reorderUserAccounts(c.UserContext(), a, oldUserID); err != nil {
 				return err
 			}
 		}
 
-		orderIndex, err := a.Store.C.COCAccounts.CountDocuments(c.UserContext(), bson.M{"user_id": userID})
+		var orderIndex int
+		err = a.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM player_links WHERE user_id = $1`, userID).Scan(&orderIndex)
 		if err != nil {
 			return err
 		}
-		_, err = a.Store.C.COCAccounts.InsertOne(c.UserContext(), bson.M{
-			"user_id":     userID,
-			"player_tag":  player.Tag,
-			"order_index": orderIndex,
-			"is_verified": requireVerification,
-			"added_at":    time.Now().UTC(),
-		})
+		verifiedAt := (*time.Time)(nil)
+		if requireVerification {
+			now := time.Now().UTC()
+			verifiedAt = &now
+		}
+		_, err = a.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO player_links (tag, user_id, source, order_index, is_verified, added_at, verified_at, updated_at)
+			VALUES ($1, $2, 'api', $3, $4, now(), $5, now())
+			ON CONFLICT (tag) DO UPDATE SET
+				user_id = EXCLUDED.user_id,
+				source = EXCLUDED.source,
+				order_index = EXCLUDED.order_index,
+				is_verified = player_links.is_verified OR EXCLUDED.is_verified,
+				verified_at = COALESCE(player_links.verified_at, EXCLUDED.verified_at),
+				updated_at = now()
+		`, player.Tag, userID, orderIndex, requireVerification, verifiedAt)
 		if err != nil {
 			return err
 		}
@@ -145,19 +155,40 @@ func addAccount(a apptypes.Deps, requireVerification bool) fiber.Handler {
 func listAccounts(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
-		cursor, err := a.Store.C.COCAccounts.Find(c.UserContext(), bson.M{"user_id": userID})
+		var accounts []map[string]any
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT user_id, tag, order_index, is_verified, added_at, verified_at
+			FROM player_links
+			WHERE user_id = $1
+			ORDER BY order_index ASC, added_at ASC
+		`, userID)
 		if err != nil {
 			return err
 		}
-		var accounts []map[string]any
-		if err := cursor.All(c.UserContext(), &accounts); err != nil {
-			return err
+		defer rows.Close()
+		for rows.Next() {
+			var userID, tag string
+			var orderIndex int
+			var isVerified bool
+			var addedAt time.Time
+			var verifiedAt *time.Time
+			if err := rows.Scan(&userID, &tag, &orderIndex, &isVerified, &addedAt, &verifiedAt); err != nil {
+				return err
+			}
+			account := map[string]any{
+				"user_id":     userID,
+				"player_tag":  tag,
+				"order_index": orderIndex,
+				"is_verified": isVerified,
+				"added_at":    addedAt,
+			}
+			if verifiedAt != nil {
+				account["verified_at"] = *verifiedAt
+			}
+			accounts = append(accounts, account)
 		}
-		slices.SortFunc(accounts, func(left, right map[string]any) int {
-			return int(asInt64(left["order_index"]) - asInt64(right["order_index"]))
-		})
-		for _, account := range accounts {
-			delete(account, "_id")
+		if err := rows.Err(); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"coc_accounts": accounts})
 	}
@@ -179,11 +210,11 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
 		playerTag := accountsNormalizeTag(c.Params("player_tag"))
-		result, err := a.Store.C.COCAccounts.DeleteOne(c.UserContext(), bson.M{"user_id": userID, "player_tag": playerTag})
+		tag, err := deleteUserAccount(c.UserContext(), a, userID, playerTag)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if tag == "" {
 			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account not found or not linked to your profile")
 		}
 		if err := reorderUserAccounts(c.UserContext(), a, userID); err != nil {
@@ -208,7 +239,7 @@ func accountStatus(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		playerTag := accountsNormalizeTag(c.Params("player_tag"))
 		account, err := findAccountByTag(c.UserContext(), a, playerTag)
-		if err == mongo.ErrNoDocuments {
+		if err == pgx.ErrNoRows {
 			return apptypes.JSON(c, fiber.StatusOK, map[string]any{
 				"linked":  false,
 				"message": "This Clash of Clans account is not linked to any user.",
@@ -253,19 +284,16 @@ func reorderAccounts(a apptypes.Deps) fiber.Handler {
 		for _, tag := range body.OrderedTags {
 			normalized = append(normalized, accountsNormalizeTag(tag))
 		}
-		count, err := a.Store.C.COCAccounts.CountDocuments(c.UserContext(), bson.M{"user_id": userID, "player_tag": bson.M{"$in": normalized}})
+		var count int
+		err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM player_links WHERE user_id = $1 AND tag = ANY($2)`, userID, normalized).Scan(&count)
 		if err != nil {
 			return err
 		}
-		if int(count) != len(normalized) {
+		if count != len(normalized) {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid account tags provided")
 		}
-		models := make([]mongo.WriteModel, 0, len(normalized))
 		for index, tag := range normalized {
-			models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{"user_id": userID, "player_tag": tag}).SetUpdate(bson.M{"$set": bson.M{"order_index": index}}))
-		}
-		if len(models) > 0 {
-			if _, err := a.Store.C.COCAccounts.BulkWrite(c.UserContext(), models); err != nil {
+			if _, err := a.Store.SQL.Exec(c.UserContext(), `UPDATE player_links SET order_index = $1, updated_at = now() WHERE user_id = $2 AND tag = $3`, index, userID, tag); err != nil {
 				return err
 			}
 		}
@@ -304,9 +332,8 @@ func verifyAccount(a apptypes.Deps) fiber.Handler {
 		if strings.TrimSpace(playerToken) == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "Player token is required for verification")
 		}
-		var existing map[string]any
-		err := a.Store.C.COCAccounts.FindOne(c.UserContext(), bson.M{"user_id": userID, "player_tag": playerTag}).Decode(&existing)
-		if err == mongo.ErrNoDocuments {
+		existing, err := findAccountByUserAndTag(c.UserContext(), a, userID, playerTag)
+		if err == pgx.ErrNoRows {
 			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account not found or not linked to your profile")
 		}
 		if err != nil {
@@ -319,7 +346,7 @@ func verifyAccount(a apptypes.Deps) fiber.Handler {
 		if err != nil || !ok {
 			return apptypes.Error(fiber.StatusForbidden, "Invalid player token. Check your Clash of Clans account settings and try again.")
 		}
-		_, err = a.Store.C.COCAccounts.UpdateOne(c.UserContext(), bson.M{"user_id": userID, "player_tag": playerTag}, bson.M{"$set": bson.M{"is_verified": true, "verified_at": time.Now().UTC()}})
+		_, err = a.Store.SQL.Exec(c.UserContext(), `UPDATE player_links SET is_verified = true, verified_at = now(), updated_at = now() WHERE user_id = $1 AND tag = $2`, userID, playerTag)
 		if err != nil {
 			return err
 		}
@@ -348,34 +375,115 @@ func accountsNormalizeTag(tag string) string {
 }
 
 func findAccountByTag(ctx context.Context, a apptypes.Deps, playerTag string) (map[string]any, error) {
-	var account map[string]any
-	if err := a.Store.C.COCAccounts.FindOne(ctx, bson.M{"player_tag": playerTag}).Decode(&account); err != nil {
+	return scanPlayerLink(ctx, a, `WHERE tag = $1`, playerTag)
+}
+
+func findAccountByUserAndTag(ctx context.Context, a apptypes.Deps, userID, playerTag string) (map[string]any, error) {
+	return scanPlayerLink(ctx, a, `WHERE user_id = $1 AND tag = $2`, userID, playerTag)
+}
+
+func scanPlayerLink(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	query := `
+		SELECT user_id, tag, order_index, is_verified, added_at, verified_at
+		FROM player_links ` + where + ` LIMIT 1`
+	var userID *string
+	var tag string
+	var orderIndex int
+	var verified bool
+	var addedAt time.Time
+	var verifiedAt *time.Time
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&userID, &tag, &orderIndex, &verified, &addedAt, &verifiedAt); err != nil {
 		return nil, err
+	}
+	account := map[string]any{
+		"player_tag":  tag,
+		"order_index": orderIndex,
+		"is_verified": verified,
+		"added_at":    addedAt,
+	}
+	if userID != nil {
+		account["user_id"] = *userID
+	}
+	if verifiedAt != nil {
+		account["verified_at"] = *verifiedAt
 	}
 	return account, nil
 }
 
-func reorderUserAccounts(ctx context.Context, a apptypes.Deps, userID string) error {
-	cursor, err := a.Store.C.COCAccounts.Find(ctx, bson.M{"user_id": userID})
-	if err != nil {
-		return err
+func listUserAccountLinks(ctx context.Context, a apptypes.Deps, userID string) ([]map[string]any, error) {
+	if a.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	var accounts []map[string]any
-	if err := cursor.All(ctx, &accounts); err != nil {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT tag, order_index, is_verified, added_at, verified_at
+		FROM player_links
+		WHERE user_id = $1
+		ORDER BY order_index ASC, added_at ASC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	accounts := []map[string]any{}
+	for rows.Next() {
+		var tag string
+		var orderIndex int
+		var verified bool
+		var addedAt time.Time
+		var verifiedAt *time.Time
+		if err := rows.Scan(&tag, &orderIndex, &verified, &addedAt, &verifiedAt); err != nil {
+			return nil, err
+		}
+		account := map[string]any{
+			"user_id":     userID,
+			"player_tag":  tag,
+			"order_index": orderIndex,
+			"is_verified": verified,
+			"added_at":    addedAt,
+		}
+		if verifiedAt != nil {
+			account["verified_at"] = *verifiedAt
+		}
+		accounts = append(accounts, account)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
+func deleteUserAccount(ctx context.Context, a apptypes.Deps, userID, playerTag string) (string, error) {
+	if a.Store.SQL == nil {
+		return "", apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	var deleted string
+	err := a.Store.SQL.QueryRow(ctx, `DELETE FROM player_links WHERE user_id = $1 AND tag = $2 RETURNING tag`, userID, playerTag).Scan(&deleted)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return deleted, nil
+}
+
+func reorderUserAccounts(ctx context.Context, a apptypes.Deps, userID string) error {
+	accounts, err := listUserAccountLinks(ctx, a, userID)
+	if err != nil {
 		return err
 	}
 	slices.SortFunc(accounts, func(left, right map[string]any) int {
 		return int(asInt64(left["order_index"]) - asInt64(right["order_index"]))
 	})
-	models := make([]mongo.WriteModel, 0, len(accounts))
 	for index, account := range accounts {
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{"_id": account["_id"]}).SetUpdate(bson.M{"$set": bson.M{"order_index": index}}))
+		if _, err := a.Store.SQL.Exec(ctx, `UPDATE player_links SET order_index = $1, updated_at = now() WHERE tag = $2`, index, accountsStringify(account["player_tag"])); err != nil {
+			return err
+		}
 	}
-	if len(models) == 0 {
-		return nil
-	}
-	_, err = a.Store.C.COCAccounts.BulkWrite(ctx, models)
-	return err
+	return nil
 }
 
 func asInt64(value any) int64 {

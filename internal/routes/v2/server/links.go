@@ -1,16 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // getLinks godoc
@@ -33,7 +33,7 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if err := ensureSQLServer(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
 		limit := c.QueryInt("limit", 100)
@@ -69,36 +69,17 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 		// while legacy Python-bot accounts stored Discord snowflake IDs directly.
 		// We need both to show all linked accounts for server members.
 		internalToDiscord := map[string]string{}
-		internalIDs := make([]any, 0, len(memberIDs))
-		if cur, err := rt.Store.C.Users.Find(c.UserContext(),
-			bson.M{"linked_accounts.discord.discord_user_id": bson.M{"$in": memberIDs}},
-			options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "linked_accounts.discord.discord_user_id": 1}),
-		); err == nil {
-			var userDocs []bson.M
-			if err := cur.All(c.UserContext(), &userDocs); err == nil {
-				for _, doc := range userDocs {
-					internalID := serverAsString(doc["user_id"])
-					discordAcc := mapMaybe(mapMaybe(doc["linked_accounts"])["discord"])
-					discordID := serverAsString(discordAcc["discord_user_id"])
-					if internalID != "" && discordID != "" {
-						internalToDiscord[internalID] = discordID
-						internalIDs = append(internalIDs, internalID)
-					}
-				}
-			}
+		internalIDs, err := sqlInternalUserIDsForDiscordMembers(c, rt, memberIDs, internalToDiscord)
+		if err != nil {
+			return err
 		}
 
 		// Query by both Discord IDs (legacy) and internal UUIDs (new accounts).
-		linkFilter := bson.M{"user_id": bson.M{"$in": memberIDs}}
+		linkIDs := append([]string{}, memberIDs...)
 		if len(internalIDs) > 0 {
-			combined := make([]any, 0, len(memberIDs)+len(internalIDs))
-			for _, id := range memberIDs {
-				combined = append(combined, id)
-			}
-			combined = append(combined, internalIDs...)
-			linkFilter = bson.M{"user_id": bson.M{"$in": combined}}
+			linkIDs = append(linkIDs, internalIDs...)
 		}
-		links, err := findManyMaps(c.UserContext(), rt.Store.C.Links, linkFilter)
+		links, err := sqlPlayerLinksByUsers(c, rt, linkIDs)
 		if err != nil {
 			return err
 		}
@@ -177,7 +158,7 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 				}
 			}
 		}
-		playerDocs, err := findManyMaps(c.UserContext(), rt.Store.C.PlayerStats, bson.M{"tag": bson.M{"$in": playerTags}})
+		playerDocs, err := sqlPlayerStatsByTags(c, rt, playerTags)
 		if err != nil {
 			playerDocs = nil
 		}
@@ -249,11 +230,11 @@ func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		userID := c.Params("user_discord_id")
 		tag := serverNormalizeTag(c.Params("player_tag"))
-		result, err := rt.Store.C.Links.DeleteOne(c.UserContext(), bson.M{"user_id": userID, "player_tag": tag})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2`, userID, tag)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Link not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Link removed successfully", "player_tag": tag, "user_id": userID})
@@ -289,11 +270,11 @@ func bulkUnlink(rt apptypes.Deps) apptypes.HandlerFunc {
 		for _, tag := range body.PlayerTags {
 			tags = append(tags, serverNormalizeTag(tag))
 		}
-		result, err := rt.Store.C.Links.DeleteMany(c.UserContext(), bson.M{"user_id": body.UserDiscordID, "player_tag": bson.M{"$in": tags}})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = ANY($2)`, body.UserDiscordID, tags)
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Links removed successfully", "deleted_count": result.DeletedCount})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Links removed successfully", "deleted_count": result.RowsAffected()})
 	}
 }
 
@@ -352,11 +333,126 @@ func stringifyTimeLike(value any) any {
 		return nil
 	case string:
 		return typed
-	case bson.DateTime:
-		return typed.Time().UTC().Format(time.RFC3339)
 	case time.Time:
 		return typed.UTC().Format(time.RFC3339)
 	default:
 		return serverAsString(typed)
 	}
+}
+
+func ensureSQLServer(c *fiber.Ctx, rt apptypes.Deps, serverID int) error {
+	if rt.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	var found int
+	return rt.Store.SQL.QueryRow(c.UserContext(), `SELECT 1 FROM servers WHERE id = $1 LIMIT 1`, strconv.Itoa(serverID)).Scan(&found)
+}
+
+func sqlInternalUserIDsForDiscordMembers(c *fiber.Ctx, rt apptypes.Deps, memberIDs []string, out map[string]string) ([]string, error) {
+	if rt.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT user_id, discord_user_id
+		FROM auth_users
+		WHERE discord_user_id = ANY($1)
+	`, memberIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	internalIDs := []string{}
+	for rows.Next() {
+		var userID, discordID string
+		if err := rows.Scan(&userID, &discordID); err != nil {
+			return nil, err
+		}
+		if userID != "" && discordID != "" {
+			out[userID] = discordID
+			internalIDs = append(internalIDs, userID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return internalIDs, nil
+}
+
+func sqlPlayerLinksByUsers(c *fiber.Ctx, rt apptypes.Deps, userIDs []string) ([]map[string]any, error) {
+	if rt.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT user_id, discord_id, tag, is_verified, added_at
+		FROM player_links
+		WHERE user_id = ANY($1) OR discord_id = ANY($1)
+		ORDER BY order_index ASC, added_at ASC
+	`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	links := []map[string]any{}
+	for rows.Next() {
+		var userID, discordID *string
+		var tag string
+		var verified bool
+		var addedAt time.Time
+		if err := rows.Scan(&userID, &discordID, &tag, &verified, &addedAt); err != nil {
+			return nil, err
+		}
+		linkUserID := ""
+		if userID != nil {
+			linkUserID = *userID
+		} else if discordID != nil {
+			linkUserID = *discordID
+		}
+		links = append(links, map[string]any{
+			"user_id":     linkUserID,
+			"player_tag":  tag,
+			"is_verified": verified,
+			"added_at":    addedAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return links, nil
+}
+
+func sqlPlayerStatsByTags(c *fiber.Ctx, rt apptypes.Deps, tags []string) ([]map[string]any, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, name, townhall_level, data
+		FROM player_current_stats
+		WHERE player_tag = ANY($1)
+	`, tags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag, name string
+		var townhall *int
+		var raw []byte
+		if err := rows.Scan(&tag, &name, &townhall, &raw); err != nil {
+			return nil, err
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		doc["tag"] = tag
+		doc["name"] = name
+		if townhall != nil {
+			doc["townhall"] = *townhall
+			doc["town_hall"] = *townhall
+		}
+		out = append(out, doc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

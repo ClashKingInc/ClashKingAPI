@@ -3,8 +3,6 @@ package v2
 import (
 	"testing"
 	"time"
-
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestJoinLeaveSeasonBoundsUseClashSeasonWindow(t *testing.T) {
@@ -24,7 +22,7 @@ func TestJoinLeaveSeasonBoundsUseClashSeasonWindow(t *testing.T) {
 }
 
 func TestJoinLeaveItemsFromRowsBuildPerClanContract(t *testing.T) {
-	rows := []bson.M{
+	rows := []map[string]any{
 		{
 			"clan": "#AAA",
 			"tag":  "#P1",
@@ -99,7 +97,7 @@ func TestJoinLeaveItemsFromRowsBuildPerClanContract(t *testing.T) {
 }
 
 func TestJoinLeaveItemsFromRowsApplyPerClanLimit(t *testing.T) {
-	rows := []bson.M{
+	rows := []map[string]any{
 		{"clan": "#AAA", "tag": "#P1", "name": "Alice", "type": "leave", "time": time.Date(2026, time.May, 3, 9, 0, 0, 0, time.UTC)},
 		{"clan": "#AAA", "tag": "#P1", "name": "Alice", "type": "join", "time": time.Date(2026, time.May, 2, 9, 0, 0, 0, time.UTC)},
 		{"clan": "#AAA", "tag": "#P2", "name": "Bob", "type": "join", "time": time.Date(2026, time.May, 1, 9, 0, 0, 0, time.UTC)},

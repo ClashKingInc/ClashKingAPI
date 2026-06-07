@@ -4,7 +4,6 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // addTrackingPlayers godoc
@@ -31,9 +30,23 @@ func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 			tags = append(tags, accountsNormalizeTag(tag))
 		}
 
-		var existingTags []string
-		if err := a.Store.C.PlayerStats.Distinct(c.UserContext(), "tag", bson.M{"tag": bson.M{"$in": tags}}).Decode(&existingTags); err != nil {
+		if a.Store.SQL == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+		}
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT tag FROM tracked_player_targets WHERE tag = ANY($1) AND enabled = true
+		`, tags)
+		if err != nil {
 			return err
+		}
+		defer rows.Close()
+		existingTags := []string{}
+		for rows.Next() {
+			var tag string
+			if err := rows.Scan(&tag); err != nil {
+				return err
+			}
+			existingTags = append(existingTags, tag)
 		}
 
 		existingSet := make(map[string]struct{}, len(existingTags))
@@ -42,15 +55,26 @@ func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 		}
 
 		newTags := make([]string, 0)
-		docs := make([]any, 0)
 		for _, tag := range tags {
 			if _, exists := existingSet[tag]; !exists {
 				newTags = append(newTags, tag)
-				docs = append(docs, bson.M{"tag": tag})
 			}
 		}
-		if len(docs) > 0 {
-			if _, err := a.Store.C.PlayerStats.InsertMany(c.UserContext(), docs); err != nil {
+		if len(newTags) > 0 {
+			for _, tag := range newTags {
+				if _, err := a.Store.SQL.Exec(c.UserContext(), `
+					INSERT INTO tracked_player_targets (tag, enabled, source, created_at, updated_at)
+					VALUES ($1, true, 'api', now(), now())
+					ON CONFLICT (tag) DO UPDATE SET enabled = true, source = 'api', updated_at = now()
+				`, tag); err != nil {
+					return err
+				}
+			}
+			if _, err := a.Store.SQL.Exec(c.UserContext(), `
+				INSERT INTO basic_player (tag, name, townhall_level)
+				SELECT unnest($1::text[]), '', 0
+				ON CONFLICT (tag) DO NOTHING
+			`, newTags); err != nil {
 				return err
 			}
 		}
@@ -85,7 +109,14 @@ func removeTrackingPlayers(a apptypes.Deps) fiber.Handler {
 		for _, tag := range body.Tags {
 			tags = append(tags, accountsNormalizeTag(tag))
 		}
-		if _, err := a.Store.C.PlayerStats.DeleteMany(c.UserContext(), bson.M{"tag": bson.M{"$in": tags}}); err != nil {
+		if a.Store.SQL == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+		}
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			UPDATE tracked_player_targets
+			SET enabled = false, updated_at = now()
+			WHERE tag = ANY($1)
+		`, tags); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{

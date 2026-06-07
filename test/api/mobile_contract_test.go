@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 	"time"
 
 	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
@@ -209,7 +207,7 @@ func TestMobileWarContractsKeepWarLists(t *testing.T) {
 func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
 	results := routesv2.MobileLegendRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2"},
-		[]bson.M{
+		[]map[string]any{
 			{"tag": "#P1", "season": "2026-05", "rank": 1},
 			{"tag": "#P1", "season": "2026-04", "rank": 2},
 			{"tag": "#P2", "season": "2026-05", "rank": 3},
@@ -235,11 +233,11 @@ func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
 func TestMobileCurrentRankingsByTagFromRowsUsesFallbackGlobalRank(t *testing.T) {
 	results := routesv2.MobileCurrentRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2", "#P3"},
-		[]bson.M{
+		[]map[string]any{
 			{"tag": "#P1", "country_code": "FR", "local_rank": 10},
 			{"tag": "#P2", "country_code": "US", "global_rank": 22},
 		},
-		[]bson.M{
+		[]map[string]any{
 			{"tag": "#P1", "rank": 111},
 			{"tag": "#P2", "rank": 999},
 			{"tag": "#P3", "rank": 333},
@@ -272,28 +270,28 @@ func TestMobilePlayerWarContextTargetClanSkipsCurrentClan(t *testing.T) {
 func TestMobilePlayerRaidDataByClanFromRowsKeepsLatestPerClan(t *testing.T) {
 	results := routesv2.MobilePlayerRaidDataByClanFromRowsForTest(
 		[]string{"#C1", "#C2"},
-		[]bson.M{
+		[]map[string]any{
 			{
 				"clan_tag": "#C1",
-				"data": bson.M{
-					"members": bson.A{
-						bson.M{"tag": "#P1", "attackCount": 4, "attackLimit": 5, "bonusAttackLimit": 1},
+				"data": map[string]any{
+					"members": []any{
+						map[string]any{"tag": "#P1", "attackCount": 4, "attackLimit": 5, "bonusAttackLimit": 1},
 					},
 				},
 			},
 			{
 				"clan_tag": "#C1",
-				"data": bson.M{
-					"members": bson.A{
-						bson.M{"tag": "#P1", "attackCount": 1, "attackLimit": 5, "bonusAttackLimit": 0},
+				"data": map[string]any{
+					"members": []any{
+						map[string]any{"tag": "#P1", "attackCount": 1, "attackLimit": 5, "bonusAttackLimit": 0},
 					},
 				},
 			},
 			{
 				"clan_tag": "c2",
-				"data": bson.M{
-					"members": bson.A{
-						bson.M{"tag": "#P2", "attackCount": 3, "attackLimit": 5, "bonusAttackLimit": 0},
+				"data": map[string]any{
+					"members": []any{
+						map[string]any{"tag": "#P2", "attackCount": 3, "attackLimit": 5, "bonusAttackLimit": 0},
 					},
 				},
 			},
@@ -848,43 +846,27 @@ func TestMobileMergeWarDocBatchesDedupesAndSortsNewestFirst(t *testing.T) {
 }
 
 func TestMobilePlayerWarDocsPipelineMatchesBothSidesAndAppliesEarlyLimit(t *testing.T) {
-	pipeline := routesv2.MobilePlayerWarDocsPipelineForTest("#P1", 100, 200, 50)
-	if len(pipeline) != 4 {
-		t.Fatalf("expected 4 stages, got %d", len(pipeline))
+	query := routesv2.MobilePlayerWarDocsPipelineForTest("#P1", 100, 200, 50)
+	if len(query.PlayerTags) != 1 || query.PlayerTags[0] != "#P1" {
+		t.Fatalf("expected player query to target #P1, got %+v", query.PlayerTags)
 	}
-
-	matchStage := pipeline[0].(bson.M)["$match"].(bson.M)
-	andStage := matchStage["$and"].(bson.A)
-	orStage := andStage[0].(bson.M)["$or"].(bson.A)
-	if len(orStage) != 2 {
-		t.Fatalf("expected player query to match both clan sides, got %+v", orStage)
+	if len(query.ClanTags) != 0 {
+		t.Fatalf("expected player query not to set clan tags, got %+v", query.ClanTags)
 	}
-
-	if _, ok := pipeline[2].(bson.M)["$limit"]; !ok {
-		t.Fatalf("expected limit stage before projection, got %+v", pipeline)
+	if query.StartUnix != 100 || query.EndUnix != 200 || query.Limit != 50 {
+		t.Fatalf("unexpected player war query window/limit: %+v", query)
 	}
 }
 
 func TestMobileClanWarDocsPipelineMatchesPythonShape(t *testing.T) {
-	pipeline := routesv2.MobileClanWarDocsPipelineForTest("#C1", 100, 200, 50)
-	if len(pipeline) != 4 {
-		t.Fatalf("expected 4 stages, got %d", len(pipeline))
+	query := routesv2.MobileClanWarDocsPipelineForTest("#C1", 100, 200, 50)
+	if len(query.ClanTags) != 1 || query.ClanTags[0] != "#C1" {
+		t.Fatalf("expected clan query to target #C1, got %+v", query.ClanTags)
 	}
-
-	matchStage := pipeline[0].(bson.M)["$match"].(bson.M)
-	if _, hasOpponent := matchStage["data.opponent.tag"]; hasOpponent {
-		t.Fatalf("expected clan query to ignore opponent tag like python, got %+v", matchStage)
+	if len(query.PlayerTags) != 0 {
+		t.Fatalf("expected clan query not to set player tags, got %+v", query.PlayerTags)
 	}
-	if got := matchStage["data.clan.tag"]; got != "#C1" {
-		t.Fatalf("expected clan tag match, got %v", got)
-	}
-
-	expectedRange := bson.M{"$gte": "19700101T000140.000Z", "$lte": "19700101T000320.000Z"}
-	if !reflect.DeepEqual(matchStage["data.preparationStartTime"], expectedRange) {
-		t.Fatalf("unexpected time range: %+v", matchStage["data.preparationStartTime"])
-	}
-
-	if _, ok := pipeline[2].(bson.M)["$limit"]; !ok {
-		t.Fatalf("expected limit stage before projection, got %+v", pipeline)
+	if query.StartUnix != 100 || query.EndUnix != 200 || query.Limit != 50 {
+		t.Fatalf("unexpected clan war query window/limit: %+v", query)
 	}
 }

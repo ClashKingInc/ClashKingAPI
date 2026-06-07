@@ -2,7 +2,9 @@ package utils
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -10,7 +12,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type contextKey string
@@ -80,17 +81,31 @@ func bearerToken(raw string) string {
 }
 
 func (a *Authenticator) fromDBToken(ctx context.Context, token string) (string, error) {
-	var doc struct {
-		ServerID  int       `bson:"server_id"`
-		ExpiresAt time.Time `bson:"expires_at"`
+	if a.store.SQL == nil {
+		return "", Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	if err := a.store.C.Tokens.FindOne(ctx, bson.M{"token": token}).Decode(&doc); err != nil {
+	var userID string
+	var serverID *string
+	var expiresAt *time.Time
+	if err := a.store.SQL.QueryRow(ctx, `
+		SELECT user_id, server_id, expires_at
+		FROM api_tokens
+		WHERE token_hash = $1
+	`, tokenHash(token)).Scan(&userID, &serverID, &expiresAt); err != nil {
 		return "", err
 	}
-	if !doc.ExpiresAt.IsZero() && time.Now().After(doc.ExpiresAt) {
+	if expiresAt != nil && time.Now().After(*expiresAt) {
 		return "", Error(fiber.StatusUnauthorized, "Access token expired")
 	}
-	return fmt.Sprintf("server:%d", doc.ServerID), nil
+	if serverID != nil && *serverID != "" {
+		return fmt.Sprintf("server:%s", *serverID), nil
+	}
+	return userID, nil
+}
+
+func tokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 func (a *Authenticator) parseJWT(token string) (*Claims, error) {

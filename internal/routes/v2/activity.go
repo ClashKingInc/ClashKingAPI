@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"errors"
 	"sort"
 	"strconv"
 	"time"
@@ -8,9 +9,8 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // guildSummary godoc
@@ -25,6 +25,7 @@ import (
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/guild-summary [get]
+// @Router /v2/activity/guild-summary [get]
 func guildSummary(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
@@ -33,9 +34,8 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "guild_id is required")
 		}
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
+		if err := activityRequireServer(c, a, guildID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return apptypes.Error(fiber.StatusNotFound, "Server not found")
 			}
 			return err
@@ -85,22 +85,14 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 			clanEntries = append(clanEntries, clanEntry{tag: tag, name: name, members: members})
 		}
 
-		// Batch-query last_online from player_stats.
 		lastOnlineMap := make(map[string]int64)
 		if len(allTags) > 0 {
-			loCur, err := a.Store.C.PlayerStats.Find(
-				c.UserContext(),
-				bson.M{"tag": bson.M{"$in": allTags}},
-				options.Find().SetProjection(bson.M{"tag": 1, "last_online": 1, "_id": 0}),
-			)
-			if err == nil {
-				var loDocs []bson.M
-				if err := loCur.All(c.UserContext(), &loDocs); err == nil {
-					for _, doc := range loDocs {
-						t, _ := doc["tag"].(string)
-						lastOnlineMap[t] = activityAsInt64(doc["last_online"])
-					}
-				}
+			lastOnlineRows, err := activityPlayerStats(c, a, allTags)
+			if err != nil {
+				return err
+			}
+			for tag, row := range lastOnlineRows {
+				lastOnlineMap[tag] = row.lastOnline
 			}
 		}
 
@@ -183,6 +175,7 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/inactive-players [get]
+// @Router /v2/activity/inactive-players [get]
 func inactivePlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
@@ -195,9 +188,8 @@ func inactivePlayers(a apptypes.Deps) fiber.Handler {
 		offset := activityParseIntDefault(c.Query("offset"), 0)
 		clanFilter := c.Query("clan_tag")
 
-		var serverDoc bson.M
-		if err := a.Store.C.ServerDB.FindOne(c.UserContext(), bson.M{"server": guildID}).Decode(&serverDoc); err != nil {
-			if err == mongo.ErrNoDocuments {
+		if err := activityRequireServer(c, a, guildID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return apptypes.Error(fiber.StatusNotFound, "Server not found")
 			}
 			return err
@@ -247,33 +239,15 @@ func inactivePlayers(a apptypes.Deps) fiber.Handler {
 			}
 		}
 
-		// Batch-query player_stats for last_online and townhall.
-		type playerStatsData struct {
-			lastOnline int64
-			townhall   int
-		}
-		playerDataMap := make(map[string]playerStatsData)
+		playerDataMap := make(map[string]activityPlayerStatsData)
 		if len(allMembers) > 0 {
 			allTags := make([]string, len(allMembers))
 			for i, m := range allMembers {
 				allTags[i] = m.tag
 			}
-			loCur, err := a.Store.C.PlayerStats.Find(
-				c.UserContext(),
-				bson.M{"tag": bson.M{"$in": allTags}},
-				options.Find().SetProjection(bson.M{"tag": 1, "last_online": 1, "townhall": 1, "_id": 0}),
-			)
-			if err == nil {
-				var loDocs []bson.M
-				if err := loCur.All(c.UserContext(), &loDocs); err == nil {
-					for _, doc := range loDocs {
-						t, _ := doc["tag"].(string)
-						playerDataMap[t] = playerStatsData{
-							lastOnline: activityAsInt64(doc["last_online"]),
-							townhall:   activityAsInt(doc["townhall"]),
-						}
-					}
-				}
+			playerDataMap, err = activityPlayerStats(c, a, allTags)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -344,16 +318,74 @@ func inactivePlayers(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func serverClans(c *fiber.Ctx, a apptypes.Deps, guildID int64) ([]bson.M, error) {
-	cur, err := a.Store.C.ClanDB.Find(c.UserContext(), bson.M{"server": guildID})
+func activityRequireServer(c *fiber.Ctx, a apptypes.Deps, guildID int64) error {
+	var exists int
+	return a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT 1
+		FROM servers
+		WHERE id = $1
+	`, strconv.FormatInt(guildID, 10)).Scan(&exists)
+}
+
+func serverClans(c *fiber.Ctx, a apptypes.Deps, guildID int64) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT tag, name, data
+		FROM server_clans
+		WHERE server_id = $1
+		ORDER BY tag
+	`, strconv.FormatInt(guildID, 10))
 	if err != nil {
 		return nil, err
 	}
-	var clans []bson.M
-	if err := cur.All(c.UserContext(), &clans); err != nil {
+	defer rows.Close()
+	clans := []map[string]any{}
+	for rows.Next() {
+		var tag, name string
+		var dataRaw []byte
+		if err := rows.Scan(&tag, &name, &dataRaw); err != nil {
+			return nil, err
+		}
+		item := playerDecodeJSONObject(dataRaw)
+		item["tag"] = tag
+		item["name"] = name
+		clans = append(clans, item)
+	}
+	return clans, rows.Err()
+}
+
+type activityPlayerStatsData struct {
+	lastOnline int64
+	townhall   int
+}
+
+func activityPlayerStats(c *fiber.Ctx, a apptypes.Deps, tags []string) (map[string]activityPlayerStatsData, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, townhall_level, last_online_at
+		FROM player_current_stats
+		WHERE player_tag = ANY($1)
+	`, tags)
+	if err != nil {
 		return nil, err
 	}
-	return clans, nil
+	defer rows.Close()
+	out := map[string]activityPlayerStatsData{}
+	for rows.Next() {
+		var tag string
+		var townhall pgtype.Int4
+		var lastOnline pgtype.Timestamptz
+		if err := rows.Scan(&tag, &townhall, &lastOnline); err != nil {
+			return nil, err
+		}
+		item := activityPlayerStatsData{}
+		if townhall.Valid {
+			item.townhall = int(townhall.Int32)
+		}
+		if lastOnline.Valid {
+			item.lastOnline = lastOnline.Time.Unix()
+		}
+		out[tag] = item
+	}
+	return out, rows.Err()
 }
 
 func activityAsString(v any) string {
@@ -401,5 +433,3 @@ func activityParseIntDefault(raw string, fallback int) int {
 	}
 	return value
 }
-
-

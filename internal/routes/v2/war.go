@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net/url"
 	"sort"
@@ -14,8 +15,6 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // previousWars godoc
@@ -41,41 +40,13 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		limit := warParseIntDefault(c.Query("limit"), 50)
-		filter := bson.M{
-			"$and": bson.A{
-				bson.M{"$or": bson.A{bson.M{"data.clan.tag": clanTag}, bson.M{"data.opponent.tag": clanTag}}},
-				bson.M{"data.preparationStartTime": bson.M{"$gte": start}},
-				bson.M{"data.preparationStartTime": bson.M{"$lte": end}},
-			},
-		}
-		if !includeCWL {
-			filter["$and"] = append(filter["$and"].(bson.A), bson.M{"data.season": bson.M{"$eq": nil}})
-		}
-		cur, err := a.Store.DB.Looper.Collection("clan_war").Find(c.UserContext(), filter,
-			options.Find().SetSort(bson.D{{Key: "data.endTime", Value: -1}}))
+		rows, err := sqlPreviousWarRows(c, a, clanTag, start, end, includeCWL, limit)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
-			return err
-		}
-		seen := map[string]struct{}{}
-		items := make([]any, 0, warMin(limit, len(rows)))
+		items := make([]any, 0, len(rows))
 		for _, row := range rows {
-			data, _ := sanitize(row["data"]).(map[string]any)
-			prep := warAsString(data["preparationStartTime"])
-			if prep == "" {
-				prep = warAsString(row["preparationStartTime"])
-			}
-			if _, ok := seen[prep]; ok {
-				continue
-			}
-			seen[prep] = struct{}{}
-			items = append(items, warWithoutID(bson.M(data)))
-			if len(items) == limit {
-				break
-			}
+			items = append(items, row)
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
@@ -94,12 +65,8 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 func cwlRankingHistory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
-		cur, err := a.Store.DB.Looper.Collection("cwl_group").Find(c.UserContext(), bson.M{"data.clans.tag": clanTag})
+		rows, err := sqlCWLGroups(c, a, clanTag)
 		if err != nil {
-			return err
-		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
 			return err
 		}
 		if len(rows) == 0 {
@@ -107,8 +74,8 @@ func cwlRankingHistory(a apptypes.Deps) fiber.Handler {
 		}
 		items := make([]modelsv2.CWLRankingHistoryItem, 0, len(rows))
 		for _, row := range rows {
-			data, _ := row["data"].(bson.M)
-			season, _ := data["season"].(string)
+			data := warMap(row["data"])
+			season, _ := row["season"].(string)
 			items = append(items, modelsv2.CWLRankingHistoryItem{
 				Season: season,
 				League: nestedString(data, "clans", "0", "warLeague", "name"),
@@ -149,14 +116,11 @@ func cwlThresholds(c *fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/war/clan/stats [get]
+// @Router /v2/war/stats [get]
 func clanStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTags := splitCSV(apptypes.QueryValues(c, "clan_tags"), c.Query("clan_tag"))
-		filter := bson.M{}
-		if len(clanTags) > 0 {
-			filter = bson.M{"$or": bson.A{bson.M{"data.clan.tag": bson.M{"$in": clanTags}}, bson.M{"data.opponent.tag": bson.M{"$in": clanTags}}}}
-		}
-		total, err := a.Store.DB.Looper.Collection("clan_war").CountDocuments(c.UserContext(), filter)
+		total, err := sqlWarCount(c, a, clanTags)
 		if err != nil {
 			return err
 		}
@@ -261,6 +225,112 @@ func clanWarhits(a apptypes.Deps) fiber.Handler {
 	}
 }
 
+func sqlPreviousWarRows(c *fiber.Ctx, a apptypes.Deps, clanTag string, start string, end string, includeCWL bool, limit int) ([]map[string]any, error) {
+	query := `
+		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
+		FROM war_log_index
+		WHERE (clan_tag = $1 OR opponent_tag = $1)
+			AND prep_time >= $2::timestamptz
+			AND prep_time <= $3::timestamptz
+	`
+	args := []any{clanTag, warTimestampToTime(start), warTimestampToTime(end)}
+	if !includeCWL {
+		query += ` AND war_type <> 'cwl'`
+	}
+	query += ` ORDER BY end_time DESC LIMIT $` + strconv.Itoa(len(args)+1)
+	args = append(args, limit)
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var warID, rowClanTag, opponentTag, warType, state, modifier string
+		var startTime *time.Time
+		var prepTime, endTime time.Time
+		var size int
+		var cwlWarTag, r2Key *string
+		if err := rows.Scan(&warID, &rowClanTag, &opponentTag, &prepTime, &startTime, &endTime, &size, &warType, &state, &modifier, &cwlWarTag, &r2Key); err != nil {
+			return nil, err
+		}
+		item := map[string]any{
+			"war_id":               warID,
+			"clan":                 map[string]any{"tag": rowClanTag},
+			"opponent":             map[string]any{"tag": opponentTag},
+			"preparationStartTime": prepTime.UTC().Format(time.RFC3339),
+			"endTime":              endTime.UTC().Format(time.RFC3339),
+			"teamSize":             size,
+			"type":                 warType,
+			"state":                state,
+			"battleModifier":       modifier,
+		}
+		if startTime != nil {
+			item["startTime"] = startTime.UTC().Format(time.RFC3339)
+		}
+		if cwlWarTag != nil {
+			item["cwlWarTag"] = *cwlWarTag
+		}
+		if r2Key != nil {
+			item["r2_key"] = *r2Key
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func sqlCWLGroups(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT season, cwl_league_id, rounds, data
+		FROM cwl_groups
+		WHERE $1 = ANY(clan_tags)
+		ORDER BY season DESC
+	`, clanTag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var season string
+		var leagueID int
+		var roundsRaw, dataRaw []byte
+		if err := rows.Scan(&season, &leagueID, &roundsRaw, &dataRaw); err != nil {
+			return nil, err
+		}
+		data := map[string]any{}
+		_ = json.Unmarshal(dataRaw, &data)
+		var rounds any
+		_ = json.Unmarshal(roundsRaw, &rounds)
+		data["rounds"] = rounds
+		out = append(out, map[string]any{"season": season, "cwl_league_id": leagueID, "data": data})
+	}
+	return out, rows.Err()
+}
+
+func sqlWarCount(c *fiber.Ctx, a apptypes.Deps, clanTags []string) (int64, error) {
+	query := `SELECT count(*) FROM war_log_index`
+	args := []any{}
+	if len(clanTags) > 0 {
+		query += ` WHERE clan_tag = ANY($1) OR opponent_tag = ANY($1)`
+		args = append(args, clanTags)
+	}
+	var total int64
+	err := a.Store.SQL.QueryRow(c.UserContext(), query, args...).Scan(&total)
+	return total, err
+}
+
+func warTimestampToTime(value string) time.Time {
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err == nil {
+		return time.Unix(parsed, 0).UTC()
+	}
+	if parsedTime, err := time.Parse("20060102T150405.000Z", value); err == nil {
+		return parsedTime.UTC()
+	}
+	return time.Unix(0, 0).UTC()
+}
+
 func currentWarSummary(ctx context.Context, a apptypes.Deps, tag string) map[string]any {
 	tag = warFixTag(tag)
 
@@ -346,10 +416,6 @@ func warSummaryMapOrNil(value any) map[string]any {
 		return nil
 	case map[string]any:
 		return mapsClone(typed)
-	case bson.M:
-		if out, ok := sanitize(typed).(map[string]any); ok {
-			return out
-		}
 	case map[string]string:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
@@ -935,25 +1001,6 @@ func splitCSV(list []string, single string) []string {
 	return out
 }
 
-func warStripIDs(rows []bson.M) []bson.M {
-	out := make([]bson.M, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, warWithoutID(row))
-	}
-	return out
-}
-
-func warWithoutID(doc bson.M) bson.M {
-	clean := bson.M{}
-	for key, value := range doc {
-		if key == "_id" {
-			continue
-		}
-		clean[key] = value
-	}
-	return clean
-}
-
 func warAsString(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -962,16 +1009,31 @@ func warAsString(v any) string {
 }
 
 func asArray(v any) []any {
-	if arr, ok := v.(bson.A); ok {
-		return arr
-	}
 	if arr, ok := v.([]any); ok {
 		return arr
 	}
 	return nil
 }
 
-func nestedString(_ bson.M, _ ...string) string { return "" }
+func nestedString(data map[string]any, path ...string) string {
+	current := any(data)
+	for _, part := range path {
+		if idx, err := strconv.Atoi(part); err == nil {
+			items := asArray(current)
+			if idx < 0 || idx >= len(items) {
+				return ""
+			}
+			current = items[idx]
+			continue
+		}
+		mapped := warMap(current)
+		if mapped == nil {
+			return ""
+		}
+		current = mapped[part]
+	}
+	return warAsString(current)
+}
 
 func warFixTags(tags []string) []string {
 	out := make([]string, 0, len(tags))
@@ -979,6 +1041,15 @@ func warFixTags(tags []string) []string {
 		out = append(out, warFixTag(tag))
 	}
 	return out
+}
+
+func warMap(value any) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed
+	default:
+		return nil
+	}
 }
 
 func warFixTag(tag string) string {

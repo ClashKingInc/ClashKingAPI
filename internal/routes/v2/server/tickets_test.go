@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func TestNormalizeApproveMessagesKeepsOnlyFirstNamedMessage(t *testing.T) {
@@ -23,9 +22,9 @@ func TestNormalizeApproveMessagesKeepsOnlyFirstNamedMessage(t *testing.T) {
 }
 
 func TestTicketApproveMessagesReturnsSingleEntry(t *testing.T) {
-	got := ticketApproveMessages(bson.A{
-		bson.M{"name": "first", "message": "message one"},
-		bson.M{"name": "second", "message": "message two"},
+	got := ticketApproveMessages([]any{
+		map[string]any{"name": "first", "message": "message one"},
+		map[string]any{"name": "second", "message": "message two"},
 	})
 
 	if len(got) != 1 {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,8 +9,6 @@ import (
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 var (
@@ -112,62 +109,8 @@ func pathInt(c *fiber.Ctx, key string) (int, error) {
 	return out, nil
 }
 
-func objectID(raw string) (bson.ObjectID, error) {
-	id, err := bson.ObjectIDFromHex(raw)
-	if err != nil {
-		return bson.ObjectID{}, apptypes.Error(http.StatusBadRequest, "invalid object id")
-	}
-	return id, nil
-}
-
-func findOneMap(ctx context.Context, collection *mongo.Collection, filter any) (map[string]any, error) {
-	var out map[string]any
-	err := collection.FindOne(ctx, filter).Decode(&out)
-	return out, err
-}
-
-func findManyMaps(ctx context.Context, collection *mongo.Collection, filter any) ([]map[string]any, error) {
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-	var out []map[string]any
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func flattenForMongo(input map[string]any, prefix string) bson.M {
-	out := bson.M{}
-	for key, value := range input {
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
-		}
-		if nested, ok := value.(map[string]any); ok {
-			for nestedKey, nestedValue := range flattenForMongo(nested, path) {
-				out[nestedKey] = nestedValue
-			}
-			continue
-		}
-		out[path] = value
-	}
-	return out
-}
-
 func sanitize(value any) any {
 	switch typed := value.(type) {
-	case bson.M:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			if key == "_id" {
-				continue
-			}
-			out[key] = sanitize(item)
-		}
-		return out
 	case []map[string]any:
 		out := make([]map[string]any, 0, len(typed))
 		for _, item := range typed {
@@ -189,41 +132,9 @@ func sanitize(value any) any {
 			out[key] = sanitize(item)
 		}
 		return out
-	case bson.D:
-		out := make(map[string]any, len(typed))
-		for _, e := range typed {
-			if e.Key == "_id" {
-				continue
-			}
-			out[e.Key] = sanitize(e.Value)
-		}
-		return out
-	case bson.A:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, sanitize(item))
-		}
-		return out
-	case bson.ObjectID:
-		return typed.Hex()
 	default:
 		return typed
 	}
-}
-
-func roleCollection(rt apptypes.Deps, roleType string) *mongo.Collection {
-	name := serverRoleCollections[roleType]
-	if name == "" {
-		return nil
-	}
-	return rt.Store.DB.Usafam.Collection(name)
-}
-
-func sanitizeObjectID(value any) any {
-	if id, ok := value.(bson.ObjectID); ok {
-		return id.Hex()
-	}
-	return value
 }
 
 func serverNormalizeTag(tag string) string {
@@ -243,8 +154,6 @@ func serverAsString(value any) string {
 		return typed
 	case nil:
 		return ""
-	case bson.ObjectID:
-		return typed.Hex()
 	default:
 		return fmt.Sprint(typed)
 	}
@@ -280,10 +189,10 @@ func toStringMaybe(value any) any {
 }
 
 func notFoundErr(err error, message string) error {
-	if err == mongo.ErrNoDocuments {
+	if err != nil {
 		return apptypes.Error(http.StatusNotFound, message)
 	}
-	return err
+	return nil
 }
 
 func randomID(seed string, n int) string {

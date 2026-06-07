@@ -2,8 +2,8 @@
 
 package integration_test
 
-// Fix #275 — PUT /v2/server/:id/tickets/:panel with an empty string for a channel
-// field must remove the field from MongoDB ($unset), not set it to null.
+// Fix #275: PUT /v2/server/:id/tickets/:panel with an empty string for a channel
+// field must clear the persisted value, not set it to null.
 
 import (
 	"fmt"

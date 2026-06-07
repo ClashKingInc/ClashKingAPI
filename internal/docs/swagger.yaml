@@ -1,5 +1,49 @@
 basePath: /
 definitions:
+  modelsv1.PlayerLegendsResponse:
+    properties:
+      legends: {}
+      name: {}
+      rankings: {}
+      streak: {}
+      tag: {}
+      townhall: {}
+    type: object
+  modelsv1.PlayerLootedData:
+    properties:
+      dark_elixir: {}
+      elixir: {}
+      gold: {}
+    type: object
+  modelsv1.PlayerStatsResponse:
+    properties:
+      activity: {}
+      attack_wins: {}
+      capital: {}
+      clan_games: {}
+      clan_tag: {}
+      clanCapitalContributions: {}
+      donations: {}
+      last_online: {}
+      league: {}
+      legends: {}
+      location: {}
+      looted:
+        $ref: '#/definitions/modelsv1.PlayerLootedData'
+      name: {}
+      season_pass: {}
+      tag: {}
+      townhall: {}
+      trophies: {}
+      warStars: {}
+    type: object
+  modelsv1.V1CapitalClanTagsBody:
+    properties:
+      clan_tags:
+        items:
+          type: string
+        type: array
+    type: object
   modelsv2.AccountsCOCAccountRequest:
     properties:
       api_token:
@@ -210,6 +254,63 @@ definitions:
           type: string
         type: array
     type: object
+  v2.mobileLiveActivityRequest:
+    properties:
+      activity_id:
+        type: string
+      clan_tag:
+        type: string
+      cwl_war_tag:
+        type: string
+      device_id:
+        type: string
+      environment:
+        type: string
+      push_token:
+        type: string
+      war_id:
+        type: string
+    type: object
+  v2.mobilePushDeviceRequest:
+    properties:
+      app_version:
+        type: string
+      build_number:
+        type: string
+      device_id:
+        type: string
+      device_model:
+        type: string
+      environment:
+        type: string
+      os_version:
+        type: string
+      platform:
+        type: string
+      provider:
+        type: string
+      token:
+        type: string
+    type: object
+  v2.mobileWarSubscriptionRequest:
+    properties:
+      clan_tag:
+        type: string
+      cwl_rank_enabled:
+        type: boolean
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      live_activity_enabled:
+        type: boolean
+      score_change_enabled:
+        type: boolean
+      war_end_enabled:
+        type: boolean
+      war_start_enabled:
+        type: boolean
+    type: object
 info:
   contact: {}
   description: ClashKing Go API documentation. Public Swagger lists only unauthenticated
@@ -219,6 +320,1576 @@ info:
   title: ClashKing API
   version: "1.0"
 paths:
+  /activity:
+    get:
+      description: Returns scoped activity stats for players.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        type: array
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Discord server ID
+        in: query
+        name: server
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy activity stats
+      tags:
+      - Legacy Stats
+  /assets:
+    get:
+      description: Returns the ClashKing sprite bundle download link.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy asset download link
+      tags:
+      - Legacy
+  /boost-rate:
+    get:
+      description: Returns boost counts and usage percentages for super troops in
+        a season window.
+      parameters:
+      - description: Start season YYYY-MM
+        in: query
+        name: start_season
+        required: true
+        type: string
+      - description: End season YYYY-MM
+        in: query
+        name: end_season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get super troop boost rates
+      tags:
+      - Legacy Stats
+  /bot/config:
+    get:
+      description: Returns ClashKing bot configuration for authorized bot tokens.
+      parameters:
+      - description: Bot token
+        in: header
+        name: bot_token
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get bot configuration
+      tags:
+      - Legacy Bot
+  /builderbaseleagues:
+    get:
+      description: Returns legacy builder base league metadata.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get builder base leagues
+      tags:
+      - Legacy Static Data
+  /capital:
+    get:
+      description: Returns scoped clan capital stats for players.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        type: array
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Discord server ID
+        in: query
+        name: server
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy capital stats
+      tags:
+      - Legacy Capital
+  /capital/{clan_tag}:
+    get:
+      description: Returns stored raid weekends for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan capital raid log
+      tags:
+      - Legacy Capital
+  /capital/bulk:
+    post:
+      consumes:
+      - application/json
+      description: Returns stored raid weekends grouped by clan tag.
+      parameters:
+      - description: Clan tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv1.V1CapitalClanTagsBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get capital raid logs in bulk
+      tags:
+      - Legacy Capital
+  /capital/stats/district:
+    get:
+      description: Returns raid weekend capital district stats.
+      parameters:
+      - description: Weekend filter
+        in: query
+        name: weekend
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get capital district stats
+      tags:
+      - Legacy Capital
+  /capital/stats/leagues:
+    get:
+      description: Returns raid weekend capital league stats.
+      parameters:
+      - description: Weekend filter
+        in: query
+        name: weekend
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get capital league stats
+      tags:
+      - Legacy Capital
+  /ck/bulk:
+    post:
+      consumes:
+      - application/json
+      description: Proxies multiple Clash API paths and returns successful JSON responses.
+      parameters:
+      - description: Bearer internal API token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Proxy paths
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Proxy bulk Clash API requests
+      tags:
+      - Legacy Proxy
+  /clan-games:
+    get:
+      description: Returns scoped clan games stats for players.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        type: array
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Discord server ID
+        in: query
+        name: server
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy clan games stats
+      tags:
+      - Legacy Stats
+  /clan/{clan_tag}/basic:
+    get:
+      description: Returns tracked basic clan data for a clan tag.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get basic clan data
+      tags:
+      - Legacy Clans
+  /clan/{clan_tag}/historical:
+    get:
+      description: Returns tracked player history events for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan historical events
+      tags:
+      - Legacy Clans
+  /clan/{clan_tag}/join-leave:
+    get:
+      description: Returns tracked join and leave events for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan join-leave history
+      tags:
+      - Legacy Clans
+  /clan/search:
+    get:
+      description: Returns tracked clans with optional location filtering.
+      parameters:
+      - description: Location ID
+        in: query
+        name: location_id
+        type: integer
+      - description: Maximum number of clans
+        in: query
+        name: limit
+        type: integer
+      - description: Include member tags
+        in: query
+        name: member_list
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search tracked clans
+      tags:
+      - Legacy Clans
+  /cwl/{clan_tag}/{season}:
+    get:
+      description: Returns the CWL group for a clan and season.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Season YYYY-MM
+        in: path
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get CWL group by season
+      tags:
+      - Legacy War
+  /cwl/{clan_tag}/group:
+    get:
+      description: Returns the current season CWL group for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current CWL group
+      tags:
+      - Legacy War
+  /discord_links:
+    post:
+      consumes:
+      - application/json
+      description: Returns Discord user IDs linked to the provided player tags.
+      parameters:
+      - description: Player tags
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            type: string
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Discord links for player tags
+      tags:
+      - Legacy Links
+  /donations:
+    get:
+      description: Returns scoped donation stats for players.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        type: array
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Discord server ID
+        in: query
+        name: server
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy donation stats
+      tags:
+      - Legacy Stats
+  /global/counts:
+    get:
+      description: Returns global tracking counts used by legacy clients.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global ClashKing counts
+      tags:
+      - Legacy Stats
+  /guild_links/{guild_id}:
+    get:
+      description: Returns linked player data for a Discord guild.
+      parameters:
+      - description: Discord guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get guild links
+      tags:
+      - Legacy Links
+  /json/{data_type}:
+    get:
+      description: Returns static Clash data for the requested legacy data type.
+      parameters:
+      - description: Static data type
+        in: path
+        name: data_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy static JSON data
+      tags:
+      - Legacy Static Data
+  /legends/clan/{clan_tag}/{date}:
+    get:
+      description: Returns clan data with legend league members for a specific day.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Legend day YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan legend day data
+      tags:
+      - Legacy Legends
+  /legends/eos-winners:
+    get:
+      description: Returns season rank-one legend snapshots.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legend end-of-season winners
+      tags:
+      - Legacy Legends
+  /legends/streaks:
+    get:
+      description: Returns players ordered by their tracked legend streak.
+      parameters:
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legend streak leaderboard
+      tags:
+      - Legacy Legends
+  /legends/trophy-buckets:
+    get:
+      description: Returns histogram buckets for current legend trophy counts.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legend trophy buckets
+      tags:
+      - Legacy Legends
+  /list/seasons:
+    get:
+      description: Returns recent season identifiers in YYYY-MM format.
+      parameters:
+      - description: Number of previous months to include
+        in: query
+        name: last
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+      summary: List recent seasons
+      tags:
+      - Legacy Lists
+  /list/townhalls:
+    get:
+      description: Returns distinct town hall levels seen in tracked player stats.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: integer
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List tracked town halls
+      tags:
+      - Legacy Lists
+  /permalink/{clan_tag}:
+    get:
+      description: Returns the clan badge image as a PNG.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan badge image
+      tags:
+      - Legacy Clans
+  /player/{player_tag}/historical/{season}:
+    get:
+      description: Returns player history events grouped by event type for a season.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Season YYYY-MM
+        in: path
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player historical events
+      tags:
+      - Legacy Player
+  /player/{player_tag}/join-leave:
+    get:
+      description: Returns tracked join and leave events for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: time_stamp_end
+        type: integer
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player join-leave history
+      tags:
+      - Legacy Player
+  /player/{player_tag}/legend_rankings:
+    get:
+      description: Returns stored end-of-season legend ranking snapshots for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Maximum number of snapshots
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player legend ranking history
+      tags:
+      - Legacy Player
+  /player/{player_tag}/legends:
+    get:
+      description: Returns tracked legend league data for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Season YYYY-MM
+        in: query
+        name: season
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv1.PlayerLegendsResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player legends data
+      tags:
+      - Legacy Player
+  /player/{player_tag}/raids:
+    get:
+      description: Returns recent raid weekend documents containing a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Maximum number of raid weekends
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player raid weekends
+      tags:
+      - Legacy Player
+  /player/{player_tag}/stats:
+    get:
+      description: Returns tracked aggregate stats for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv1.PlayerStatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player stats
+      tags:
+      - Legacy Player
+  /player/{player_tag}/warhits:
+    get:
+      description: Returns recent war attacks and defenses for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player war hits
+      tags:
+      - Legacy Player
+  /player/{player_tag}/wartimer:
+    get:
+      description: Returns current war timer data for a player when available.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player war timer
+      tags:
+      - Legacy Player
+  /player/full-search/{name}:
+    get:
+      description: Searches tracked players by name with optional filters.
+      parameters:
+      - description: Player name search
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      - description: Role filter
+        in: query
+        name: role
+        type: string
+      - description: League filter
+        in: query
+        name: league
+        type: string
+      - description: Town hall range as min,max
+        in: query
+        name: townhall
+        type: string
+      - description: Experience range as min,max
+        in: query
+        name: exp
+        type: string
+      - description: Trophy range as min,max
+        in: query
+        name: trophies
+        type: string
+      - description: Donation range as min,max
+        in: query
+        name: donations
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Full player search
+      tags:
+      - Legacy Player
+  /player/search/{name}:
+    get:
+      description: Returns basic tracked player search results by name.
+      parameters:
+      - description: Player name search
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Search players by name
+      tags:
+      - Legacy Player
+  /player/to-do:
+    get:
+      description: Returns war, raid, legend, clan games, and season pass to-do data
+        for player tags.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player to-do state
+      tags:
+      - Legacy Player
+  /ranking/clan-builder/{location}/{date}:
+    get:
+      description: Returns a stored clan builder ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan builder ranking snapshot
+      tags:
+      - Legacy Rankings
+  /ranking/clan-capital/{location}/{date}:
+    get:
+      description: Returns a stored clan capital ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan capital ranking snapshot
+      tags:
+      - Legacy Rankings
+  /ranking/clan-trophies/{location}/{date}:
+    get:
+      description: Returns a stored clan trophy ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan trophy ranking snapshot
+      tags:
+      - Legacy Rankings
+  /ranking/legends/{player_tag}:
+    get:
+      description: Returns the current legend ranking row for a player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get live legend ranking by player
+      tags:
+      - Legacy Rankings
+  /ranking/live/legends:
+    get:
+      description: Returns current legend rankings in the requested rank range.
+      parameters:
+      - description: First rank
+        in: query
+        name: top_ranking
+        type: integer
+      - description: Last rank
+        in: query
+        name: lower_ranking
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get live legend rankings
+      tags:
+      - Legacy Rankings
+  /ranking/player-builder/{location}/{date}:
+    get:
+      description: Returns a stored player builder ranking snapshot for a location
+        and date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player builder ranking snapshot
+      tags:
+      - Legacy Rankings
+  /ranking/player-trophies/{location}/{date}:
+    get:
+      description: Returns a stored player trophy ranking snapshot for a location
+        and date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player trophy ranking snapshot
+      tags:
+      - Legacy Rankings
+  /server-settings/{server_id}:
+    get:
+      description: Returns server settings for a Discord server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy server settings
+      tags:
+      - Legacy Server
+  /shortlink:
+    get:
+      description: Redirects a ClashKing short link to its destination URL.
+      parameters:
+      - description: Short link ID
+        in: query
+        name: id
+        type: string
+      - description: Short link ID
+        in: query
+        name: link_id
+        type: string
+      responses:
+        "307":
+          description: Temporary Redirect
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resolve short link
+      tags:
+      - Legacy Links
+  /shortner:
+    get:
+      description: Creates a ClashKing short link for the supplied URL.
+      parameters:
+      - description: Destination URL
+        in: query
+        name: url
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create short link
+      tags:
+      - Legacy Links
+  /v1/{path}:
+    get:
+      description: Proxies a GET request through the ClashKing Clash API proxy.
+      parameters:
+      - description: Proxy path
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Proxy a legacy Clash API GET request
+      tags:
+      - Legacy Proxy
+    post:
+      consumes:
+      - application/json
+      description: Proxies a POST request through the ClashKing Clash API proxy.
+      parameters:
+      - description: Proxy path
+        in: path
+        name: path
+        required: true
+        type: string
+      - description: Proxy payload
+        in: body
+        name: body
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Proxy a legacy Clash API POST request
+      tags:
+      - Legacy Proxy
   /v2/{category}:
     get:
       description: Returns static items for a category, with optional filters applied.
@@ -386,15 +2057,18 @@ paths:
       summary: Get category names
       tags:
       - Static Data
-  /v2/{server_id}/giveaways:
+  /v2/activity/guild-summary:
     get:
-      description: Returns all giveaways for a server split by status (ongoing, scheduled,
-        ended).
+      description: Returns clan and member activity totals for a Discord guild.
       parameters:
-      - description: Server ID
-        in: path
-        name: server_id
+      - description: Discord guild ID
+        in: query
+        name: guild_id
         required: true
+        type: integer
+      - description: Days without login to be considered inactive (default 7)
+        in: query
+        name: inactive_threshold_days
         type: integer
       produces:
       - application/json
@@ -409,59 +2083,49 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "401":
-          description: Unauthorized
+        "404":
+          description: Not Found
           schema:
             additionalProperties: true
             type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get server giveaways
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get guild activity summary
       tags:
-      - Server Giveaways
-    post:
-      consumes:
-      - multipart/form-data
-      description: Creates a new giveaway. Accepts multipart/form-data with optional
-        image upload.
+      - Activity & Inactivity
+  /v2/activity/inactive-players:
+    get:
+      description: Returns players in the guild that are considered inactive by the
+        provided threshold.
       parameters:
-      - description: Server ID
-        in: path
-        name: server_id
+      - description: Discord guild ID
+        in: query
+        name: guild_id
         required: true
         type: integer
-      - description: Prize description
-        in: formData
-        name: prize
-        required: true
-        type: string
-      - description: End time (ISO 8601)
-        in: formData
-        name: end_time
-        required: true
-        type: string
-      - description: Number of winners
-        in: formData
-        name: winners
-        required: true
+      - description: Days before a player is considered inactive
+        in: query
+        name: inactive_threshold_days
         type: integer
-      - description: Discord channel ID
-        in: formData
-        name: channel_id
-        required: true
+      - description: Minimum town hall level
+        in: query
+        name: min_townhall
+        type: integer
+      - description: Restrict results to a single clan
+        in: query
+        name: clan_tag
         type: string
-      - description: Start time (ISO 8601)
-        in: formData
-        name: start_time
-        type: string
-      - description: Start immediately (true/false)
-        in: formData
-        name: now
-        type: string
-      - description: Giveaway banner image
-        in: formData
-        name: image
-        type: file
+      - description: Maximum number of results
+        in: query
+        name: limit
+        type: integer
+      - description: Number of results to skip
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
@@ -475,269 +2139,168 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Create a server giveaway
-      tags:
-      - Server Giveaways
-  /v2/{server_id}/giveaways/{giveaway_id}:
-    delete:
-      description: Deletes a giveaway and its image from the CDN if applicable.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Giveaway ID
-        in: path
-        name: giveaway_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
         "404":
           description: Not Found
           schema:
             additionalProperties: true
             type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Delete a server giveaway
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get inactive players
       tags:
-      - Server Giveaways
-    get:
-      description: Returns a single giveaway by ID for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Giveaway ID
-        in: path
-        name: giveaway_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get a specific server giveaway
-      tags:
-      - Server Giveaways
-    put:
-      consumes:
-      - multipart/form-data
-      description: Updates an existing giveaway. Accepts multipart/form-data with
-        optional image upload.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Giveaway ID
-        in: path
-        name: giveaway_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Update a server giveaway
-      tags:
-      - Server Giveaways
-  /v2/{server_id}/giveaways/{giveaway_id}/reroll:
+      - Activity & Inactivity
+  /v2/auth/discord:
     post:
       consumes:
       - application/json
-      description: Replaces selected winners of an ended giveaway with new ones drawn
-        at random.
+      description: Exchanges Discord OAuth credentials for a ClashKing session.
       parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Giveaway ID
-        in: path
-        name: giveaway_id
-        required: true
-        type: string
-      - description: user_ids_to_replace
+      - description: Discord OAuth payload
         in: body
         name: body
         required: true
         schema:
-          additionalProperties:
-            items:
-              type: string
-            type: array
-          type: object
+          $ref: '#/definitions/modelsv2.AuthDiscordOAuthRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/modelsv2.AuthResponse'
         "400":
           description: Bad Request
           schema:
             additionalProperties: true
             type: object
-        "404":
-          description: Not Found
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Reroll giveaway winners
+      summary: Authenticate with Discord
       tags:
-      - Server Giveaways
-  /v2/{server_id}/leaderboards:
-    get:
-      description: Returns top players and clans for a Discord server based on ranking
-        data.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Max players to return (default 100, max 500)
-        in: query
-        name: limit_players
-        type: integer
-      - description: Max clans to return (default 50, max 200)
-        in: query
-        name: limit_clans
-        type: integer
-      - description: 'Sort by: global_rank, local_rank, trophies, legend_trophies'
-        in: query
-        name: sort_by
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get server leaderboards
-      tags:
-      - Server Leaderboards
-  /v2/{server_id}/panel:
-    get:
-      description: Returns the welcome panel configuration for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get server welcome panel
-      tags:
-      - Server Panels
-    put:
+      - App Authentication
+  /v2/auth/email:
+    post:
       consumes:
       - application/json
-      description: Updates the welcome panel configuration for a server.
+      description: Validates email/password credentials and returns access and refresh
+        tokens.
       parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Panel configuration
+      - description: Login payload
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/modelsv2.ServerPanelBody'
+          $ref: '#/definitions/modelsv2.AuthEmailAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Authenticate with email
+      tags:
+      - App Authentication
+  /v2/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Issues a password reset code for the matching email account.
+      parameters:
+      - description: Forgot password payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Request password reset
+      tags:
+      - App Authentication
+  /v2/auth/link-discord:
+    post:
+      consumes:
+      - application/json
+      description: Attaches a Discord account and stores its OAuth tokens for the
+        current authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link Discord to an existing account
+      tags:
+      - App Authentication
+  /v2/auth/link-email:
+    post:
+      consumes:
+      - application/json
+      description: Attaches email credentials to the authenticated account.
+      parameters:
+      - description: Link email payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthEmailRegisterRequest'
       produces:
       - application/json
       responses:
@@ -758,9 +2321,215 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
-      summary: Update server welcome panel
+      summary: Link Email to an existing Discord account
       tags:
-      - Server Panels
+      - App Authentication
+  /v2/auth/me:
+    get:
+      description: Returns the authenticated user's current profile information.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthUserInfo'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get current user information
+      tags:
+      - App Authentication
+  /v2/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Validates a refresh token and returns a new access token for the
+        same user.
+      parameters:
+      - description: Refresh token payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthRefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh the access token
+      tags:
+      - App Authentication
+  /v2/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a pending email registration and issues a verification
+        code.
+      parameters:
+      - description: Registration payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthEmailRegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register with email
+      tags:
+      - App Authentication
+  /v2/auth/resend-verification:
+    post:
+      consumes:
+      - application/json
+      description: Resends the verification code for a pending email registration.
+      parameters:
+      - description: Email payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "410":
+          description: Gone
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resend verification email
+      tags:
+      - App Authentication
+  /v2/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Validates a password reset token and updates the account password.
+      parameters:
+      - description: Reset password payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Reset password with token
+      tags:
+      - App Authentication
+  /v2/auth/verify-email-code:
+    post:
+      consumes:
+      - application/json
+      description: Confirms a pending email registration by checking the verification
+        code and creates the account session.
+      parameters:
+      - description: Verification payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthEmailCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify email address with 6-digit code
+      tags:
+      - App Authentication
   /v2/capital/guild-leaderboard:
     get:
       description: Returns a capital leaderboard for all clans attached to the requested
@@ -1241,6 +3010,20 @@ paths:
       summary: Join leaves for many clans
       tags:
       - Clan
+  /v2/config/public:
+    get:
+      description: Returns client-safe configuration values.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get public configuration
+      tags:
+      - Configuration
   /v2/cwl/{clan_tag}/ranking-history:
     get:
       description: Returns CWL ranking history rows for a clan tag.
@@ -1871,6 +3654,84 @@ paths:
       summary: Get guild legends statistics
       tags:
       - Bot Legends Endpoints
+  /v2/legends/players/day/{day}:
+    get:
+      description: Returns legend stats for requested players on a specific day.
+      parameters:
+      - description: Legend day YYYY-MM-DD
+        in: path
+        name: day
+        required: true
+        type: string
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: players
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legend stats by day
+      tags:
+      - Bot Legends Endpoints
+  /v2/legends/players/season/{season}:
+    get:
+      description: Returns legend stats for requested players in a season.
+      parameters:
+      - description: Season YYYY-MM
+        in: path
+        name: season
+        required: true
+        type: string
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: players
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legend stats by season
+      tags:
+      - Bot Legends Endpoints
   /v2/link-discord:
     post:
       consumes:
@@ -1940,6 +3801,33 @@ paths:
       summary: Link Email to an existing Discord account
       tags:
       - App Authentication
+  /v2/link/server/{server_id}/clan/list:
+    get:
+      description: Returns a basic list of clans (tag+name) for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List server clans (basic)
+      tags:
+      - Server Clans
   /v2/me:
     get:
       description: Returns the authenticated user's current profile information.
@@ -1965,6 +3853,177 @@ paths:
       summary: Get current user information
       tags:
       - App Authentication
+  /v2/mobile/live-activities:
+    post:
+      consumes:
+      - application/json
+      description: Registers or updates a mobile live activity push token.
+      parameters:
+      - description: Live activity
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.mobileLiveActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Register mobile live activity
+      tags:
+      - Mobile Push
+  /v2/mobile/live-activities/{activity_id}:
+    delete:
+      description: Marks a mobile live activity as ended for the authenticated user.
+      parameters:
+      - description: Live activity ID
+        in: path
+        name: activity_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: End mobile live activity
+      tags:
+      - Mobile Push
+  /v2/mobile/push/devices:
+    post:
+      consumes:
+      - application/json
+      description: Registers or updates a mobile push token for the authenticated
+        user.
+      parameters:
+      - description: Push device
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.mobilePushDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Register mobile push device
+      tags:
+      - Mobile Push
+  /v2/mobile/push/devices/{device_id}:
+    delete:
+      description: Disables a mobile push device for the authenticated user.
+      parameters:
+      - description: Device ID
+        in: path
+        name: device_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Disable mobile push device
+      tags:
+      - Mobile Push
+  /v2/mobile/push/war-subscriptions:
+    put:
+      consumes:
+      - application/json
+      description: Creates or updates war push subscription preferences for a device
+        and clan.
+      parameters:
+      - description: War subscription
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.mobileWarSubscriptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update mobile war subscription
+      tags:
+      - Mobile Push
   /v2/player/{player_tag}/extended:
     get:
       consumes:
@@ -3839,6 +5898,43 @@ paths:
       summary: Get all clan logs
       tags:
       - Server Logs
+  /v2/server/{server_id}/clan/{clan_tag}:
+    delete:
+      description: Removes a clan from the Discord server tracking list.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan Tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a clan from the server
+      tags:
+      - Server Clans
   /v2/server/{server_id}/clan/{clan_tag}/countdowns:
     get:
       description: Returns all clan-level countdown types with enabled status and
@@ -4286,6 +6382,39 @@ paths:
       summary: Enable a countdown
       tags:
       - Server Countdowns
+  /v2/server/{server_id}/discord-channels:
+    get:
+      description: Returns category, text, and news channels for the Discord server,
+        sorted by category.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get Discord channels
+      tags:
+      - Server Discord
   /v2/server/{server_id}/discord-roles:
     get:
       description: Returns all roles for the Discord server sorted by position.
@@ -4602,6 +6731,217 @@ paths:
       summary: Remove a family role
       tags:
       - Server Roles
+  /v2/server/{server_id}/giveaways:
+    get:
+      description: Returns all giveaways for a server split by status (ongoing, scheduled,
+        ended).
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server giveaways
+      tags:
+      - Server Giveaways
+    post:
+      consumes:
+      - multipart/form-data
+      description: Creates a new giveaway. Accepts multipart/form-data with optional
+        image upload.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Prize description
+        in: formData
+        name: prize
+        required: true
+        type: string
+      - description: End time (ISO 8601)
+        in: formData
+        name: end_time
+        required: true
+        type: string
+      - description: Number of winners
+        in: formData
+        name: winners
+        required: true
+        type: integer
+      - description: Discord channel ID
+        in: formData
+        name: channel_id
+        required: true
+        type: string
+      - description: Start time (ISO 8601)
+        in: formData
+        name: start_time
+        type: string
+      - description: Start immediately (true/false)
+        in: formData
+        name: now
+        type: string
+      - description: Giveaway banner image
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a server giveaway
+      tags:
+      - Server Giveaways
+  /v2/server/{server_id}/giveaways/{giveaway_id}:
+    delete:
+      description: Deletes a giveaway and its image from the CDN if applicable.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Giveaway ID
+        in: path
+        name: giveaway_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a server giveaway
+      tags:
+      - Server Giveaways
+    get:
+      description: Returns a single giveaway by ID for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Giveaway ID
+        in: path
+        name: giveaway_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get a specific server giveaway
+      tags:
+      - Server Giveaways
+    put:
+      consumes:
+      - multipart/form-data
+      description: Updates an existing giveaway. Accepts multipart/form-data with
+        optional image upload.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Giveaway ID
+        in: path
+        name: giveaway_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a server giveaway
+      tags:
+      - Server Giveaways
   /v2/server/{server_id}/giveaways/{giveaway_id}/entries:
     get:
       description: Returns the list of users who entered a giveaway, with their entry
@@ -4635,6 +6975,333 @@ paths:
       summary: Get giveaway entrants
       tags:
       - Server Giveaways
+  /v2/server/{server_id}/giveaways/{giveaway_id}/reroll:
+    post:
+      consumes:
+      - application/json
+      description: Replaces selected winners of an ended giveaway with new ones drawn
+        at random.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Giveaway ID
+        in: path
+        name: giveaway_id
+        required: true
+        type: string
+      - description: user_ids_to_replace
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Reroll giveaway winners
+      tags:
+      - Server Giveaways
+  /v2/server/{server_id}/leaderboards:
+    get:
+      description: Returns player and clan ranking leaderboards for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Maximum number of players
+        in: query
+        name: limit_players
+        type: integer
+      - description: Maximum number of clans
+        in: query
+        name: limit_clans
+        type: integer
+      - description: Player sort key
+        in: query
+        name: sort_by
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server leaderboards
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/activity:
+    get:
+      description: Returns players ranked by season activity for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Season YYYY-MM
+        in: query
+        name: season
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server activity leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/capital-raids:
+    get:
+      description: Returns players ranked by recent capital raid loot for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server capital raids leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/clan-games:
+    get:
+      description: Returns players ranked by season clan games points for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Season YYYY-MM
+        in: query
+        name: season
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server clan games leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/donations:
+    get:
+      description: Returns players ranked by season donations for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Season YYYY-MM
+        in: query
+        name: season
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server donations leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/legends:
+    get:
+      description: Returns tracked legend players ranked by trophies for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server legends leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/looting:
+    get:
+      description: Returns players ranked by season loot totals for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Season YYYY-MM
+        in: query
+        name: season
+        type: string
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server looting leaderboard
+      tags:
+      - Server Leaderboards
+  /v2/server/{server_id}/leaderboards/war-performance:
+    get:
+      description: Returns players ranked by war attack performance for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Maximum number of rows
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server war performance leaderboard
+      tags:
+      - Server Leaderboards
   /v2/server/{server_id}/links:
     get:
       description: Returns all player-Discord account links for server members.
@@ -4856,6 +7523,77 @@ paths:
       summary: Patch a log type config
       tags:
       - Server Logs
+  /v2/server/{server_id}/panel:
+    get:
+      description: Returns the welcome panel configuration for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get server welcome panel
+      tags:
+      - Server Panels
+    put:
+      consumes:
+      - application/json
+      description: Updates the welcome panel configuration for a server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Panel configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ServerPanelBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update server welcome panel
+      tags:
+      - Server Panels
   /v2/server/{server_id}/reminders:
     get:
       description: Returns all reminders for a server grouped by type.
@@ -5800,6 +8538,187 @@ paths:
       summary: Update open ticket status
       tags:
       - Server Tickets
+  /v2/static/{category}:
+    get:
+      description: Returns static items for a category, with optional filters applied.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Locale code
+        in: query
+        name: locale
+        type: string
+      - description: Substring to filter item names
+        in: query
+        name: name
+        type: string
+      - description: Village filter
+        in: query
+        name: village
+        type: string
+      - description: Type filter
+        in: query
+        name: type
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category items
+      tags:
+      - Static Data
+  /v2/static/{category}/{item_id_or_name}:
+    get:
+      description: Returns a static data item resolved by item ID or name.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Item ID or name
+        in: path
+        name: item_id_or_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category item by id
+      tags:
+      - Static Data
+  /v2/static/{category}/{item_id_or_name}/maxlevel:
+    get:
+      description: Returns the highest level defined for a static item.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Item ID or name
+        in: path
+        name: item_id_or_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item max level
+      tags:
+      - Static Data
+  /v2/static/{category}/names:
+    get:
+      description: Returns the names of static items for a category, with optional
+        filters applied.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Locale code
+        in: query
+        name: locale
+        type: string
+      - description: Substring to filter item names
+        in: query
+        name: name
+        type: string
+      - description: Village filter
+        in: query
+        name: village
+        type: string
+      - description: Type filter
+        in: query
+        name: type
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get category names
+      tags:
+      - Static Data
+  /v2/static/app-bundle:
+    get:
+      description: Returns the static-data bundle used by mobile clients.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get mobile app static data bundle
+      tags:
+      - Static Data
   /v2/static/app-translations:
     get:
       description: Returns locale-specific translations keyed by TID for the static-data
@@ -5824,6 +8743,20 @@ paths:
             additionalProperties: true
             type: object
       summary: Get app static translations
+      tags:
+      - Static Data
+  /v2/static/categories:
+    get:
+      description: Returns all available static data categories and item counts.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get static categories
       tags:
       - Static Data
   /v2/tracking/players/add:
@@ -6340,6 +9273,37 @@ paths:
       summary: Player warhits stats
       tags:
       - War
+  /v2/war/stats:
+    get:
+      description: Returns the number of wars for the requested clan tags.
+      parameters:
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Single clan tag
+        in: query
+        name: clan_tag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Clan war stats
+      tags:
+      - War
   /v2/war/war-summary:
     post:
       description: Returns current war summary data for multiple clan tags.
@@ -6371,6 +9335,144 @@ paths:
       summary: Get full war summary for multiple clans
       tags:
       - War
+  /war-stats:
+    get:
+      description: Returns scoped war hit-rate stats for players.
+      parameters:
+      - collectionFormat: csv
+        description: Player tags
+        in: query
+        items:
+          type: string
+        name: player_tags
+        type: array
+      - collectionFormat: csv
+        description: Clan tags
+        in: query
+        items:
+          type: string
+        name: clan_tags
+        type: array
+      - description: Discord server ID
+        in: query
+        name: server
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get legacy war stats
+      tags:
+      - Legacy War
+  /war/{clan_tag}/basic:
+    get:
+      description: Returns the current or most recent non-CWL war for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current or recent war
+      tags:
+      - Legacy War
+  /war/{clan_tag}/previous:
+    get:
+      description: Returns stored previous wars for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Maximum number of wars
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get previous wars
+      tags:
+      - Legacy War
+  /war/{clan_tag}/previous/{end_time}:
+    get:
+      description: Returns the stored previous war near the supplied Clash API end
+        time.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: War end time in Clash format
+        in: path
+        name: end_time
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get previous war by end time
+      tags:
+      - Legacy War
 securityDefinitions:
   ApiKeyAuth:
     in: header

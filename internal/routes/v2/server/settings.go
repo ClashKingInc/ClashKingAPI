@@ -1,12 +1,14 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getServerSettings godoc
@@ -27,7 +29,7 @@ func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		server, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		server, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil {
 			return notFoundErr(err, "Server Not Found")
 		}
@@ -36,13 +38,12 @@ func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		eval := map[string]any{}
-		for key, collectionName := range serverSettingsEvalCollections {
-			items, _ := findManyMaps(c.UserContext(), rt.Store.DB.Usafam.Collection(collectionName), bson.M{"server": serverID})
-			eval[key] = sanitize(items)
+		for key := range serverSettingsEvalCollections {
+			eval[key] = []any{}
 		}
 		server["eval"] = eval
 		if includeClans {
-			clans, _ := findManyMaps(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID})
+			clans, _ := sqlServerClanDocs(c, rt, serverID)
 			server["clans"] = sanitize(clans)
 		}
 		return apptypes.JSON(c, http.StatusOK, sanitize(server))
@@ -72,11 +73,15 @@ func putEmbedColor(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$set": bson.M{"embed_color": hexCode}})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `
+			UPDATE servers
+			SET embed_color = $2, data = data || $3::jsonb, updated_at = now()
+			WHERE id = $1
+		`, strconv.Itoa(serverID), strconv.Itoa(hexCode), apptypes.Marshal(map[string]any{"embed_color": hexCode}))
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Server not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.EmbedColorResponse{Message: "Embed color updated", ServerID: serverID, EmbedColor: hexCode})
@@ -102,7 +107,7 @@ func patchServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if _, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID}); err != nil {
+		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
 		var body modelsv2.ServerSettingsUpdate
@@ -113,15 +118,21 @@ func patchServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if len(rawBody) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		update := flattenForMongo(rawBody, "")
+		update := rawBody
 		if len(update) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$set": update})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `
+			UPDATE servers
+			SET embed_color = COALESCE($2, embed_color),
+				data = data || $3::jsonb,
+				updated_at = now()
+			WHERE id = $1
+		`, strconv.Itoa(serverID), optionalString(update["embed_color"]), apptypes.Marshal(update))
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Server not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerSettingsResponse{Message: "Server settings updated successfully", ServerID: serverID, UpdatedFields: len(update)})
@@ -213,4 +224,123 @@ func structToUpdateMap(body modelsv2.ServerSettingsUpdate) map[string]any {
 		out["link_parse"] = linkParse
 	}
 	return out
+}
+
+func sqlServerSettingsDoc(c *fiber.Ctx, rt apptypes.Deps, serverID int) (map[string]any, error) {
+	if rt.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	var id, name string
+	var embedColor *string
+	var logsRaw, statusRaw, countdownsRaw, dataRaw []byte
+	if err := rt.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT id, name, embed_color, logs_config, status_roles, countdowns, data
+		FROM servers
+		WHERE id = $1
+	`, strconv.Itoa(serverID)).Scan(&id, &name, &embedColor, &logsRaw, &statusRaw, &countdownsRaw, &dataRaw); err != nil {
+		return nil, err
+	}
+	doc := map[string]any{}
+	_ = json.Unmarshal(dataRaw, &doc)
+	doc["server"] = serverID
+	doc["server_id"] = id
+	doc["name"] = name
+	if embedColor != nil {
+		doc["embed_color"] = *embedColor
+	}
+	doc["logs_config"] = jsonObject(logsRaw)
+	doc["logs"] = doc["logs_config"]
+	doc["status_roles"] = jsonObject(statusRaw)
+	doc["countdowns"] = jsonObject(countdownsRaw)
+	return doc, nil
+}
+
+func sqlServerClanDocs(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string]any, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT tag, name, abbreviation, clan_channel_id, logs_config, countdowns, data
+		FROM server_clans
+		WHERE server_id = $1
+		ORDER BY name ASC, tag ASC
+	`, strconv.Itoa(serverID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var tag, name, abbreviation string
+		var clanChannelID *string
+		var logsRaw, countdownsRaw, dataRaw []byte
+		if err := rows.Scan(&tag, &name, &abbreviation, &clanChannelID, &logsRaw, &countdownsRaw, &dataRaw); err != nil {
+			return nil, err
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(dataRaw, &doc)
+		doc["tag"] = tag
+		doc["server"] = serverID
+		doc["server_id"] = strconv.Itoa(serverID)
+		doc["name"] = name
+		doc["abbreviation"] = abbreviation
+		if clanChannelID != nil {
+			doc["clan_channel"] = *clanChannelID
+		}
+		doc["logs_config"] = jsonObject(logsRaw)
+		doc["logs"] = doc["logs_config"]
+		doc["countdowns"] = jsonObject(countdownsRaw)
+		out = append(out, doc)
+	}
+	return out, rows.Err()
+}
+
+func sqlServerClanDoc(c *fiber.Ctx, rt apptypes.Deps, serverID int, tag string) (map[string]any, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT tag, name, abbreviation, clan_channel_id, logs_config, countdowns, data
+		FROM server_clans
+		WHERE server_id = $1 AND tag = $2
+		LIMIT 1
+	`, strconv.Itoa(serverID), tag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("clan not found")
+	}
+	var clanTag, name, abbreviation string
+	var clanChannelID *string
+	var logsRaw, countdownsRaw, dataRaw []byte
+	if err := rows.Scan(&clanTag, &name, &abbreviation, &clanChannelID, &logsRaw, &countdownsRaw, &dataRaw); err != nil {
+		return nil, err
+	}
+	doc := map[string]any{}
+	_ = json.Unmarshal(dataRaw, &doc)
+	doc["tag"] = clanTag
+	doc["server"] = serverID
+	doc["server_id"] = strconv.Itoa(serverID)
+	doc["name"] = name
+	doc["abbreviation"] = abbreviation
+	if clanChannelID != nil {
+		doc["clan_channel"] = *clanChannelID
+	}
+	doc["logs_config"] = jsonObject(logsRaw)
+	doc["logs"] = doc["logs_config"]
+	doc["countdowns"] = jsonObject(countdownsRaw)
+	return doc, nil
+}
+
+func jsonObject(raw []byte) map[string]any {
+	out := map[string]any{}
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+func optionalString(value any) *string {
+	if value == nil {
+		return nil
+	}
+	out := serverAsString(value)
+	return &out
 }

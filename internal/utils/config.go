@@ -14,8 +14,7 @@ import (
 type Config struct {
 	COCEmail            string
 	COCPassword         string
-	StaticMongoURI      string
-	StatsMongoURI       string
+	TimescaleURL        string
 	RedisIP             string
 	RedisPassword       string
 	BunnyAccessKey      string
@@ -46,8 +45,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		COCEmail:            os.Getenv("COC_EMAIL"),
 		COCPassword:         os.Getenv("COC_PASSWORD"),
-		StaticMongoURI:      os.Getenv("STATIC_MONGODB"),
-		StatsMongoURI:       os.Getenv("STATS_MONGODB"),
+		TimescaleURL:        firstNonEmpty(os.Getenv("TIMESCALE_URL"), os.Getenv("DATABASE_URL")),
 		RedisIP:             os.Getenv("REDIS_IP"),
 		RedisPassword:       os.Getenv("REDIS_PW"),
 		BunnyAccessKey:      os.Getenv("BUNNY_ACCESS_KEY"),
@@ -89,8 +87,7 @@ func (c Config) Addr() string {
 
 func (c Config) validate() error {
 	required := map[string]string{
-		"STATIC_MONGODB":        c.StaticMongoURI,
-		"STATS_MONGODB":         c.StatsMongoURI,
+		"TIMESCALE_URL":         c.TimescaleURL,
 		"ENCRYPTION_KEY":        c.EncryptionKey,
 		"SECRET_KEY":            c.SecretKey,
 		"REFRESH_SECRET":        c.RefreshSecret,
@@ -112,4 +109,13 @@ func (c Config) validate() error {
 		return errors.New("LOCAL=TRUE requires DEV_USER_ID")
 	}
 	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

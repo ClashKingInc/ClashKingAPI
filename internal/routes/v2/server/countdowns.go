@@ -10,7 +10,6 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getServerCountdowns godoc
@@ -30,18 +29,19 @@ func getServerCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil {
 			return notFoundErr(err, "Server not found")
 		}
+		countdowns := mapMaybe(serverDoc["countdowns"])
 		items := make([]modelsv2.CountdownStatus, 0, len(serverCountdownTypes))
 		for _, countdownType := range serverCountdownTypes {
 			field := countdownDBFields[countdownType]
 			items = append(items, modelsv2.CountdownStatus{
 				Type:      countdownType,
 				Name:      countdownType,
-				Enabled:   serverDoc[field] != nil,
-				ChannelID: stringPtrMaybe(serverDoc[field]),
+				Enabled:   countdowns[field] != nil,
+				ChannelID: stringPtrMaybe(countdowns[field]),
 			})
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerCountdownsResponse{ServerID: strconv.Itoa(serverID), Countdowns: items})
@@ -67,18 +67,19 @@ func getClanCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("clan_tag"))
-		clanDoc, err := findOneMap(c.UserContext(), rt.Store.C.ClanDB, bson.M{"server": serverID, "tag": tag})
+		clanDoc, err := sqlServerClanDoc(c, rt, serverID, tag)
 		if err != nil {
 			return notFoundErr(err, "Clan not found on this server")
 		}
+		countdowns := mapMaybe(clanDoc["countdowns"])
 		items := make([]modelsv2.CountdownStatus, 0, len(clanCountdownTypes))
 		for _, countdownType := range clanCountdownTypes {
 			field := countdownDBFields[countdownType]
 			items = append(items, modelsv2.CountdownStatus{
 				Type:      countdownType,
 				Name:      countdownType,
-				Enabled:   clanDoc[field] != nil,
-				ChannelID: stringPtrMaybe(clanDoc[field]),
+				Enabled:   countdowns[field] != nil,
+				ChannelID: stringPtrMaybe(countdowns[field]),
 			})
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanCountdownsResponse{ServerID: strconv.Itoa(serverID), ClanTag: tag, Countdowns: items})
@@ -118,19 +119,31 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 			if tag == "" {
 				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s countdown", body.CountdownType))
 			}
-			result, err := rt.Store.C.ClanDB.UpdateOne(c.UserContext(), bson.M{"server": serverID, "tag": tag}, bson.M{"$set": bson.M{field: channelID}})
+			result, err := rt.Store.SQL.Exec(c.UserContext(), `
+				UPDATE server_clans
+				SET countdowns = jsonb_set(countdowns, ARRAY[$3], to_jsonb($4::text), true),
+					data = data || $5::jsonb,
+					updated_at = now()
+				WHERE server_id = $1 AND tag = $2
+			`, strconv.Itoa(serverID), tag, field, strconv.FormatInt(channelID, 10), apptypes.Marshal(map[string]any{field: channelID}))
 			if err != nil {
 				return err
 			}
-			if result.MatchedCount == 0 {
+			if result.RowsAffected() == 0 {
 				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 			}
 		} else {
-			result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$set": bson.M{field: channelID}})
+			result, err := rt.Store.SQL.Exec(c.UserContext(), `
+				UPDATE servers
+				SET countdowns = jsonb_set(countdowns, ARRAY[$2], to_jsonb($3::text), true),
+					data = data || $4::jsonb,
+					updated_at = now()
+				WHERE id = $1
+			`, strconv.Itoa(serverID), field, strconv.FormatInt(channelID, 10), apptypes.Marshal(map[string]any{field: channelID}))
 			if err != nil {
 				return err
 			}
-			if result.MatchedCount == 0 {
+			if result.RowsAffected() == 0 {
 				return apptypes.Error(http.StatusNotFound, "Server not found")
 			}
 		}
@@ -175,19 +188,31 @@ func disableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 			if tag == "" {
 				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s countdown", body.CountdownType))
 			}
-			result, err := rt.Store.C.ClanDB.UpdateOne(c.UserContext(), bson.M{"server": serverID, "tag": tag}, bson.M{"$unset": bson.M{field: ""}})
+			result, err := rt.Store.SQL.Exec(c.UserContext(), `
+				UPDATE server_clans
+				SET countdowns = countdowns - $3,
+					data = data - $3,
+					updated_at = now()
+				WHERE server_id = $1 AND tag = $2
+			`, strconv.Itoa(serverID), tag, field)
 			if err != nil {
 				return err
 			}
-			if result.MatchedCount == 0 {
+			if result.RowsAffected() == 0 {
 				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 			}
 		} else {
-			result, err := rt.Store.C.ServerDB.UpdateOne(c.UserContext(), bson.M{"server": serverID}, bson.M{"$unset": bson.M{field: ""}})
+			result, err := rt.Store.SQL.Exec(c.UserContext(), `
+				UPDATE servers
+				SET countdowns = countdowns - $2,
+					data = data - $2,
+					updated_at = now()
+				WHERE id = $1
+			`, strconv.Itoa(serverID), field)
 			if err != nil {
 				return err
 			}
-			if result.MatchedCount == 0 {
+			if result.RowsAffected() == 0 {
 				return apptypes.Error(http.StatusNotFound, "Server not found")
 			}
 		}

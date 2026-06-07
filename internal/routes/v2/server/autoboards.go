@@ -1,8 +1,10 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,7 +12,6 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getAutoboards godoc
@@ -30,11 +31,11 @@ func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil {
 			return notFoundErr(err, "Server not found")
 		}
-		items, err := findManyMaps(c.UserContext(), rt.Store.C.Autoboards, bson.M{"server_id": serverID})
+		items, err := sqlAutoboards(c, rt, serverID)
 		if err != nil {
 			return err
 		}
@@ -135,7 +136,7 @@ func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		serverDoc, err := findOneMap(c.UserContext(), rt.Store.C.ServerDB, bson.M{"server": serverID})
+		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
 		if err != nil {
 			return notFoundErr(err, "Server not found")
 		}
@@ -144,11 +145,11 @@ func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		limit := asIntWithDefault(serverDoc["autoboard_limit"], 10)
-		existingCount, _ := rt.Store.C.Autoboards.CountDocuments(c.UserContext(), bson.M{"server_id": serverID})
-		if int(existingCount) >= limit {
+		existingCount, _ := sqlAutoboardCount(c, rt, serverID)
+		if existingCount >= limit {
 			return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("Autoboard limit reached (%d/%d). Please upgrade or delete existing autoboards.", existingCount, limit))
 		}
-		doc := bson.M{
+		doc := map[string]any{
 			"type":       body.Type,
 			"board_type": body.BoardType,
 			"button_id":  body.ButtonID,
@@ -168,11 +169,17 @@ func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if body.Locale != "" {
 			doc["locale"] = body.Locale
 		}
-		result, err := rt.Store.C.Autoboards.InsertOne(c.UserContext(), doc)
+		var id string
+		err = rt.Store.SQL.QueryRow(c.UserContext(), `
+			INSERT INTO autoboards (
+				server_id, type, board_type, button_id, webhook_id, thread_id, channel_id, days, locale, data, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10::jsonb, now(), now())
+			RETURNING id::text
+		`, strconv.Itoa(serverID), body.Type, body.BoardType, body.ButtonID, body.WebhookID, body.ThreadID, body.ChannelID, body.Days, body.Locale, apptypes.Marshal(doc)).Scan(&id)
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.AutoBoardOperationResponse{Message: "Autoboard created successfully", AutoboardID: serverAsString(sanitizeObjectID(result.InsertedID)), ServerID: serverID, Type: body.Type})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.AutoBoardOperationResponse{Message: "Autoboard created successfully", AutoboardID: id, ServerID: serverID, Type: body.Type})
 	}
 }
 
@@ -196,10 +203,7 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		id, err := objectID(c.Params("autoboard_id"))
-		if err != nil {
-			return err
-		}
+		id := c.Params("autoboard_id")
 		var body modelsv2.UpdateAutoBoardRequest
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
@@ -220,11 +224,20 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if len(updateBody) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		result, err := rt.Store.C.Autoboards.UpdateOne(c.UserContext(), bson.M{"_id": id, "server_id": serverID}, bson.M{"$set": updateBody})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `
+			UPDATE autoboards
+			SET type = COALESCE($3, type),
+				days = COALESCE($4, days),
+				webhook_id = COALESCE($5, webhook_id),
+				thread_id = COALESCE($6, thread_id),
+				data = data || $7::jsonb,
+				updated_at = now()
+			WHERE server_id = $1 AND id = $2::uuid
+		`, strconv.Itoa(serverID), id, optionalString(updateBody["type"]), autoboardUpdateDays(updateBody), optionalString(updateBody["webhook_id"]), optionalString(updateBody["thread_id"]), apptypes.Marshal(updateBody))
 		if err != nil {
 			return err
 		}
-		if result.MatchedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Autoboard not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.AutoBoardOperationResponse{Message: "Autoboard updated successfully", AutoboardID: c.Params("autoboard_id"), UpdatedFields: len(updateBody)})
@@ -249,15 +262,12 @@ func deleteAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		id, err := objectID(c.Params("autoboard_id"))
+		id := c.Params("autoboard_id")
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM autoboards WHERE server_id = $1 AND id = $2::uuid`, strconv.Itoa(serverID), id)
 		if err != nil {
 			return err
 		}
-		result, err := rt.Store.C.Autoboards.DeleteOne(c.UserContext(), bson.M{"_id": id, "server_id": serverID})
-		if err != nil {
-			return err
-		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Autoboard not found")
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.AutoBoardOperationResponse{Message: "Autoboard deleted successfully", AutoboardID: c.Params("autoboard_id")})
@@ -266,9 +276,6 @@ func deleteAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 
 func autoBoardConfigFromDoc(item map[string]any, webhookChannelIDs map[string]string) modelsv2.AutoBoardConfig {
 	id := serverAsString(item["_id"])
-	if oid, ok := item["_id"].(bson.ObjectID); ok {
-		id = oid.Hex()
-	}
 	// board_type may not be stored (bot-created docs); extract from button_id like the Python API
 	boardType := serverAsString(item["board_type"])
 	if boardType == "" {
@@ -290,9 +297,76 @@ func autoBoardConfigFromDoc(item map[string]any, webhookChannelIDs map[string]st
 		WebhookID: serverAsString(item["webhook_id"]),
 		ThreadID:  stringPtrMaybe(item["thread_id"]),
 		ChannelID: channelID,
-		Days:      stringSlice(item["days"]),
+		Days:      autoboardStringSlice(item["days"]),
 		Locale:    serverAsString(item["locale"]),
 		CreatedAt: stringPtrMaybe(stringifyTimeLike(item["created_at"])),
+	}
+}
+
+func sqlAutoboards(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string]any, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT id::text, type, board_type, button_id, webhook_id, thread_id, channel_id, days, locale, data, created_at
+		FROM autoboards
+		WHERE server_id = $1
+		ORDER BY created_at ASC
+	`, strconv.Itoa(serverID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var id, typ, boardType, buttonID string
+		var webhookID, threadID, channelID *string
+		var days []string
+		var locale string
+		var raw []byte
+		var createdAt time.Time
+		if err := rows.Scan(&id, &typ, &boardType, &buttonID, &webhookID, &threadID, &channelID, &days, &locale, &raw, &createdAt); err != nil {
+			return nil, err
+		}
+		doc := map[string]any{}
+		_ = json.Unmarshal(raw, &doc)
+		doc["_id"] = id
+		doc["type"] = typ
+		doc["board_type"] = boardType
+		doc["button_id"] = buttonID
+		if webhookID != nil {
+			doc["webhook_id"] = *webhookID
+		}
+		if threadID != nil {
+			doc["thread_id"] = *threadID
+		}
+		if channelID != nil {
+			doc["channel_id"] = *channelID
+		}
+		doc["days"] = days
+		doc["locale"] = locale
+		doc["created_at"] = createdAt
+		items = append(items, doc)
+	}
+	return items, rows.Err()
+}
+
+func sqlAutoboardCount(c *fiber.Ctx, rt apptypes.Deps, serverID int) (int, error) {
+	var count int
+	err := rt.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM autoboards WHERE server_id = $1`, strconv.Itoa(serverID)).Scan(&count)
+	return count, err
+}
+
+func autoboardUpdateDays(update map[string]any) []string {
+	if value, ok := update["days"].([]string); ok {
+		return value
+	}
+	return nil
+}
+
+func autoboardStringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	default:
+		return stringSlice(value)
 	}
 }
 

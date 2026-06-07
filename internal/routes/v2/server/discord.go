@@ -186,6 +186,17 @@ func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getServerDiscordChannels godoc
+// @Summary Get Discord channels
+// @Description Returns category, text, and news channels for the Discord server, sorted by category.
+// @Tags Server Discord
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 502 {object} map[string]interface{}
+// @Router /v2/server/{server_id}/discord-channels [get]
 func getServerDiscordChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	return getServerChannels(a)
 }

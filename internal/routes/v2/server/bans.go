@@ -1,14 +1,15 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // getBans godoc
@@ -27,7 +28,7 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		items, err := findManyMaps(c.UserContext(), rt.Store.C.Banlist, bson.M{"server": serverID})
+		items, err := sqlBans(c, rt, serverID)
 		if err != nil {
 			return err
 		}
@@ -38,7 +39,7 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 				playerTags = append(playerTags, tag)
 			}
 		}
-		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.C.PlayerStats, rt.Store.C.ClanDB, playerTags)
+		playerSnapshots := fetchPlayerSnapshots(c.UserContext(), rt.Store.SQL, playerTags)
 
 		if members, err := fetchAllServerMembers(c, rt, int64(serverID)); err == nil {
 			for _, item := range items {
@@ -141,17 +142,27 @@ func addBan(rt apptypes.Deps) apptypes.HandlerFunc {
 				playerName = player.Name
 			}
 		}
-		filter := bson.M{"VillageTag": tag, "server": serverID}
-		existing, err := findOneMap(c.UserContext(), rt.Store.C.Banlist, filter)
+		existing, err := sqlBan(c, rt, serverID, tag)
 		if err == nil && existing != nil {
-			_, err = rt.Store.C.Banlist.UpdateOne(c.UserContext(), filter, bson.M{"$set": bson.M{"Notes": body.Reason}, "$push": bson.M{"edited_by": bson.M{"user": body.AddedBy, "previous": bson.M{"reason": existing["Notes"]}}}})
+			editedBy := append(banAnySlice(existing["edited_by"]), map[string]any{"user": body.AddedBy, "previous": map[string]any{"reason": existing["Notes"]}})
+			_, err = rt.Store.SQL.Exec(c.UserContext(), `
+				UPDATE server_bans
+				SET reason = $3,
+					edited_by = $4::jsonb,
+					data = data || $5::jsonb,
+					updated_at = now()
+				WHERE server_id = $1 AND player_tag = $2
+			`, strconv.Itoa(serverID), tag, body.Reason, apptypes.Marshal(editedBy), apptypes.Marshal(map[string]any{"Notes": body.Reason, "edited_by": editedBy}))
 			if err != nil {
 				return err
 			}
 			return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "updated", "player_tag": tag, "player_name": playerName, "server_id": serverID})
 		}
-		doc := bson.M{"VillageTag": tag, "VillageName": playerName, "DateCreated": time.Now().UTC().Format("2006-01-02 15:04:05"), "Notes": body.Reason, "server": serverID, "added_by": body.AddedBy, "image": body.Image}
-		if _, err := rt.Store.C.Banlist.InsertOne(c.UserContext(), doc); err != nil {
+		doc := map[string]any{"VillageTag": tag, "VillageName": playerName, "DateCreated": time.Now().UTC().Format("2006-01-02 15:04:05"), "Notes": body.Reason, "server": serverID, "added_by": body.AddedBy, "image": body.Image}
+		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO server_bans (server_id, player_tag, player_name, reason, added_by, data, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, now(), now())
+		`, strconv.Itoa(serverID), tag, playerName, body.Reason, body.AddedBy, apptypes.Marshal(doc)); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "created", "player_tag": tag, "player_name": playerName, "server_id": serverID})
@@ -177,13 +188,92 @@ func removeBan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("player_tag"))
-		result, err := rt.Store.C.Banlist.DeleteOne(c.UserContext(), bson.M{"VillageTag": tag, "server": serverID})
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM server_bans WHERE server_id = $1 AND player_tag = $2`, strconv.Itoa(serverID), tag)
 		if err != nil {
 			return err
 		}
-		if result.DeletedCount == 0 {
+		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, fmt.Sprintf("Player %s is not banned on server %d.", tag, serverID))
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "deleted", "player_tag": tag, "server_id": serverID})
+	}
+}
+
+func sqlBans(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string]any, error) {
+	if rt.Store.SQL == nil {
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, player_name, reason, added_by, edited_by, created_at, data
+		FROM server_bans
+		WHERE server_id = $1
+		ORDER BY created_at DESC
+	`, strconv.Itoa(serverID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		item, err := scanSQLBan(rows, serverID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func sqlBan(c *fiber.Ctx, rt apptypes.Deps, serverID int, tag string) (map[string]any, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT player_tag, player_name, reason, added_by, edited_by, created_at, data
+		FROM server_bans
+		WHERE server_id = $1 AND player_tag = $2
+		LIMIT 1
+	`, strconv.Itoa(serverID), tag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	return scanSQLBan(rows, serverID)
+}
+
+type banScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanSQLBan(row banScanner, serverID int) (map[string]any, error) {
+	var tag, playerName, reason, addedBy string
+	var editedRaw, dataRaw []byte
+	var createdAt time.Time
+	if err := row.Scan(&tag, &playerName, &reason, &addedBy, &editedRaw, &createdAt, &dataRaw); err != nil {
+		return nil, err
+	}
+	item := map[string]any{}
+	_ = json.Unmarshal(dataRaw, &item)
+	item["VillageTag"] = tag
+	item["VillageName"] = playerName
+	item["Notes"] = reason
+	item["server"] = serverID
+	item["added_by"] = addedBy
+	item["DateCreated"] = createdAt.UTC().Format("2006-01-02 15:04:05")
+	var edited []any
+	_ = json.Unmarshal(editedRaw, &edited)
+	item["edited_by"] = edited
+	return item, nil
+}
+
+func banAnySlice(value any) []any {
+	switch typed := value.(type) {
+	case []any:
+		return typed
+	default:
+		return []any{}
 	}
 }

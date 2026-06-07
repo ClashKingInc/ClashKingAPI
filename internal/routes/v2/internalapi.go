@@ -2,14 +2,12 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
 	"runtime"
 	"sort"
-	"sync"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // botInfo godoc
@@ -24,12 +22,38 @@ import (
 func botInfo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		ctx := c.UserContext()
-		shardCur, err := a.Store.C.BotSync.Find(ctx, map[string]any{"bot_id": int64(824653933347209227)}, options.Find())
+		rows, err := a.Store.SQL.Query(ctx, `
+			SELECT cluster_id, shard_ids, server_count, member_count, clan_count, servers, data
+			FROM bot_sync_status
+			WHERE bot_id = $1
+		`, "824653933347209227")
 		if err != nil {
 			return err
 		}
 		var shardData []map[string]any
-		if err := shardCur.All(ctx, &shardData); err != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var clusterID int
+			var shardIDs []int
+			var serverCount, memberCount, clanCount int
+			var serversRaw, dataRaw []byte
+			if err := rows.Scan(&clusterID, &shardIDs, &serverCount, &memberCount, &clanCount, &serversRaw, &dataRaw); err != nil {
+				return err
+			}
+			doc := map[string]any{}
+			_ = json.Unmarshal(dataRaw, &doc)
+			var servers any
+			_ = json.Unmarshal(serversRaw, &servers)
+			doc["cluster_id"] = clusterID
+			doc["shards"] = shardIDs
+			doc["shard_ids"] = shardIDs
+			doc["server_count"] = serverCount
+			doc["member_count"] = memberCount
+			doc["clan_count"] = clanCount
+			doc["servers"] = servers
+			shardData = append(shardData, doc)
+		}
+		if err := rows.Err(); err != nil {
 			return err
 		}
 
@@ -51,13 +75,7 @@ func botInfo(a apptypes.Deps) fiber.Handler {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
 
-		dbStats := parallelCounts(ctx, map[string]counter{
-			"clans_tracked":   a.Store.C.ClanDB,
-			"players_tracked": a.Store.C.PlayerStats,
-			"wars_stored":     a.Store.C.ClanWars,
-			"tickets_open":    a.Store.C.OpenTickets,
-			"capital_raids":   a.Store.C.RaidWeekendDB,
-		})
+		dbStats := sqlInternalCounts(ctx, a)
 
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
 			"bot": map[string]any{
@@ -82,30 +100,20 @@ func botInfo(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-type counter interface {
-	EstimatedDocumentCount(context.Context, ...options.Lister[options.EstimatedDocumentCountOptions]) (int64, error)
-}
-
-func count(ctx context.Context, coll counter) int64 {
-	total, _ := coll.EstimatedDocumentCount(ctx)
-	return total
-}
-
-func parallelCounts(ctx context.Context, items map[string]counter) map[string]any {
-	out := make(map[string]any, len(items))
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	for key, coll := range items {
-		wg.Add(1)
-		go func(key string, coll counter) {
-			defer wg.Done()
-			total := count(ctx, coll)
-			mu.Lock()
-			out[key] = total
-			mu.Unlock()
-		}(key, coll)
+func sqlInternalCounts(ctx context.Context, a apptypes.Deps) map[string]any {
+	queries := map[string]string{
+		"clans_tracked":   `SELECT count(*) FROM server_clans`,
+		"players_tracked": `SELECT count(*) FROM player_current_stats`,
+		"wars_stored":     `SELECT count(*) FROM war_log_index`,
+		"tickets_open":    `SELECT count(*) FROM tickets WHERE closed_at IS NULL`,
+		"capital_raids":   `SELECT count(*) FROM raid_weekends`,
 	}
-	wg.Wait()
+	out := map[string]any{}
+	for key, query := range queries {
+		var count int64
+		_ = a.Store.SQL.QueryRow(ctx, query).Scan(&count)
+		out[key] = count
+	}
 	return out
 }
 
@@ -127,8 +135,6 @@ func toInt(value any) int {
 func sliceLen(value any) int {
 	switch typed := value.(type) {
 	case []any:
-		return len(typed)
-	case bson.A:
 		return len(typed)
 	default:
 		return 0

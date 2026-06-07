@@ -50,6 +50,7 @@ type categoryMeta struct {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Router /v2/categories [get]
+// @Router /v2/static/categories [get]
 func listCategories(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		raw := a.Clash.Client().StaticData().Raw
@@ -77,6 +78,7 @@ func listCategories(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/{category} [get]
+// @Router /v2/static/{category} [get]
 func categoryItems(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -103,6 +105,7 @@ func categoryItems(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/{category}/names [get]
+// @Router /v2/static/{category}/names [get]
 func categoryNames(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -130,6 +133,7 @@ func categoryNames(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/{category}/{item_id_or_name} [get]
+// @Router /v2/static/{category}/{item_id_or_name} [get]
 func categoryItem(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		item, err := findItem(a, c.Params("category"), c.Params("item_id_or_name"))
@@ -152,6 +156,7 @@ func categoryItem(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Router /v2/{category}/{item_id_or_name}/maxlevel [get]
+// @Router /v2/static/{category}/{item_id_or_name}/maxlevel [get]
 func maxLevel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		category := c.Params("category")
@@ -170,6 +175,13 @@ func maxLevel(a apptypes.Deps) fiber.Handler {
 	}
 }
 
+// appStaticDataBundle godoc
+// @Summary Get mobile app static data bundle
+// @Description Returns the static-data bundle used by mobile clients.
+// @Tags Static Data
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v2/static/app-bundle [get]
 func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		raw := a.Clash.Client().StaticData().Raw

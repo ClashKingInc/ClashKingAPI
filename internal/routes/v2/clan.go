@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -8,8 +10,8 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // clanRanking godoc
@@ -23,12 +25,39 @@ import (
 // @Router /v2/clan/{clan_tag}/ranking [get]
 func clanRanking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var row bson.M
-		err := a.Store.DB.NewLooper.Collection("clan_leaderboard_db").FindOne(c.UserContext(), bson.M{"tag": clanFixTag(c.Params("clan_tag"))}).Decode(&row)
+		tag := clanFixTag(c.Params("clan_tag"))
+		var countryCode, countryName pgtype.Text
+		var rank, globalRank, localRank pgtype.Int4
+		var rawData []byte
+		err := a.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT country_code, country_name, rank, global_rank, local_rank, data
+			FROM clan_rankings_current
+			WHERE clan_tag = $1
+		`, tag).Scan(&countryCode, &countryName, &rank, &globalRank, &localRank, &rawData)
 		if err != nil {
-			return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanRankingResponse{Tag: clanFixTag(c.Params("clan_tag"))})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanRankingResponse{Tag: tag})
+			}
+			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, clanWithoutID(row))
+		row := clanDecodeJSONObject(rawData)
+		row["tag"] = tag
+		if countryCode.Valid {
+			row["country_code"] = countryCode.String
+		}
+		if countryName.Valid {
+			row["country_name"] = countryName.String
+		}
+		if rank.Valid {
+			row["rank"] = rank.Int32
+		}
+		if globalRank.Valid {
+			row["global_rank"] = globalRank.Int32
+		}
+		if localRank.Valid {
+			row["local_rank"] = localRank.Int32
+		}
+		return apptypes.JSON(c, fiber.StatusOK, row)
 	}
 }
 
@@ -52,19 +81,18 @@ func boardTotals(a apptypes.Deps) fiber.Handler {
 		if len(body.PlayerTags) == 0 {
 			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
 		}
-		filter := bson.M{"tag": bson.M{"$in": clanFixTags(body.PlayerTags)}}
-		cur, err := a.Store.DB.NewLooper.Collection("player_stats").Find(c.UserContext(), filter)
-		if err != nil {
-			return err
-		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
+		var count int
+		if err := a.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT count(*)
+			FROM player_current_stats
+			WHERE player_tag = ANY($1)
+		`, clanFixTags(body.PlayerTags)).Scan(&count); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.BoardTotalsResponse{
 			Tag:                clanFixTag(c.Params("clan_tag")),
-			TrackedPlayerCount: len(rows),
-			Activity:           len(rows),
+			TrackedPlayerCount: count,
+			Activity:           count,
 		})
 	}
 }
@@ -83,14 +111,21 @@ func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := clanFixTag(c.Params("clan_tag"))
 		season := c.Params("season")
-		var row bson.M
-		if err := a.Store.DB.NewLooper.Collection("clan_stats").FindOne(c.UserContext(), bson.M{"tag": clanTag}).Decode(&row); err != nil {
+		var rawDonations []byte
+		if err := a.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT donations
+			FROM clan_season_stats
+			WHERE clan_tag = $1 AND season = $2
+		`, clanTag, season).Scan(&rawDonations); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []modelsv2.DonationEntry{}})
+			}
 			return err
 		}
-		seasonData, _ := row[season].(bson.M)
+		seasonData := clanDecodeJSONObject(rawDonations)
 		items := make([]modelsv2.DonationEntry, 0, len(seasonData))
 		for tag, raw := range seasonData {
-			doc, _ := raw.(bson.M)
+			doc, _ := raw.(map[string]any)
 			items = append(items, modelsv2.DonationEntry{Tag: tag, Donated: doc["donated"], Received: doc["received"]})
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
@@ -159,15 +194,42 @@ func clanDonationsMany(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
 		tags := clanFixTags(apptypes.QueryValues(c, "clan_tags"))
-		cur, err := a.Store.DB.Looper.Collection("player_stats").Find(c.UserContext(), bson.M{"clan_tag": bson.M{"$in": tags}, "season": season})
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT player_tag, clan_tag, season, name, townhall_level, donations, clan_games, activity, data
+			FROM player_season_stats
+			WHERE season = $1
+			  AND (cardinality($2::text[]) = 0 OR clan_tag = ANY($2))
+			ORDER BY clan_tag, player_tag
+		`, season, tags)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			var playerTag, clanTag, rowSeason, name string
+			var townhall pgtype.Int4
+			var donationsRaw, clanGamesRaw, activityRaw, dataRaw []byte
+			if err := rows.Scan(&playerTag, &clanTag, &rowSeason, &name, &townhall, &donationsRaw, &clanGamesRaw, &activityRaw, &dataRaw); err != nil {
+				return err
+			}
+			item := clanDecodeJSONObject(dataRaw)
+			item["tag"] = playerTag
+			item["clan_tag"] = clanTag
+			item["season"] = rowSeason
+			item["name"] = name
+			if townhall.Valid {
+				item["townhall"] = townhall.Int32
+			}
+			item["donations"] = clanDecodeJSONObject(donationsRaw)
+			item["clan_games"] = clanDecodeJSONObject(clanGamesRaw)
+			item["activity"] = clanDecodeJSONObject(activityRaw)
+			items = append(items, item)
+		}
+		if err := rows.Err(); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, clanStripIDs(rows))
+		return apptypes.JSON(c, fiber.StatusOK, items)
 	}
 }
 
@@ -304,26 +366,57 @@ func joinLeaveManyResponse(c *fiber.Ctx, a apptypes.Deps, clanTags []string) ([]
 	if limit <= 0 {
 		limit = 50
 	}
-	filter := bson.M{
-		"clan": bson.M{"$in": clanTags},
-		"time": bson.M{"$gte": window.start, "$lte": window.end},
-	}
+	args := []any{clanTags, window.start, window.end}
+	typeFilter := ""
 	if joinLeaveType := strings.TrimSpace(c.Query("type")); joinLeaveType != "" {
-		filter["type"] = joinLeaveType
+		args = append(args, joinLeaveType)
+		typeFilter = "AND event_type = $4"
 	}
-	cur, err := a.Store.C.JoinLeaveHistory.Find(
+	rows, err := a.Store.SQL.Query(
 		c.UserContext(),
-		filter,
-		options.Find().SetSort(bson.M{"time": -1}),
+		`
+			SELECT event_time, event_type, clan_tag, player_tag, player_name, townhall_level, clan_role, data
+			FROM join_leave_history
+			WHERE clan_tag = ANY($1)
+			  AND event_time >= $2
+			  AND event_time <= $3
+			  `+typeFilter+`
+			ORDER BY event_time DESC
+		`,
+		args...,
 	)
 	if err != nil {
 		return nil, err
 	}
-	var rows []bson.M
-	if err := cur.All(c.UserContext(), &rows); err != nil {
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var eventTime time.Time
+		var eventType, clanTag, playerTag string
+		var playerName, clanRole pgtype.Text
+		var townhall int16
+		var dataRaw []byte
+		if err := rows.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanRole, &dataRaw); err != nil {
+			return nil, err
+		}
+		item := clanDecodeJSONObject(dataRaw)
+		item["time"] = eventTime
+		item["type"] = eventType
+		item["clan"] = clanTag
+		item["tag"] = playerTag
+		item["th"] = townhall
+		if playerName.Valid {
+			item["name"] = playerName.String
+		}
+		if clanRole.Valid {
+			item["role"] = clanRole.String
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return joinLeaveItemsFromRows(rows, clanTags, window, limit), nil
+	return joinLeaveItemsFromRows(items, clanTags, window, limit), nil
 }
 
 func joinLeaveWindowFromQuery(c *fiber.Ctx) (joinLeaveWindow, error) {
@@ -372,7 +465,7 @@ func joinLeaveSeasonBounds(season string) (time.Time, time.Time, error) {
 	return start.UTC(), end.UTC(), nil
 }
 
-func joinLeaveItemsFromRows(rows []bson.M, clanTags []string, window joinLeaveWindow, limit int) []map[string]any {
+func joinLeaveItemsFromRows(rows []map[string]any, clanTags []string, window joinLeaveWindow, limit int) []map[string]any {
 	groupedDocs := map[string][]map[string]any{}
 	groupedStats := map[string][]mobileJoinLeaveEvent{}
 	for _, row := range rows {
@@ -430,15 +523,45 @@ func clansCapitalRaids(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		cur, err := a.Store.DB.Looper.Collection("raid_weekends").Find(c.UserContext(), bson.M{"clan_tag": bson.M{"$in": clanFixTags(body.ClanTags)}})
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT clan_tag, start_time, end_time, state, total_attacks, capital_total_loot,
+			       raids_completed, offensive_reward, defensive_reward, members, attack_log, defense_log, data
+			FROM raid_weekends
+			WHERE clan_tag = ANY($1)
+			ORDER BY clan_tag, start_time DESC
+		`, clanFixTags(body.ClanTags))
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			var clanTag, state string
+			var startTime, endTime time.Time
+			var totalAttacks, capitalLoot, raidsCompleted, offensiveReward, defensiveReward int
+			var membersRaw, attackRaw, defenseRaw, dataRaw []byte
+			if err := rows.Scan(&clanTag, &startTime, &endTime, &state, &totalAttacks, &capitalLoot, &raidsCompleted, &offensiveReward, &defensiveReward, &membersRaw, &attackRaw, &defenseRaw, &dataRaw); err != nil {
+				return err
+			}
+			item := clanDecodeJSONObject(dataRaw)
+			item["clan_tag"] = clanTag
+			item["start_time"] = startTime.UTC().Format(time.RFC3339)
+			item["end_time"] = endTime.UTC().Format(time.RFC3339)
+			item["state"] = state
+			item["total_attacks"] = totalAttacks
+			item["capital_total_loot"] = capitalLoot
+			item["raids_completed"] = raidsCompleted
+			item["offensive_reward"] = offensiveReward
+			item["defensive_reward"] = defensiveReward
+			item["members"] = clanDecodeJSONValue(membersRaw, []any{})
+			item["attack_log"] = clanDecodeJSONValue(attackRaw, []any{})
+			item["defense_log"] = clanDecodeJSONValue(defenseRaw, []any{})
+			items = append(items, item)
+		}
+		if err := rows.Err(); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": clanStripIDs(rows)})
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
 }
 
@@ -481,21 +604,24 @@ func clanFixTag(tag string) string {
 	return "#" + tag
 }
 
-func clanStripIDs(rows []bson.M) []bson.M {
-	out := make([]bson.M, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, clanWithoutID(row))
+func clanDecodeJSONObject(raw []byte) map[string]any {
+	value := clanDecodeJSONValue(raw, map[string]any{})
+	if obj, ok := value.(map[string]any); ok {
+		return obj
 	}
-	return out
+	return map[string]any{}
 }
 
-func clanWithoutID(doc bson.M) bson.M {
-	clean := bson.M{}
-	for key, value := range doc {
-		if key == "_id" {
-			continue
-		}
-		clean[key] = value
+func clanDecodeJSONValue(raw []byte, fallback any) any {
+	if len(raw) == 0 {
+		return fallback
 	}
-	return clean
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fallback
+	}
+	if value == nil {
+		return fallback
+	}
+	return value
 }

@@ -1,6 +1,12 @@
 package v2
 
 import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +17,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+var reSeasonPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
 
 // clanRanking godoc
 // @Summary Get ranking of a clan
@@ -52,19 +60,124 @@ func boardTotals(a apptypes.Deps) fiber.Handler {
 		if len(body.PlayerTags) == 0 {
 			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
 		}
-		filter := bson.M{"tag": bson.M{"$in": clanFixTags(body.PlayerTags)}}
-		cur, err := a.Store.DB.NewLooper.Collection("player_stats").Find(c.UserContext(), filter)
+
+		clanTag := clanFixTag(c.Params("clan_tag"))
+		playerTags := clanFixTags(body.PlayerTags)
+		ctx := c.UserContext()
+
+		// Current and previous season identifiers
+		seasonSlice := genSeasonDate(2, false).([]string)
+		currentSeason, prevSeason := seasonSlice[0], seasonSlice[1]
+
+		// Last 4 raid week start dates
+		raidDates := genRaidDate(3).([]string)
+
+		// Clan stats: clan_games, donated, received per player per season
+		var clanStats bson.M
+		_ = a.Store.DB.NewLooper.Collection("clan_stats").
+			FindOne(ctx, bson.M{"tag": clanTag}).Decode(&clanStats)
+
+		// Player stats: capital_gold donations + last_online_times for activity
+		cur, err := a.Store.DB.NewLooper.Collection("player_stats").Find(
+			ctx,
+			bson.M{"tag": bson.M{"$in": playerTags}},
+			options.Find().SetProjection(bson.M{"tag": 1, "capital_gold": 1, "last_online_times": 1}),
+		)
 		if err != nil {
 			return err
 		}
-		var rows []bson.M
-		if err := cur.All(c.UserContext(), &rows); err != nil {
+		var playerStats []bson.M
+		if err := cur.All(ctx, &playerStats); err != nil {
 			return err
 		}
+
+		// Clan games: current season first, fallback to previous
+		clanGamesPoints := 0
+		for _, s := range []string{currentSeason, prevSeason} {
+			if clanStats != nil {
+				if seasonData, ok := clanStats[s].(bson.M); ok {
+					for _, raw := range seasonData {
+						if doc, ok := raw.(bson.M); ok {
+							clanGamesPoints += asIntWithDefault(doc["clan_games"], 0)
+						}
+					}
+				}
+			}
+			if clanGamesPoints > 0 {
+				break
+			}
+		}
+
+		// Donations: current season only
+		troopsDonated, troopsReceived := 0, 0
+		if clanStats != nil {
+			if seasonData, ok := clanStats[currentSeason].(bson.M); ok {
+				for _, raw := range seasonData {
+					if doc, ok := raw.(bson.M); ok {
+						troopsDonated += asIntWithDefault(doc["donated"], 0)
+						troopsReceived += asIntWithDefault(doc["received"], 0)
+					}
+				}
+			}
+		}
+
+		// Capital gold donated: sum over last 4 raid weeks from player_stats
+		capitalDonated := 0
+		for _, player := range playerStats {
+			if capitalGold, ok := player["capital_gold"].(bson.M); ok {
+				for _, date := range raidDates {
+					if dateData, ok := capitalGold[date].(bson.M); ok {
+						if donates, ok := dateData["donate"].(bson.A); ok {
+							for _, v := range donates {
+								capitalDonated += asIntWithDefault(v, 0)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Activity: avg active players per day over last 30 days.
+		// Count unique (player, day) pairs then divide by 30.
+		now := time.Now().UTC()
+		thirtyDaysAgo := now.AddDate(0, 0, -30).Unix()
+		dayPlayers := map[string]map[string]struct{}{}
+		for _, player := range playerStats {
+			tag, _ := player["tag"].(string)
+			if tag == "" {
+				continue
+			}
+			if lastOnline, ok := player["last_online_times"].(bson.M); ok {
+				for _, s := range []string{currentSeason, prevSeason} {
+					if timestamps, ok := lastOnline[s].(bson.A); ok {
+						for _, ts := range timestamps {
+							t := int64(asIntWithDefault(ts, 0))
+							if t < thirtyDaysAgo {
+								continue
+							}
+							day := time.Unix(t, 0).UTC().Format("2006-01-02")
+							if dayPlayers[day] == nil {
+								dayPlayers[day] = map[string]struct{}{}
+							}
+							dayPlayers[day][tag] = struct{}{}
+						}
+					}
+				}
+			}
+		}
+		totalPlayerDays := 0
+		for _, players := range dayPlayers {
+			totalPlayerDays += len(players)
+		}
+
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.BoardTotalsResponse{
-			Tag:                clanFixTag(c.Params("clan_tag")),
-			TrackedPlayerCount: len(rows),
-			Activity:           len(rows),
+			Tag:                clanTag,
+			TrackedPlayerCount: len(playerStats),
+			ClanGamesPoints:    clanGamesPoints,
+			TroopsDonated:      troopsDonated,
+			TroopsReceived:     troopsReceived,
+			ClanCapitalDonated: capitalDonated,
+			Activity:           float64(totalPlayerDays) / 30.0,
 		})
 	}
 }
@@ -216,8 +329,10 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 // @Router /v2/clan/{clan_tag}/details [get]
 func clanDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		clan, err := a.Clash.GetClan(c.UserContext(), c.Params("clan_tag"))
+		tag := c.Params("clan_tag")
+		clan, err := a.Clash.GetClan(c.UserContext(), tag)
 		if err != nil || clan == nil {
+			slog.Error("clanDetails failed", slog.String("tag", tag), slog.Any("err", err))
 			return apptypes.Error(fiber.StatusNotFound, "Clan not found")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, enrichClanLeagueIcons(clan, leagueIconLookup(a)))
@@ -439,6 +554,121 @@ func clansCapitalRaids(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": clanStripIDs(rows)})
+	}
+}
+
+// clanGamesLeaderboard godoc
+// @Summary Get clan games leaderboard
+// @Description Returns a sorted player leaderboard for clan games in a given season.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Param season path string true "Season (e.g. 2025-05)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/clan/{clan_tag}/games/{season} [get]
+func clanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		season := strings.TrimSpace(c.Params("season"))
+		if !reSeasonPattern.MatchString(season) {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid season format, expected YYYY-MM")
+		}
+
+		var row bson.M
+		err := a.Store.DB.NewLooper.Collection("clan_stats").FindOne(c.UserContext(), bson.M{"tag": tag}).Decode(&row)
+		if err != nil {
+			return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []any{}, "season": season, "tracked": false})
+		}
+
+		seasonData, _ := row[season].(bson.M)
+		if len(seasonData) == 0 {
+			return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []any{}, "season": season, "tracked": true})
+		}
+
+		type gamesEntry struct {
+			Tag    string `json:"tag"`
+			Points int    `json:"points"`
+		}
+		entries := make([]gamesEntry, 0, len(seasonData))
+		for playerTag, raw := range seasonData {
+			doc, _ := raw.(bson.M)
+			pts := clanParseIntDefault(fmt.Sprintf("%v", doc["clan_games"]), 0)
+			entries = append(entries, gamesEntry{Tag: "#" + strings.TrimPrefix(playerTag, "#"), Points: pts})
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Points > entries[j].Points })
+
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": entries, "season": season, "tracked": true})
+	}
+}
+
+// clanCapitalLatest godoc
+// @Summary Get latest raid weekend for a clan
+// @Description Returns the most recent capital raid weekend document for a clan.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/clan/{clan_tag}/capital/latest [get]
+func clanCapitalLatest(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		var row bson.M
+		err := a.Store.DB.Looper.Collection("raid_weekends").FindOne(
+			c.UserContext(),
+			bson.M{"clan_tag": tag},
+			options.FindOne().SetSort(bson.D{{Key: "startTime", Value: -1}}),
+		).Decode(&row)
+		if err != nil {
+			return apptypes.Error(fiber.StatusNotFound, "no raid weekend data found")
+		}
+		return apptypes.JSON(c, fiber.StatusOK, clanWithoutID(row))
+	}
+}
+
+// clanWarOpt godoc
+// @Summary Get member war opt status
+// @Description Returns all clan members with their warPreference (in/out).
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/clan/{clan_tag}/war-opt [get]
+func clanWarOpt(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		encoded := strings.ReplaceAll(tag, "#", "%23")
+
+		resp, err := http.Get("https://proxy.clashk.ing/v1/clans/" + encoded)
+		if err != nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "CoC proxy unreachable")
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return apptypes.Error(fiber.StatusNotFound, "clan not found")
+		}
+		if resp.StatusCode != http.StatusOK {
+			return apptypes.Error(fiber.StatusBadGateway, "CoC proxy error")
+		}
+
+		type memberOpt struct {
+			Tag           string `json:"tag"`
+			Name          string `json:"name"`
+			Role          string `json:"role"`
+			TownHallLevel int    `json:"townHallLevel"`
+			Trophies      int    `json:"trophies"`
+			WarPreference string `json:"warPreference"`
+		}
+		var payload struct {
+			Members []memberOpt `json:"memberList"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			return apptypes.Error(fiber.StatusBadGateway, "failed to parse CoC response")
+		}
+
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": payload.Members})
 	}
 }
 

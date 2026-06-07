@@ -385,6 +385,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/clan/{clan_tag}/capital/latest": {
+            "get": {
+                "description": "Returns the most recent capital raid weekend document for a clan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get latest raid weekend for a clan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v2/clan/{clan_tag}/details": {
             "get": {
                 "description": "Returns the live clan object for a clan tag.",
@@ -465,6 +502,50 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/games/{season}": {
+            "get": {
+                "description": "Returns a sorted player leaderboard for clan games in a given season.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get clan games leaderboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Season (e.g. 2025-05)",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -557,6 +638,43 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/war-opt": {
+            "get": {
+                "description": "Returns all clan members with their warPreference (in/out).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get member war opt status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true

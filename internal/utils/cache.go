@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/valkey-io/valkey-go"
 )
@@ -66,6 +67,41 @@ func (c *CacheAdapter) GetDiscordMember(ctx context.Context, guildID int64, user
 		return nil, false
 	}
 	return &entry, true
+}
+
+// GetGuildClansAutocomplete retrieves the cached list of clan tags for a guild.
+// Key: autocomplete:clan:tags:{guildID}, TTL 5 min.
+func (c *CacheAdapter) GetGuildClansAutocomplete(ctx context.Context, guildID int64) ([]string, bool) {
+	if c.client == nil {
+		return nil, false
+	}
+	key := fmt.Sprintf("autocomplete:clan:tags:%d", guildID)
+	result := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
+	if result.Error() != nil {
+		return nil, false
+	}
+	data, err := result.AsBytes()
+	if err != nil {
+		return nil, false
+	}
+	var tags []string
+	if err := json.Unmarshal(data, &tags); err != nil {
+		return nil, false
+	}
+	return tags, true
+}
+
+// SetGuildClansAutocomplete stores the clan tag list for a guild in Valkey.
+func (c *CacheAdapter) SetGuildClansAutocomplete(ctx context.Context, guildID int64, tags []string, ttl time.Duration) {
+	if c.client == nil {
+		return
+	}
+	data, err := json.Marshal(tags)
+	if err != nil {
+		return
+	}
+	key := fmt.Sprintf("autocomplete:clan:tags:%d", guildID)
+	c.client.Do(ctx, c.client.B().Set().Key(key).Value(string(data)).Ex(ttl).Build())
 }
 
 // Close releases the Valkey connection.

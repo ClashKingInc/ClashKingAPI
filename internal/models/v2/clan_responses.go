@@ -11,13 +11,13 @@ type ClanRankingResponse struct {
 
 // BoardTotalsResponse is returned by GET /v2/clan/:clan_tag/board/totals.
 type BoardTotalsResponse struct {
-	Tag                string `json:"tag"`
-	TrackedPlayerCount int    `json:"tracked_player_count"`
-	ClanGamesPoints    int    `json:"clan_games_points"`
-	TroopsDonated      int    `json:"troops_donated"`
-	TroopsReceived     int    `json:"troops_received"`
-	ClanCapitalDonated int    `json:"clan_capital_donated"`
-	Activity           int    `json:"activity"`
+	Tag                string  `json:"tag"`
+	TrackedPlayerCount int     `json:"tracked_player_count"`
+	ClanGamesPoints    int     `json:"clan_games_points"`
+	TroopsDonated      int     `json:"troops_donated"`
+	TroopsReceived     int     `json:"troops_received"`
+	ClanCapitalDonated int     `json:"clan_capital_donated"`
+	Activity           float64 `json:"activity"` // avg active players per day over last 30 days
 }
 
 // DonationEntry is a single player donation row returned by /v2/clan/:clan_tag/donations/:season.

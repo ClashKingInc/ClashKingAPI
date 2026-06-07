@@ -949,6 +949,31 @@ paths:
       summary: Get aggregated board totals for a clan
       tags:
       - Clan
+  /v2/clan/{clan_tag}/capital/latest:
+    get:
+      description: Returns the most recent capital raid weekend document for a clan.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get latest raid weekend for a clan
+      tags:
+      - Clan
   /v2/clan/{clan_tag}/details:
     get:
       description: Returns the live clan object for a clan tag.
@@ -1007,6 +1032,36 @@ paths:
             additionalProperties: true
             type: object
       summary: Get clan donations
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/games/{season}:
+    get:
+      description: Returns a sorted player leaderboard for clan games in a given season.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Season (e.g. 2025-05)
+        in: path
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan games leaderboard
       tags:
       - Clan
   /v2/clan/{clan_tag}/join-leave:
@@ -1069,6 +1124,31 @@ paths:
             additionalProperties: true
             type: object
       summary: Get ranking of a clan
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/war-opt:
+    get:
+      description: Returns all clan members with their warPreference (in/out).
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get member war opt status
       tags:
       - Clan
   /v2/clan/compo:

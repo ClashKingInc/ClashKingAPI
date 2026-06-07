@@ -497,6 +497,10 @@ func searchFetchGuildClans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query s
 	if guildID == 0 {
 		return nil
 	}
+	// Check Redis cache first (avoids a MongoDB round-trip on every keystroke).
+	if cached, ok := a.Cache.GetGuildClansAutocomplete(c.UserContext(), guildID); ok {
+		return cached
+	}
 	filter := bson.M{"server": guildID}
 	opts := options.Find().SetSort(bson.M{"name": 1}).SetLimit(25)
 	if len(query) > 1 {
@@ -516,6 +520,7 @@ func searchFetchGuildClans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query s
 			tags = append(tags, tag)
 		}
 	}
+	a.Cache.SetGuildClansAutocomplete(c.UserContext(), guildID, tags, 5*time.Minute)
 	return tags
 }
 

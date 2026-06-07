@@ -98,6 +98,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		ErrorHandler:          utils.ErrorHandler,
+		UnescapePath:          true,
 	})
 	app.Use(requestid.New())
 	app.Use(utils.HTTPLoggerMiddleware(a.Config))

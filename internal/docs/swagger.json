@@ -1,144 +1,13 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "ClashKing Go API documentation. Public Swagger lists only unauthenticated endpoints; private Swagger includes the full API and supports Authorization headers for secured endpoints. This API is still under active construction, so use it with caution because endpoints and payloads may still change.",
+        "description": "ClashKing Go API documentation. Use Authorize with Bearer access tokens for protected routes. This API is still under active construction, so use it with caution because endpoints and payloads may still change.",
         "title": "ClashKing API",
         "contact": {},
         "version": "1.0"
     },
     "basePath": "/",
     "paths": {
-        "/activity": {
-            "get": {
-                "description": "Returns scoped activity stats for players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Stats"
-                ],
-                "summary": "Get legacy activity stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/assets": {
-            "get": {
-                "description": "Returns the ClashKing sprite bundle download link.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy"
-                ],
-                "summary": "Get legacy asset download link",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/boost-rate": {
-            "get": {
-                "description": "Returns boost counts and usage percentages for super troops in a season window.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Stats"
-                ],
-                "summary": "Get super troop boost rates",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Start season YYYY-MM",
-                        "name": "start_season",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "End season YYYY-MM",
-                        "name": "end_season",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/bot/config": {
             "get": {
                 "description": "Returns ClashKing bot configuration for authorized bot tokens.",
@@ -418,124 +287,6 @@
                                 "type": "object",
                                 "additionalProperties": true
                             }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ck/bulk": {
-            "post": {
-                "description": "Proxies multiple Clash API paths and returns successful JSON responses.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Proxy"
-                ],
-                "summary": "Proxy bulk Clash API requests",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bearer internal API token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "Proxy paths",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/clan-games": {
-            "get": {
-                "description": "Returns scoped clan games stats for players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Stats"
-                ],
-                "summary": "Get legacy clan games stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -864,62 +615,6 @@
                 }
             }
         },
-        "/donations": {
-            "get": {
-                "description": "Returns scoped donation stats for players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Stats"
-                ],
-                "summary": "Get legacy donation stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/global/counts": {
             "get": {
                 "description": "Returns global tracking counts used by legacy clients.",
@@ -927,7 +622,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy Stats"
+                    "Global"
                 ],
                 "summary": "Get global ClashKing counts",
                 "responses": {
@@ -963,43 +658,6 @@
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/json/{data_type}": {
-            "get": {
-                "description": "Returns static Clash data for the requested legacy data type.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Static Data"
-                ],
-                "summary": "Get legacy static JSON data",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Static data type",
-                        "name": "data_type",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2237,90 +1895,6 @@
                 }
             }
         },
-        "/v1/{path}": {
-            "get": {
-                "description": "Proxies a GET request through the ClashKing Clash API proxy.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Proxy"
-                ],
-                "summary": "Proxy a legacy Clash API GET request",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Proxy path",
-                        "name": "path",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Proxies a POST request through the ClashKing Clash API proxy.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Proxy"
-                ],
-                "summary": "Proxy a legacy Clash API POST request",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Proxy path",
-                        "name": "path",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Proxy payload",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v2/activity/guild-summary": {
             "get": {
                 "description": "Returns clan and member activity totals for a Discord guild.",
@@ -3478,14 +3052,14 @@
         },
         "/v2/clan/{clan_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single clan tag.",
+                "description": "Returns join and leave history for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Join Leaves in a season",
+                "summary": "Get clan join-leave history",
                 "parameters": [
                     {
                         "type": "string",
@@ -3496,26 +3070,126 @@
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum number of results",
+                        "default": 50,
+                        "description": "Maximum events per page",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Start timestamp",
-                        "name": "timestamp_start",
+                        "default": 0,
+                        "description": "Number of events to skip",
+                        "name": "offset",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "End timestamp",
-                        "name": "time_stamp_end",
+                        "description": "1-based page number; ignored when offset is provided",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "-time",
+                        "description": "Comma-separated event sort fields; prefix with - for descending",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated event fields to include",
+                        "name": "fields",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event type filter",
+                        "name": "type",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.JoinLeaveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/join-leave/stats": {
+            "get": {
+                "description": "Returns join and leave summary stats for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get clan join-leave stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event type filter",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.JoinLeaveStatsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3633,70 +3307,6 @@
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanTagsBody"
                         }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clans/join-leave": {
-            "post": {
-                "description": "Returns join and leave history for multiple clan tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Join leaves for many clans",
-                "parameters": [
-                    {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanTagsBody"
-                        }
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End timestamp",
-                        "name": "time_stamp_end",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4974,266 +4584,6 @@
                 }
             }
         },
-        "/v2/mobile/live-activities": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Registers or updates a mobile live activity push token.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Mobile Push"
-                ],
-                "summary": "Register mobile live activity",
-                "parameters": [
-                    {
-                        "description": "Live activity",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v2.mobileLiveActivityRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/mobile/live-activities/{activity_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Marks a mobile live activity as ended for the authenticated user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Mobile Push"
-                ],
-                "summary": "End mobile live activity",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Live activity ID",
-                        "name": "activity_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/mobile/push/devices": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Registers or updates a mobile push token for the authenticated user.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Mobile Push"
-                ],
-                "summary": "Register mobile push device",
-                "parameters": [
-                    {
-                        "description": "Push device",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v2.mobilePushDeviceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/mobile/push/devices/{device_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Disables a mobile push device for the authenticated user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Mobile Push"
-                ],
-                "summary": "Disable mobile push device",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device ID",
-                        "name": "device_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/mobile/push/war-subscriptions": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Creates or updates war push subscription preferences for a device and clan.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Mobile Push"
-                ],
-                "summary": "Update mobile war subscription",
-                "parameters": [
-                    {
-                        "description": "War subscription",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v2.mobileWarSubscriptionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v2/player/{player_tag}/extended": {
             "get": {
                 "consumes": [
@@ -5264,6 +4614,100 @@
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/join-leave": {
+            "get": {
+                "description": "Returns join and leave history for a single player tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player join-leave history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum events per page",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of events to skip",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "1-based page number; ignored when offset is provided",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include events at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "-time",
+                        "description": "Comma-separated event sort fields; prefix with - for descending",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated event fields to include",
+                        "name": "fields",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event type filter",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.JoinLeaveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -14022,6 +13466,142 @@
                 }
             }
         },
+        "modelsv2.JoinLeaveEvent": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "type": "string"
+                },
+                "clan_name": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "current": {},
+                "name": {
+                    "type": "string"
+                },
+                "player_name": {
+                    "type": "string"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "previous": {},
+                "role": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "th": {
+                    "type": "integer"
+                },
+                "time": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveMovingPlayer": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveResponse": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.JoinLeaveEvent"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/modelsv2.PaginationMeta"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "timestamp_end": {
+                    "type": "integer"
+                },
+                "timestamp_start": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveStats": {
+            "type": "object",
+            "properties": {
+                "avg_time_between_join_leave": {},
+                "first_event": {},
+                "last_event": {},
+                "most_moving_hour": {},
+                "most_moving_players": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.JoinLeaveMovingPlayer"
+                    }
+                },
+                "moving_players": {
+                    "type": "integer"
+                },
+                "players_left_forever": {
+                    "type": "integer"
+                },
+                "players_still_in_clan": {
+                    "type": "integer"
+                },
+                "rejoined_players": {
+                    "type": "integer"
+                },
+                "total_events": {
+                    "type": "integer"
+                },
+                "total_joins": {
+                    "type": "integer"
+                },
+                "total_leaves": {
+                    "type": "integer"
+                },
+                "unique_players": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveStatsResponse": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "stats": {
+                    "$ref": "#/definitions/modelsv2.JoinLeaveStats"
+                },
+                "timestamp_end": {
+                    "type": "integer"
+                },
+                "timestamp_start": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.MobilePlayerTagsRequest": {
             "type": "object",
             "properties": {
@@ -14036,6 +13616,25 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.PaginationMeta": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "next_offset": {},
+                "offset": {
+                    "type": "integer"
+                },
+                "previous_offset": {},
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -14089,93 +13688,6 @@
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "v2.mobileLiveActivityRequest": {
-            "type": "object",
-            "properties": {
-                "activity_id": {
-                    "type": "string"
-                },
-                "clan_tag": {
-                    "type": "string"
-                },
-                "cwl_war_tag": {
-                    "type": "string"
-                },
-                "device_id": {
-                    "type": "string"
-                },
-                "environment": {
-                    "type": "string"
-                },
-                "push_token": {
-                    "type": "string"
-                },
-                "war_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "v2.mobilePushDeviceRequest": {
-            "type": "object",
-            "properties": {
-                "app_version": {
-                    "type": "string"
-                },
-                "build_number": {
-                    "type": "string"
-                },
-                "device_id": {
-                    "type": "string"
-                },
-                "device_model": {
-                    "type": "string"
-                },
-                "environment": {
-                    "type": "string"
-                },
-                "os_version": {
-                    "type": "string"
-                },
-                "platform": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "v2.mobileWarSubscriptionRequest": {
-            "type": "object",
-            "properties": {
-                "clan_tag": {
-                    "type": "string"
-                },
-                "cwl_rank_enabled": {
-                    "type": "boolean"
-                },
-                "device_id": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "live_activity_enabled": {
-                    "type": "boolean"
-                },
-                "score_change_enabled": {
-                    "type": "boolean"
-                },
-                "war_end_enabled": {
-                    "type": "boolean"
-                },
-                "war_start_enabled": {
-                    "type": "boolean"
                 }
             }
         }

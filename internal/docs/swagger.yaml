@@ -209,6 +209,97 @@ definitions:
       role:
         type: string
     type: object
+  modelsv2.JoinLeaveEvent:
+    properties:
+      clan:
+        type: string
+      clan_name:
+        type: string
+      clan_tag:
+        type: string
+      current: {}
+      name:
+        type: string
+      player_name:
+        type: string
+      player_tag:
+        type: string
+      previous: {}
+      role:
+        type: string
+      tag:
+        type: string
+      th:
+        type: integer
+      time:
+        type: string
+      type:
+        type: string
+    type: object
+  modelsv2.JoinLeaveMovingPlayer:
+    properties:
+      count:
+        type: integer
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.JoinLeaveResponse:
+    properties:
+      clan_tag:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.JoinLeaveEvent'
+        type: array
+      pagination:
+        $ref: '#/definitions/modelsv2.PaginationMeta'
+      player_tag:
+        type: string
+      timestamp_end:
+        type: integer
+      timestamp_start:
+        type: integer
+    type: object
+  modelsv2.JoinLeaveStats:
+    properties:
+      avg_time_between_join_leave: {}
+      first_event: {}
+      last_event: {}
+      most_moving_hour: {}
+      most_moving_players:
+        items:
+          $ref: '#/definitions/modelsv2.JoinLeaveMovingPlayer'
+        type: array
+      moving_players:
+        type: integer
+      players_left_forever:
+        type: integer
+      players_still_in_clan:
+        type: integer
+      rejoined_players:
+        type: integer
+      total_events:
+        type: integer
+      total_joins:
+        type: integer
+      total_leaves:
+        type: integer
+      unique_players:
+        type: integer
+    type: object
+  modelsv2.JoinLeaveStatsResponse:
+    properties:
+      clan_tag:
+        type: string
+      stats:
+        $ref: '#/definitions/modelsv2.JoinLeaveStats'
+      timestamp_end:
+        type: integer
+      timestamp_start:
+        type: integer
+    type: object
   modelsv2.MobilePlayerTagsRequest:
     properties:
       clan_tags:
@@ -219,6 +310,19 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  modelsv2.PaginationMeta:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      next_offset: {}
+      offset:
+        type: integer
+      previous_offset: {}
+      total:
+        type: integer
     type: object
   modelsv2.ServerPanelBody:
     properties:
@@ -254,162 +358,14 @@ definitions:
           type: string
         type: array
     type: object
-  v2.mobileLiveActivityRequest:
-    properties:
-      activity_id:
-        type: string
-      clan_tag:
-        type: string
-      cwl_war_tag:
-        type: string
-      device_id:
-        type: string
-      environment:
-        type: string
-      push_token:
-        type: string
-      war_id:
-        type: string
-    type: object
-  v2.mobilePushDeviceRequest:
-    properties:
-      app_version:
-        type: string
-      build_number:
-        type: string
-      device_id:
-        type: string
-      device_model:
-        type: string
-      environment:
-        type: string
-      os_version:
-        type: string
-      platform:
-        type: string
-      provider:
-        type: string
-      token:
-        type: string
-    type: object
-  v2.mobileWarSubscriptionRequest:
-    properties:
-      clan_tag:
-        type: string
-      cwl_rank_enabled:
-        type: boolean
-      device_id:
-        type: string
-      enabled:
-        type: boolean
-      live_activity_enabled:
-        type: boolean
-      score_change_enabled:
-        type: boolean
-      war_end_enabled:
-        type: boolean
-      war_start_enabled:
-        type: boolean
-    type: object
 info:
   contact: {}
-  description: ClashKing Go API documentation. Public Swagger lists only unauthenticated
-    endpoints; private Swagger includes the full API and supports Authorization headers
-    for secured endpoints. This API is still under active construction, so use it
-    with caution because endpoints and payloads may still change.
+  description: ClashKing Go API documentation. Use Authorize with Bearer access tokens
+    for protected routes. This API is still under active construction, so use it with
+    caution because endpoints and payloads may still change.
   title: ClashKing API
   version: "1.0"
 paths:
-  /activity:
-    get:
-      description: Returns scoped activity stats for players.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        type: array
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      - description: Discord server ID
-        in: query
-        name: server
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy activity stats
-      tags:
-      - Legacy Stats
-  /assets:
-    get:
-      description: Returns the ClashKing sprite bundle download link.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy asset download link
-      tags:
-      - Legacy
-  /boost-rate:
-    get:
-      description: Returns boost counts and usage percentages for super troops in
-        a season window.
-      parameters:
-      - description: Start season YYYY-MM
-        in: query
-        name: start_season
-        required: true
-        type: string
-      - description: End season YYYY-MM
-        in: query
-        name: end_season
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get super troop boost rates
-      tags:
-      - Legacy Stats
   /bot/config:
     get:
       description: Returns ClashKing bot configuration for authorized bot tokens.
@@ -606,86 +562,6 @@ paths:
       summary: Get capital league stats
       tags:
       - Legacy Capital
-  /ck/bulk:
-    post:
-      consumes:
-      - application/json
-      description: Proxies multiple Clash API paths and returns successful JSON responses.
-      parameters:
-      - description: Bearer internal API token
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      - description: Proxy paths
-        in: body
-        name: body
-        required: true
-        schema:
-          items:
-            type: string
-          type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Proxy bulk Clash API requests
-      tags:
-      - Legacy Proxy
-  /clan-games:
-    get:
-      description: Returns scoped clan games stats for players.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        type: array
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      - description: Discord server ID
-        in: query
-        name: server
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy clan games stats
-      tags:
-      - Legacy Stats
   /clan/{clan_tag}/basic:
     get:
       description: Returns tracked basic clan data for a clan tag.
@@ -899,44 +775,6 @@ paths:
       summary: Get Discord links for player tags
       tags:
       - Legacy Links
-  /donations:
-    get:
-      description: Returns scoped donation stats for players.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        type: array
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      - description: Discord server ID
-        in: query
-        name: server
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy donation stats
-      tags:
-      - Legacy Stats
   /global/counts:
     get:
       description: Returns global tracking counts used by legacy clients.
@@ -950,7 +788,7 @@ paths:
             type: object
       summary: Get global ClashKing counts
       tags:
-      - Legacy Stats
+      - Global
   /guild_links/{guild_id}:
     get:
       description: Returns linked player data for a Discord guild.
@@ -971,31 +809,6 @@ paths:
       summary: Get guild links
       tags:
       - Legacy Links
-  /json/{data_type}:
-    get:
-      description: Returns static Clash data for the requested legacy data type.
-      parameters:
-      - description: Static data type
-        in: path
-        name: data_type
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy static JSON data
-      tags:
-      - Legacy Static Data
   /legends/clan/{clan_tag}/{date}:
     get:
       description: Returns clan data with legend league members for a specific day.
@@ -1833,63 +1646,6 @@ paths:
       summary: Create short link
       tags:
       - Legacy Links
-  /v1/{path}:
-    get:
-      description: Proxies a GET request through the ClashKing Clash API proxy.
-      parameters:
-      - description: Proxy path
-        in: path
-        name: path
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Proxy a legacy Clash API GET request
-      tags:
-      - Legacy Proxy
-    post:
-      consumes:
-      - application/json
-      description: Proxies a POST request through the ClashKing Clash API proxy.
-      parameters:
-      - description: Proxy path
-        in: path
-        name: path
-        required: true
-        type: string
-      - description: Proxy payload
-        in: body
-        name: body
-        schema:
-          additionalProperties: true
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Proxy a legacy Clash API POST request
-      tags:
-      - Legacy Proxy
   /v2/{category}:
     get:
       description: Returns static items for a category, with optional filters applied.
@@ -2780,30 +2536,58 @@ paths:
       - Clan
   /v2/clan/{clan_tag}/join-leave:
     get:
-      description: Returns join and leave history for a single clan tag.
+      description: Returns join and leave history for a single clan tag. Date filters
+        use ISO-8601 values such as 2026-05-01T00:00:00Z.
       parameters:
       - description: Clan tag
         in: path
         name: clan_tag
         required: true
         type: string
-      - description: Maximum number of results
+      - default: 50
+        description: Maximum events per page
         in: query
         name: limit
         type: integer
-      - description: Start timestamp
+      - default: 0
+        description: Number of events to skip
         in: query
-        name: timestamp_start
+        name: offset
         type: integer
-      - description: End timestamp
+      - description: 1-based page number; ignored when offset is provided
         in: query
-        name: time_stamp_end
+        name: page
         type: integer
+      - description: Only include events at or after this ISO-8601 time
+        in: query
+        name: time[after]
+        type: string
+      - description: Only include events at or before this ISO-8601 time
+        in: query
+        name: time[before]
+        type: string
+      - default: -time
+        description: Comma-separated event sort fields; prefix with - for descending
+        in: query
+        name: sort
+        type: string
+      - description: Comma-separated event fields to include
+        in: query
+        name: fields
+        type: string
+      - description: Event type filter
+        in: query
+        name: type
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.JoinLeaveResponse'
+        "400":
+          description: Bad Request
           schema:
             additionalProperties: true
             type: object
@@ -2812,7 +2596,49 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Join Leaves in a season
+      summary: Get clan join-leave history
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/join-leave/stats:
+    get:
+      description: Returns join and leave summary stats for a single clan tag. Date
+        filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Only include events at or after this ISO-8601 time
+        in: query
+        name: time[after]
+        type: string
+      - description: Only include events at or before this ISO-8601 time
+        in: query
+        name: time[before]
+        type: string
+      - description: Event type filter
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.JoinLeaveStatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan join-leave stats
       tags:
       - Clan
   /v2/clan/{clan_tag}/ranking:
@@ -2965,49 +2791,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Get full stats for a list of clans
-      tags:
-      - Clan
-  /v2/clans/join-leave:
-    post:
-      description: Returns join and leave history for multiple clan tags.
-      parameters:
-      - description: Clan tags
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.ClanTagsBody'
-      - description: Maximum number of results
-        in: query
-        name: limit
-        type: integer
-      - description: Start timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End timestamp
-        in: query
-        name: time_stamp_end
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Join leaves for many clans
       tags:
       - Clan
   /v2/config/public:
@@ -3853,177 +3636,6 @@ paths:
       summary: Get current user information
       tags:
       - App Authentication
-  /v2/mobile/live-activities:
-    post:
-      consumes:
-      - application/json
-      description: Registers or updates a mobile live activity push token.
-      parameters:
-      - description: Live activity
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v2.mobileLiveActivityRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Register mobile live activity
-      tags:
-      - Mobile Push
-  /v2/mobile/live-activities/{activity_id}:
-    delete:
-      description: Marks a mobile live activity as ended for the authenticated user.
-      parameters:
-      - description: Live activity ID
-        in: path
-        name: activity_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: End mobile live activity
-      tags:
-      - Mobile Push
-  /v2/mobile/push/devices:
-    post:
-      consumes:
-      - application/json
-      description: Registers or updates a mobile push token for the authenticated
-        user.
-      parameters:
-      - description: Push device
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v2.mobilePushDeviceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Register mobile push device
-      tags:
-      - Mobile Push
-  /v2/mobile/push/devices/{device_id}:
-    delete:
-      description: Disables a mobile push device for the authenticated user.
-      parameters:
-      - description: Device ID
-        in: path
-        name: device_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Disable mobile push device
-      tags:
-      - Mobile Push
-  /v2/mobile/push/war-subscriptions:
-    put:
-      consumes:
-      - application/json
-      description: Creates or updates war push subscription preferences for a device
-        and clan.
-      parameters:
-      - description: War subscription
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v2.mobileWarSubscriptionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Update mobile war subscription
-      tags:
-      - Mobile Push
   /v2/player/{player_tag}/extended:
     get:
       consumes:
@@ -4047,6 +3659,71 @@ paths:
             additionalProperties: true
             type: object
       summary: Get comprehensive stats for single player
+      tags:
+      - Player
+  /v2/player/{player_tag}/join-leave:
+    get:
+      description: Returns join and leave history for a single player tag. Date filters
+        use ISO-8601 values such as 2026-05-01T00:00:00Z.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - default: 50
+        description: Maximum events per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of events to skip
+        in: query
+        name: offset
+        type: integer
+      - description: 1-based page number; ignored when offset is provided
+        in: query
+        name: page
+        type: integer
+      - description: Only include events at or after this ISO-8601 time
+        in: query
+        name: time[after]
+        type: string
+      - description: Only include events at or before this ISO-8601 time
+        in: query
+        name: time[before]
+        type: string
+      - default: -time
+        description: Comma-separated event sort fields; prefix with - for descending
+        in: query
+        name: sort
+        type: string
+      - description: Comma-separated event fields to include
+        in: query
+        name: fields
+        type: string
+      - description: Event type filter
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.JoinLeaveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player join-leave history
       tags:
       - Player
   /v2/players:

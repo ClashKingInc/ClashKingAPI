@@ -10,7 +10,7 @@ This document tracks the progress of migrating the ClashKingAPI from Python (Fas
   |---|---|---|
 | Framework | FastAPI | Fiber v2 |
 | Entry point | `main.py` / `startup.py` | `main.go` |
-| Routers | `routers/v1/` and `routers/v2/` | `internal/routes/v1/` and `internal/routes/v2/` |
+| Routers | `routers/v1/` and `routers/v2/` | `internal/routes/` and `internal/routes/` |
 | Models | Pydantic | Go structs in `internal/models/` |
 | Database | Motor (async MongoDB) | `go.mongodb.org/mongo-driver/v2` |
 | CoC API client | `coc.py` / `coc` library | Internal `Clash` client wrapper |
@@ -105,7 +105,7 @@ A catch-all proxy at `/v1/*` in Go forwards any unmigrated V1 requests back to t
 
 #### Migrated to Go
 
-All major feature domains are implemented in `internal/routes/v2/` and `internal/routes/v2/server/`:
+All major feature domains are implemented in `internal/routes/` and `internal/routes/server/`:
 
 - **Auth** - email, Discord OAuth, token refresh, password reset, account linking
 - **Accounts** - CoC account add/verify/list/remove/reorder
@@ -183,15 +183,15 @@ All major feature domains are implemented in `internal/routes/v2/` and `internal
 
 | File | Models applied |
   |---|---|
-| `routes/v2/clan.go` | `ClanRankingResponse`, `BoardTotalsResponse`, `DonationEntry`, `ClanCompositionResponse` |
-| `routes/v2/war.go` | `CWLThresholdItem`, `CWLRankingHistoryItem`, `WarStatsItem`, `WarSummaryResponse` |
-| `routes/v2/legends.go` | `GuildStatsResponse`, `DailyTrackingResponse` |
-| `routes/v2/dates.go` | `CurrentDatesResponse`, `SeasonBoundsResponse` |
-| `routes/v2/activity.go` | `GuildSummaryResponse`, `InactivePlayersResponse` |
-| `routes/v2/capital.go` | `CapitalPlayerStatsResponse`, `CapitalLeaderboardResponse` |
-| `routes/v2/player.go` | `PlayerTagsRequest` (replaces inline struct), `PlayerSortedItem`, `PlayerLegendDaysItem`, `PlayerLegendRankingItem` |
-| `routes/v1/player.go` | `PlayerStatsResponse`, `PlayerLegendsResponse` |
-| `routes/v1/war.go` | `CWLRankingEntry` (typed function return) |
+| `routes/clan.go` | `ClanRankingResponse`, `BoardTotalsResponse`, `DonationEntry`, `ClanCompositionResponse` |
+| `routes/war.go` | `CWLThresholdItem`, `CWLRankingHistoryItem`, `WarStatsItem`, `WarSummaryResponse` |
+| `routes/legends.go` | `GuildStatsResponse`, `DailyTrackingResponse` |
+| `routes/dates.go` | `CurrentDatesResponse`, `SeasonBoundsResponse` |
+| `routes/activity.go` | `GuildSummaryResponse`, `InactivePlayersResponse` |
+| `routes/capital.go` | `CapitalPlayerStatsResponse`, `CapitalLeaderboardResponse` |
+| `routes/player.go` | `PlayerTagsRequest` (replaces inline struct), `PlayerSortedItem`, `PlayerLegendDaysItem`, `PlayerLegendRankingItem` |
+| `routes/player.go` | `PlayerStatsResponse`, `PlayerLegendsResponse` |
+| `routes/war.go` | `CWLRankingEntry` (typed function return) |
 
 ### What still needs typed models
 
@@ -226,7 +226,7 @@ CoC API response schema:
 
 ### 2. Complete V2 Python-to-Go migration
 
-- Finish `routers/v2/tracking.py` - add missing endpoints to `routes/v2/tracking.go`
+- Finish `routers/v2/tracking.py` - add missing endpoints to `routes/tracking.go`
 - Implement `routers/v2/pl.py` (legend players) fully in Go
 - Wire up and verify the `config.py` stub already present in Go
 

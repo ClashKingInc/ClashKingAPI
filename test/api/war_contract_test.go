@@ -3,11 +3,11 @@ package api_test
 import (
 	"testing"
 
-	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
+	routes "github.com/ClashKingInc/ClashKingAPI/internal/routes"
 )
 
 func TestWarSummaryResponseMatchesAppContract(t *testing.T) {
-	result := routesv2.WarSummaryResponseForTest("2qpcjqq2u", false, true, nil, nil, []any{
+	result := routes.WarSummaryResponseForTest("2qpcjqq2u", false, true, nil, nil, []any{
 		nil,
 		map[string]any{
 			"war_tag": "#WAR1",
@@ -47,7 +47,7 @@ func TestWarSummaryResponseMatchesAppContract(t *testing.T) {
 }
 
 func TestWarSummaryInfoMapRemovesInvalidCurrentWarInfo(t *testing.T) {
-	info := routesv2.WarSummaryInfoMapForTest(map[string]any{
+	info := routes.WarSummaryInfoMapForTest(map[string]any{
 		"state":          "war",
 		"currentWarInfo": nil,
 		"bypass":         false,
@@ -65,7 +65,7 @@ func TestWarSummaryInfoMapRemovesInvalidCurrentWarInfo(t *testing.T) {
 }
 
 func TestExtractLeagueWarTagsFiltersZerosAndDuplicates(t *testing.T) {
-	tags := routesv2.ExtractLeagueWarTagsForTest(map[string]any{
+	tags := routes.ExtractLeagueWarTagsForTest(map[string]any{
 		"rounds": []any{
 			map[string]any{"warTags": []any{"#AAA", "#0", "#BBB"}},
 			map[string]any{"warTags": []any{"#BBB", "#CCC"}},
@@ -81,7 +81,7 @@ func TestExtractLeagueWarTagsFiltersZerosAndDuplicates(t *testing.T) {
 }
 
 func TestEnrichLeagueInfoBuildsRanksFromProxyWars(t *testing.T) {
-	result := routesv2.EnrichLeagueInfoForTest(
+	result := routes.EnrichLeagueInfoForTest(
 		map[string]any{
 			"state": "inWar",
 			"clans": []any{
@@ -122,7 +122,7 @@ func TestEnrichLeagueInfoBuildsRanksFromProxyWars(t *testing.T) {
 }
 
 func TestEnrichLeagueInfoEnrichesMemberStatsForMobile(t *testing.T) {
-	result := routesv2.EnrichLeagueInfoForTest(
+	result := routes.EnrichLeagueInfoForTest(
 		map[string]any{
 			"state": "inWar",
 			"clans": []any{

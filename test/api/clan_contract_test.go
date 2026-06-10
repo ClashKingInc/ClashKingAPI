@@ -3,12 +3,12 @@ package api_test
 import (
 	"testing"
 
-	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
+	routes "github.com/ClashKingInc/ClashKingAPI/internal/routes"
 	clashy "github.com/clashkinginc/clashy.go"
 )
 
 func TestBuildLeagueIconLookupUsesStaticDataURLs(t *testing.T) {
-	icons := routesv2.BuildLeagueIconLookupForTest(
+	icons := routes.BuildLeagueIconLookupForTest(
 		[]map[string]any{
 			{"name": "Master League I", "icon": "/war_leagues/master-league-i.png"},
 		},
@@ -38,7 +38,7 @@ func TestEnrichClanLeagueIconsFillsMissingWarLeagueIcon(t *testing.T) {
 		},
 	}
 
-	routesv2.EnrichClanLeagueIconsForTest(clan, map[string]*clashy.Icon{
+	routes.EnrichClanLeagueIconsForTest(clan, map[string]*clashy.Icon{
 		"Master League I": {
 			Small:  "small-url",
 			Medium: "medium-url",
@@ -55,7 +55,7 @@ func TestEnrichClanLeagueIconsFillsMissingWarLeagueIcon(t *testing.T) {
 }
 
 func TestEnrichClanPayloadLeagueIconsMergesIconUrls(t *testing.T) {
-	result := routesv2.EnrichClanPayloadLeagueIconsForTest(
+	result := routes.EnrichClanPayloadLeagueIconsForTest(
 		map[string]any{
 			"tag": "#CLAN",
 			"warLeague": map[string]any{
@@ -89,7 +89,7 @@ func TestEnrichClanPayloadLeagueIconsMergesIconUrls(t *testing.T) {
 }
 
 func TestEnrichLeagueInfoIconsAddsCWLLeagueIconURLs(t *testing.T) {
-	result := routesv2.EnrichLeagueInfoIconsForTest(
+	result := routes.EnrichLeagueInfoIconsForTest(
 		map[string]any{
 			"war_league": "Master League I",
 			"clans": []any{

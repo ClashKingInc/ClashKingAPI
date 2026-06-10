@@ -10,8 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	routesv1 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v1"
-	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
+	routes "github.com/ClashKingInc/ClashKingAPI/internal/routes"
 	"github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -22,7 +21,7 @@ import (
 
 // @title ClashKing API
 // @version 1.0
-// @description ClashKing Go API documentation. Public Swagger lists only unauthenticated endpoints; private Swagger includes the full API and supports Authorization headers for secured endpoints. This API is still under active construction, so use it with caution because endpoints and payloads may still change.
+// @description ClashKing Go API documentation. Use Authorize with Bearer access tokens for protected routes. This API is still under active construction, so use it with caution because endpoints and payloads may still change.
 // @BasePath /
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
@@ -124,8 +123,7 @@ func (a *App) wrap(handler fiber.Handler) fiber.Handler {
 }
 
 func (a *App) registerRoutes(app *fiber.App) {
-	routesv2.Register(app, a.Deps, a.wrap)
-	routesv1.Register(app, a.Deps)
+	routes.Register(app, a.Deps, a.wrap)
 }
 
 func (a *App) Run(ctx context.Context) error {

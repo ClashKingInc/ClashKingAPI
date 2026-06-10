@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	routesv2 "github.com/ClashKingInc/ClashKingAPI/internal/routes/v2"
+	routes "github.com/ClashKingInc/ClashKingAPI/internal/routes"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
 func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
 	app := fiber.New()
-	app.Get("/v2/public-config", routesv2.PublicMobileConfigForTest(apptypes.Deps{
+	app.Get("/v2/public-config", routes.PublicMobileConfigForTest(apptypes.Deps{
 		Config: apptypes.Config{
 			SentryDSNMobile: "mobile-dsn",
 		},
@@ -37,7 +37,7 @@ func TestPublicMobileConfigReturnsSentryDSN(t *testing.T) {
 }
 
 func TestMobileInitializationResponseMatchesAppContract(t *testing.T) {
-	response := routesv2.MobileInitializationResponseForTest(
+	response := routes.MobileInitializationResponseForTest(
 		[]string{"#AAA", "#BBB"},
 		nil,
 		nil,
@@ -83,7 +83,7 @@ func TestMobileInitializationResponseMatchesAppContract(t *testing.T) {
 }
 
 func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
-	player := routesv2.MobilePlayerExtendedContractForTest(map[string]any{
+	player := routes.MobilePlayerExtendedContractForTest(map[string]any{
 		"tag": "#AAA",
 		"war_data": map[string]any{
 			"clan_tag": "#CLAN",
@@ -142,7 +142,7 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 }
 
 func TestMobileWarContractsKeepWarLists(t *testing.T) {
-	response := routesv2.MobileInitializationResponseForTest(
+	response := routes.MobileInitializationResponseForTest(
 		[]string{"#P1"},
 		[]string{"#C1"},
 		nil,
@@ -205,7 +205,7 @@ func TestMobileWarContractsKeepWarLists(t *testing.T) {
 }
 
 func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
-	results := routesv2.MobileLegendRankingsByTagFromRowsForTest(
+	results := routes.MobileLegendRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2"},
 		[]map[string]any{
 			{"tag": "#P1", "season": "2026-05", "rank": 1},
@@ -231,7 +231,7 @@ func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
 }
 
 func TestMobileCurrentRankingsByTagFromRowsUsesFallbackGlobalRank(t *testing.T) {
-	results := routesv2.MobileCurrentRankingsByTagFromRowsForTest(
+	results := routes.MobileCurrentRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2", "#P3"},
 		[]map[string]any{
 			{"tag": "#P1", "country_code": "FR", "local_rank": 10},
@@ -259,16 +259,16 @@ func TestMobileCurrentRankingsByTagFromRowsUsesFallbackGlobalRank(t *testing.T) 
 }
 
 func TestMobilePlayerWarContextTargetClanSkipsCurrentClan(t *testing.T) {
-	if got := routesv2.MobilePlayerWarContextTargetClanForTest([]string{"#VY2J0LL", "#ALT"}, "#VY2J0LL"); got != "" {
+	if got := routes.MobilePlayerWarContextTargetClanForTest([]string{"#VY2J0LL", "#ALT"}, "#VY2J0LL"); got != "" {
 		t.Fatalf("expected current clan to suppress alternate war context, got %q", got)
 	}
-	if got := routesv2.MobilePlayerWarContextTargetClanForTest([]string{"alt", "#OTHER"}, "#VY2J0LL"); got != "#ALT" {
+	if got := routes.MobilePlayerWarContextTargetClanForTest([]string{"alt", "#OTHER"}, "#VY2J0LL"); got != "#ALT" {
 		t.Fatalf("expected first normalized alternate clan, got %q", got)
 	}
 }
 
 func TestMobilePlayerRaidDataByClanFromRowsKeepsLatestPerClan(t *testing.T) {
-	results := routesv2.MobilePlayerRaidDataByClanFromRowsForTest(
+	results := routes.MobilePlayerRaidDataByClanFromRowsForTest(
 		[]string{"#C1", "#C2"},
 		[]map[string]any{
 			{
@@ -324,14 +324,14 @@ func TestMobileIsRaidsWindowAtMatchesLegacySchedule(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if got := routesv2.MobileIsRaidsWindowAtForTest(tc.now); got != tc.want {
+		if got := routes.MobileIsRaidsWindowAtForTest(tc.now); got != tc.want {
 			t.Fatalf("%s: expected %v, got %v", tc.name, tc.want, got)
 		}
 	}
 }
 
 func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
-	bundle := routesv2.MobileClanBundleContractForTest(map[string]any{
+	bundle := routes.MobileClanBundleContractForTest(map[string]any{
 		"war_data": []any{
 			map[string]any{
 				"clan_tag": "#CLAN",
@@ -408,8 +408,8 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 }
 
 func TestMobileBuildPlayerWarStatsInfersLegacyWarTypeForAppFilters(t *testing.T) {
-	filter := routesv2.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
-	results := routesv2.MobileBuildPlayerWarStatsFromDocsForTest([]string{"#P1"}, []map[string]any{
+	filter := routes.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
+	results := routes.MobileBuildPlayerWarStatsFromDocsForTest([]string{"#P1"}, []map[string]any{
 		{
 			"tag":                  "#WAR1",
 			"season":               "2026-05",
@@ -501,7 +501,7 @@ func TestMobileBuildPlayerWarStatsInfersLegacyWarTypeForAppFilters(t *testing.T)
 }
 
 func TestMobileWarTypeDefaultsLegacyUntypedWarsToRandom(t *testing.T) {
-	got := routesv2.MobileWarTypeForTest(map[string]any{
+	got := routes.MobileWarTypeForTest(map[string]any{
 		"battleModifier": "none",
 	})
 	if got != "random" {
@@ -510,7 +510,7 @@ func TestMobileWarTypeDefaultsLegacyUntypedWarsToRandom(t *testing.T) {
 }
 
 func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
-	filter := routesv2.MobileInitializationWarHitsFilterForTest()
+	filter := routes.MobileInitializationWarHitsFilterForTest()
 
 	if filter.Limit != 50 {
 		t.Fatalf("expected startup war stats limit to stay at 50, got %d", filter.Limit)
@@ -521,21 +521,21 @@ func TestMobileInitializationWarHitsFilterUsesStartupLimit(t *testing.T) {
 }
 
 func TestMobilePlayerWarHitsDefaultFilterMatchesPythonDefaultLimit(t *testing.T) {
-	filter := routesv2.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
+	filter := routes.MobileDefaultPlayerWarHitsFilterForTest([]string{"#P1"})
 	if filter.Limit != 50 {
 		t.Fatalf("expected default player warhits limit=50, got %d", filter.Limit)
 	}
 }
 
 func TestMobileClanWarHitsDefaultFilterMatchesPythonDefaultLimit(t *testing.T) {
-	filter := routesv2.MobileDefaultClanWarHitsFilterForTest([]string{"#C1"})
+	filter := routes.MobileDefaultClanWarHitsFilterForTest([]string{"#C1"})
 	if filter.Limit != 100 {
 		t.Fatalf("expected default clan warhits limit=100, got %d", filter.Limit)
 	}
 }
 
 func TestMobileDecodeWarHitsFilterAppliesPlayerDefaultLimit(t *testing.T) {
-	filter, err := routesv2.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
+	filter, err := routes.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
 		"player_tags": []string{"#P1"},
 	})
 	if err != nil {
@@ -547,7 +547,7 @@ func TestMobileDecodeWarHitsFilterAppliesPlayerDefaultLimit(t *testing.T) {
 }
 
 func TestMobileDecodeWarHitsFilterAppliesClanDefaultLimit(t *testing.T) {
-	filter, err := routesv2.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
+	filter, err := routes.MobileDecodeWarHitsFilterBodyForTest(map[string]any{
 		"clan_tags": []string{"#C1"},
 	})
 	if err != nil {
@@ -559,11 +559,11 @@ func TestMobileDecodeWarHitsFilterAppliesClanDefaultLimit(t *testing.T) {
 }
 
 func TestMobileInitializationWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
-	playerFilter := routesv2.MobileInitializationWarHitsFilterForTest()
+	playerFilter := routes.MobileInitializationWarHitsFilterForTest()
 	playerFilter.PlayerTags = []string{"#P1"}
 	playerFilter.Limit = 1
 
-	clanFilter := routesv2.MobileInitializationWarHitsFilterForTest()
+	clanFilter := routes.MobileInitializationWarHitsFilterForTest()
 	clanFilter.ClanTags = []string{"#C1"}
 	clanFilter.Limit = 1
 
@@ -626,7 +626,7 @@ func TestMobileInitializationWarStatsFromSharedDocsKeepsPerTargetLimits(t *testi
 		},
 	}
 
-	playerStats, clanStats := routesv2.MobileBuildInitializationWarStatsFromDocsForTest(wars, playerFilter, clanFilter)
+	playerStats, clanStats := routes.MobileBuildInitializationWarStatsFromDocsForTest(wars, playerFilter, clanFilter)
 
 	if len(playerStats) != 1 {
 		t.Fatalf("expected one player stat result, got %d", len(playerStats))
@@ -656,7 +656,7 @@ func TestMobileInitializationWarStatsFromSharedDocsKeepsPerTargetLimits(t *testi
 }
 
 func TestMobilePlayerWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
-	filter := routesv2.MobileInitializationWarHitsFilterForTest()
+	filter := routes.MobileInitializationWarHitsFilterForTest()
 	filter.PlayerTags = []string{"#P1", "#P2"}
 	filter.Limit = 1
 
@@ -719,7 +719,7 @@ func TestMobilePlayerWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
 		},
 	}
 
-	results := routesv2.MobileBuildPlayerWarStatsFromDocsForTest(filter.PlayerTags, wars, filter)
+	results := routes.MobileBuildPlayerWarStatsFromDocsForTest(filter.PlayerTags, wars, filter)
 	if len(results) != 2 {
 		t.Fatalf("expected two player results, got %d", len(results))
 	}
@@ -738,7 +738,7 @@ func TestMobilePlayerWarStatsFromSharedDocsKeepsPerTargetLimits(t *testing.T) {
 }
 
 func TestMobileClanWarStatsFromSharedDocsKeepsPerTargetLimitsAndEmptyRows(t *testing.T) {
-	filter := routesv2.MobileInitializationWarHitsFilterForTest()
+	filter := routes.MobileInitializationWarHitsFilterForTest()
 	filter.ClanTags = []string{"#C1", "#C2", "#C3"}
 	filter.Limit = 1
 
@@ -777,7 +777,7 @@ func TestMobileClanWarStatsFromSharedDocsKeepsPerTargetLimitsAndEmptyRows(t *tes
 		},
 	}
 
-	results := routesv2.MobileBuildClanWarStatsFromDocsForTest(filter.ClanTags, wars, filter)
+	results := routes.MobileBuildClanWarStatsFromDocsForTest(filter.ClanTags, wars, filter)
 	if len(results) != 3 {
 		t.Fatalf("expected three clan rows including empty result, got %d", len(results))
 	}
@@ -804,7 +804,7 @@ func TestMobileClanWarStatsFromSharedDocsKeepsPerTargetLimitsAndEmptyRows(t *tes
 }
 
 func TestMobileMergeWarDocBatchesDedupesAndSortsNewestFirst(t *testing.T) {
-	merged := routesv2.MobileMergeWarDocBatchesForTest([][]map[string]any{
+	merged := routes.MobileMergeWarDocBatchesForTest([][]map[string]any{
 		{
 			{
 				"clan":                 map[string]any{"tag": "#A"},
@@ -846,7 +846,7 @@ func TestMobileMergeWarDocBatchesDedupesAndSortsNewestFirst(t *testing.T) {
 }
 
 func TestMobilePlayerWarDocsPipelineMatchesBothSidesAndAppliesEarlyLimit(t *testing.T) {
-	query := routesv2.MobilePlayerWarDocsPipelineForTest("#P1", 100, 200, 50)
+	query := routes.MobilePlayerWarDocsPipelineForTest("#P1", 100, 200, 50)
 	if len(query.PlayerTags) != 1 || query.PlayerTags[0] != "#P1" {
 		t.Fatalf("expected player query to target #P1, got %+v", query.PlayerTags)
 	}
@@ -859,7 +859,7 @@ func TestMobilePlayerWarDocsPipelineMatchesBothSidesAndAppliesEarlyLimit(t *test
 }
 
 func TestMobileClanWarDocsPipelineMatchesPythonShape(t *testing.T) {
-	query := routesv2.MobileClanWarDocsPipelineForTest("#C1", 100, 200, 50)
+	query := routes.MobileClanWarDocsPipelineForTest("#C1", 100, 200, 50)
 	if len(query.ClanTags) != 1 || query.ClanTags[0] != "#C1" {
 		t.Fatalf("expected clan query to target #C1, got %+v", query.ClanTags)
 	}

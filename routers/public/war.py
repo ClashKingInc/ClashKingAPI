@@ -11,6 +11,18 @@ from datetime import datetime, timedelta
 
 
 router = APIRouter(tags=["War Endpoints"])
+CWL_SEASON_DATE_CUTOFF = datetime(2026, 6, 14).date()
+
+
+def normalize_cwl_season(season: str) -> str:
+    season_date_raw = f"{season}-01" if len(season) == 7 else season
+    try:
+        season_date = datetime.strptime(season_date_raw, "%Y-%m-%d").date()
+    except ValueError:
+        return season
+    if season_date < CWL_SEASON_DATE_CUTOFF:
+        return season_date.strftime("%Y-%m")
+    return season
 
 
 
@@ -97,6 +109,7 @@ async def cwl_group(clan_tag: str, request: Request, response: Response):
 @cache(expire=300)
 async def cwl(clan_tag: str, season: str, request: Request, response: Response):
     clan_tag = fix_tag(clan_tag)
+    season = normalize_cwl_season(season)
     cwl_result = await db_client.cwl_groups.find_one({"$and" : [{"data.clans.tag" : clan_tag}, {"data.season" : season}]})
 
     if cwl_result is None:

@@ -1,8 +1,6 @@
 
 import coc
-import operator
 import pendulum as pend
-from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
@@ -112,61 +110,10 @@ async def cwl(clan_tag: str, season: str, request: Request, response: Response):
     matching_wars = {w.get("data").get("tag") : w.get("data") for w in matching_wars}
     for r_count, round in enumerate(rounds):
         for count, tag in enumerate(round.get("warTags")):
-            rounds[r_count].get("warTags")[count] = matching_wars.get(tag)
+            war_data = matching_wars.get(tag)
+            if war_data is None:
+                war_data = {"tag": tag}
+            rounds[r_count].get("warTags")[count] = war_data
     cwl_result = cwl_result["data"]
     cwl_result["rounds"] = rounds
-    cwl_result["clan_rankings"] = ranking_create(data=cwl_result)
     return cwl_result
-    
-
-
-def ranking_create(data: dict):
-
-    star_dict = defaultdict(int)
-    dest_dict = defaultdict(int)
-    tag_to_name = defaultdict(str)
-    rounds_won = defaultdict(int)
-    rounds_lost = defaultdict(int)
-    rounds_tied = defaultdict(int)
-
-    for round in data.get("rounds"):
-        for war in round.get("warTags"):
-            war = coc.ClanWar(data=war, client=None)
-            if str(war.status) == "won":
-                rounds_won[war.clan.tag] += 1
-                rounds_lost[war.opponent.tag] += 1
-                star_dict[war.clan.tag] += 10
-            elif str(war.status) == "lost":
-                rounds_won[war.opponent.tag] += 1
-                rounds_lost[war.clan.tag] += 1
-                star_dict[war.opponent.tag] += 10
-            else:
-                rounds_tied[war.clan.tag] += 1
-                rounds_tied[war.opponent.tag] += 1
-
-            tag_to_name[war.clan.tag] = war.clan.name
-            tag_to_name[war.opponent.tag] = war.opponent.name
-            on_each_player = {}
-            for player in war.members:
-                for attack in player.attacks:
-                    if on_each_player.get(attack.defender_tag) is None:
-                        on_each_player[attack.defender_tag] = (attack, player.clan.tag)
-                    else:
-                        prev, clan_tag = on_each_player.get(attack.defender_tag)
-                        if attack.stars > prev.stars or (attack.stars == prev.stars and attack.destruction > prev.destruction):
-                            on_each_player[attack.defender_tag] = (attack, player.clan.tag)
-
-            for attack, clan_tag in on_each_player.values():
-                star_dict[clan_tag] += attack.stars
-                dest_dict[clan_tag] += attack.destruction
-
-    star_list = []
-    for tag, stars in star_dict.items():
-        destruction = dest_dict[tag]
-        name = tag_to_name[tag]
-        star_list.append([name, tag, stars, destruction])
-
-    sorted_list = sorted(star_list, key=operator.itemgetter(2, 3), reverse=True)
-    return  [{"name" : x[0], "tag" : x[1], "stars": x[2], "destruction" : x[3],
-              "rounds" : {"won" : rounds_won.get(x[1], 0), "tied" : rounds_tied.get(x[1], 0), "lost" : rounds_lost.get(x[1], 0)}} for x in sorted_list]
-

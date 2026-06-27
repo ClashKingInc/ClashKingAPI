@@ -149,7 +149,7 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		var accounts []map[string]any
+		accounts := make([]map[string]any, 0)
 		if err := cursor.All(c.UserContext(), &accounts); err != nil {
 			return err
 		}

@@ -40,13 +40,6 @@ definitions:
       password:
         type: string
     type: object
-  modelsv2.AuthEmailCodeRequest:
-    properties:
-      code:
-        type: string
-      email:
-        type: string
-    type: object
   modelsv2.AuthEmailRegisterRequest:
     properties:
       device_id:
@@ -1983,6 +1976,47 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Link Discord to an existing account
+      tags:
+      - App Authentication
+  /v2/link-discord-code:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a Discord authorization code for tokens, then attaches
+        the Discord account to the current authenticated user.
+      parameters:
+      - description: Discord OAuth code payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthDiscordOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link Discord via OAuth code
       tags:
       - App Authentication
   /v2/link-email:
@@ -6223,44 +6257,6 @@ paths:
       summary: Link a Clash of Clans account to a user with verification
       tags:
       - Coc Accounts
-  /v2/verify-email-code:
-    post:
-      consumes:
-      - application/json
-      description: Confirms a pending email registration by checking the verification
-        code and creates the account session.
-      parameters:
-      - description: Verification payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.AuthEmailCodeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.AuthResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Verify email address with 6-digit code
-      tags:
-      - App Authentication
   /v2/war/{clan_tag}/previous:
     get:
       description: Returns previous wars for a clan tag, optionally filtered to CWL.

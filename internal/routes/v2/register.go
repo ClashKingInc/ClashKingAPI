@@ -36,6 +36,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/auth/email", emailLogin(a))
 	app.Post("/v2/link-discord", wrap(linkDiscord(a)))
 	app.Post("/v2/auth/link-discord", wrap(linkDiscord(a)))
+	app.Post("/v2/link-discord-code", wrap(linkDiscordWithCode(a)))
+	app.Post("/v2/auth/link-discord-code", wrap(linkDiscordWithCode(a)))
 	app.Post("/v2/link-email", wrap(linkEmail(a)))
 	app.Post("/v2/auth/link-email", wrap(linkEmail(a)))
 	app.Post("/v2/forgot-password", forgotPassword(a))

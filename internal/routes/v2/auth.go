@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/mail"
 	"strconv"
@@ -36,6 +37,20 @@ const defaultAvatarURL = "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Gob
 // @Failure 401 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /v2/verify-email-code [post]
+type emailVerifyUserData struct {
+	UserID   string `bson:"user_id"`
+	Username string `bson:"username"`
+	Password string `bson:"password"`
+	DeviceID string `bson:"device_id"`
+}
+
+type emailVerifyRecord struct {
+	ID        any                 `bson:"_id"`
+	EmailHash string              `bson:"email_hash"`
+	UserData  emailVerifyUserData `bson:"user_data"`
+	ExpiresAt time.Time           `bson:"expires_at"`
+}
+
 func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.AuthEmailCodeRequest
@@ -49,22 +64,27 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid verification code format")
 		}
 		emailHash := hashEmail(a, body.Email)
-		var pending map[string]any
+		var pending emailVerifyRecord
 		if err := a.Store.C.EmailVerify.FindOne(c.UserContext(), bson.M{"email_hash": emailHash, "verification_code": body.Code}).Decode(&pending); err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid verification code")
 		}
-		expiresAt := asTime(pending["expires_at"])
-		if !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
-			_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending["_id"]})
+		slog.Info("verify_email_code_record",
+			"email_hash", emailHash,
+			"has_username", pending.UserData.Username != "",
+			"has_password", pending.UserData.Password != "",
+			"expires_at", pending.ExpiresAt,
+		)
+		if !pending.ExpiresAt.IsZero() && time.Now().UTC().After(pending.ExpiresAt) {
+			_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending.ID})
 			return apptypes.Error(fiber.StatusUnauthorized, "Verification code expired. Please request a new one.")
 		}
-		userData, _ := pending["user_data"].(map[string]any)
-		if userData == nil {
+		if pending.UserData.Username == "" || pending.UserData.Password == "" {
+			slog.Error("verify_email_code_invalid_record", "email_hash", emailHash, "username_empty", pending.UserData.Username == "", "password_empty", pending.UserData.Password == "")
 			return apptypes.Error(fiber.StatusInternalServerError, "Invalid verification record")
 		}
 		var existing map[string]any
 		_ = a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&existing)
-		userID := authStringify(userData["user_id"])
+		userID := pending.UserData.UserID
 		if userID == "" {
 			if existing != nil {
 				userID = authStringify(existing["user_id"])
@@ -76,8 +96,8 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 			"user_id":         userID,
 			"email_encrypted": apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(body.Email))),
 			"email_hash":      emailHash,
-			"username":        authStringify(userData["username"]),
-			"password":        authStringify(userData["password"]),
+			"username":        pending.UserData.Username,
+			"password":        pending.UserData.Password,
 			"created_at":      time.Now().UTC(),
 			"auth_methods":    []string{"email"},
 		}
@@ -94,8 +114,8 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 				return err
 			}
 		}
-		_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending["_id"]})
-		response, err := buildAuthResponse(a, userID, authStringify(update["username"]), authStringify(userData["device_id"]), defaultAvatarURL)
+		_, _ = a.Store.C.EmailVerify.DeleteOne(c.UserContext(), bson.M{"_id": pending.ID})
+		response, err := buildAuthResponse(a, userID, pending.UserData.Username, pending.UserData.DeviceID, defaultAvatarURL)
 		if err != nil {
 			return err
 		}
@@ -374,6 +394,11 @@ func emailLogin(a apptypes.Deps) fiber.Handler {
 		emailHash := hashEmail(a, body.Email)
 		var user map[string]any
 		if err := a.Store.C.Users.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&user); err != nil {
+			var pending map[string]any
+			_ = a.Store.C.EmailVerify.FindOne(c.UserContext(), bson.M{"email_hash": emailHash}).Decode(&pending)
+			if pending != nil {
+				return apptypes.Error(fiber.StatusConflict, "Email verification required. Please check your email for the verification code.")
+			}
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid email or password")
 		}
 		passwordHash := authStringify(user["password"])
@@ -463,6 +488,92 @@ func linkDiscord(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
+		if err := upsertLinkedDiscordTokens(c.UserContext(), a, userID, payload); err != nil {
+			return err
+		}
+
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"detail": "Discord account successfully linked"})
+	}
+}
+
+// linkDiscordWithCode links a Discord account using an OAuth authorization code (PKCE flow).
+//
+// @Summary Link Discord via OAuth code
+// @Description Exchanges a Discord authorization code for tokens, then attaches the Discord account to the current authenticated user.
+// @Tags App Authentication
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body modelsv2.AuthDiscordOAuthRequest true "Discord OAuth code payload"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v2/link-discord-code [post]
+func linkDiscordWithCode(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID := apptypes.UserID(c.UserContext())
+		if strings.TrimSpace(userID) == "" {
+			return apptypes.Error(fiber.StatusUnauthorized, "Missing or invalid authentication token")
+		}
+
+		var body modelsv2.AuthDiscordOAuthRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		if strings.TrimSpace(body.Code) == "" || strings.TrimSpace(body.CodeVerifier) == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "Missing code or code_verifier")
+		}
+		redirectURI := strings.TrimSpace(body.RedirectURI)
+		if redirectURI == "" {
+			redirectURI = a.Config.DiscordRedirectURI
+		}
+
+		var currentUser map[string]any
+		if err := a.Store.C.Users.FindOne(c.UserContext(), bson.M{"user_id": userID}).Decode(&currentUser); err != nil {
+			return apptypes.Error(fiber.StatusNotFound, "User not found")
+		}
+
+		token, err := a.Discord.ExchangeCode(c.UserContext(), body.Code, body.CodeVerifier, redirectURI)
+		if err != nil {
+			return apptypes.Error(fiber.StatusBadRequest, "Failed to exchange Discord code: "+err.Error())
+		}
+
+		discordUser, err := a.Discord.GetCurrentUser(c.UserContext(), token.AccessToken)
+		if err != nil {
+			return apptypes.Error(fiber.StatusBadRequest, "Failed to fetch Discord user")
+		}
+
+		conflictFilter := discordAccountConflictFilter(discordUser.ID.String())
+		if len(conflictFilter) > 0 {
+			var conflictUser map[string]any
+			err = a.Store.C.Users.FindOne(c.UserContext(), conflictFilter).Decode(&conflictUser)
+			if err == nil && authStringify(conflictUser["user_id"]) != userID {
+				return apptypes.Error(fiber.StatusBadRequest, "Discord account already linked to another user")
+			}
+		}
+
+		linkedDiscord := bson.M{
+			"linked_at":       time.Now().UTC(),
+			"discord_user_id": discordUser.ID.String(),
+			"username":        discordUser.Username,
+			"email":           discordUser.Email,
+		}
+		update := bson.M{
+			"auth_methods":            uniqueStrings(append(toStringSlice(currentUser["auth_methods"]), "discord")),
+			"linked_accounts.discord": linkedDiscord,
+		}
+		if _, err := a.Store.C.Users.UpdateOne(c.UserContext(), bson.M{"user_id": userID}, bson.M{"$set": update}); err != nil {
+			return err
+		}
+
+		payload := linkDiscordPayload{
+			AccessToken:  token.AccessToken,
+			RefreshToken: token.RefreshToken,
+			ExpiresIn:    int(token.ExpiresIn / time.Second),
+			DeviceID:     body.DeviceID,
+			DeviceName:   body.DeviceName,
+		}
 		if err := upsertLinkedDiscordTokens(c.UserContext(), a, userID, payload); err != nil {
 			return err
 		}
@@ -754,6 +865,16 @@ func toStringSlice(value any) []string {
 	switch typed := value.(type) {
 	case []string:
 		return append([]string(nil), typed...)
+	case bson.A:
+		// MongoDB Go driver v2 decodes BSON arrays into bson.A (primitive.A),
+		// not []any — so we need this case to avoid returning nil.
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := authStringify(item); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {

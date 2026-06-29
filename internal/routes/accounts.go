@@ -362,6 +362,7 @@ func validateCOCTag(tag string) error {
 }
 
 func accountsNormalizeTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = strings.ToUpper(strings.TrimSpace(tag))
 	if tag == "" {
 		return tag

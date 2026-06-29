@@ -63,6 +63,7 @@ type swaggerUIConfig struct {
 	DomID                string
 	DeepLinking          bool
 	PersistAuthorization bool
+	TagOrder             []string
 }
 
 func NewUIHandler(specURL string) fiber.Handler {
@@ -76,6 +77,7 @@ func NewUIHandler(specURL string) fiber.Handler {
 		DomID:                "swagger-ui",
 		DeepLinking:          true,
 		PersistAuthorization: false,
+		TagOrder:             primaryTagOrder(),
 	}
 
 	return func(c *fiber.Ctx) error {
@@ -181,6 +183,11 @@ const swaggerIndexTemplate = `<!DOCTYPE html>
 <script src="./swagger-ui-standalone-preset.js"> </script>
 <script>
 window.onload = function() {
+  const tagOrder = [
+    {{- range .TagOrder }}
+    "{{ . }}",
+    {{- end }}
+  ];
   const ui = SwaggerUIBundle({
     url: "{{.URL}}",
     deepLinking: {{.DeepLinking}},
@@ -188,6 +195,14 @@ window.onload = function() {
     dom_id: "#{{.DomID}}",
     persistAuthorization: {{.PersistAuthorization}},
     validatorUrl: null,
+    tagsSorter: function(a, b) {
+      const ai = tagOrder.indexOf(a);
+      const bi = tagOrder.indexOf(b);
+      if (ai !== -1 || bi !== -1) {
+        return (ai === -1 ? tagOrder.length : ai) - (bi === -1 ? tagOrder.length : bi);
+      }
+      return a.localeCompare(b);
+    },
     presets: [
       SwaggerUIBundle.presets.apis,
       SwaggerUIStandalonePreset
@@ -214,4 +229,41 @@ func setSwaggerMetadata(doc map[string]any) {
 	info["title"] = swaggerBaseTitle
 	info["description"] = swaggerBaseDescription
 	info["version"] = swaggerVersion
+	doc["tags"] = swaggerTags(doc["tags"])
+}
+
+func primaryTagOrder() []string {
+	return []string{
+		"Player",
+		"Clan",
+		"Dates",
+		"Leaderboard",
+		"Global",
+		"Battlelogs",
+		"War",
+		"Static Data",
+		"Configuration",
+		"Auth",
+	}
+}
+
+func swaggerTags(existing any) []map[string]string {
+	seen := map[string]bool{}
+	out := []map[string]string{}
+	for _, name := range primaryTagOrder() {
+		out = append(out, map[string]string{"name": name})
+		seen[name] = true
+	}
+
+	tags, _ := existing.([]any)
+	for _, tag := range tags {
+		tagMap, _ := tag.(map[string]any)
+		name, _ := tagMap["name"].(string)
+		if name == "" || seen[name] {
+			continue
+		}
+		out = append(out, map[string]string{"name": name})
+		seen[name] = true
+	}
+	return out
 }

@@ -147,12 +147,191 @@ definitions:
       username:
         type: string
     type: object
+  modelsv2.BattlelogItemFilters:
+    properties:
+      leagueId:
+        type: integer
+      top200:
+        type: boolean
+      townHallLevel:
+        type: integer
+    type: object
+  modelsv2.BattlelogItemHitratePoint:
+    properties:
+      date:
+        type: string
+      hitRate:
+        type: number
+      threeStars:
+        type: integer
+      total:
+        type: integer
+    type: object
+  modelsv2.BattlelogItemHitrateResponse:
+    properties:
+      dimension:
+        type: string
+      filters:
+        $ref: '#/definitions/modelsv2.BattlelogItemFilters'
+      item:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.BattlelogItemHitratePoint'
+        type: array
+      metric:
+        type: string
+    type: object
+  modelsv2.BattlelogItemUsagePoint:
+    properties:
+      date:
+        type: string
+      total:
+        type: integer
+      usageRate:
+        type: number
+      used:
+        type: integer
+    type: object
+  modelsv2.BattlelogItemUsageResponse:
+    properties:
+      dimension:
+        type: string
+      filters:
+        $ref: '#/definitions/modelsv2.BattlelogItemFilters'
+      item:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.BattlelogItemUsagePoint'
+        type: array
+      metric:
+        type: string
+    type: object
+  modelsv2.ClanBadgeURLs:
+    properties:
+      large:
+        type: string
+      medium:
+        type: string
+      small:
+        type: string
+    type: object
+  modelsv2.ClanBasicRecords:
+    properties:
+      clanPoints:
+        $ref: '#/definitions/modelsv2.ClanRecordEntry'
+      warWinStreak:
+        $ref: '#/definitions/modelsv2.ClanRecordEntry'
+    type: object
+  modelsv2.ClanBasicResponse:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.ClanBadgeURLs'
+      capitalLeague:
+        $ref: '#/definitions/modelsv2.ClanLeagueRef'
+      clanLevel:
+        type: integer
+      clanPoints:
+        type: integer
+      description:
+        type: string
+      lastActive:
+        type: string
+      location:
+        $ref: '#/definitions/modelsv2.ClanLeagueRef'
+      memberCount:
+        type: integer
+      members: {}
+      name:
+        type: string
+      publicWarLog:
+        type: boolean
+      records:
+        $ref: '#/definitions/modelsv2.ClanBasicRecords'
+      tag:
+        type: string
+      troopsDonated:
+        type: integer
+      troopsReceived:
+        type: integer
+      warLeague:
+        $ref: '#/definitions/modelsv2.ClanLeagueRef'
+      warWinStreak:
+        type: integer
+      warWins:
+        type: integer
+    type: object
+  modelsv2.ClanChangeRecord:
+    properties:
+      current: {}
+      previous: {}
+      time:
+        type: string
+      type:
+        type: string
+    type: object
+  modelsv2.ClanChangesResponse:
+    properties:
+      badgeUrls: {}
+      count:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.ClanChangeRecord'
+        type: array
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.ClanLeagueRef:
+    properties:
+      id:
+        type: integer
+    type: object
   modelsv2.ClanPlayerTagsBody:
     properties:
       player_tags:
         items:
           type: string
         type: array
+    type: object
+  modelsv2.ClanRankingMetric:
+    properties:
+      globalRank:
+        type: integer
+      localRank: {}
+      value:
+        type: integer
+    type: object
+  modelsv2.ClanRankingsResponse:
+    properties:
+      badge:
+        type: string
+      clanPoints:
+        $ref: '#/definitions/modelsv2.ClanRankingMetric'
+      donations:
+        $ref: '#/definitions/modelsv2.ClanRankingMetric'
+      donationsReceived:
+        $ref: '#/definitions/modelsv2.ClanRankingMetric'
+      location:
+        $ref: '#/definitions/modelsv2.ClanLeagueRef'
+      name:
+        type: string
+      tag:
+        type: string
+      warWinStreak:
+        $ref: '#/definitions/modelsv2.ClanRankingMetric'
+      warWins:
+        $ref: '#/definitions/modelsv2.ClanRankingMetric'
+    type: object
+  modelsv2.ClanRecordEntry:
+    properties:
+      time:
+        type: string
+      value:
+        type: integer
     type: object
   modelsv2.ClanTagsBody:
     properties:
@@ -209,30 +388,36 @@ definitions:
       role:
         type: string
     type: object
-  modelsv2.JoinLeaveEvent:
+  modelsv2.JoinLeaveClan:
     properties:
-      clan:
+      badge:
         type: string
-      clan_name:
-        type: string
-      clan_tag:
-        type: string
-      current: {}
       name:
-        type: string
-      player_name:
-        type: string
-      player_tag:
-        type: string
-      previous: {}
-      role:
         type: string
       tag:
         type: string
-      th:
+    type: object
+  modelsv2.JoinLeaveClanTotal:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.JoinLeaveClan'
+      minutes:
         type: integer
+      visits:
+        type: integer
+    type: object
+  modelsv2.JoinLeaveEvent:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.JoinLeaveClan'
+      name:
+        type: string
+      tag:
+        type: string
       time:
         type: string
+      townHallLevel:
+        type: integer
       type:
         type: string
     type: object
@@ -247,20 +432,26 @@ definitions:
     type: object
   modelsv2.JoinLeaveResponse:
     properties:
-      clan_tag:
-        type: string
+      available:
+        type: integer
       items:
         items:
           $ref: '#/definitions/modelsv2.JoinLeaveEvent'
         type: array
-      pagination:
-        $ref: '#/definitions/modelsv2.PaginationMeta'
-      player_tag:
-        type: string
-      timestamp_end:
+    type: object
+  modelsv2.JoinLeaveSharedClanTotal:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.JoinLeaveClan'
+      minutes:
         type: integer
-      timestamp_start:
-        type: integer
+    type: object
+  modelsv2.JoinLeaveSharedResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.JoinLeaveSharedClanTotal'
+        type: array
     type: object
   modelsv2.JoinLeaveStats:
     properties:
@@ -300,6 +491,13 @@ definitions:
       timestamp_start:
         type: integer
     type: object
+  modelsv2.JoinLeaveTotalsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.JoinLeaveClanTotal'
+        type: array
+    type: object
   modelsv2.MobilePlayerTagsRequest:
     properties:
       clan_tags:
@@ -311,18 +509,12 @@ definitions:
           type: string
         type: array
     type: object
-  modelsv2.PaginationMeta:
+  modelsv2.PlayerBattlelogStatsRequest:
     properties:
-      has_more:
-        type: boolean
-      limit:
-        type: integer
-      next_offset: {}
-      offset:
-        type: integer
-      previous_offset: {}
-      total:
-        type: integer
+      player_tags:
+        items:
+          type: string
+        type: array
     type: object
   modelsv2.ServerPanelBody:
     properties:
@@ -414,277 +606,6 @@ paths:
       summary: Get builder base leagues
       tags:
       - Legacy Static Data
-  /capital:
-    get:
-      description: Returns scoped clan capital stats for players.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        type: array
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      - description: Discord server ID
-        in: query
-        name: server
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy capital stats
-      tags:
-      - Legacy Capital
-  /capital/{clan_tag}:
-    get:
-      description: Returns stored raid weekends for a clan.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan capital raid log
-      tags:
-      - Legacy Capital
-  /capital/bulk:
-    post:
-      consumes:
-      - application/json
-      description: Returns stored raid weekends grouped by clan tag.
-      parameters:
-      - description: Clan tags
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv1.V1CapitalClanTagsBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get capital raid logs in bulk
-      tags:
-      - Legacy Capital
-  /capital/stats/district:
-    get:
-      description: Returns raid weekend capital district stats.
-      parameters:
-      - description: Weekend filter
-        in: query
-        name: weekend
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get capital district stats
-      tags:
-      - Legacy Capital
-  /capital/stats/leagues:
-    get:
-      description: Returns raid weekend capital league stats.
-      parameters:
-      - description: Weekend filter
-        in: query
-        name: weekend
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get capital league stats
-      tags:
-      - Legacy Capital
-  /clan/{clan_tag}/basic:
-    get:
-      description: Returns tracked basic clan data for a clan tag.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get basic clan data
-      tags:
-      - Legacy Clans
-  /clan/{clan_tag}/historical:
-    get:
-      description: Returns tracked player history events for a clan.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Start Unix timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: time_stamp_end
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan historical events
-      tags:
-      - Legacy Clans
-  /clan/{clan_tag}/join-leave:
-    get:
-      description: Returns tracked join and leave events for a clan.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Start Unix timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: time_stamp_end
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan join-leave history
-      tags:
-      - Legacy Clans
-  /clan/search:
-    get:
-      description: Returns tracked clans with optional location filtering.
-      parameters:
-      - description: Location ID
-        in: query
-        name: location_id
-        type: integer
-      - description: Maximum number of clans
-        in: query
-        name: limit
-        type: integer
-      - description: Include member tags
-        in: query
-        name: member_list
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Search tracked clans
-      tags:
-      - Legacy Clans
   /cwl/{clan_tag}/{season}:
     get:
       description: Returns the CWL group for a clan and season.
@@ -789,6 +710,95 @@ paths:
       summary: Get global ClashKing counts
       tags:
       - Global
+  /global/war/completed/daily:
+    get:
+      description: Returns completed war counts per day and war type.
+      parameters:
+      - description: Start Unix timestamp. Defaults to 90 days ago.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: 'War type filter. Repeatable. Values: random, friendly, cwl,
+          all.'
+        in: query
+        name: war_type
+        type: string
+      - description: 'Comma-separated war type filter. Values: random,friendly,cwl.'
+        in: query
+        name: war_types
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get daily completed war counts
+      tags:
+      - War
+  /global/war/townhall/{townhall_level}/hitrate/weekly:
+    get:
+      description: Returns weekly hitrate and average attack quality for a town hall
+        level.
+      parameters:
+      - description: Town hall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Start Unix timestamp. Defaults to 90 days ago.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: 'War type filter. Repeatable. Values: random, friendly, all.
+          CWL is not included for this endpoint.'
+        in: query
+        name: war_type
+        type: string
+      - description: 'Comma-separated war type filter. Values: random,friendly.'
+        in: query
+        name: war_types
+        type: string
+      - description: Only include same town hall attacks
+        in: query
+        name: same_townhall
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get weekly town hall war hitrate
+      tags:
+      - War
   /guild_links/{guild_id}:
     get:
       description: Returns linked player data for a Discord guild.
@@ -809,103 +819,6 @@ paths:
       summary: Get guild links
       tags:
       - Legacy Links
-  /legends/clan/{clan_tag}/{date}:
-    get:
-      description: Returns clan data with legend league members for a specific day.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Legend day YYYY-MM-DD
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan legend day data
-      tags:
-      - Legacy Legends
-  /legends/eos-winners:
-    get:
-      description: Returns season rank-one legend snapshots.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legend end-of-season winners
-      tags:
-      - Legacy Legends
-  /legends/streaks:
-    get:
-      description: Returns players ordered by their tracked legend streak.
-      parameters:
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legend streak leaderboard
-      tags:
-      - Legacy Legends
-  /legends/trophy-buckets:
-    get:
-      description: Returns histogram buckets for current legend trophy counts.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legend trophy buckets
-      tags:
-      - Legacy Legends
   /list/seasons:
     get:
       description: Returns recent season identifiers in YYYY-MM format.
@@ -946,398 +859,6 @@ paths:
       summary: List tracked town halls
       tags:
       - Legacy Lists
-  /permalink/{clan_tag}:
-    get:
-      description: Returns the clan badge image as a PNG.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      produces:
-      - image/png
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan badge image
-      tags:
-      - Legacy Clans
-  /player/{player_tag}/historical/{season}:
-    get:
-      description: Returns player history events grouped by event type for a season.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Season YYYY-MM
-        in: path
-        name: season
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player historical events
-      tags:
-      - Legacy Player
-  /player/{player_tag}/join-leave:
-    get:
-      description: Returns tracked join and leave events for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Start Unix timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: time_stamp_end
-        type: integer
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player join-leave history
-      tags:
-      - Legacy Player
-  /player/{player_tag}/legend_rankings:
-    get:
-      description: Returns stored end-of-season legend ranking snapshots for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Maximum number of snapshots
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player legend ranking history
-      tags:
-      - Legacy Player
-  /player/{player_tag}/legends:
-    get:
-      description: Returns tracked legend league data for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Season YYYY-MM
-        in: query
-        name: season
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv1.PlayerLegendsResponse'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player legends data
-      tags:
-      - Legacy Player
-  /player/{player_tag}/raids:
-    get:
-      description: Returns recent raid weekend documents containing a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Maximum number of raid weekends
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player raid weekends
-      tags:
-      - Legacy Player
-  /player/{player_tag}/stats:
-    get:
-      description: Returns tracked aggregate stats for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv1.PlayerStatsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player stats
-      tags:
-      - Legacy Player
-  /player/{player_tag}/warhits:
-    get:
-      description: Returns recent war attacks and defenses for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Start Unix timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player war hits
-      tags:
-      - Legacy Player
-  /player/{player_tag}/wartimer:
-    get:
-      description: Returns current war timer data for a player when available.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player war timer
-      tags:
-      - Legacy Player
-  /player/full-search/{name}:
-    get:
-      description: Searches tracked players by name with optional filters.
-      parameters:
-      - description: Player name search
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      - description: Role filter
-        in: query
-        name: role
-        type: string
-      - description: League filter
-        in: query
-        name: league
-        type: string
-      - description: Town hall range as min,max
-        in: query
-        name: townhall
-        type: string
-      - description: Experience range as min,max
-        in: query
-        name: exp
-        type: string
-      - description: Trophy range as min,max
-        in: query
-        name: trophies
-        type: string
-      - description: Donation range as min,max
-        in: query
-        name: donations
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Full player search
-      tags:
-      - Legacy Player
-  /player/search/{name}:
-    get:
-      description: Returns basic tracked player search results by name.
-      parameters:
-      - description: Player name search
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Search players by name
-      tags:
-      - Legacy Player
-  /player/to-do:
-    get:
-      description: Returns war, raid, legend, clan games, and season pass to-do data
-        for player tags.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        required: true
-        type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player to-do state
-      tags:
-      - Legacy Player
   /ranking/clan-builder/{location}/{date}:
     get:
       description: Returns a stored clan builder ranking snapshot for a location and
@@ -1429,66 +950,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Get clan trophy ranking snapshot
-      tags:
-      - Legacy Rankings
-  /ranking/legends/{player_tag}:
-    get:
-      description: Returns the current legend ranking row for a player.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get live legend ranking by player
-      tags:
-      - Legacy Rankings
-  /ranking/live/legends:
-    get:
-      description: Returns current legend rankings in the requested rank range.
-      parameters:
-      - description: First rank
-        in: query
-        name: top_ranking
-        type: integer
-      - description: Last rank
-        in: query
-        name: lower_ranking
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get live legend rankings
       tags:
       - Legacy Rankings
   /ranking/player-builder/{location}/{date}:
@@ -1850,62 +1311,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Get guild activity summary
-      tags:
-      - Activity & Inactivity
-  /v2/activity/inactive-players:
-    get:
-      description: Returns players in the guild that are considered inactive by the
-        provided threshold.
-      parameters:
-      - description: Discord guild ID
-        in: query
-        name: guild_id
-        required: true
-        type: integer
-      - description: Days before a player is considered inactive
-        in: query
-        name: inactive_threshold_days
-        type: integer
-      - description: Minimum town hall level
-        in: query
-        name: min_townhall
-        type: integer
-      - description: Restrict results to a single clan
-        in: query
-        name: clan_tag
-        type: string
-      - description: Maximum number of results
-        in: query
-        name: limit
-        type: integer
-      - description: Number of results to skip
-        in: query
-        name: offset
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get inactive players
       tags:
       - Activity & Inactivity
   /v2/auth/discord:
@@ -2286,74 +1691,36 @@ paths:
       summary: Verify email address with 6-digit code
       tags:
       - App Authentication
-  /v2/capital/guild-leaderboard:
+  /v2/battlelogs/farming/armies:
     get:
-      description: Returns a capital leaderboard for all clans attached to the requested
-        guild.
+      description: Returns top farming armies by usage rate. Supports townhall, item
+        includes/excludes, and max 100 result filters.
       parameters:
-      - description: Discord guild ID
+      - description: Townhall level
         in: query
-        name: guild_id
-        required: true
-        type: integer
-      - description: Season filter (YYYY-MM)
-        in: query
-        name: season
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get capital guild leaderboard
-      tags:
-      - Capital Raids
-  /v2/capital/player-stats:
-    get:
-      description: Returns raid weekend player rows for the requested guild and clan
-        tags.
-      parameters:
-      - description: Discord guild ID
-        in: query
-        name: guild_id
-        required: true
+        name: townhall_level
         type: integer
       - collectionFormat: csv
-        description: Clan tags (defaults to all guild clans)
+        description: Required troop, spell, pet, or equipment IDs/names
         in: query
         items:
           type: string
-        name: clan_tags
+        name: contains
         type: array
-      - description: Season filter (YYYY-MM)
+      - collectionFormat: csv
+        description: Excluded troop, spell, pet, or equipment IDs/names
         in: query
-        name: season
+        items:
+          type: string
+        name: excludes
+        type: array
+      - description: Timeframe such as 7d or 24h
+        in: query
+        name: timeframe
         type: string
-      - description: Maximum number of rows
+      - description: Result limit, max 100
         in: query
         name: limit
-        type: integer
-      - description: Number of rows to skip
-        in: query
-        name: offset
         type: integer
       produces:
       - application/json
@@ -2368,8 +1735,38 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "404":
-          description: Not Found
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get farming battlelog armies
+      tags:
+      - Battlelogs
+  /v2/battlelogs/items/league/{league_id}/hitrate:
+    get:
+      description: Returns 90 daily hitrate points for same-townhall ranked and legend
+        attacks containing an item for players stored in ranked league groups.
+      parameters:
+      - description: Ranked league tier ID
+        in: path
+        name: league_id
+        required: true
+        type: integer
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
+        "400":
+          description: Bad Request
           schema:
             additionalProperties: true
             type: object
@@ -2378,9 +1775,240 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get capital player statistics
+      summary: Get item hitrate by ranked league
       tags:
-      - Capital Raids
+      - Battlelogs
+  /v2/battlelogs/items/league/{league_id}/usage:
+    get:
+      description: Returns 90 daily usage points for an item in ranked and legend
+        battlelogs for players stored in ranked league groups.
+      parameters:
+      - description: Ranked league tier ID
+        in: path
+        name: league_id
+        required: true
+        type: integer
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item usage by ranked league
+      tags:
+      - Battlelogs
+  /v2/battlelogs/items/top200/hitrate:
+    get:
+      description: Returns 90 daily hitrate points for same-townhall ranked and legend
+        attacks containing an item for players in the previous day's stored legend
+        top 200.
+      parameters:
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item hitrate for legend top 200
+      tags:
+      - Battlelogs
+  /v2/battlelogs/items/top200/usage:
+    get:
+      description: Returns 90 daily usage points for an item in ranked and legend
+        battlelogs for players in the previous day's stored legend top 200.
+      parameters:
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item usage for legend top 200
+      tags:
+      - Battlelogs
+  /v2/battlelogs/items/townhall/{townhall_level}/hitrate:
+    get:
+      description: Returns 90 daily hitrate points for same-townhall ranked and legend
+        attacks containing an item for a townhall level.
+      parameters:
+      - description: Townhall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item hitrate by townhall
+      tags:
+      - Battlelogs
+  /v2/battlelogs/items/townhall/{townhall_level}/usage:
+    get:
+      description: Returns 90 daily usage points for an item in ranked and legend
+        battlelogs for a townhall level.
+      parameters:
+      - description: Townhall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Troop, spell, hero, pet, or equipment item ID/name
+        in: query
+        name: item
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get item usage by townhall
+      tags:
+      - Battlelogs
+  /v2/battlelogs/ranked/armies:
+    get:
+      description: Returns top ranked armies by hitrate or usage rate. Supports townhall,
+        item includes/excludes, minimum usage count, timeframe, and max 100 result
+        filters.
+      parameters:
+      - description: League ID, matched against the attacker's current league
+        in: query
+        name: league_id
+        type: integer
+      - description: Townhall level
+        in: query
+        name: townhall_level
+        type: integer
+      - collectionFormat: csv
+        description: Required troop, spell, pet, or equipment IDs/names
+        in: query
+        items:
+          type: string
+        name: contains
+        type: array
+      - collectionFormat: csv
+        description: Excluded troop, spell, pet, or equipment IDs/names
+        in: query
+        items:
+          type: string
+        name: excludes
+        type: array
+      - description: Minimum usage count
+        in: query
+        name: min_usage_count
+        type: integer
+      - description: Timeframe such as 7d or 24h
+        in: query
+        name: timeframe
+        type: string
+      - description: hitrate or usage_rate
+        in: query
+        name: sort_by
+        type: string
+      - description: Result limit, max 100
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get ranked battlelog armies
+      tags:
+      - Battlelogs
   /v2/categories:
     get:
       description: Returns all available static data categories and item counts.
@@ -2439,44 +2067,9 @@ paths:
       summary: Upload a file to the ClashKing CDN
       tags:
       - CDN
-  /v2/clan/{clan_tag}/board/totals:
+  /v2/clan/{clan_tag}/badge:
     get:
-      description: Returns aggregate board totals for one or more player tags.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Player tags
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/modelsv2.ClanPlayerTagsBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get aggregated board totals for a clan
-      tags:
-      - Clan
-  /v2/clan/{clan_tag}/details:
-    get:
-      description: Returns the live clan object for a clan tag.
+      description: Returns the clan badge image as a PNG.
       parameters:
       - description: Clan tag
         in: path
@@ -2484,13 +2077,12 @@ paths:
         required: true
         type: string
       produces:
-      - application/json
+      - image/png
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            type: file
         "404":
           description: Not Found
           schema:
@@ -2501,21 +2093,16 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get full stats for a single clan
+      summary: Get clan badge image
       tags:
       - Clan
-  /v2/clan/{clan_tag}/donations/{season}:
+  /v2/clan/{clan_tag}/basic:
     get:
-      description: Returns donation totals for a single clan and season.
+      description: Returns tracked basic clan data for a clan tag.
       parameters:
       - description: Clan tag
         in: path
         name: clan_tag
-        required: true
-        type: string
-      - description: Season
-        in: path
-        name: season
         required: true
         type: string
       produces:
@@ -2524,14 +2111,46 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/modelsv2.ClanBasicResponse'
         "500":
           description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      summary: Get clan donations
+      summary: Get basic clan data
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/changes:
+    get:
+      description: Returns stored clan changes such as description changes, clan level
+        upgrades, and war league history.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Result limit, max 500
+        in: query
+        name: limit
+        type: integer
+      - description: Change type
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanChangesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan changes
       tags:
       - Clan
   /v2/clan/{clan_tag}/join-leave:
@@ -2545,18 +2164,9 @@ paths:
         required: true
         type: string
       - default: 50
-        description: Maximum events per page
+        description: Maximum events to return; 0 returns full matching history
         in: query
         name: limit
-        type: integer
-      - default: 0
-        description: Number of events to skip
-        in: query
-        name: offset
-        type: integer
-      - description: 1-based page number; ignored when offset is provided
-        in: query
-        name: page
         type: integer
       - description: Only include events at or after this ISO-8601 time
         in: query
@@ -2565,19 +2175,6 @@ paths:
       - description: Only include events at or before this ISO-8601 time
         in: query
         name: time[before]
-        type: string
-      - default: -time
-        description: Comma-separated event sort fields; prefix with - for descending
-        in: query
-        name: sort
-        type: string
-      - description: Comma-separated event fields to include
-        in: query
-        name: fields
-        type: string
-      - description: Event type filter
-        in: query
-        name: type
         type: string
       produces:
       - application/json
@@ -2617,10 +2214,6 @@ paths:
         in: query
         name: time[before]
         type: string
-      - description: Event type filter
-        in: query
-        name: type
-        type: string
       produces:
       - application/json
       responses:
@@ -2641,9 +2234,10 @@ paths:
       summary: Get clan join-leave stats
       tags:
       - Clan
-  /v2/clan/{clan_tag}/ranking:
+  /v2/clan/{clan_tag}/rankings:
     get:
-      description: Returns the cached ranking document for a clan tag.
+      description: Returns current clan ranking placements across supported ranking
+        metrics.
       parameters:
       - description: Clan tag
         in: path
@@ -2656,65 +2250,46 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/modelsv2.ClanRankingsResponse'
         "500":
           description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      summary: Get ranking of a clan
+      summary: Get rankings of a clan
       tags:
       - Clan
-  /v2/clan/compo:
+  /v2/clan/{clan_tag}/wars:
     get:
-      description: Returns town hall, role, and league composition for the requested
-        clan tags.
+      description: Returns previous wars for a clan rebuilt from SQL war rows, attacks,
+        and missed attacks.
       parameters:
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get composition of a clan or clans
-      tags:
-      - Clan
-  /v2/clan/donations/{season}:
-    get:
-      description: Returns donation totals for multiple clans in a season.
-      parameters:
-      - description: Season
+      - description: Clan tag
         in: path
-        name: season
+        name: clan_tag
         required: true
         type: string
-      - collectionFormat: csv
-        description: Clan tags
+      - description: Start Unix timestamp. Defaults to all history.
         in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Maximum number of wars. Max 250.
+        in: query
+        name: limit
+        type: integer
+      - description: 'War type filter. Repeatable. Values: random, friendly, cwl,
+          all.'
+        in: query
+        name: war_type
+        type: string
+      - description: 'Comma-separated war type filter. Values: random,friendly,cwl.'
+        in: query
+        name: war_types
+        type: string
       produces:
       - application/json
       responses:
@@ -2728,69 +2303,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get donations for many clans
-      tags:
-      - Clan
-  /v2/clans/capital-raids:
-    post:
-      description: Returns raid weekend documents for the requested clan tags.
-      parameters:
-      - description: Clan tags
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.ClanTagsBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get capital raids for a list of clans
-      tags:
-      - Clan
-  /v2/clans/details:
-    post:
-      description: Returns detailed clan objects for the requested clan tags.
-      parameters:
-      - description: Clan tags
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.ClanTagsBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get full stats for a list of clans
+      summary: Get stored clan wars
       tags:
       - Clan
   /v2/config/public:
@@ -3117,6 +2630,209 @@ paths:
       summary: Request password reset
       tags:
       - App Authentication
+  /v2/global/builderhalls:
+    get:
+      description: Returns counts of players at each builder hall level.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global builderhall counts
+      tags:
+      - Global
+  /v2/global/capital-leagues:
+    get:
+      description: Returns counts of clans at different capital leagues.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global capital league counts
+      tags:
+      - Global
+  /v2/global/clan/locations:
+    get:
+      description: Returns counts of clans in different locations.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global clan location counts
+      tags:
+      - Global
+  /v2/global/cwl-leagues:
+    get:
+      description: Returns counts of clans at different CWL leagues.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global CWL league counts
+      tags:
+      - Global
+  /v2/global/leaguetiers:
+    get:
+      description: Returns counts of players at different league tiers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global league tier counts
+      tags:
+      - Global
+  /v2/global/townhalls:
+    get:
+      description: Returns counts of players at each townhall level.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get global townhall counts
+      tags:
+      - Global
+  /v2/global/war/completed/daily:
+    get:
+      description: Returns completed war counts per day and war type.
+      parameters:
+      - description: Start Unix timestamp. Defaults to 90 days ago.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: 'War type filter. Repeatable. Values: random, friendly, cwl,
+          all.'
+        in: query
+        name: war_type
+        type: string
+      - description: 'Comma-separated war type filter. Values: random,friendly,cwl.'
+        in: query
+        name: war_types
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get daily completed war counts
+      tags:
+      - War
+  /v2/global/war/townhall/{townhall_level}/hitrate/weekly:
+    get:
+      description: Returns weekly hitrate and average attack quality for a town hall
+        level.
+      parameters:
+      - description: Town hall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Start Unix timestamp. Defaults to 90 days ago.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: 'War type filter. Repeatable. Values: random, friendly, all.
+          CWL is not included for this endpoint.'
+        in: query
+        name: war_type
+        type: string
+      - description: 'Comma-separated war type filter. Values: random,friendly.'
+        in: query
+        name: war_types
+        type: string
+      - description: Only include same town hall attacks
+        in: query
+        name: same_townhall
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get weekly town hall war hitrate
+      tags:
+      - War
   /v2/guild-summary:
     get:
       description: Returns clan and member activity totals for a Discord guild.
@@ -3222,62 +2938,6 @@ paths:
       summary: Get user guilds with bot status
       tags:
       - Guilds
-  /v2/inactive-players:
-    get:
-      description: Returns players in the guild that are considered inactive by the
-        provided threshold.
-      parameters:
-      - description: Discord guild ID
-        in: query
-        name: guild_id
-        required: true
-        type: integer
-      - description: Days before a player is considered inactive
-        in: query
-        name: inactive_threshold_days
-        type: integer
-      - description: Minimum town hall level
-        in: query
-        name: min_townhall
-        type: integer
-      - description: Restrict results to a single clan
-        in: query
-        name: clan_tag
-        type: string
-      - description: Maximum number of results
-        in: query
-        name: limit
-        type: integer
-      - description: Number of results to skip
-        in: query
-        name: offset
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get inactive players
-      tags:
-      - Activity & Inactivity
   /v2/initialization:
     post:
       consumes:
@@ -3336,38 +2996,54 @@ paths:
       summary: Get bot info
       tags:
       - Internal
-  /v2/legends/daily-tracking:
+  /v2/leaderboard/{league_tier_id}/trophy-buckets:
     get:
-      description: Returns per-day legend stats for all players in a guild over a
-        date range.
+      description: Returns trophy buckets of players and trophies at bucket points,
+        with optional history up to 30 days.
       parameters:
-      - description: Discord guild ID
-        in: query
-        name: guild_id
+      - description: League tier ID
+        in: path
+        name: league_tier_id
         required: true
         type: integer
-      - description: Start date in YYYY-MM-DD format
+      - description: History days, max 30
         in: query
-        name: start_date
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get trophy bucket history
+      tags:
+      - Leaderboard
+  /v2/leaderboard/{location_id}/clan/donations:
+    get:
+      description: Returns top donation clans for a location.
+      parameters:
+      - description: Location ID
+        in: path
+        name: location_id
         required: true
-        type: string
-      - description: End date in YYYY-MM-DD format
-        in: query
-        name: end_date
-        required: true
-        type: string
-      - description: Restrict to a single clan
-        in: query
-        name: clan_tag
-        type: string
-      - description: Maximum number of players to return
+        type: integer
+      - description: Result limit, max 500
         in: query
         name: limit
         type: integer
-      - description: Number of players to skip
-        in: query
-        name: offset
-        type: integer
       produces:
       - application/json
       responses:
@@ -3381,88 +3057,35 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
         "500":
           description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      summary: Get legends daily tracking
+      summary: Get clan donation leaderboard
       tags:
-      - Bot Legends Endpoints
-  /v2/legends/guild-stats:
+      - Leaderboard
+  /v2/leaderboard/{location_id}/clan/war-wins:
     get:
-      description: Returns legends leaderboard and player stats for a guild.
+      description: Returns top war wins clans for a location.
       parameters:
-      - description: Discord guild ID
-        in: query
-        name: guild_id
-        required: true
-        type: integer
-      - description: Season (YYYY-MM)
-        in: query
-        name: season
-        type: string
-      - description: Max number of top players to return
-        in: query
-        name: limit_top_players
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get guild legends statistics
-      tags:
-      - Bot Legends Endpoints
-  /v2/legends/players/day/{day}:
-    get:
-      description: Returns legend stats for requested players on a specific day.
-      parameters:
-      - description: Legend day YYYY-MM-DD
+      - description: Location ID
         in: path
-        name: day
+        name: location_id
         required: true
-        type: string
-      - collectionFormat: csv
-        description: Player tags
+        type: integer
+      - description: Result limit, max 500
         in: query
-        items:
-          type: string
-        name: players
-        type: array
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
@@ -3473,35 +3096,54 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get legend stats by day
+      summary: Get clan war wins leaderboard
       tags:
-      - Bot Legends Endpoints
-  /v2/legends/players/season/{season}:
+      - Leaderboard
+  /v2/leaderboard/clan/win-streak:
     get:
-      description: Returns legend stats for requested players in a season.
+      description: Returns top clan win streaks.
       parameters:
-      - description: Season YYYY-MM
-        in: path
-        name: season
-        required: true
-        type: string
-      - collectionFormat: csv
-        description: Player tags
+      - description: Result limit, max 500
         in: query
-        items:
-          type: string
-        name: players
-        type: array
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan win streak leaderboard
+      tags:
+      - Leaderboard
+  /v2/leaderboard/league/{league_tier_id}:
+    get:
+      description: Returns top players for a league.
+      parameters:
+      - description: League tier ID
+        in: path
+        name: league_tier_id
+        required: true
+        type: integer
+      - description: Result limit, max 500
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
@@ -3512,9 +3154,111 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get legend stats by season
+      summary: Get league leaderboard
       tags:
-      - Bot Legends Endpoints
+      - Leaderboard
+  /v2/leaderboard/league/{league_tier_id}/history/{date}:
+    get:
+      description: Returns stored historical league leaderboard snapshots.
+      parameters:
+      - description: League tier ID
+        in: path
+        name: league_tier_id
+        required: true
+        type: integer
+      - description: Snapshot date YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      - description: Result limit, max 200
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get historical league leaderboard
+      tags:
+      - Leaderboard
+  /v2/leaderboard/townhalls/{townhall_level}:
+    get:
+      description: Returns top tracked players for a townhall level.
+      parameters:
+      - description: Townhall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Result limit, max 500
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get townhall leaderboard
+      tags:
+      - Leaderboard
+  /v2/leaderboard/townhalls/{townhall_level}/history/{date}:
+    get:
+      description: Returns stored historical townhall leaderboard snapshots.
+      parameters:
+      - description: Townhall level
+        in: path
+        name: townhall_level
+        required: true
+        type: integer
+      - description: Snapshot date YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      - description: Result limit, max 200
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get historical townhall leaderboard
+      tags:
+      - Leaderboard
   /v2/link-discord:
     post:
       consumes:
@@ -3636,19 +3380,69 @@ paths:
       summary: Get current user information
       tags:
       - App Authentication
-  /v2/player/{player_tag}/extended:
+  /v2/player/{player_tag}/battlelog/history:
     get:
-      consumes:
-      - application/json
+      description: Returns historical returned battlelogs for a player, including
+        farming hits when present.
       parameters:
       - description: Player tag
         in: path
         name: player_tag
         required: true
         type: string
-      - description: Optional clan tag for context
+      - description: Result limit, max 500
         in: query
-        name: clan_tag
+        name: limit
+        type: integer
+      - description: Days of history, max 365
+        in: query
+        name: days
+        type: integer
+      - description: Battle type
+        in: query
+        name: type
+        type: string
+      - description: Filter attacks or defenses
+        in: query
+        name: attack
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player battlelog history
+      tags:
+      - Player
+  /v2/player/{player_tag}/changes:
+    get:
+      description: Returns stored player profile changes such as upgrades.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Result limit, max 500
+        in: query
+        name: limit
+        type: integer
+      - description: Change type
+        in: query
+        name: type
         type: string
       produces:
       - application/json
@@ -3658,7 +3452,17 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get comprehensive stats for single player
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player changes
       tags:
       - Player
   /v2/player/{player_tag}/join-leave:
@@ -3672,18 +3476,9 @@ paths:
         required: true
         type: string
       - default: 50
-        description: Maximum events per page
+        description: Maximum events to return; 0 returns full matching history
         in: query
         name: limit
-        type: integer
-      - default: 0
-        description: Number of events to skip
-        in: query
-        name: offset
-        type: integer
-      - description: 1-based page number; ignored when offset is provided
-        in: query
-        name: page
         type: integer
       - description: Only include events at or after this ISO-8601 time
         in: query
@@ -3692,19 +3487,6 @@ paths:
       - description: Only include events at or before this ISO-8601 time
         in: query
         name: time[before]
-        type: string
-      - default: -time
-        description: Comma-separated event sort fields; prefix with - for descending
-        in: query
-        name: sort
-        type: string
-      - description: Comma-separated event fields to include
-        in: query
-        name: fields
-        type: string
-      - description: Event type filter
-        in: query
-        name: type
         type: string
       produces:
       - application/json
@@ -3726,136 +3508,85 @@ paths:
       summary: Get player join-leave history
       tags:
       - Player
-  /v2/players:
-    post:
-      consumes:
-      - application/json
+  /v2/player/{player_tag}/join-leave/shared:
+    get:
+      description: Returns clans two players shared, total shared minutes per clan,
+        and each shared time range.
       parameters:
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get basic API data for multiple players
-      tags:
-      - Player
-  /v2/players/extended:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get comprehensive stats for multiple players
-      tags:
-      - Player
-  /v2/players/legend-days:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legend league statistics for multiple players
-      tags:
-      - Player
-  /v2/players/legend_rankings:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Max rankings per player (default 10)
-        in: query
-        name: limit
-        type: integer
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get historical legend league rankings for multiple players
-      tags:
-      - Player
-  /v2/players/location:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get locations for a list of players
-      tags:
-      - Player
-  /v2/players/sorted/{attribute}:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Attribute path (dot notation, e.g. trophies or league.name)
+      - description: Player tag
         in: path
-        name: attribute
+        name: player_tag
         required: true
         type: string
-      - description: Player tags list
-        in: body
-        name: body
+      - description: Other player tag
+        in: query
+        name: tag
         required: true
-        schema:
-          type: object
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.JoinLeaveSharedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get shared player join-leave clan totals
+      tags:
+      - Player
+  /v2/player/{player_tag}/join-leave/totals:
+    get:
+      description: Returns total minutes and join visit counts for each clan a player
+        spent time in across all stored join-leave history.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.JoinLeaveTotalsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player join-leave clan totals
+      tags:
+      - Player
+  /v2/player/{player_tag}/legends/{day}/day:
+    get:
+      description: Returns player legends attacks and defenses for a day.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Legend day YYYY-MM-DD
+        in: path
+        name: day
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -3864,29 +3595,38 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get players sorted by an attribute
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player legends day battlelog
       tags:
       - Player
-  /v2/players/summary/{season}/top:
-    post:
-      consumes:
-      - application/json
+  /v2/player/{player_tag}/legends/{season}/season:
+    get:
+      description: Returns player legends +/- and overview stats for a season.
       parameters:
-      - description: Season (e.g. 2024-01)
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Legend season YYYY-MM
         in: path
         name: season
         required: true
         type: string
-      - description: Max players per category (default 10)
-        in: query
-        name: limit
-        type: integer
-      - description: Player tags list
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
       produces:
       - application/json
       responses:
@@ -3895,7 +3635,239 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Get summary of top stats for a list of players
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player legends season battlelog stats
+      tags:
+      - Player
+  /v2/player/{player_tag}/ranked/{season}/battlelog:
+    get:
+      description: Returns player ranked season placement plus recent ranked battlelog
+        rows.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Ranked season ID
+        in: path
+        name: season
+        required: true
+        type: integer
+      - description: Battlelog row limit, max 200
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player ranked battlelog
+      tags:
+      - Player
+  /v2/player/{player_tag}/ranked/{season}/group:
+    get:
+      description: Returns ranked group data for the group containing the requested
+        player.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Ranked season ID
+        in: path
+        name: season
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player ranked group
+      tags:
+      - Player
+  /v2/player/{player_tag}/rankings:
+    get:
+      description: Returns live rankings, when available, for a player in their league
+        or other ranking bucket.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current player rankings
+      tags:
+      - Player
+  /v2/player/{player_tag}/war/attacks:
+    get:
+      description: Returns stored attacks and defenses involving a player, most recent
+        first.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Maximum number of rows. Max 500.
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player war attacks
+      tags:
+      - Player
+  /v2/player/{player_tag}/war/stats:
+    get:
+      description: Returns player war performance stats for all, random, friendly,
+        and CWL wars in a time range.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Start Unix timestamp. Defaults to 90 days ago.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: End Unix timestamp
+        in: query
+        name: timestamp_end
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player war stats
+      tags:
+      - Player
+  /v2/player/legends/{season}/battlelog-stats:
+    post:
+      consumes:
+      - application/json
+      description: Returns season +/- and overview stats for a list of players.
+      parameters:
+      - description: Legend season YYYY-MM
+        in: path
+        name: season
+        required: true
+        type: string
+      - description: Player tags
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.PlayerBattlelogStatsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get bulk player legends battlelog stats
       tags:
       - Player
   /v2/public:

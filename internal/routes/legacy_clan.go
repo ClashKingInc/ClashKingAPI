@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
@@ -14,15 +15,15 @@ import (
 // clanBasic godoc
 // @Summary Get basic clan data
 // @Description Returns tracked basic clan data for a clan tag.
-// @Tags Legacy Clans
+// @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanBasicResponse
 // @Failure 500 {object} map[string]interface{}
-// @Router /clan/{clan_tag}/basic [get]
+// @Router /v2/clan/{clan_tag}/basic [get]
 func clanBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		row, err := v1BasicClan(c, a, legacyClanFixTag(c.Params("clan_tag")))
+		row, err := v2BasicClan(c, a, legacyClanFixTag(c.Params("clan_tag")))
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return apptypes.JSON(c, fiber.StatusOK, nil)
@@ -43,16 +44,15 @@ func clanBasic(a apptypes.Deps) fiber.Handler {
 // @Param time_stamp_end query int false "End Unix timestamp"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /clan/{clan_tag}/join-leave [get]
 func legacyClanJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()
 		end := time.Unix(legacyClanParseInt64Default(c.Query("time_stamp_end"), 9999999999), 0).UTC()
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT event_time, event_type, clan_tag, player_tag, player_name, townhall_level, clan_role, data
+			SELECT "time", "type", clan_tag, player_tag, player_name, townhall_level
 			FROM join_leave_history
-			WHERE clan_tag = $1 AND event_time >= $2 AND event_time <= $3
-			ORDER BY event_time DESC
+			WHERE clan_tag = $1 AND "time" >= $2 AND "time" <= $3
+			ORDER BY "time" DESC
 		`, legacyClanFixTag(c.Params("clan_tag")), start, end)
 		if err != nil {
 			return err
@@ -80,14 +80,14 @@ func legacyClanJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Param member_list query bool false "Include member tags"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /clan/search [get]
 func clanSearch(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := clamp(legacyClanParseIntDefault(c.Query("limit"), 100), 1, 500)
 		locationID := c.Query("location_id")
 		query := `
 			SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
-				public_war_log, war_wins, member_count, badge_url, troops_donated, troops_received, member_tags, last_active
+				public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+				troops_donated, troops_received, members, last_active
 			FROM basic_clan
 		`
 		args := []any{}
@@ -110,7 +110,7 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 				return err
 			}
 			if memberList {
-				item["memberList"] = memberTagsToList(stringSlice(item["member_tags"]))
+				item["memberList"] = item["members"]
 			}
 			items = append(items, item)
 		}
@@ -133,7 +133,6 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 // @Param time_stamp_end query int false "End Unix timestamp"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /clan/{clan_tag}/historical [get]
 func clanHistorical(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()
@@ -195,6 +194,7 @@ func legacyClanParseInt64Default(raw string, fallback int64) int64 {
 }
 
 func legacyClanFixTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = strings.TrimSpace(strings.ToUpper(tag))
 	tag = strings.TrimPrefix(tag, "#")
 	if tag == "" {
@@ -206,64 +206,198 @@ func legacyClanFixTag(tag string) string {
 func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
-			public_war_log, war_wins, member_count, badge_url, troops_donated, troops_received, member_tags, last_active
+			public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+			troops_donated, troops_received, members, last_active
 		FROM basic_clan
 		WHERE tag = $1
 	`, tag)
 	return scanBasicClan(row)
 }
 
+func v2BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanBasicResponse, error) {
+	row := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
+			public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+			troops_donated, troops_received, members, last_active
+		FROM basic_clan
+		WHERE tag = $1
+	`, tag)
+	data, err := scanBasicClanData(row)
+	if err != nil {
+		return modelsv2.ClanBasicResponse{}, err
+	}
+	resp := basicClanResponse(data)
+	records, err := v2BasicClanRecords(c, a, tag)
+	if err != nil {
+		return modelsv2.ClanBasicResponse{}, err
+	}
+	resp.Records = records
+	return resp, nil
+}
+
 type basicClanScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanBasicClan(row basicClanScanner) (map[string]any, error) {
-	var tag, name, desc, badge string
-	var level, cwlLeague, warWins, memberCount, donated, received int
+type basicClanData struct {
+	tag           string
+	name          string
+	description   string
+	level         int
+	locationID    pgtype.Int4
+	cwlLeague     int
+	capitalLeague pgtype.Int4
+	publicWarLog  bool
+	warWins       int
+	warWinStreak  int
+	clanPoints    int
+	memberCount   int
+	badge         string
+	donated       int
+	received      int
+	members       any
+	lastActive    pgtype.Timestamptz
+}
+
+func scanBasicClanData(row basicClanScanner) (basicClanData, error) {
+	var data basicClanData
 	var locationID, capitalLeague pgtype.Int4
-	var publicWarLog bool
-	var memberTags []string
+	var membersRaw []byte
 	var lastActive pgtype.Timestamptz
-	if err := row.Scan(&tag, &name, &desc, &level, &locationID, &cwlLeague, &capitalLeague, &publicWarLog, &warWins, &memberCount, &badge, &donated, &received, &memberTags, &lastActive); err != nil {
+	if err := row.Scan(&data.tag, &data.name, &data.description, &data.level, &locationID, &data.cwlLeague, &capitalLeague, &data.publicWarLog, &data.warWins, &data.warWinStreak, &data.clanPoints, &data.memberCount, &data.badge, &data.donated, &data.received, &membersRaw, &lastActive); err != nil {
+		return basicClanData{}, err
+	}
+	data.locationID = locationID
+	data.capitalLeague = capitalLeague
+	data.members = clanDecodeJSONValue(membersRaw, []any{})
+	data.lastActive = lastActive
+	return data, nil
+}
+
+func scanBasicClan(row basicClanScanner) (map[string]any, error) {
+	data, err := scanBasicClanData(row)
+	if err != nil {
 		return nil, err
 	}
+	return basicClanMap(data), nil
+}
+
+func basicClanMap(data basicClanData) map[string]any {
 	item := map[string]any{
-		"tag":            tag,
-		"name":           name,
-		"description":    desc,
-		"clanLevel":      level,
-		"warWins":        warWins,
-		"members":        memberCount,
-		"member_count":   memberCount,
-		"badgeUrls":      map[string]any{"large": badge, "medium": badge, "small": badge},
-		"troopsDonated":  donated,
-		"troopsReceived": received,
-		"publicWarLog":   publicWarLog,
-		"warLeague":      map[string]any{"id": cwlLeague},
-		"member_tags":    memberTags,
+		"tag":             data.tag,
+		"name":            data.name,
+		"description":     data.description,
+		"clan_level":      data.level,
+		"clanLevel":       data.level,
+		"cwl_league_id":   data.cwlLeague,
+		"public_war_log":  data.publicWarLog,
+		"publicWarLog":    data.publicWarLog,
+		"war_wins":        data.warWins,
+		"warWins":         data.warWins,
+		"war_win_streak":  data.warWinStreak,
+		"warWinStreak":    data.warWinStreak,
+		"clan_points":     data.clanPoints,
+		"clanPoints":      data.clanPoints,
+		"member_count":    data.memberCount,
+		"memberCount":     data.memberCount,
+		"badge_token":     data.badge,
+		"badge_url":       badgeURL(data.badge, 512),
+		"badgeUrls":       badgeURLs(data.badge),
+		"troops_donated":  data.donated,
+		"troopsDonated":   data.donated,
+		"troops_received": data.received,
+		"troopsReceived":  data.received,
+		"members":         data.members,
+		"warLeague":       map[string]any{"id": data.cwlLeague},
 	}
-	if locationID.Valid {
-		item["location"] = map[string]any{"id": locationID.Int32}
+	if data.locationID.Valid {
+		item["location_id"] = data.locationID.Int32
+		item["location"] = map[string]any{"id": data.locationID.Int32}
 	}
-	if capitalLeague.Valid {
-		item["capitalLeague"] = map[string]any{"id": capitalLeague.Int32}
+	if data.capitalLeague.Valid {
+		item["capital_league_id"] = data.capitalLeague.Int32
+		item["capitalLeague"] = map[string]any{"id": data.capitalLeague.Int32}
 	}
-	if lastActive.Valid {
-		item["last_active"] = lastActive.Time
+	if data.lastActive.Valid {
+		item["last_active"] = data.lastActive.Time
+		item["lastActive"] = data.lastActive.Time
 	}
-	return item, nil
+	return item
+}
+
+func basicClanResponse(data basicClanData) modelsv2.ClanBasicResponse {
+	resp := modelsv2.ClanBasicResponse{
+		Name: data.name,
+		Tag:  data.tag,
+		BadgeURLs: modelsv2.ClanBadgeURLs{
+			Small:  badgeURL(data.badge, 70),
+			Medium: badgeURL(data.badge, 200),
+			Large:  badgeURL(data.badge, 512),
+		},
+		Description:    data.description,
+		ClanLevel:      data.level,
+		ClanPoints:     data.clanPoints,
+		WarLeague:      modelsv2.ClanLeagueRef{ID: int32(data.cwlLeague)},
+		PublicWarLog:   data.publicWarLog,
+		WarWins:        data.warWins,
+		WarWinStreak:   data.warWinStreak,
+		MemberCount:    data.memberCount,
+		TroopsDonated:  data.donated,
+		TroopsReceived: data.received,
+		Members:        data.members,
+	}
+	if data.locationID.Valid {
+		resp.Location = &modelsv2.ClanLeagueRef{ID: data.locationID.Int32}
+	}
+	if data.capitalLeague.Valid {
+		resp.CapitalLeague = &modelsv2.ClanLeagueRef{ID: data.capitalLeague.Int32}
+	}
+	if data.lastActive.Valid {
+		lastActive := data.lastActive.Time
+		resp.LastActive = &lastActive
+	}
+	return resp
+}
+
+func v2BasicClanRecords(c *fiber.Ctx, a apptypes.Deps, tag string) (*modelsv2.ClanBasicRecords, error) {
+	var clanPoints int
+	var clanPointsAt pgtype.Timestamptz
+	var warWinStreak int
+	var warWinStreakAt pgtype.Timestamptz
+	err := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT clan_points, clan_points_at, war_win_streak, war_win_streak_at
+		FROM clan_records
+		WHERE tag = $1
+	`, tag).Scan(&clanPoints, &clanPointsAt, &warWinStreak, &warWinStreakAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	records := modelsv2.ClanBasicRecords{}
+	if clanPointsAt.Valid {
+		records.ClanPoints = &modelsv2.ClanRecordEntry{Value: clanPoints, Time: clanPointsAt.Time}
+	}
+	if warWinStreakAt.Valid {
+		records.WarWinStreak = &modelsv2.ClanRecordEntry{Value: warWinStreak, Time: warWinStreakAt.Time}
+	}
+	if records.ClanPoints == nil && records.WarWinStreak == nil {
+		return nil, nil
+	}
+	return &records, nil
 }
 
 func scanJoinLeaveRow(row basicClanScanner) (map[string]any, error) {
 	var eventTime time.Time
 	var eventType, clanTag, playerTag string
-	var playerName, clanRole pgtype.Text
+	var playerName pgtype.Text
 	var townhall int16
-	var raw []byte
-	if err := row.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanRole, &raw); err != nil {
+	if err := row.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall); err != nil {
 		return nil, err
 	}
-	item := jsonObject(raw)
+	item := map[string]any{}
 	item["time"] = eventTime
 	item["type"] = eventType
 	item["clan"] = clanTag
@@ -271,9 +405,6 @@ func scanJoinLeaveRow(row basicClanScanner) (map[string]any, error) {
 	item["th"] = townhall
 	if playerName.Valid {
 		item["name"] = playerName.String
-	}
-	if clanRole.Valid {
-		item["role"] = clanRole.String
 	}
 	return item, nil
 }

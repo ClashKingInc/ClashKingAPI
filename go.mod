@@ -1,6 +1,6 @@
 module github.com/ClashKingInc/ClashKingAPI
 
-go 1.25.0
+go 1.26.4
 
 require (
 	github.com/clashkinginc/clashy.go v0.0.0-20260406132723-846551b0007c

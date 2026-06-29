@@ -86,409 +86,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/capital": {
-            "get": {
-                "description": "Returns scoped clan capital stats for players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Capital"
-                ],
-                "summary": "Get legacy capital stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/capital/bulk": {
-            "post": {
-                "description": "Returns stored raid weekends grouped by clan tag.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Capital"
-                ],
-                "summary": "Get capital raid logs in bulk",
-                "parameters": [
-                    {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv1.V1CapitalClanTagsBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/capital/stats/district": {
-            "get": {
-                "description": "Returns raid weekend capital district stats.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Capital"
-                ],
-                "summary": "Get capital district stats",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Weekend filter",
-                        "name": "weekend",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/capital/stats/leagues": {
-            "get": {
-                "description": "Returns raid weekend capital league stats.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Capital"
-                ],
-                "summary": "Get capital league stats",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Weekend filter",
-                        "name": "weekend",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/capital/{clan_tag}": {
-            "get": {
-                "description": "Returns stored raid weekends for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Capital"
-                ],
-                "summary": "Get clan capital raid log",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/clan/search": {
-            "get": {
-                "description": "Returns tracked clans with optional location filtering.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Clans"
-                ],
-                "summary": "Search tracked clans",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Location ID",
-                        "name": "location_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of clans",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include member tags",
-                        "name": "member_list",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/clan/{clan_tag}/basic": {
-            "get": {
-                "description": "Returns tracked basic clan data for a clan tag.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Clans"
-                ],
-                "summary": "Get basic clan data",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/clan/{clan_tag}/historical": {
-            "get": {
-                "description": "Returns tracked player history events for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Clans"
-                ],
-                "summary": "Get clan historical events",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "time_stamp_end",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/clan/{clan_tag}/join-leave": {
-            "get": {
-                "description": "Returns tracked join and leave events for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Clans"
-                ],
-                "summary": "Get clan join-leave history",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "time_stamp_end",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/cwl/{clan_tag}/group": {
             "get": {
                 "description": "Returns the current season CWL group for a clan.",
@@ -643,6 +240,134 @@ const docTemplate = `{
                 }
             }
         },
+        "/global/war/completed/daily": {
+            "get": {
+                "description": "Returns completed war counts per day and war type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "Get daily completed war counts",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
+                        "name": "war_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
+                        "name": "war_types",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/global/war/townhall/{townhall_level}/hitrate/weekly": {
+            "get": {
+                "description": "Returns weekly hitrate and average attack quality for a town hall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "Get weekly town hall war hitrate",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Town hall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint.",
+                        "name": "war_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated war type filter. Values: random,friendly.",
+                        "name": "war_types",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only include same town hall attacks",
+                        "name": "same_townhall",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/guild_links/{guild_id}": {
             "get": {
                 "description": "Returns linked player data for a Discord guild.",
@@ -665,149 +390,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/legends/clan/{clan_tag}/{date}": {
-            "get": {
-                "description": "Returns clan data with legend league members for a specific day.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Legends"
-                ],
-                "summary": "Get clan legend day data",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Legend day YYYY-MM-DD",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/legends/eos-winners": {
-            "get": {
-                "description": "Returns season rank-one legend snapshots.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Legends"
-                ],
-                "summary": "Get legend end-of-season winners",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/legends/streaks": {
-            "get": {
-                "description": "Returns players ordered by their tracked legend streak.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Legends"
-                ],
-                "summary": "Get legend streak leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/legends/trophy-buckets": {
-            "get": {
-                "description": "Returns histogram buckets for current legend trophy counts.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Legends"
-                ],
-                "summary": "Get legend trophy buckets",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -869,585 +451,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/permalink/{clan_tag}": {
-            "get": {
-                "description": "Returns the clan badge image as a PNG.",
-                "produces": [
-                    "image/png"
-                ],
-                "tags": [
-                    "Legacy Clans"
-                ],
-                "summary": "Get clan badge image",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/full-search/{name}": {
-            "get": {
-                "description": "Searches tracked players by name with optional filters.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Full player search",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player name search",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Role filter",
-                        "name": "role",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "League filter",
-                        "name": "league",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Town hall range as min,max",
-                        "name": "townhall",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Experience range as min,max",
-                        "name": "exp",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Trophy range as min,max",
-                        "name": "trophies",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Donation range as min,max",
-                        "name": "donations",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/search/{name}": {
-            "get": {
-                "description": "Returns basic tracked player search results by name.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Search players by name",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player name search",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/to-do": {
-            "get": {
-                "description": "Returns war, raid, legend, clan games, and season pass to-do data for player tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player to-do state",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/historical/{season}": {
-            "get": {
-                "description": "Returns player history events grouped by event type for a season.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player historical events",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/join-leave": {
-            "get": {
-                "description": "Returns tracked join and leave events for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player join-leave history",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "time_stamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/legend_rankings": {
-            "get": {
-                "description": "Returns stored end-of-season legend ranking snapshots for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player legend ranking history",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of snapshots",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/legends": {
-            "get": {
-                "description": "Returns tracked legend league data for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player legends data",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv1.PlayerLegendsResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/raids": {
-            "get": {
-                "description": "Returns recent raid weekend documents containing a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player raid weekends",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of raid weekends",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/stats": {
-            "get": {
-                "description": "Returns tracked aggregate stats for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player stats",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv1.PlayerStatsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/warhits": {
-            "get": {
-                "description": "Returns recent war attacks and defenses for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player war hits",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/player/{player_tag}/wartimer": {
-            "get": {
-                "description": "Returns current war timer data for a player when available.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Player"
-                ],
-                "summary": "Get player war timer",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1573,95 +576,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/legends/{player_tag}": {
-            "get": {
-                "description": "Returns the current legend ranking row for a player.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get live legend ranking by player",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/live/legends": {
-            "get": {
-                "description": "Returns current legend rankings in the requested rank range.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get live legend rankings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "First rank",
-                        "name": "top_ranking",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Last rank",
-                        "name": "lower_ranking",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1924,87 +838,6 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Days without login to be considered inactive (default 7)",
                         "name": "inactive_threshold_days",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/activity/inactive-players": {
-            "get": {
-                "description": "Returns players in the guild that are considered inactive by the provided threshold.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Activity \u0026 Inactivity"
-                ],
-                "summary": "Get inactive players",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Days before a player is considered inactive",
-                        "name": "inactive_threshold_days",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Minimum town hall level",
-                        "name": "min_townhall",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Restrict results to a single clan",
-                        "name": "clan_tag",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Number of results to skip",
-                        "name": "offset",
                         "in": "query"
                     }
                 ],
@@ -2599,28 +1432,53 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/capital/guild-leaderboard": {
+        "/v2/battlelogs/farming/armies": {
             "get": {
-                "description": "Returns a capital leaderboard for all clans attached to the requested guild.",
+                "description": "Returns top farming armies by usage rate. Supports townhall, item includes/excludes, and max 100 result filters.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Capital Raids"
+                    "Battlelogs"
                 ],
-                "summary": "Get capital guild leaderboard",
+                "summary": "Get farming battlelog armies",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "query",
-                        "required": true
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Required troop, spell, pet, or equipment IDs/names",
+                        "name": "contains",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Excluded troop, spell, pet, or equipment IDs/names",
+                        "name": "excludes",
+                        "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Season filter (YYYY-MM)",
-                        "name": "season",
+                        "description": "Timeframe such as 7d or 24h",
+                        "name": "timeframe",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 100",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -2634,13 +1492,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2656,23 +1507,314 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/capital/player-stats": {
+        "/v2/battlelogs/items/league/{league_id}/hitrate": {
             "get": {
-                "description": "Returns raid weekend player rows for the requested guild and clan tags.",
+                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for players stored in ranked league groups.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Capital Raids"
+                    "Battlelogs"
                 ],
-                "summary": "Get capital player statistics",
+                "summary": "Get item hitrate by ranked league",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
+                        "description": "Ranked league tier ID",
+                        "name": "league_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
                         "in": "query",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/items/league/{league_id}/usage": {
+            "get": {
+                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for players stored in ranked league groups.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get item usage by ranked league",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Ranked league tier ID",
+                        "name": "league_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/items/top200/hitrate": {
+            "get": {
+                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for players in the previous day's stored legend top 200.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get item hitrate for legend top 200",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/items/top200/usage": {
+            "get": {
+                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for players in the previous day's stored legend top 200.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get item usage for legend top 200",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/items/townhall/{townhall_level}/hitrate": {
+            "get": {
+                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for a townhall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get item hitrate by townhall",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/items/townhall/{townhall_level}/usage": {
+            "get": {
+                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for a townhall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get item usage by townhall",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
+                        "name": "item",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/battlelogs/ranked/armies": {
+            "get": {
+                "description": "Returns top ranked armies by hitrate or usage rate. Supports townhall, item includes/excludes, minimum usage count, timeframe, and max 100 result filters.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Battlelogs"
+                ],
+                "summary": "Get ranked battlelog armies",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "League ID, matched against the attacker's current league",
+                        "name": "league_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "query"
                     },
                     {
                         "type": "array",
@@ -2680,26 +1822,42 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "collectionFormat": "csv",
-                        "description": "Clan tags (defaults to all guild clans)",
-                        "name": "clan_tags",
+                        "description": "Required troop, spell, pet, or equipment IDs/names",
+                        "name": "contains",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Excluded troop, spell, pet, or equipment IDs/names",
+                        "name": "excludes",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Minimum usage count",
+                        "name": "min_usage_count",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Season filter (YYYY-MM)",
-                        "name": "season",
+                        "description": "Timeframe such as 7d or 24h",
+                        "name": "timeframe",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "hitrate or usage_rate",
+                        "name": "sort_by",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum number of rows",
+                        "description": "Result limit, max 100",
                         "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Number of rows to skip",
-                        "name": "offset",
                         "in": "query"
                     }
                 ],
@@ -2713,13 +1871,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2823,162 +1974,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/compo": {
+        "/v2/clan/{clan_tag}/badge": {
             "get": {
-                "description": "Returns town hall, role, and league composition for the requested clan tags.",
+                "description": "Returns the clan badge image as a PNG.",
                 "produces": [
-                    "application/json"
+                    "image/png"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get composition of a clan or clans",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clan/donations/{season}": {
-            "get": {
-                "description": "Returns donation totals for multiple clans in a season.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get donations for many clans",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Season",
-                        "name": "season",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clan/{clan_tag}/board/totals": {
-            "get": {
-                "description": "Returns aggregate board totals for one or more player tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get aggregated board totals for a clan",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanPlayerTagsBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clan/{clan_tag}/details": {
-            "get": {
-                "description": "Returns the live clan object for a clan tag.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get full stats for a single clan",
+                "summary": "Get clan badge image",
                 "parameters": [
                     {
                         "type": "string",
@@ -2992,8 +1997,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "type": "file"
                         }
                     },
                     "404": {
@@ -3013,16 +2017,52 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/donations/{season}": {
+        "/v2/clan/{clan_tag}/basic": {
             "get": {
-                "description": "Returns donation totals for a single clan and season.",
+                "description": "Returns tracked basic clan data for a clan tag.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan donations",
+                "summary": "Get basic clan data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanBasicResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/changes": {
+            "get": {
+                "description": "Returns stored clan changes such as description changes, clan level upgrades, and war league history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get clan changes",
                 "parameters": [
                     {
                         "type": "string",
@@ -3032,19 +2072,23 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
-                        "description": "Season",
-                        "name": "season",
-                        "in": "path",
-                        "required": true
+                        "description": "Change type",
+                        "name": "type",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/modelsv2.ClanChangesResponse"
                         }
                     },
                     "500": {
@@ -3078,21 +2122,8 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 50,
-                        "description": "Maximum events per page",
+                        "description": "Maximum events to return; 0 returns full matching history",
                         "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Number of events to skip",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "1-based page number; ignored when offset is provided",
-                        "name": "page",
                         "in": "query"
                     },
                     {
@@ -3105,25 +2136,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Only include events at or before this ISO-8601 time",
                         "name": "time[before]",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "-time",
-                        "description": "Comma-separated event sort fields; prefix with - for descending",
-                        "name": "sort",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated event fields to include",
-                        "name": "fields",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Event type filter",
-                        "name": "type",
                         "in": "query"
                     }
                 ],
@@ -3180,12 +2192,6 @@ const docTemplate = `{
                         "description": "Only include events at or before this ISO-8601 time",
                         "name": "time[before]",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Event type filter",
-                        "name": "type",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3212,16 +2218,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/ranking": {
+        "/v2/clan/{clan_tag}/rankings": {
             "get": {
-                "description": "Returns the cached ranking document for a clan tag.",
+                "description": "Returns current clan ranking placements across supported ranking metrics.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get ranking of a clan",
+                "summary": "Get rankings of a clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -3235,8 +2241,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/modelsv2.ClanRankingsResponse"
                         }
                     },
                     "500": {
@@ -3249,83 +2254,58 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clans/capital-raids": {
-            "post": {
-                "description": "Returns raid weekend documents for the requested clan tags.",
+        "/v2/clan/{clan_tag}/wars": {
+            "get": {
+                "description": "Returns previous wars for a clan rebuilt from SQL war rows, attacks, and missed attacks.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get capital raids for a list of clans",
+                "summary": "Get stored clan wars",
                 "parameters": [
                     {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanTagsBody"
-                        }
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to all history.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of wars. Max 250.",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
+                        "name": "war_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
+                        "name": "war_types",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clans/details": {
-            "post": {
-                "description": "Returns detailed clan objects for the requested clan tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get full stats for a list of clans",
-                "parameters": [
-                    {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanTagsBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3824,6 +2804,302 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/global/builderhalls": {
+            "get": {
+                "description": "Returns counts of players at each builder hall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global builderhall counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/capital-leagues": {
+            "get": {
+                "description": "Returns counts of clans at different capital leagues.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global capital league counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/clan/locations": {
+            "get": {
+                "description": "Returns counts of clans in different locations.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global clan location counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/cwl-leagues": {
+            "get": {
+                "description": "Returns counts of clans at different CWL leagues.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global CWL league counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/leaguetiers": {
+            "get": {
+                "description": "Returns counts of players at different league tiers.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global league tier counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/townhalls": {
+            "get": {
+                "description": "Returns counts of players at each townhall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Global"
+                ],
+                "summary": "Get global townhall counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/war/completed/daily": {
+            "get": {
+                "description": "Returns completed war counts per day and war type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "Get daily completed war counts",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
+                        "name": "war_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
+                        "name": "war_types",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/global/war/townhall/{townhall_level}/hitrate/weekly": {
+            "get": {
+                "description": "Returns weekly hitrate and average attack quality for a town hall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "Get weekly town hall war hitrate",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Town hall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint.",
+                        "name": "war_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated war type filter. Values: random,friendly.",
+                        "name": "war_types",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only include same town hall attacks",
+                        "name": "same_townhall",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v2/guild-summary": {
             "get": {
                 "description": "Returns clan and member activity totals for a Discord guild.",
@@ -3978,87 +3254,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/inactive-players": {
-            "get": {
-                "description": "Returns players in the guild that are considered inactive by the provided threshold.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Activity \u0026 Inactivity"
-                ],
-                "summary": "Get inactive players",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Days before a player is considered inactive",
-                        "name": "inactive_threshold_days",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Minimum town hall level",
-                        "name": "min_townhall",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Restrict results to a single clan",
-                        "name": "clan_tag",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Number of results to skip",
-                        "name": "offset",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v2/initialization": {
             "post": {
                 "security": [
@@ -4146,74 +3341,27 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/legends/daily-tracking": {
+        "/v2/leaderboard/clan/win-streak": {
             "get": {
-                "description": "Returns per-day legend stats for all players in a guild over a date range.",
+                "description": "Returns top clan win streaks.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Bot Legends Endpoints"
+                    "Leaderboard"
                 ],
-                "summary": "Get legends daily tracking",
+                "summary": "Get clan win streak leaderboard",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Start date in YYYY-MM-DD format",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "End date in YYYY-MM-DD format",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Restrict to a single clan",
-                        "name": "clan_tag",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of players to return",
+                        "description": "Result limit, max 500",
                         "name": "limit",
                         "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Number of players to skip",
-                        "name": "offset",
-                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4229,95 +3377,28 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/legends/guild-stats": {
+        "/v2/leaderboard/league/{league_tier_id}": {
             "get": {
-                "description": "Returns legends leaderboard and player stats for a guild.",
+                "description": "Returns top players for a league.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Bot Legends Endpoints"
+                    "Leaderboard"
                 ],
-                "summary": "Get guild legends statistics",
+                "summary": "Get league leaderboard",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season (YYYY-MM)",
-                        "name": "season",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Max number of top players to return",
-                        "name": "limit_top_players",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/legends/players/day/{day}": {
-            "get": {
-                "description": "Returns legend stats for requested players on a specific day.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Bot Legends Endpoints"
-                ],
-                "summary": "Get legend stats by day",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Legend day YYYY-MM-DD",
-                        "name": "day",
+                        "description": "League tier ID",
+                        "name": "league_tier_id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "players",
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -4325,11 +3406,8 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
@@ -4349,32 +3427,35 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/legends/players/season/{season}": {
+        "/v2/leaderboard/league/{league_tier_id}/history/{date}": {
             "get": {
-                "description": "Returns legend stats for requested players in a season.",
+                "description": "Returns stored historical league leaderboard snapshots.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Bot Legends Endpoints"
+                    "Leaderboard"
                 ],
-                "summary": "Get legend stats by season",
+                "summary": "Get historical league leaderboard",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
+                        "type": "integer",
+                        "description": "League tier ID",
+                        "name": "league_tier_id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "players",
+                        "type": "string",
+                        "description": "Snapshot date YYYY-MM-DD",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 200",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -4382,11 +3463,251 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/townhalls/{townhall_level}": {
+            "get": {
+                "description": "Returns top tracked players for a townhall level.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get townhall leaderboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/townhalls/{townhall_level}/history/{date}": {
+            "get": {
+                "description": "Returns stored historical townhall leaderboard snapshots.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get historical townhall leaderboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Townhall level",
+                        "name": "townhall_level",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date YYYY-MM-DD",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 200",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/{league_tier_id}/trophy-buckets": {
+            "get": {
+                "description": "Returns trophy buckets of players and trophies at bucket points, with optional history up to 30 days.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get trophy bucket history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "League tier ID",
+                        "name": "league_tier_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "History days, max 30",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/{location_id}/clan/donations": {
+            "get": {
+                "description": "Returns top donation clans for a location.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get clan donation leaderboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Location ID",
+                        "name": "location_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/{location_id}/clan/war-wins": {
+            "get": {
+                "description": "Returns top war wins clans for a location.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get clan war wins leaderboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Location ID",
+                        "name": "location_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "400": {
@@ -4591,8 +3912,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/player/{player_tag}/extended": {
-            "get": {
+        "/v2/player/legends/{season}/battlelog-stats": {
+            "post": {
+                "description": "Returns season +/- and overview stats for a list of players.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4602,7 +3924,60 @@ const docTemplate = `{
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get comprehensive stats for single player",
+                "summary": "Get bulk player legends battlelog stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Legend season YYYY-MM",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Player tags",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerBattlelogStatsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/battlelog/history": {
+            "get": {
+                "description": "Returns historical returned battlelogs for a player, including farming hits when present.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player battlelog history",
                 "parameters": [
                     {
                         "type": "string",
@@ -4612,15 +3987,103 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Days of history, max 365",
+                        "name": "days",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
-                        "description": "Optional clan tag for context",
-                        "name": "clan_tag",
+                        "description": "Battle type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter attacks or defenses",
+                        "name": "attack",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/changes": {
+            "get": {
+                "description": "Returns stored player profile changes such as upgrades.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player changes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Change type",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4650,21 +4113,8 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 50,
-                        "description": "Maximum events per page",
+                        "description": "Maximum events to return; 0 returns full matching history",
                         "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Number of events to skip",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "1-based page number; ignored when offset is provided",
-                        "name": "page",
                         "in": "query"
                     },
                     {
@@ -4677,25 +4127,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Only include events at or before this ISO-8601 time",
                         "name": "time[before]",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "-time",
-                        "description": "Comma-separated event sort fields; prefix with - for descending",
-                        "name": "sort",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated event fields to include",
-                        "name": "fields",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Event type filter",
-                        "name": "type",
                         "in": "query"
                     }
                 ],
@@ -4723,210 +4154,123 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/players": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
+        "/v2/player/{player_tag}/join-leave/shared": {
+            "get": {
+                "description": "Returns clans two players shared, total shared minutes per clan, and each shared time range.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get basic API data for multiple players",
-                "parameters": [
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/players/extended": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get comprehensive stats for multiple players",
-                "parameters": [
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/players/legend-days": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get legend league statistics for multiple players",
-                "parameters": [
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/players/legend_rankings": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get historical legend league rankings for multiple players",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Max rankings per player (default 10)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/players/location": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get locations for a list of players",
-                "parameters": [
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/players/sorted/{attribute}": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get players sorted by an attribute",
+                "summary": "Get shared player join-leave clan totals",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Attribute path (dot notation, e.g. trophies or league.name)",
-                        "name": "attribute",
+                        "description": "Player tag",
+                        "name": "player_tag",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
+                        "type": "string",
+                        "description": "Other player tag",
+                        "name": "tag",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "type": "object"
+                            "$ref": "#/definitions/modelsv2.JoinLeaveSharedResponse"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/join-leave/totals": {
+            "get": {
+                "description": "Returns total minutes and join visit counts for each clan a player spent time in across all stored join-leave history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player join-leave clan totals",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.JoinLeaveTotalsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/legends/{day}/day": {
+            "get": {
+                "description": "Returns player legends attacks and defenses for a day.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player legends day battlelog",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Legend day YYYY-MM-DD",
+                        "name": "day",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -4936,49 +4280,337 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
         },
-        "/v2/players/summary/{season}/top": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
+        "/v2/player/{player_tag}/legends/{season}/season": {
+            "get": {
+                "description": "Returns player legends +/- and overview stats for a season.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get summary of top stats for a list of players",
+                "summary": "Get player legends season battlelog stats",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Season (e.g. 2024-01)",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Legend season YYYY-MM",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/ranked/{season}/battlelog": {
+            "get": {
+                "description": "Returns player ranked season placement plus recent ranked battlelog rows.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player ranked battlelog",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Ranked season ID",
                         "name": "season",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "integer",
-                        "description": "Max players per category (default 10)",
+                        "description": "Battlelog row limit, max 200",
                         "name": "limit",
                         "in": "query"
-                    },
-                    {
-                        "description": "Player tags list",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/ranked/{season}/group": {
+            "get": {
+                "description": "Returns ranked group data for the group containing the requested player.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player ranked group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Ranked season ID",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/rankings": {
+            "get": {
+                "description": "Returns live rankings, when available, for a player in their league or other ranking bucket.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get current player rankings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/war/attacks": {
+            "get": {
+                "description": "Returns stored attacks and defenses involving a player, most recent first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player war attacks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of rows. Max 500.",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/war/stats": {
+            "get": {
+                "description": "Returns player war performance stats for all, random, friendly, and CWL wars in a time range.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player war stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "End Unix timestamp",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -13378,6 +13010,224 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.BattlelogItemFilters": {
+            "type": "object",
+            "properties": {
+                "leagueId": {
+                    "type": "integer"
+                },
+                "top200": {
+                    "type": "boolean"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.BattlelogItemHitratePoint": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "hitRate": {
+                    "type": "number"
+                },
+                "threeStars": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.BattlelogItemHitrateResponse": {
+            "type": "object",
+            "properties": {
+                "dimension": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/modelsv2.BattlelogItemFilters"
+                },
+                "item": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.BattlelogItemHitratePoint"
+                    }
+                },
+                "metric": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BattlelogItemUsagePoint": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "usageRate": {
+                    "type": "number"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.BattlelogItemUsageResponse": {
+            "type": "object",
+            "properties": {
+                "dimension": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/modelsv2.BattlelogItemFilters"
+                },
+                "item": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.BattlelogItemUsagePoint"
+                    }
+                },
+                "metric": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanBadgeURLs": {
+            "type": "object",
+            "properties": {
+                "large": {
+                    "type": "string"
+                },
+                "medium": {
+                    "type": "string"
+                },
+                "small": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanBasicRecords": {
+            "type": "object",
+            "properties": {
+                "clanPoints": {
+                    "$ref": "#/definitions/modelsv2.ClanRecordEntry"
+                },
+                "warWinStreak": {
+                    "$ref": "#/definitions/modelsv2.ClanRecordEntry"
+                }
+            }
+        },
+        "modelsv2.ClanBasicResponse": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.ClanBadgeURLs"
+                },
+                "capitalLeague": {
+                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "clanPoints": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "lastActive": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                },
+                "memberCount": {
+                    "type": "integer"
+                },
+                "members": {},
+                "name": {
+                    "type": "string"
+                },
+                "publicWarLog": {
+                    "type": "boolean"
+                },
+                "records": {
+                    "$ref": "#/definitions/modelsv2.ClanBasicRecords"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "troopsDonated": {
+                    "type": "integer"
+                },
+                "troopsReceived": {
+                    "type": "integer"
+                },
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                },
+                "warWinStreak": {
+                    "type": "integer"
+                },
+                "warWins": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanChangeRecord": {
+            "type": "object",
+            "properties": {
+                "current": {},
+                "previous": {},
+                "time": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanChangesResponse": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {},
+                "count": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanChangeRecord"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanLeagueRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.ClanPlayerTagsBody": {
             "type": "object",
             "properties": {
@@ -13386,6 +13236,61 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.ClanRankingMetric": {
+            "type": "object",
+            "properties": {
+                "globalRank": {
+                    "type": "integer"
+                },
+                "localRank": {},
+                "value": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanRankingsResponse": {
+            "type": "object",
+            "properties": {
+                "badge": {
+                    "type": "string"
+                },
+                "clanPoints": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                },
+                "donations": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                },
+                "donationsReceived": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                },
+                "location": {
+                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "warWinStreak": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                },
+                "warWins": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                }
+            }
+        },
+        "modelsv2.ClanRecordEntry": {
+            "type": "object",
+            "properties": {
+                "time": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "integer"
                 }
             }
         },
@@ -13473,40 +13378,51 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.JoinLeaveClan": {
+            "type": "object",
+            "properties": {
+                "badge": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveClanTotal": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.JoinLeaveClan"
+                },
+                "minutes": {
+                    "type": "integer"
+                },
+                "visits": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.JoinLeaveEvent": {
             "type": "object",
             "properties": {
                 "clan": {
-                    "type": "string"
+                    "$ref": "#/definitions/modelsv2.JoinLeaveClan"
                 },
-                "clan_name": {
-                    "type": "string"
-                },
-                "clan_tag": {
-                    "type": "string"
-                },
-                "current": {},
                 "name": {
-                    "type": "string"
-                },
-                "player_name": {
-                    "type": "string"
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "previous": {},
-                "role": {
                     "type": "string"
                 },
                 "tag": {
                     "type": "string"
                 },
-                "th": {
-                    "type": "integer"
-                },
                 "time": {
                     "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "string"
@@ -13530,26 +13446,36 @@ const docTemplate = `{
         "modelsv2.JoinLeaveResponse": {
             "type": "object",
             "properties": {
-                "clan_tag": {
-                    "type": "string"
+                "available": {
+                    "type": "integer"
                 },
                 "items": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.JoinLeaveEvent"
                     }
+                }
+            }
+        },
+        "modelsv2.JoinLeaveSharedClanTotal": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.JoinLeaveClan"
                 },
-                "pagination": {
-                    "$ref": "#/definitions/modelsv2.PaginationMeta"
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "timestamp_end": {
+                "minutes": {
                     "type": "integer"
-                },
-                "timestamp_start": {
-                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.JoinLeaveSharedResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.JoinLeaveSharedClanTotal"
+                    }
                 }
             }
         },
@@ -13609,6 +13535,17 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.JoinLeaveTotalsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.JoinLeaveClanTotal"
+                    }
+                }
+            }
+        },
         "modelsv2.MobilePlayerTagsRequest": {
             "type": "object",
             "properties": {
@@ -13626,22 +13563,14 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.PaginationMeta": {
+        "modelsv2.PlayerBattlelogStatsRequest": {
             "type": "object",
             "properties": {
-                "has_more": {
-                    "type": "boolean"
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "next_offset": {},
-                "offset": {
-                    "type": "integer"
-                },
-                "previous_offset": {},
-                "total": {
-                    "type": "integer"
+                "player_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

@@ -137,6 +137,7 @@ func sanitize(value any) any {
 }
 
 func serverNormalizeTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = apptypes.NormalizeTag(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(tag, "#"))))
 	if tag == "" {
 		return ""

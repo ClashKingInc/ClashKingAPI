@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -14,51 +15,164 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// clanRanking godoc
-// @Summary Get ranking of a clan
-// @Description Returns the cached ranking document for a clan tag.
+// clanWars godoc
+// @Summary Get stored clan wars
+// @Description Returns previous wars for a clan rebuilt from SQL war rows, attacks, and missed attacks.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
+// @Param timestamp_start query int false "Start Unix timestamp. Defaults to all history."
+// @Param timestamp_end query int false "End Unix timestamp"
+// @Param limit query int false "Maximum number of wars. Max 250."
+// @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, cwl, all."
+// @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/{clan_tag}/ranking [get]
+// @Router /v2/clan/{clan_tag}/wars [get]
+func clanWars(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		clanTag := warFixTag(c.Params("clan_tag"))
+		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
+		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
+		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 250)
+		types := warTypesFromQuery(c, true)
+		wars, err := sqlClanWars(c, a, clanTag, start, end, types, limit)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": wars})
+	}
+}
+
+// clanRanking godoc
+// @Summary Get rankings of a clan
+// @Description Returns current clan ranking placements across supported ranking metrics.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Success 200 {object} modelsv2.ClanRankingsResponse
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/clan/{clan_tag}/rankings [get]
 func clanRanking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
-		var countryCode, countryName pgtype.Text
-		var rank, globalRank, localRank pgtype.Int4
-		var rawData []byte
+		var row clanRankingRow
 		err := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT country_code, country_name, rank, global_rank, local_rank, data
-			FROM clan_rankings_current
-			WHERE clan_tag = $1
-		`, tag).Scan(&countryCode, &countryName, &rank, &globalRank, &localRank, &rawData)
+			SELECT
+				COALESCE(b.tag, r.clan_tag) AS tag,
+				b.name,
+				b.badge_token,
+				b.location_id,
+				b.clan_points,
+				b.war_wins,
+				b.war_win_streak,
+				b.troops_donated,
+				b.troops_received,
+				r.rank,
+				r.global_rank,
+				r.local_rank,
+				l.donated_rank,
+				l.received_rank,
+				l.war_wins_rank,
+				l.war_win_streak_rank,
+				l.location_donated_rank,
+				l.location_received_rank,
+				l.location_war_wins_rank
+			FROM clan_rankings_current r
+			FULL JOIN basic_clan b ON b.tag = r.clan_tag
+			LEFT JOIN clan_leaderboards l ON l.tag = COALESCE(b.tag, r.clan_tag)
+			WHERE COALESCE(b.tag, r.clan_tag) = $1
+		`, tag).Scan(
+			&row.tag,
+			&row.name,
+			&row.badgeURL,
+			&row.locationID,
+			&row.clanPoints,
+			&row.warWins,
+			&row.warWinStreak,
+			&row.troopsDonated,
+			&row.troopsReceived,
+			&row.currentRank,
+			&row.globalRank,
+			&row.localRank,
+			&row.donatedRank,
+			&row.receivedRank,
+			&row.warWinsRank,
+			&row.warWinStreakRank,
+			&row.locationDonatedRank,
+			&row.locationReceivedRank,
+			&row.locationWarWinsRank,
+		)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanRankingResponse{Tag: tag})
+				return apptypes.JSON(c, fiber.StatusOK, clanRankingsResponse(tag, clanRankingRow{}))
 			}
 			return err
 		}
-		row := clanDecodeJSONObject(rawData)
-		row["tag"] = tag
-		if countryCode.Valid {
-			row["country_code"] = countryCode.String
-		}
-		if countryName.Valid {
-			row["country_name"] = countryName.String
-		}
-		if rank.Valid {
-			row["rank"] = rank.Int32
-		}
-		if globalRank.Valid {
-			row["global_rank"] = globalRank.Int32
-		}
-		if localRank.Valid {
-			row["local_rank"] = localRank.Int32
-		}
-		return apptypes.JSON(c, fiber.StatusOK, row)
+		return apptypes.JSON(c, fiber.StatusOK, clanRankingsResponse(tag, row))
 	}
+}
+
+type clanRankingRow struct {
+	tag                  *string
+	name                 *string
+	badgeURL             *string
+	locationID           *int32
+	clanPoints           *int
+	warWins              *int
+	warWinStreak         *int
+	troopsDonated        *int
+	troopsReceived       *int
+	currentRank          *int
+	globalRank           *int
+	localRank            *int
+	donatedRank          *int64
+	receivedRank         *int64
+	warWinsRank          *int64
+	warWinStreakRank     *int64
+	locationDonatedRank  *int64
+	locationReceivedRank *int64
+	locationWarWinsRank  *int64
+}
+
+func clanRankingsResponse(tag string, row clanRankingRow) modelsv2.ClanRankingsResponse {
+	if row.tag != nil && *row.tag != "" {
+		tag = *row.tag
+	}
+	resp := modelsv2.ClanRankingsResponse{
+		Name:              row.name,
+		Tag:               tag,
+		Badge:             badgeURLPtr(row.badgeURL, 512),
+		ClanPoints:        clanRankingMetric(row.clanPoints, intToInt64(row.globalRank), nullableLocalRank(intToInt64(row.localRank))),
+		WarWins:           clanRankingMetric(row.warWins, row.warWinsRank, nullableLocalRank(row.locationWarWinsRank)),
+		WarWinStreak:      clanRankingMetric(row.warWinStreak, row.warWinStreakRank, nil),
+		Donations:         clanRankingMetric(row.troopsDonated, row.donatedRank, nullableLocalRank(row.locationDonatedRank)),
+		DonationsReceived: clanRankingMetric(row.troopsReceived, row.receivedRank, nullableLocalRank(row.locationReceivedRank)),
+	}
+	if row.locationID != nil {
+		resp.Location = &modelsv2.ClanLeagueRef{ID: *row.locationID}
+	}
+	return resp
+}
+
+func clanRankingMetric(value *int, global *int64, local any) modelsv2.ClanRankingMetric {
+	return modelsv2.ClanRankingMetric{Value: value, GlobalRank: global, LocalRank: local}
+}
+
+func intToInt64(value *int) *int64 {
+	if value == nil {
+		return nil
+	}
+	out := int64(*value)
+	return &out
+}
+
+func nullableLocalRank(value *int64) any {
+	if value == nil {
+		var empty *int64
+		return empty
+	}
+	return value
 }
 
 // boardTotals godoc
@@ -71,7 +185,6 @@ func clanRanking(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/{clan_tag}/board/totals [get]
 func boardTotals(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanPlayerTagsBody
@@ -106,7 +219,6 @@ func boardTotals(a apptypes.Deps) fiber.Handler {
 // @Param season path string true "Season"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/{clan_tag}/donations/{season} [get]
 func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := clanFixTag(c.Params("clan_tag"))
@@ -141,7 +253,6 @@ func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/compo [get]
 func clanComposition(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags := clanFixTags(apptypes.QueryValues(c, "clan_tags"))
@@ -189,7 +300,6 @@ func clanComposition(a apptypes.Deps) fiber.Handler {
 // @Param clan_tags query []string false "Clan tags"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/donations/{season} [get]
 func clanDonationsMany(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -242,7 +352,6 @@ func clanDonationsMany(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clans/details [post]
 func clansDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanTagsBody
@@ -275,7 +384,6 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clan/{clan_tag}/details [get]
 func clanDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clan, err := a.Clash.GetClan(c.UserContext(), c.Params("clan_tag"))
@@ -295,7 +403,6 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/clans/capital-raids [post]
 func clansCapitalRaids(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanTagsBody
@@ -375,6 +482,7 @@ func clanFixTags(tags []string) []string {
 }
 
 func clanFixTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = strings.TrimSpace(strings.ToUpper(tag))
 	tag = strings.TrimPrefix(tag, "#")
 	if tag == "" {

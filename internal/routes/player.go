@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -14,8 +16,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// playerWarAttacks godoc
+// @Summary Get player war attacks
+// @Description Returns stored attacks and defenses involving a player, most recent first.
+// @Tags Player
+// @Produce json
+// @Param player_tag path string true "Player tag"
+// @Param timestamp_start query int false "Start Unix timestamp"
+// @Param timestamp_end query int false "End Unix timestamp"
+// @Param limit query int false "Maximum number of rows. Max 500."
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/player/{player_tag}/war/attacks [get]
+func playerWarAttacks(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := warFixTag(c.Params("player_tag"))
+		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
+		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
+		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 500)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT war_id, war_end_time, war_type, war_size, attacking_clan_tag, defending_clan_tag,
+				attacker_tag, attacker_name, defender_tag, defender_name, attacker_townhall, defender_townhall,
+				attacker_map_position, defender_map_position, stars, destruction_percentage, duration, attack_order,
+				battle_modifier
+			FROM war_attacks
+			WHERE (attacker_tag = $1 OR defender_tag = $1)
+				AND war_end_time >= $2
+				AND war_end_time <= $3
+			ORDER BY war_end_time DESC, attack_order
+			LIMIT $4
+		`, tag, start, end, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			attack, err := scanSQLWarAttack(rows)
+			if err != nil {
+				return err
+			}
+			items = append(items, sqlWarAttackMap(attack, tag))
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+// playerWarStats godoc
+// @Summary Get player war stats
+// @Description Returns player war performance stats for all, random, friendly, and CWL wars in a time range.
+// @Tags Player
+// @Produce json
+// @Param player_tag path string true "Player tag"
+// @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
+// @Param timestamp_end query int false "End Unix timestamp"
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/player/{player_tag}/war/stats [get]
+func playerWarStats(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := warFixTag(c.Params("player_tag"))
+		start := time.Unix(queryInt64(c, "timestamp_start", time.Now().UTC().Add(-90*24*time.Hour).Unix()), 0).UTC()
+		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
+		stats, err := sqlPlayerWarStats(c, a, tag, start, end)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, http.StatusOK, stats)
+	}
+}
+
 // playerNormalizeTag converts a raw tag string to #TAG format.
 func playerNormalizeTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = strings.ToUpper(strings.TrimSpace(tag))
 	tag = strings.TrimLeft(tag, "#!")
 	tag = strings.ReplaceAll(tag, "O", "0")
@@ -23,6 +96,13 @@ func playerNormalizeTag(tag string) string {
 		return ""
 	}
 	return "#" + tag
+}
+
+func decodeRouteTag(tag string) string {
+	if decoded, err := url.PathUnescape(tag); err == nil {
+		return decoded
+	}
+	return tag
 }
 
 // playerTagsFromBody decodes a JSON body with a "player_tags" array.
@@ -93,7 +173,6 @@ func playerStructToMap(v any) map[string]any {
 // @Produce json
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/location [post]
 func playersLocation(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, err := playerTagsFromBody(c)
@@ -143,7 +222,6 @@ func playersLocation(a apptypes.Deps) fiber.Handler {
 // @Param attribute path string true "Attribute path (dot notation, e.g. trophies or league.name)"
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/sorted/{attribute} [post]
 func playersSorted(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		attribute := c.Params("attribute")
@@ -231,7 +309,6 @@ func playersSorted(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Max players per category (default 10)"
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/summary/{season}/top [post]
 func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -340,7 +417,6 @@ func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players [post]
 func playersBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, err := playerTagsFromBody(c)
@@ -386,7 +462,6 @@ func playersBasic(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/extended [post]
 func playersExtended(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, err := playerTagsFromBody(c)
@@ -452,7 +527,6 @@ func playersExtended(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param clan_tag query string false "Optional clan tag for context"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/player/{player_tag}/extended [get]
 func playerExtendedSingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := playerNormalizeTag(c.Params("player_tag"))
@@ -494,7 +568,6 @@ func playerExtendedSingle(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/legend-days [post]
 func playersLegendDays(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, err := playerTagsFromBody(c)
@@ -531,7 +604,6 @@ func playersLegendDays(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Max rankings per player (default 10)"
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/players/legend_rankings [post]
 func playersLegendRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := c.QueryInt("limit", 10)

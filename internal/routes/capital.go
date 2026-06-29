@@ -24,7 +24,6 @@ import (
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/capital/player-stats [get]
 func playerStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
@@ -120,7 +119,6 @@ func playerStats(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/capital/guild-leaderboard [get]
 func guildLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)

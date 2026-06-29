@@ -16,6 +16,7 @@ import (
 var v1PlayerTagRe = regexp.MustCompile(`[^A-Z0-9]+`)
 
 func fixTag(tag string) string {
+	tag = decodeRouteTag(tag)
 	tag = strings.ToUpper(strings.TrimSpace(tag))
 	tag = strings.TrimPrefix(tag, "#")
 	tag = v1PlayerTagRe.ReplaceAllString(tag, "")
@@ -36,7 +37,6 @@ func fixTag(tag string) string {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/stats [get]
 func legacyPlayerStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -85,7 +85,6 @@ func legacyPlayerStats(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv1.PlayerLegendsResponse
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/legends [get]
 func playerLegends(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -167,7 +166,6 @@ func parseYearMonth(yearStr, monthStr string, year, month *int) (bool, error) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/historical/{season} [get]
 func playerHistorical(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -220,34 +218,9 @@ func playerHistorical(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/warhits [get]
 func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
-		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
-		limit := queryInt(c, "limit", 50)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT war_id, war_end_time, war_type, war_size, attacking_clan_tag, defending_clan_tag,
-				attacker_tag, defender_tag, attacker_townhall, defender_townhall, stars, destruction_percentage, duration, attack_order
-			FROM war_attack_events
-			WHERE (attacker_tag = $1 OR defender_tag = $1) AND war_end_time >= $2 AND war_end_time <= $3
-			ORDER BY war_end_time DESC, attack_order
-			LIMIT $4
-		`, tag, start, end, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			item, err := scanWarAttackRow(rows, tag)
-			if err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
+		return playerWarAttacks(a)(c)
 	}
 }
 
@@ -260,7 +233,6 @@ func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of raid weekends"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/raids [get]
 func playerRaids(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -298,7 +270,6 @@ func playerRaids(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of snapshots"
 // @Success 200 {array} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/legend_rankings [get]
 func playerLegendRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -325,7 +296,6 @@ func playerLegendRankings(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} map[string]interface{}
-// @Router /player/{player_tag}/wartimer [get]
 func playerWartimer(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		result, err := v1CurrentWarTimer(c, a, fixTag(c.Params("player_tag")))
@@ -347,7 +317,6 @@ func playerWartimer(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/{player_tag}/join-leave [get]
 func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -355,12 +324,12 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 		end := time.Unix(queryInt64(c, "time_stamp_end", 9999999999), 0).UTC()
 		limit := queryInt(c, "limit", 250)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT jl.event_time, jl.event_type, jl.clan_tag, jl.player_tag, jl.player_name, jl.townhall_level, jl.clan_role, jl.data,
+			SELECT jl."time", jl."type", jl.clan_tag, jl.player_tag, jl.player_name, jl.townhall_level,
 				bc.name AS clan_name
 			FROM join_leave_history jl
 			LEFT JOIN basic_clan bc ON bc.tag = jl.clan_tag
-			WHERE jl.player_tag = $1 AND jl.event_time >= $2 AND jl.event_time <= $3
-			ORDER BY jl.event_time DESC
+			WHERE jl.player_tag = $1 AND jl."time" >= $2 AND jl."time" <= $3
+			ORDER BY jl."time" DESC
 			LIMIT $4
 		`, tag, start, end, limit)
 		if err != nil {
@@ -371,13 +340,12 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 		for rows.Next() {
 			var eventTime time.Time
 			var eventType, clanTag, playerTag string
-			var playerName, clanRole, clanName pgtype.Text
+			var playerName, clanName pgtype.Text
 			var townhall int16
-			var raw []byte
-			if err := rows.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanRole, &raw, &clanName); err != nil {
+			if err := rows.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanName); err != nil {
 				return err
 			}
-			item := jsonObject(raw)
+			item := map[string]any{}
 			item["time"] = eventTime
 			item["type"] = eventType
 			item["clan"] = clanTag
@@ -385,9 +353,6 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 			item["th"] = townhall
 			if playerName.Valid {
 				item["name"] = playerName.String
-			}
-			if clanRole.Valid {
-				item["role"] = clanRole.String
 			}
 			if clanName.Valid {
 				item["clan_name"] = clanName.String
@@ -406,7 +371,6 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Param name path string true "Player name search"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/search/{name} [get]
 func playerSearchByName(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `

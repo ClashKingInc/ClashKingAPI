@@ -174,8 +174,6 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/inactive-players [get]
-// @Router /v2/activity/inactive-players [get]
 func inactivePlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)

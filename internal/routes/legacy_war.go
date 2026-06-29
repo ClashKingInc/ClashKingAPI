@@ -8,7 +8,6 @@ import (
 	modelsv1 "github.com/ClashKingInc/ClashKingAPI/internal/models/v1"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -30,24 +29,9 @@ func warPrevious(a apptypes.Deps) fiber.Handler {
 		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
 		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
 		limit := queryInt(c, "limit", 50)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
-			FROM war_log_index
-			WHERE (clan_tag = $1 OR opponent_tag = $1) AND prep_time >= $2 AND prep_time <= $3
-			ORDER BY end_time DESC
-			LIMIT $4
-		`, tag, start, end, limit)
+		result, err := sqlClanWars(c, a, tag, start, end, []string{"random", "friendly", "cwl"}, limit)
 		if err != nil {
 			return err
-		}
-		defer rows.Close()
-		result := []map[string]any{}
-		for rows.Next() {
-			item, err := scanWarIndexRow(rows)
-			if err != nil {
-				return err
-			}
-			result = append(result, item)
 		}
 		return apptypes.JSON(c, http.StatusOK, result)
 	}
@@ -71,19 +55,11 @@ func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusBadRequest, "invalid end_time format")
 		}
-		row := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
-			FROM war_log_index
-			WHERE (clan_tag = $1 OR opponent_tag = $1)
-			  AND end_time >= $2 AND end_time <= $3
-			ORDER BY end_time DESC
-			LIMIT 1
-		`, tag, t.Add(-5*time.Minute), t.Add(5*time.Minute))
-		item, err := scanWarIndexRow(row)
-		if err != nil {
+		items, err := sqlClanWars(c, a, tag, t.Add(-5*time.Minute), t.Add(5*time.Minute), []string{"random", "friendly", "cwl"}, 1)
+		if err != nil || len(items) == 0 {
 			return apptypes.Error(http.StatusNotFound, "War Not Found")
 		}
-		return apptypes.JSON(c, http.StatusOK, item)
+		return apptypes.JSON(c, http.StatusOK, items[0])
 	}
 }
 
@@ -99,21 +75,14 @@ func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 func warBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("clan_tag"))
-		row := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
-			FROM war_log_index
-			WHERE (clan_tag = $1 OR opponent_tag = $1) AND war_type <> 'cwl' AND end_time >= $2
-			ORDER BY end_time DESC
-			LIMIT 1
-		`, tag, time.Now().UTC().Add(-51*time.Hour))
-		item, err := scanWarIndexRow(row)
+		items, err := sqlClanWars(c, a, tag, time.Now().UTC().Add(-51*time.Hour), time.Now().UTC().Add(24*time.Hour), []string{"random", "friendly"}, 1)
 		if err != nil {
-			if err == pgx.ErrNoRows {
-				return apptypes.JSON(c, http.StatusOK, nil)
-			}
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, item)
+		if len(items) == 0 {
+			return apptypes.JSON(c, http.StatusOK, nil)
+		}
+		return apptypes.JSON(c, http.StatusOK, items[0])
 	}
 }
 

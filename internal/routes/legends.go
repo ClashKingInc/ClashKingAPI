@@ -28,7 +28,6 @@ var legendsDayParam = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // @Success 200 {array} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/legends/players/day/{day} [get]
 func legendStatsDay(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		day := c.Params("day")
@@ -65,7 +64,6 @@ func legendStatsDay(a apptypes.Deps) fiber.Handler {
 // @Success 200 {array} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/legends/players/season/{season} [get]
 func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -126,7 +124,6 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/legends/guild-stats [get]
 func guildStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
@@ -305,7 +302,6 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /v2/legends/daily-tracking [get]
 func dailyTracking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)

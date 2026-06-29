@@ -1233,12 +1233,12 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 		return map[string]any{}
 	}
 	rowsSQL, err := a.Store.SQL.Query(ctx, `
-		SELECT event_time, event_type, clan_tag, player_tag, player_name, townhall_level, clan_role, data
+		SELECT "time", "type", clan_tag, player_tag, player_name, townhall_level
 		FROM join_leave_history
 		WHERE clan_tag = ANY($1)
-		  AND event_time >= $2
-		  AND event_time <= $3
-		ORDER BY event_time DESC
+		  AND "time" >= $2
+		  AND "time" <= $3
+		ORDER BY "time" DESC
 	`, clanTags, seasonStart, seasonEnd)
 	if err != nil {
 		return map[string]any{}
@@ -1250,13 +1250,12 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 	for rowsSQL.Next() {
 		var eventTime time.Time
 		var eventType, clanTag, playerTag string
-		var playerName, clanRole *string
+		var playerName *string
 		var townhall int
-		var dataRaw []byte
-		if err := rowsSQL.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanRole, &dataRaw); err != nil {
+		if err := rowsSQL.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall); err != nil {
 			continue
 		}
-		clean := mobileMap(mobileDecodeJSONAny(dataRaw))
+		clean := map[string]any{}
 		clean["clan"] = clanTag
 		clean["type"] = eventType
 		clean["tag"] = playerTag
@@ -1264,9 +1263,6 @@ func mobileFetchJoinLeaveData(ctx context.Context, a apptypes.Deps, clanTags []s
 		clean["th"] = townhall
 		if playerName != nil {
 			clean["name"] = *playerName
-		}
-		if clanRole != nil {
-			clean["role"] = *clanRole
 		}
 		if clanTag == "" {
 			continue

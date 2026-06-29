@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -16,6 +17,124 @@ import (
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 )
+
+// warTownhallWeeklyHitrate godoc
+// @Summary Get weekly town hall war hitrate
+// @Description Returns weekly hitrate and average attack quality for a town hall level.
+// @Tags War
+// @Produce json
+// @Param townhall_level path int true "Town hall level"
+// @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
+// @Param timestamp_end query int false "End Unix timestamp"
+// @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint."
+// @Param war_types query string false "Comma-separated war type filter. Values: random,friendly."
+// @Param same_townhall query bool false "Only include same town hall attacks"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/global/war/townhall/{townhall_level}/hitrate/weekly [get]
+// @Router /global/war/townhall/{townhall_level}/hitrate/weekly [get]
+func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		townhall := warParseIntDefault(c.Params("townhall_level"), 0)
+		if townhall <= 0 {
+			return apptypes.Error(http.StatusBadRequest, "invalid townhall_level")
+		}
+		start := time.Unix(queryInt64(c, "timestamp_start", time.Now().UTC().AddDate(0, 0, -90).Unix()), 0).UTC()
+		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
+		types := warTypesFromQuery(c, false)
+		sameTownhall, err := apptypes.QueryBool(c, "same_townhall", false)
+		if err != nil {
+			return err
+		}
+		query := `
+			SELECT date_trunc('week', war_end_time)::date AS week, war_type,
+				count(*)::int AS attacks,
+				count(*) FILTER (WHERE stars = 3)::int AS triples,
+				avg(stars)::float8 AS avg_stars,
+				avg(destruction_percentage)::float8 AS avg_destruction
+			FROM war_attacks
+			WHERE attacker_townhall = $1
+				AND war_end_time >= $2
+				AND war_end_time <= $3
+				AND war_type = ANY($4)
+		`
+		args := []any{townhall, start, end, types}
+		if sameTownhall {
+			query += ` AND defender_townhall = attacker_townhall`
+		}
+		query += ` GROUP BY week, war_type ORDER BY week, war_type`
+		rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			var week time.Time
+			var warType string
+			var attacks, triples int
+			var avgStars, avgDestruction float64
+			if err := rows.Scan(&week, &warType, &attacks, &triples, &avgStars, &avgDestruction); err != nil {
+				return err
+			}
+			items = append(items, map[string]any{
+				"week":               week.Format("2006-01-02"),
+				"warType":            warType,
+				"townhallLevel":      townhall,
+				"attacks":            attacks,
+				"triples":            triples,
+				"hitrate":            rate(triples, attacks),
+				"averageStars":       round2(avgStars),
+				"averageDestruction": round2(avgDestruction),
+			})
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+// warCompletedDaily godoc
+// @Summary Get daily completed war counts
+// @Description Returns completed war counts per day and war type.
+// @Tags War
+// @Produce json
+// @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
+// @Param timestamp_end query int false "End Unix timestamp"
+// @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, cwl, all."
+// @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /v2/global/war/completed/daily [get]
+// @Router /global/war/completed/daily [get]
+func warCompletedDaily(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		start := time.Unix(queryInt64(c, "timestamp_start", time.Now().UTC().AddDate(0, 0, -90).Unix()), 0).UTC()
+		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
+		types := warTypesFromQuery(c, true)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT end_time::date AS day, war_type, count(*)::int
+			FROM wars
+			WHERE end_time >= $1 AND end_time <= $2 AND war_type = ANY($3)
+			GROUP BY day, war_type
+			ORDER BY day, war_type
+		`, start, end, types)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		items := []map[string]any{}
+		for rows.Next() {
+			var day time.Time
+			var warType string
+			var count int
+			if err := rows.Scan(&day, &warType, &count); err != nil {
+				return err
+			}
+			items = append(items, map[string]any{"day": day.Format("2006-01-02"), "warType": warType, "warsCompleted": count})
+		}
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
+	}
+}
 
 // previousWars godoc
 // @Summary Previous wars for a clan
@@ -40,15 +159,15 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		limit := warParseIntDefault(c.Query("limit"), 50)
-		rows, err := sqlPreviousWarRows(c, a, clanTag, start, end, includeCWL, limit)
+		types := []string{"random", "friendly"}
+		if includeCWL {
+			types = []string{"random", "friendly", "cwl"}
+		}
+		rows, err := sqlClanWars(c, a, clanTag, warTimestampToTime(start), warTimestampToTime(end), types, limit)
 		if err != nil {
 			return err
 		}
-		items := make([]any, 0, len(rows))
-		for _, row := range rows {
-			items = append(items, row)
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
+		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": rows})
 	}
 }
 
@@ -309,7 +428,7 @@ func sqlCWLGroups(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]map[string]a
 }
 
 func sqlWarCount(c *fiber.Ctx, a apptypes.Deps, clanTags []string) (int64, error) {
-	query := `SELECT count(*) FROM war_log_index`
+	query := `SELECT count(*) FROM wars`
 	args := []any{}
 	if len(clanTags) > 0 {
 		query += ` WHERE clan_tag = ANY($1) OR opponent_tag = ANY($1)`

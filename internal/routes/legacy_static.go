@@ -165,7 +165,6 @@ func globalCounts(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /legends/clan/{clan_tag}/{date} [get]
 func legendsClan(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := fixTag(c.Params("clan_tag"))
@@ -219,7 +218,6 @@ func legendsClan(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /legends/streaks [get]
 func legendStreaks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := clamp(queryInt(c, "limit", 50), 1, 500)
@@ -253,7 +251,6 @@ func legendStreaks(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /legends/trophy-buckets [get]
 func legendTrophyBuckets(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
@@ -285,7 +282,6 @@ func legendTrophyBuckets(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /legends/eos-winners [get]
 func legendEOSWinners(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
@@ -312,7 +308,6 @@ func legendEOSWinners(a apptypes.Deps) fiber.Handler {
 // @Success 200 {array} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/live/legends [get]
 func liveLegendRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		topRanking := queryInt(c, "top_ranking", 1)
@@ -342,7 +337,6 @@ func liveLegendRankings(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/legends/{player_tag} [get]
 func liveLegendRankingByPlayer(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		playerTag := fixTag(c.Params("player_tag"))
@@ -439,7 +433,6 @@ func clanCapitalRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a,
 // @Param player_tags query []string true "Player tags"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/to-do [get]
 func playerTodo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		values := collectQueryValues(c, "player_tags")
@@ -488,7 +481,6 @@ func playerTodo(a apptypes.Deps) fiber.Handler {
 // @Param donations query string false "Donation range as min,max"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /player/full-search/{name} [get]
 func playerFullSearch(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		name := c.Params("name")

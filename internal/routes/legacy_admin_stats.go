@@ -44,22 +44,26 @@ func botConfig(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// permalink godoc
+// clanBadge godoc
 // @Summary Get clan badge image
 // @Description Returns the clan badge image as a PNG.
-// @Tags Legacy Clans
+// @Tags Clan
 // @Produce png
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {file} binary
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /permalink/{clan_tag} [get]
-func permalink(a apptypes.Deps) fiber.Handler {
+// @Router /v2/clan/{clan_tag}/badge [get]
+func clanBadge(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		clanTag := fixTag(c.Params("clan_tag"))
-		var imageLink string
-		_ = a.Store.SQL.QueryRow(c.UserContext(), `SELECT badge_url FROM basic_clan WHERE tag = $1`, clanTag).Scan(&imageLink)
-		if imageLink == "" {
+		clanTag := clanFixTag(c.Params("clan_tag"))
+		var badgeToken string
+		_ = a.Store.SQL.QueryRow(c.UserContext(), `SELECT badge_token FROM basic_clan WHERE tag = $1`, clanTag).Scan(&badgeToken)
+		imageLink := badgeURL(badgeToken, 512)
+		if badgeToken == "" {
+			if a.Clash == nil {
+				return apptypes.Error(http.StatusNotFound, "Clan badge not found")
+			}
 			liveClan, err := a.Clash.GetClan(c.UserContext(), clanTag)
 			if err != nil || liveClan == nil || liveClan.Badge.Large == "" {
 				return apptypes.Error(http.StatusNotFound, "Clan badge not found")
@@ -216,7 +220,6 @@ func discordLinks(a apptypes.Deps) fiber.Handler {
 // @Param server query int false "Discord server ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /capital [get]
 func capitalLegacy(a apptypes.Deps) fiber.Handler {
 	return statsFromPlayerDocs(a, "raided", func(doc map[string]any, season string) map[string]any {
 		return map[string]any{"donated": intValue(doc["capital_gold_donos"]), "raided": intValue(doc["capital_resources_looted"]), "attacks": intValue(doc["attack_count"]), "medals": intValue(doc["medals"])}

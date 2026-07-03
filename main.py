@@ -53,6 +53,9 @@ def include_routers(app, directory):
             router = getattr(module, "router", None)
             if router:
                 app.include_router(router)
+            shutdown_handler = getattr(module, "shutdown", None)
+            if shutdown_handler:
+                app.add_event_handler("shutdown", shutdown_handler)
 
 # Include routers from public and private directories
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
@@ -119,6 +122,5 @@ if __name__ == "__main__":
         uvicorn.run("main:app", host="localhost", port=8000, reload=True)
     else:
         uvicorn.run("main:app", host="0.0.0.0", port=8010)
-
 
 

@@ -11,12 +11,29 @@ from fastapi import  Request, Response, HTTPException, Header
 from fastapi import APIRouter
 from typing import List
 from utils.utils import fix_tag, redis, db_client, config, create_keys
-from expiring_dict import ExpiringDict
 
 
 router = APIRouter(tags=["Internal Endpoints"])
 
-api_cache = ExpiringDict()
+_proxy_session = None
+_proxy_session_loop = None
+
+
+async def get_proxy_session():
+    global _proxy_session, _proxy_session_loop
+
+    loop = asyncio.get_running_loop()
+    if _proxy_session is None or _proxy_session.closed or _proxy_session_loop is not loop:
+        timeout = aiohttp.ClientTimeout(total=30)
+        connector = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300)
+        _proxy_session = aiohttp.ClientSession(timeout=timeout, connector=connector)
+        _proxy_session_loop = loop
+    return _proxy_session
+
+
+async def shutdown():
+    if _proxy_session is not None and not _proxy_session.closed:
+        await _proxy_session.close()
 
 
 async def fetch_image(url: str) -> bytes:
@@ -152,27 +169,22 @@ async def permalink(clan_tag: str):
          name="Only for internal use, rotates tokens and implements caching so that all other services dont need to",
          include_in_schema=False)
 async def ck_bulk_proxy(urls: List[str], request: Request, response: Response):
-    
     token = request.headers.get("authorization")
     if token != f"Bearer {config.internal_api_token}":
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    async def fetch_function(url: str):
+    semaphore = asyncio.Semaphore(50)
+    async def fetch_function(url: str, session: aiohttp.ClientSession):
         url = url.replace("#", '%23')
-        async with aiohttp.ClientSession() as session:
+        async with semaphore:
             async with session.get(f"https://proxy.clashk.ing/v1/{url}") as response:
-                item_bytes = await response.read()
-                item = orjson.loads(item_bytes)
                 if response.status != 200:
-                    item = None
-            await session.close()
-            return item
+                    await response.read()
+                    return None
+                return await response.json(loads=orjson.loads, content_type=None)
 
-    tasks = []
-    for url in urls:
-        tasks.append(asyncio.create_task(fetch_function(url)))
+    session = await get_proxy_session()
+    tasks = [fetch_function(url, session) for url in urls]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return [r for r in results if r is not None and not isinstance(r, Exception)]
-
-

@@ -9,7 +9,6 @@ import aiohttp
 from fastapi.responses import RedirectResponse
 from fastapi import Request, Response
 from fastapi import APIRouter
-from fastapi_cache.decorator import cache
 from typing import Dict
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
@@ -175,7 +174,6 @@ async def table_renderer(info: Dict, request: Request, response: Response):
 @router.get("/guild_links/{guild_id}",
          name="Get clans that are linked to a discord guild",
          include_in_schema=False)
-@cache(expire=300)
 async def guild_links(guild_id: int, request: Request, response: Response):
     return {}
 

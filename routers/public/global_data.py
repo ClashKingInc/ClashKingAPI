@@ -6,7 +6,6 @@ import pendulum as pend
 from collections import defaultdict
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter
-from fastapi_cache.decorator import cache
 from typing import List
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_ipaddr
@@ -19,7 +18,6 @@ router = APIRouter(tags=["Global Data"])
 @router.get(
         path="/boost-rate",
         name="Super Troop Boost Rate, for a season (YYYY-MM)")
-@cache(expire=300)
 async def super_troop_boost_rate(start_season: str, end_season: str, request: Request, response: Response):
     start_year = start_season[:4]; start_month = start_season[-2:]
     end_year = end_season[:4]; end_month = end_season[-2:]

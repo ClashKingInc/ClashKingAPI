@@ -3,7 +3,6 @@ import ujson
 
 from fastapi import FastAPI, Request, Response, Query, HTTPException
 from fastapi import APIRouter
-from fastapi_cache.decorator import cache
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_ipaddr
@@ -16,7 +15,6 @@ router = APIRouter(tags=["Leagues"])
 @router.get("/builderbaseleagues",
          tags=["Leagues"],
          name="Builder Base Leagues w/ Icons")
-@cache(expire=300)
 async def builder_base_leagues(request: Request, response: Response):
     file_path = "assets/json/builder_league.json"
     with open(file_path) as json_file:

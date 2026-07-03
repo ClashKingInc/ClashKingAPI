@@ -5,7 +5,6 @@ import coc
 from fastapi import  Request, Response, HTTPException
 from fastapi import APIRouter, Query, Depends
 from typing import Annotated, List
-from fastapi_cache.decorator import cache
 from datetime import datetime
 from utils.utils import fix_tag, db_client, token_verify, limiter, remove_id_fields
 

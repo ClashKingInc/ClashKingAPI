@@ -15,8 +15,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from slowapi import Limiter
 from slowapi.util import get_ipaddr
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 
 from utils.utils import config
 
@@ -60,10 +58,6 @@ def include_routers(app, directory):
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "public"))
 include_routers(app, os.path.join(os.path.dirname(__file__), "routers", "v2"))
 
-
-@app.on_event("startup")
-async def startup_event():
-    FastAPICache.init(InMemoryBackend())
 
 
 @app.get("/", include_in_schema=False, response_class=RedirectResponse)

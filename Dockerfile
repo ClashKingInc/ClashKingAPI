@@ -4,7 +4,7 @@ LABEL org.opencontainers.image.source=https://github.com/ClashKingInc/ClashKingA
 LABEL org.opencontainers.image.description="Image for the ClashKing API"
 LABEL org.opencontainers.image.licenses=MIT
 
-RUN apt-get update && apt-get install -y libsnappy-dev
+RUN apt-get update && apt-get install -y libsnappy-dev tini && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -16,4 +16,5 @@ COPY . .
 
 EXPOSE 8010
 
+ENTRYPOINT ["tini", "--"]
 CMD ["python", "main.py"]

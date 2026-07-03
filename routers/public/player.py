@@ -142,6 +142,9 @@ async def player_historical(player_tag: str, season: str, request: Request, resp
 async def player_warhits(player_tag: str, request: Request, response: Response, timestamp_start: int = 0, timestamp_end: int = 2527625513, limit: int = 50):
     client = coc.Client(raw_attribute=True)
     player_tag = fix_tag(player_tag)
+    if limit <= 0:
+        return {"items": []}
+    limit = min(limit, 100)
     START = pend.from_timestamp(timestamp_start, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     END = pend.from_timestamp(timestamp_end, tz=pend.UTC).strftime('%Y%m%dT%H%M%S.000Z')
     pipeline = [
@@ -151,65 +154,70 @@ async def player_warhits(player_tag: str, request: Request, response: Response, 
         {"$project": {"data": "$data"}},
         {"$sort" : {"data.preparationStartTime" : -1}}
     ]
-    wars = await db_client.clan_wars.aggregate(pipeline, allowDiskUse=True).to_list(length=None)
     found_wars = set()
     stats = {"items" : []}
     local_limit = 0
-    for war in wars:
-        war = war.get("data")
-        war = coc.ClanWar(data=war, client=client)
-        war_unique_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
-        if war_unique_id in found_wars:
-            continue
-        found_wars.add(war_unique_id)
-        if limit == local_limit:
-            break
-        local_limit += 1
+    wars = db_client.clan_wars.aggregate(pipeline, allowDiskUse=True)
+    try:
+        async for war in wars:
+            war = war.get("data")
+            war = coc.ClanWar(data=war, client=client)
+            war_unique_id = "-".join(sorted([war.clan_tag, war.opponent.tag])) + f"-{int(war.preparation_start_time.time.timestamp())}"
+            if war_unique_id in found_wars:
+                continue
+            if limit == local_limit:
+                break
+            found_wars.add(war_unique_id)
+            local_limit += 1
 
-        war_member = war.get_member(player_tag)
+            war_member = war.get_member(player_tag)
+            if war_member is None:
+                continue
 
-        war_data: dict = war._raw_data
-        war_data.pop("status_code", None)
-        war_data.pop("_response_retry", None)
-        war_data.pop("timestamp", None)
-        war_data.pop("timestamp", None)
-        del war_data["clan"]["members"]
-        del war_data["opponent"]["members"]
-        war_data["type"] = war.type
+            war_data: dict = war._raw_data
+            war_data.pop("status_code", None)
+            war_data.pop("_response_retry", None)
+            war_data.pop("timestamp", None)
+            war_data.pop("timestamp", None)
+            del war_data["clan"]["members"]
+            del war_data["opponent"]["members"]
+            war_data["type"] = war.type
 
-        member_raw_data = war_member._raw_data
-        member_raw_data.pop("bestOpponentAttack", None)
-        member_raw_data.pop("attacks", None)
+            member_raw_data = war_member._raw_data
+            member_raw_data.pop("bestOpponentAttack", None)
+            member_raw_data.pop("attacks", None)
 
-        done_holder = {
-            "war_data": war_data,
-            "member_data" : member_raw_data,
-            "attacks": [],
-            "defenses" : []
-        }
-        for attack in war_member.attacks:
-            raw_attack: dict = attack._raw_data
-            raw_attack["fresh"] = attack.is_fresh_attack
-            defender_raw_data = attack.defender._raw_data
-            defender_raw_data.pop("attacks", None)
-            defender_raw_data.pop("bestOpponentAttack", None)
-            raw_attack["defender"] = defender_raw_data
-            raw_attack["attack_order"] = attack.order
-            done_holder["attacks"].append(raw_attack)
+            done_holder = {
+                "war_data": war_data,
+                "member_data" : member_raw_data,
+                "attacks": [],
+                "defenses" : []
+            }
+            for attack in war_member.attacks:
+                raw_attack: dict = attack._raw_data
+                raw_attack["fresh"] = attack.is_fresh_attack
+                defender_raw_data = attack.defender._raw_data
+                defender_raw_data.pop("attacks", None)
+                defender_raw_data.pop("bestOpponentAttack", None)
+                raw_attack["defender"] = defender_raw_data
+                raw_attack["attack_order"] = attack.order
+                done_holder["attacks"].append(raw_attack)
 
-        for defense in war_member.defenses:
-            raw_defense: dict = defense._raw_data
-            raw_defense["fresh"] = defense.is_fresh_attack
+            for defense in war_member.defenses:
+                raw_defense: dict = defense._raw_data
+                raw_defense["fresh"] = defense.is_fresh_attack
 
-            defender_raw_data = defense.attacker._raw_data
-            defender_raw_data.pop("attacks", None)
-            defender_raw_data.pop("bestOpponentAttack", None)
+                defender_raw_data = defense.attacker._raw_data
+                defender_raw_data.pop("attacks", None)
+                defender_raw_data.pop("bestOpponentAttack", None)
 
-            raw_defense["attacker"] = defender_raw_data
-            raw_defense["attack_order"] = defense.order
-            done_holder["defenses"].append(raw_defense)
+                raw_defense["attacker"] = defender_raw_data
+                raw_defense["attack_order"] = defense.order
+                done_holder["defenses"].append(raw_defense)
 
-        stats["items"].append(done_holder)
+            stats["items"].append(done_holder)
+    finally:
+        await wars.close()
     return stats
 
 
@@ -570,6 +578,3 @@ async def player_join_leave(player_tag: str, request: Request, response: Respons
     final_events = process_clan_events(result)
     final_events.reverse()
     return {"items": final_events}
-
-
-

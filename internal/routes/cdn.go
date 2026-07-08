@@ -30,7 +30,7 @@ var cdnAllowedExtensions = map[string]bool{
 // uploadFileToCDN godoc
 // @Summary Upload a file to the ClashKing CDN
 // @Description Uploads an arbitrary file and returns its public CDN URL. Requires authentication.
-// @Tags CDN
+// @Tags Other
 // @Accept multipart/form-data
 // @Produce json
 // @Security ApiKeyAuth

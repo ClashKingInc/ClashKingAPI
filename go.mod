@@ -7,6 +7,7 @@ require (
 	github.com/disgoorg/disgo v0.19.3
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/getsentry/sentry-go v0.45.0
+	github.com/getsentry/sentry-go/fiber v0.45.0
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0

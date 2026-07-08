@@ -11,8 +11,8 @@ type ClanTagsBody struct {
 }
 
 type ClanBadgeURLs struct {
-	Small  string `json:"small"`
-	Medium string `json:"medium"`
+	Small  string `json:"small" swaggerignore:"true"`
+	Medium string `json:"medium" swaggerignore:"true"`
 	Large  string `json:"large"`
 }
 

@@ -101,6 +101,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	app.Use(requestid.New())
 	app.Use(utils.HTTPLoggerMiddleware(a.Config))
 	app.Use(utils.FiberMiddleware())
+	app.Use(utils.SentryScopeMiddleware())
 	app.Use(fiberrecover.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
@@ -182,5 +183,5 @@ func docsURL(cfg utils.Config) string {
 	if host == "0.0.0.0" {
 		host = "127.0.0.1"
 	}
-	return "http://" + host + ":" + strconv.Itoa(cfg.ListenPort) + "/docs"
+	return "http://" + host + ":" + strconv.Itoa(cfg.ListenPort) + "/"
 }

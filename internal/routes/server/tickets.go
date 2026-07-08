@@ -91,9 +91,9 @@ func sqlPlayerLinksForTickets(c *fiber.Ctx, a apptypes.Deps, userIDs []string) (
 		return out, 0, nil
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT COALESCE(user_id, discord_id, ''), tag
+		SELECT COALESCE(user_id, ''), tag
 		FROM player_links
-		WHERE user_id = ANY($1) OR discord_id = ANY($1)
+		WHERE user_id = ANY($1)
 	`, userIDs)
 	if err != nil {
 		return out, 0, err

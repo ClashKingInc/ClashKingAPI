@@ -14,18 +14,17 @@ import (
 // warPrevious godoc
 // @Summary Get previous wars
 // @Description Returns stored previous wars for a clan.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
-// @Param clan_tag path string true "Clan tag"
+// @Param clanTag path string true "Clan tag"
 // @Param timestamp_start query int false "Start Unix timestamp"
 // @Param timestamp_end query int false "End Unix timestamp"
 // @Param limit query int false "Maximum number of wars"
 // @Success 200 {array} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /war/{clan_tag}/previous [get]
 func warPrevious(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("clan_tag"))
+		tag := fixTag(c.Params("clanTag"))
 		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
 		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
 		limit := queryInt(c, "limit", 50)
@@ -40,20 +39,20 @@ func warPrevious(a apptypes.Deps) fiber.Handler {
 // warPreviousAtTime godoc
 // @Summary Get previous war by end time
 // @Description Returns the stored previous war near the supplied Clash API end time.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param end_time path string true "War end time in Clash format"
+// @Param clanTag path string true "Clan tag"
+// @Param endTime query string true "War end time in Clash format"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /war/{clan_tag}/previous/{end_time} [get]
+// @Router /war/{clanTag}/previous [get]
 func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("clan_tag"))
-		t, err := time.Parse("20060102T150405.000Z", c.Params("end_time"))
+		tag := fixTag(c.Params("clanTag"))
+		t, err := time.Parse("20060102T150405.000Z", c.Query("endTime"))
 		if err != nil {
-			return apptypes.Error(http.StatusBadRequest, "invalid end_time format")
+			return apptypes.Error(http.StatusBadRequest, "invalid endTime format")
 		}
 		items, err := sqlClanWars(c, a, tag, t.Add(-5*time.Minute), t.Add(5*time.Minute), []string{"random", "friendly", "cwl"}, 1)
 		if err != nil || len(items) == 0 {
@@ -66,15 +65,15 @@ func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 // warBasic godoc
 // @Summary Get current or recent war
 // @Description Returns the current or most recent non-CWL war for a clan.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
-// @Param clan_tag path string true "Clan tag"
+// @Param clanTag path string true "Clan tag"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /war/{clan_tag}/basic [get]
+// @Router /war/{clanTag}/basic [get]
 func warBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("clan_tag"))
+		tag := fixTag(c.Params("clanTag"))
 		items, err := sqlClanWars(c, a, tag, time.Now().UTC().Add(-51*time.Hour), time.Now().UTC().Add(24*time.Hour), []string{"random", "friendly"}, 1)
 		if err != nil {
 			return err
@@ -89,14 +88,14 @@ func warBasic(a apptypes.Deps) fiber.Handler {
 // cwlGroup godoc
 // @Summary Get current CWL group
 // @Description Returns the current season CWL group for a clan.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
-// @Param clan_tag path string true "Clan tag"
+// @Param clanTag path string true "Clan tag"
 // @Success 200 {object} map[string]interface{}
-// @Router /cwl/{clan_tag}/group [get]
+// @Router /cwl/{clanTag}/group [get]
 func cwlGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		group, err := v1CWLGroup(c, a, fixTag(c.Params("clan_tag")), currentSeason())
+		group, err := v1CWLGroup(c, a, fixTag(c.Params("clanTag")), currentSeason())
 		if err != nil {
 			return apptypes.JSON(c, http.StatusOK, nil)
 		}
@@ -107,17 +106,17 @@ func cwlGroup(a apptypes.Deps) fiber.Handler {
 // cwlSeason godoc
 // @Summary Get CWL group by season
 // @Description Returns the CWL group for a clan and season.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
-// @Param clan_tag path string true "Clan tag"
+// @Param clanTag path string true "Clan tag"
 // @Param season path string true "Season YYYY-MM"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /cwl/{clan_tag}/{season} [get]
+// @Router /cwl/{clanTag}/{season} [get]
 func cwlSeason(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		data, err := v1CWLGroup(c, a, fixTag(c.Params("clan_tag")), c.Params("season"))
+		data, err := v1CWLGroup(c, a, fixTag(c.Params("clanTag")), c.Params("season"))
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "No CWL Data Found")
 		}

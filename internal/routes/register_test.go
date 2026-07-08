@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -63,6 +64,40 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/players/extended",
 		"/v2/players/legend-days",
 		"/v2/players/legend_rankings",
+		"/v2/users/coc-accounts",
+		"/v2/users/coc-accounts/order",
+		"/v2/users/coc-accounts/:player_tag",
+		"/v2/users/coc-accounts/:player_tag/status",
+		"/v2/users/coc-accounts/:player_tag/verify",
+		"/v2/users/coc-accounts/verified",
+		"/v2/search/bookmark/:user_id/:search_type/:tag",
+		"/v2/search/recent/:user_id/:search_type/:tag",
+		"/v2/search/:id/items",
+		"/server-settings/:server_id",
+		"/guild_links/:guild_id",
+		"/shortner",
+		"/shortlink",
+		"/war-stats",
+		"/bot/config",
+		"/ranking/player-trophies/:location/:date",
+		"/ranking/player-builder/:location/:date",
+		"/ranking/clan-trophies/:location/:date",
+		"/ranking/clan-builder/:location/:date",
+		"/ranking/clan-capital/:location/:date",
+		"/v2/categories",
+		"/v2/static/categories",
+		"/v2/static/app-bundle",
+		"/v2/static/app-translations",
+		"/v2/:category/names",
+		"/v2/static/:category/names",
+		"/v2/:category/:item_id_or_name/maxlevel",
+		"/v2/static/:category/:item_id_or_name/maxlevel",
+		"/v2/:category/:item_id_or_name",
+		"/v2/static/:category/:item_id_or_name",
+		"/v2/:category",
+		"/v2/static/:category",
+		"/war/:clan_tag/previous",
+		"/war/:clan_tag/previous/:end_time",
 	} {
 		if paths[path] {
 			t.Fatalf("expected %s to be absent from registered routes", path)
@@ -74,11 +109,41 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/player/:player_tag/join-leave",
 		"/v2/player/:player_tag/war/attacks",
 		"/v2/player/:player_tag/war/stats",
-		"/war-stats",
+		"/v2/links/:id",
+		"/v2/links/:id/:playerTag",
+		"/v2/links/:id/order",
+		"/v2/links/:id/bookmarks",
+		"/v2/links/:id/bookmarks/:type/:tag",
+		"/v2/links/:id/bookmarks/order",
+		"/v2/links/:id/searches",
+		"/war/:clanTag/previous",
+		"/war/:clanTag/basic",
+		"/cwl/:clanTag/group",
+		"/cwl/:clanTag/:season",
+		"/v2/ranking/player-trophies/:location/:date",
+		"/v2/ranking/player-builder/:location/:date",
+		"/v2/ranking/clan-trophies/:location/:date",
+		"/v2/ranking/clan-builder/:location/:date",
+		"/v2/ranking/clan-capital/:location/:date",
+		"/builderbaseleagues",
 	} {
 		if !paths[path] {
 			t.Fatalf("expected %s to be registered", path)
 		}
+	}
+}
+
+func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/war/%232PP/previous", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("expected missing endTime to return 400, got %d", resp.StatusCode)
 	}
 }
 

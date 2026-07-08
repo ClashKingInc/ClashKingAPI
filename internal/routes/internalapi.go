@@ -13,7 +13,7 @@ import (
 // botInfo godoc
 // @Summary Get bot info
 // @Description Returns internal bot cluster stats, system info, and database document counts.
-// @Tags Internal
+// @Tags Other
 // @Produce json
 // @Security ApiKeyAuth
 // @Success 200 {object} map[string]interface{}

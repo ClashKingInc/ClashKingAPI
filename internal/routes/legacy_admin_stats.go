@@ -3,7 +3,6 @@ package routes
 import (
 	"io"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -12,37 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// botConfig godoc
-// @Summary Get bot configuration
-// @Description Returns ClashKing bot configuration for authorized bot tokens.
-// @Tags Legacy Bot
-// @Produce json
-// @Param bot_token header string false "Bot token"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /bot/config [get]
-func botConfig(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		botToken := legacyFirstNonEmpty(c.Get("bot_token"), c.Get("Bot-Token"))
-		var raw []byte
-		err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT data FROM bot_settings WHERE type = 'bot'`).Scan(&raw)
-		if err != nil {
-			return err
-		}
-		configData := jsonObject(raw)
-		isMain := botToken == stringValue(configData["prod_token"])
-		isBeta := slices.Contains(stringSlice(configData["beta_tokens"]), botToken)
-		if !isMain && !isBeta {
-			return apptypes.Error(http.StatusUnauthorized, "Invalid or missing token")
-		}
-		configData["is_main"] = isMain
-		configData["is_beta"] = isBeta
-		configData["is_custom"] = false
-		return apptypes.JSON(c, http.StatusOK, configData)
-	}
-}
 
 // clanBadge godoc
 // @Summary Get clan badge image
@@ -92,7 +60,6 @@ func clanBadge(a apptypes.Deps) fiber.Handler {
 // @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /server-settings/{server_id} [get]
 func serverSettingsLegacy(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := strconv.ParseInt(c.Params("server_id"), 10, 64)
@@ -113,11 +80,9 @@ func serverSettingsLegacy(a apptypes.Deps) fiber.Handler {
 // guildLinks godoc
 // @Summary Get guild links
 // @Description Returns linked player data for a Discord guild.
-// @Tags Legacy Links
 // @Produce json
 // @Param guild_id path int true "Discord guild ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /guild_links/{guild_id} [get]
 func guildLinks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return apptypes.JSON(c, http.StatusOK, map[string]any{})
@@ -127,13 +92,11 @@ func guildLinks(a apptypes.Deps) fiber.Handler {
 // shortener godoc
 // @Summary Create short link
 // @Description Creates a ClashKing short link for the supplied URL.
-// @Tags Legacy Links
 // @Produce json
 // @Param url query string true "Destination URL"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /shortner [get]
 func shortener(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		url := c.Query("url")
@@ -151,12 +114,10 @@ func shortener(a apptypes.Deps) fiber.Handler {
 // shortlink godoc
 // @Summary Resolve short link
 // @Description Redirects a ClashKing short link to its destination URL.
-// @Tags Legacy Links
 // @Param id query string false "Short link ID"
 // @Param link_id query string false "Short link ID"
 // @Success 307
 // @Failure 404 {object} map[string]interface{}
-// @Router /shortlink [get]
 func shortlink(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		linkID := legacyFirstNonEmpty(c.Query("id"), c.Query("link_id"))
@@ -165,48 +126,6 @@ func shortlink(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusNotFound, "short link not found")
 		}
 		return c.Redirect(url, http.StatusTemporaryRedirect)
-	}
-}
-
-// discordLinks godoc
-// @Summary Get Discord links for player tags
-// @Description Returns Discord user IDs linked to the provided player tags.
-// @Tags Legacy Links
-// @Accept json
-// @Produce json
-// @Param body body []string true "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /discord_links [post]
-func discordLinks(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var playerTags []string
-		if err := apptypes.DecodeJSON(c, &playerTags); err != nil {
-			return err
-		}
-		filtered := make([]string, 0, len(playerTags))
-		for _, tag := range playerTags {
-			filtered = append(filtered, fixTag(tag))
-		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT tag, COALESCE(discord_id, user_id, '')
-			FROM player_links
-			WHERE tag = ANY($1)
-		`, filtered)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		result := map[string]any{}
-		for rows.Next() {
-			var tag, userID string
-			if err := rows.Scan(&tag, &userID); err != nil {
-				return err
-			}
-			result[tag] = userID
-		}
-		return apptypes.JSON(c, http.StatusOK, result)
 	}
 }
 
@@ -229,14 +148,13 @@ func capitalLegacy(a apptypes.Deps) fiber.Handler {
 // warStatsLegacy godoc
 // @Summary Get legacy war stats
 // @Description Returns scoped war hit-rate stats for players.
-// @Tags Legacy War
+// @Tags War
 // @Produce json
 // @Param player_tags query []string false "Player tags"
 // @Param clan_tags query []string false "Clan tags"
 // @Param server query int false "Discord server ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /war-stats [get]
 func warStatsLegacy(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, names, err := scopedPlayerTags(c, a)

@@ -2,8 +2,10 @@ package api_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -31,14 +33,46 @@ func TestEnsureSwaggerSecurityDefinitionAddsAuthorizationScheme(t *testing.T) {
 	}
 }
 
+func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", swaggerdocs.NewScalarHandler("/openapi.json"))
+	app.Get("/docs", swaggerdocs.NewScalarHandler("/openapi.json"))
+
+	for _, path := range []string{"/", "/docs"} {
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil {
+			t.Fatalf("request %s failed: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d", path, resp.StatusCode)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s body: %v", path, err)
+		}
+		html := string(body)
+		for _, marker := range []string{
+			`id="api-reference"`,
+			`data-url="/openapi.json"`,
+			`https://cdn.jsdelivr.net/npm/@scalar/api-reference`,
+			`theme: "deepSpace"`,
+			`layout: "modern"`,
+		} {
+			if !strings.Contains(html, marker) {
+				t.Fatalf("expected Scalar html for %s to contain %q", path, marker)
+			}
+		}
+	}
+}
+
 func TestSwaggerUIHandlersServeAssetsIndependently(t *testing.T) {
 	app := fiber.New()
-	app.Get("/docs/*", swaggerdocs.NewUIHandler("/openapi.json"))
+	app.Get("/swagger/*", swaggerdocs.NewUIHandler("/openapi.json"))
 
 	for _, path := range []string{
-		"/docs/index.html",
-		"/docs/swagger-ui.css",
-		"/docs/swagger-ui-bundle.js",
+		"/swagger/index.html",
+		"/swagger/swagger-ui.css",
+		"/swagger/swagger-ui-bundle.js",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		resp, err := app.Test(req)
@@ -47,6 +81,34 @@ func TestSwaggerUIHandlersServeAssetsIndependently(t *testing.T) {
 		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 for %s, got %d", path, resp.StatusCode)
+		}
+	}
+}
+
+func TestSwaggerUIOrdersLinksBookmarksAfterAccounts(t *testing.T) {
+	app := fiber.New()
+	app.Get("/swagger/*", swaggerdocs.NewUIHandler("/openapi.json"))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	for _, marker := range []string{
+		"operationsSorter: function(a, b)",
+		"PUT /v2/links/{id}/order",
+		"DELETE /v2/links/{id}/{playerTag}",
+		"GET /v2/links/{id}/bookmarks",
+		"DELETE /v2/links/{id}/bookmarks/{type}/{tag}",
+		"GET /v2/links/{id}/searches",
+	} {
+		if !strings.Contains(html, marker) {
+			t.Fatalf("expected swagger UI html to contain %q", marker)
 		}
 	}
 }
@@ -71,6 +133,79 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	if !ok || len(security) == 0 {
 		t.Fatal("expected /v2/me to preserve ApiKeyAuth security marker")
 	}
+}
+
+func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	if _, exists := paths["/v2/search/{id}/items"]; exists {
+		t.Fatal("expected old query-driven search items endpoint to be absent")
+	}
+	if _, exists := paths["/v2/users/coc-accounts"]; exists {
+		t.Fatal("expected old coc accounts endpoint to be absent")
+	}
+	if _, exists := paths["/v2/links/{id}/searches"]; !exists {
+		t.Fatal("expected grouped recent searches endpoint")
+	}
+
+	definitions := swaggerDefinitions(t, doc)
+	groupedProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentGroupedResponse")
+	assertArrayItemsRef(t, groupedProps["players"], "#/definitions/modelsv2.SearchRecentPlayerItem")
+	assertArrayItemsRef(t, groupedProps["clans"], "#/definitions/modelsv2.SearchRecentClanItem")
+
+	playerProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentPlayerItem")
+	for _, field := range []string{"type", "player_tag", "clan_tag"} {
+		if _, exists := playerProps[field]; exists {
+			t.Fatalf("expected SearchRecentPlayerItem not to expose stale field %s", field)
+		}
+	}
+	for _, field := range []string{"name", "tag", "townHallLevel", "clan", "league", "created_at"} {
+		if _, exists := playerProps[field]; !exists {
+			t.Fatalf("expected SearchRecentPlayerItem to expose %s", field)
+		}
+	}
+	for _, field := range []string{"badgeUrls", "members"} {
+		if _, exists := playerProps[field]; exists {
+			t.Fatalf("expected SearchRecentPlayerItem not to expose clan-only field %s", field)
+		}
+	}
+	assertRef(t, playerProps["clan"], "#/definitions/modelsv2.SearchRecentClan")
+	assertRef(t, playerProps["league"], "#/definitions/modelsv2.SearchRecentLeague")
+
+	clanItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentClanItem")
+	for _, field := range []string{"type", "player_tag", "clan_tag", "townHallLevel", "clan", "league"} {
+		if _, exists := clanItemProps[field]; exists {
+			t.Fatalf("expected SearchRecentClanItem not to expose player-only/stale field %s", field)
+		}
+	}
+	for _, field := range []string{"name", "tag", "badgeUrls", "members", "created_at"} {
+		if _, exists := clanItemProps[field]; !exists {
+			t.Fatalf("expected SearchRecentClanItem to expose %s", field)
+		}
+	}
+	assertRef(t, clanItemProps["badgeUrls"], "#/definitions/modelsv2.SearchRecentBadgeURLs")
+
+	badgeProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentBadgeURLs")
+	if _, exists := badgeProps["large"]; !exists {
+		t.Fatal("expected recent badgeUrls schema to expose large")
+	}
+	if _, exists := definitions["modelsv2.SearchRecentBadgeURLs"].(map[string]any)["additionalProperties"]; exists {
+		t.Fatal("expected recent badgeUrls schema not to use additionalProperties")
+	}
+	recentClanProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentClan")
+	assertRef(t, recentClanProps["badgeUrls"], "#/definitions/modelsv2.SearchRecentBadgeURLs")
+	leagueProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentLeague")
+	assertRef(t, leagueProps["iconUrls"], "#/definitions/modelsv2.SearchRecentLeagueIconURLs")
+
+	for _, name := range []string{"modelsv2.SearchBookmarkRequest", "modelsv2.SearchBookmarkOrderRequest", "modelsv2.SearchBookmarkItem"} {
+		props := swaggerDefinitionProperties(t, definitions, name)
+		assertEnum(t, props["type"], []any{"player", "clan"})
+	}
+
+	getBookmarks := paths["/v2/links/{id}/bookmarks"].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, getBookmarks["parameters"], "type", []any{"player", "clan"})
+	deleteBookmark := paths["/v2/links/{id}/bookmarks/{type}/{tag}"].(map[string]any)["delete"].(map[string]any)
+	assertParameterEnum(t, deleteBookmark["parameters"], "type", []any{"player", "clan"})
 }
 
 func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
@@ -143,6 +278,35 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/players/location",
 		"/v2/players/sorted/{attribute}",
 		"/v2/players/summary/{season}/top",
+		"/v2/search/{id}/items",
+		"/server-settings/{server_id}",
+		"/guild_links/{guild_id}",
+		"/shortner",
+		"/shortlink",
+		"/war-stats",
+		"/bot/config",
+		"/ranking/player-trophies/{location}/{date}",
+		"/ranking/player-builder/{location}/{date}",
+		"/ranking/clan-trophies/{location}/{date}",
+		"/ranking/clan-builder/{location}/{date}",
+		"/ranking/clan-capital/{location}/{date}",
+		"/v2/categories",
+		"/v2/static/categories",
+		"/v2/static/app-bundle",
+		"/v2/static/app-translations",
+		"/v2/{category}/names",
+		"/v2/static/{category}/names",
+		"/v2/{category}/{item_id_or_name}/maxlevel",
+		"/v2/static/{category}/{item_id_or_name}/maxlevel",
+		"/v2/{category}/{item_id_or_name}",
+		"/v2/static/{category}/{item_id_or_name}",
+		"/v2/{category}",
+		"/v2/static/{category}",
+		"/war/{clan_tag}/previous",
+		"/war/{clan_tag}/previous/{end_time}",
+		"/cwl/{clan_tag}/group",
+		"/cwl/{clan_tag}/{season}",
+		"/v2/links/{id}/{player_tag}",
 	}
 	for _, path := range absent {
 		if _, exists := paths[path]; exists {
@@ -156,10 +320,58 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/player/{player_tag}/join-leave/totals",
 		"/v2/player/{player_tag}/join-leave/shared",
 		"/v2/clan/{clan_tag}/badge",
+		"/v2/links/{id}/searches",
+		"/v2/links/{id}/{playerTag}",
+		"/builderbaseleagues",
+		"/war/{clanTag}/previous",
+		"/war/{clanTag}/basic",
+		"/cwl/{clanTag}/group",
+		"/cwl/{clanTag}/{season}",
+		"/list/townhalls",
+		"/list/seasons",
+		"/v2/ranking/player-trophies/{location}/{date}",
+		"/v2/ranking/player-builder/{location}/{date}",
+		"/v2/ranking/clan-trophies/{location}/{date}",
+		"/v2/ranking/clan-builder/{location}/{date}",
+		"/v2/ranking/clan-capital/{location}/{date}",
+		"/v2/cdn/upload",
+		"/v2/exports/war/cwl-summary",
+		"/v2/exports/war/player-stats",
+		"/v2/guild/{server_id}",
+		"/v2/guilds",
+		"/v2/internal/bot/info",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected %s to remain in swagger", path)
 		}
+	}
+
+	previous := paths["/war/{clanTag}/previous"].(map[string]any)["get"].(map[string]any)
+	params, _ := previous["parameters"].([]any)
+	assertRequiredParameter(t, params, "endTime", "query")
+	assertRequiredParameter(t, params, "clanTag", "path")
+
+	builderBaseLeagues := paths["/builderbaseleagues"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, builderBaseLeagues, []string{"Other"})
+	for _, path := range []string{"/war/{clanTag}/previous", "/war/{clanTag}/basic", "/cwl/{clanTag}/group", "/cwl/{clanTag}/{season}"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		assertTags(t, operation, []string{"War"})
+	}
+	for _, path := range []string{"/list/townhalls", "/list/seasons"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		assertTags(t, operation, []string{"Lists"})
+	}
+	for _, path := range []string{"/v2/ranking/player-trophies/{location}/{date}", "/v2/ranking/player-builder/{location}/{date}", "/v2/ranking/clan-trophies/{location}/{date}", "/v2/ranking/clan-builder/{location}/{date}", "/v2/ranking/clan-capital/{location}/{date}"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		assertTags(t, operation, []string{"Rankings"})
+	}
+	for _, path := range []string{"/v2/cdn/upload", "/v2/exports/war/cwl-summary", "/v2/exports/war/player-stats", "/v2/guild/{server_id}", "/v2/guilds", "/v2/internal/bot/info"} {
+		method := "get"
+		if path == "/v2/cdn/upload" || path == "/v2/exports/war/player-stats" {
+			method = "post"
+		}
+		operation := paths[path].(map[string]any)[method].(map[string]any)
+		assertTags(t, operation, []string{"Other"})
 	}
 
 	definitions, ok := doc["definitions"].(map[string]any)
@@ -453,6 +665,11 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/battlelogs/items/league/{league_id}/hitrate",
 		"/v2/battlelogs/items/top200/usage",
 		"/v2/battlelogs/items/top200/hitrate",
+		"/v2/ranking/player-trophies/{location}/{date}",
+		"/v2/ranking/player-builder/{location}/{date}",
+		"/v2/ranking/clan-trophies/{location}/{date}",
+		"/v2/ranking/clan-builder/{location}/{date}",
+		"/v2/ranking/clan-capital/{location}/{date}",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected public stats path %s in swagger", path)
@@ -463,7 +680,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	if !ok {
 		t.Fatal("expected swagger tags list")
 	}
-	want := []string{"Player", "Clan", "Dates", "Leaderboard", "Global", "Battlelogs"}
+	want := []string{"Player", "Clan", "War", "Battlelogs", "Leaderboard", "Rankings", "Global", "Search", "Links", "Tracking", "Dates", "Lists"}
 	if len(tags) < len(want) {
 		t.Fatalf("expected at least %d tags, got %d", len(want), len(tags))
 	}
@@ -472,6 +689,17 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		if !ok || tag["name"] != name {
 			t.Fatalf("expected tag %d to be %s, got %v", i, name, tags[i])
 		}
+	}
+	for _, raw := range tags {
+		tag, _ := raw.(map[string]any)
+		switch tag["name"] {
+		case "Auth", "Legacy Bot", "Legacy Links", "Legacy War", "Legacy Rankings", "Legacy Lists", "CDN", "Exports", "Guild", "Guilds", "Internal", "Tracking Endpoints", "Static Data":
+			t.Fatalf("expected swagger tags not to include %s", tag["name"])
+		}
+	}
+	lastTag, _ := tags[len(tags)-1].(map[string]any)
+	if lastTag["name"] != "Other" {
+		t.Fatalf("expected Other to be the last swagger tag, got %v", lastTag)
 	}
 
 	raw, err := swaggerdocs.BuildDoc()
@@ -496,6 +724,100 @@ func buildSwaggerDoc(t *testing.T) map[string]any {
 		t.Fatalf("failed to decode swagger doc: %v", err)
 	}
 	return doc
+}
+
+func swaggerDefinitions(t *testing.T, doc map[string]any) map[string]any {
+	t.Helper()
+	definitions, ok := doc["definitions"].(map[string]any)
+	if !ok {
+		t.Fatal("expected swagger definitions")
+	}
+	return definitions
+}
+
+func swaggerDefinitionProperties(t *testing.T, definitions map[string]any, name string) map[string]any {
+	t.Helper()
+	definition, ok := definitions[name].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s definition", name)
+	}
+	properties, ok := definition["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s properties", name)
+	}
+	return properties
+}
+
+func assertRef(t *testing.T, value any, want string) {
+	t.Helper()
+	ref, _ := value.(map[string]any)
+	if ref["$ref"] != want {
+		t.Fatalf("expected ref %s, got %v", want, value)
+	}
+}
+
+func assertArrayItemsRef(t *testing.T, value any, want string) {
+	t.Helper()
+	field, _ := value.(map[string]any)
+	items, _ := field["items"].(map[string]any)
+	if items["$ref"] != want {
+		t.Fatalf("expected array items ref %s, got %v", want, value)
+	}
+}
+
+func assertEnum(t *testing.T, value any, want []any) {
+	t.Helper()
+	field, _ := value.(map[string]any)
+	if !reflect.DeepEqual(field["enum"], want) {
+		t.Fatalf("expected enum %v, got %v", want, value)
+	}
+}
+
+func assertParameterEnum(t *testing.T, value any, name string, want []any) {
+	t.Helper()
+	params, ok := value.([]any)
+	if !ok {
+		t.Fatalf("expected parameters array, got %v", value)
+	}
+	for _, raw := range params {
+		param, _ := raw.(map[string]any)
+		if param["name"] == name {
+			if !reflect.DeepEqual(param["enum"], want) {
+				t.Fatalf("expected %s enum %v, got %v", name, want, param)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected %s parameter in %v", name, params)
+}
+
+func assertRequiredParameter(t *testing.T, params []any, name string, in string) {
+	t.Helper()
+	for _, raw := range params {
+		param, _ := raw.(map[string]any)
+		if param["name"] == name && param["in"] == in {
+			if param["required"] != true {
+				t.Fatalf("expected %s %s parameter to be required, got %v", in, name, param)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected required %s %s parameter in %v", in, name, params)
+}
+
+func assertTags(t *testing.T, operation map[string]any, want []string) {
+	t.Helper()
+	rawTags, ok := operation["tags"].([]any)
+	if !ok {
+		t.Fatalf("expected operation tags, got %v", operation["tags"])
+	}
+	got := make([]string, 0, len(rawTags))
+	for _, raw := range rawTags {
+		got = append(got, raw.(string))
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected tags %v, got %v", want, got)
+	}
 }
 
 func swaggerPaths(t *testing.T, doc map[string]any) map[string]any {

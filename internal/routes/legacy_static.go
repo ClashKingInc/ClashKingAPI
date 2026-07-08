@@ -23,7 +23,7 @@ var staticDataPath = filepath.Join(".venv", "lib", "python3.13", "site-packages"
 // builderBaseLeagues godoc
 // @Summary Get builder base leagues
 // @Description Returns legacy builder base league metadata.
-// @Tags Legacy Static Data
+// @Tags Other
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
@@ -76,7 +76,7 @@ func builderBaseLeagues() fiber.Handler {
 // listTownhalls godoc
 // @Summary List tracked town halls
 // @Description Returns distinct town hall levels seen in tracked player stats.
-// @Tags Legacy Lists
+// @Tags Lists
 // @Produce json
 // @Success 200 {array} int
 // @Failure 500 {object} map[string]interface{}
@@ -103,7 +103,7 @@ func listTownhalls(a apptypes.Deps) fiber.Handler {
 // listSeasons godoc
 // @Summary List recent seasons
 // @Description Returns recent season identifiers in YYYY-MM format.
-// @Tags Legacy Lists
+// @Tags Lists
 // @Produce json
 // @Param last query int false "Number of previous months to include"
 // @Success 200 {array} string
@@ -301,7 +301,7 @@ func legendEOSWinners(a apptypes.Deps) fiber.Handler {
 // liveLegendRankings godoc
 // @Summary Get live legend rankings
 // @Description Returns current legend rankings in the requested rank range.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param top_ranking query int false "First rank"
 // @Param lower_ranking query int false "Last rank"
@@ -332,7 +332,7 @@ func liveLegendRankings(a apptypes.Deps) fiber.Handler {
 // liveLegendRankingByPlayer godoc
 // @Summary Get live legend ranking by player
 // @Description Returns the current legend ranking row for a player.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} map[string]interface{}
@@ -368,61 +368,61 @@ func liveLegendRankingByPlayer(a apptypes.Deps) fiber.Handler {
 // playerTrophiesRanking godoc
 // @Summary Get player trophy ranking snapshot
 // @Description Returns a stored player trophy ranking snapshot for a location and date.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/player-trophies/{location}/{date} [get]
+// @Router /v2/ranking/player-trophies/{location}/{date} [get]
 func playerTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "player_trophies") }
 
 // playerBuilderRanking godoc
 // @Summary Get player builder ranking snapshot
 // @Description Returns a stored player builder ranking snapshot for a location and date.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/player-builder/{location}/{date} [get]
+// @Router /v2/ranking/player-builder/{location}/{date} [get]
 func playerBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "player_builder") }
 
 // clanTrophiesRanking godoc
 // @Summary Get clan trophy ranking snapshot
 // @Description Returns a stored clan trophy ranking snapshot for a location and date.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/clan-trophies/{location}/{date} [get]
+// @Router /v2/ranking/clan-trophies/{location}/{date} [get]
 func clanTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_trophies") }
 
 // clanBuilderRanking godoc
 // @Summary Get clan builder ranking snapshot
 // @Description Returns a stored clan builder ranking snapshot for a location and date.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/clan-builder/{location}/{date} [get]
+// @Router /v2/ranking/clan-builder/{location}/{date} [get]
 func clanBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_builder") }
 
 // clanCapitalRanking godoc
 // @Summary Get clan capital ranking snapshot
 // @Description Returns a stored clan capital ranking snapshot for a location and date.
-// @Tags Legacy Rankings
+// @Tags Rankings
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /ranking/clan-capital/{location}/{date} [get]
+// @Router /v2/ranking/clan-capital/{location}/{date} [get]
 func clanCapitalRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_capital") }
 
 // playerTodo godoc

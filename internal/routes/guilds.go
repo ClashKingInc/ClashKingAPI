@@ -18,7 +18,7 @@ import (
 //
 // @Summary Get user guilds with bot status
 // @Description Returns the authenticated user's guilds and whether the bot is present. Only guilds where the user has MANAGE_GUILD permission or is owner are returned.
-// @Tags Guilds
+// @Tags Other
 // @Produce json
 // @Security ApiKeyAuth
 // @Success 200 {array} modelsv2.GuildInfo
@@ -93,7 +93,7 @@ func resolveBotPresence(ctx context.Context, discordAdapter *apptypes.DiscordAda
 //
 // @Summary Get guild details by ID
 // @Description Returns guild metadata for the requested server. The authenticated user must be a member of the guild.
-// @Tags Guild
+// @Tags Other
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path string true "Server ID"

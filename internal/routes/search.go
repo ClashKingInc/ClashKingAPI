@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -155,72 +156,6 @@ func searchBannedPlayers(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// bookmarkSearch godoc
-// @Summary Add or update a bookmark for a user
-// @Description Adds or moves the tag to the front of the user's bookmarks (limit 20).
-// @Tags Search
-// @Produce json
-// @Security ApiKeyAuth
-// @Param user_id path int true "Discord user ID"
-// @Param search_type path int true "Type (0=player, 1=clan)"
-// @Param tag path string true "Tag to bookmark"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Router /v2/search/bookmark/{user_id}/{search_type}/{tag} [post]
-func bookmarkSearch(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		userID, err := strconv.ParseInt(c.Params("user_id"), 10, 64)
-		if err != nil {
-			return apptypes.Error(fiber.StatusBadRequest, "Invalid user_id")
-		}
-		searchType, _ := strconv.ParseInt(c.Params("search_type"), 10, 64)
-		typeField := searchTypeFieldMap[searchType]
-		if typeField == "" {
-			typeField = "clan"
-		}
-		tag := accountsNormalizeTag(c.Params("tag"))
-		err = searchUpsertTag(c, a, userID, typeField, "bookmarked", tag)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true})
-	}
-}
-
-// recentSearch godoc
-// @Summary Add a recent search for a user
-// @Description Adds or moves the tag to the front of the user's recent searches (limit 20).
-// @Tags Search
-// @Produce json
-// @Security ApiKeyAuth
-// @Param user_id path int true "Discord user ID"
-// @Param search_type path int true "Type (0=player, 1=clan)"
-// @Param tag path string true "Tag to add"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Router /v2/search/recent/{user_id}/{search_type}/{tag} [post]
-func recentSearch(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		userID, err := strconv.ParseInt(c.Params("user_id"), 10, 64)
-		if err != nil {
-			return apptypes.Error(fiber.StatusBadRequest, "Invalid user_id")
-		}
-		searchType, _ := strconv.ParseInt(c.Params("search_type"), 10, 64)
-		typeField := searchTypeFieldMap[searchType]
-		if typeField == "" {
-			typeField = "clan"
-		}
-		tag := accountsNormalizeTag(c.Params("tag"))
-		err = searchUpsertTag(c, a, userID, typeField, "recent", tag)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true})
-	}
-}
-
 // groupCreate godoc
 // @Summary Create a player or clan group
 // @Description Creates a new group for organising clans or players for a user.
@@ -283,7 +218,7 @@ func groupCreate(a apptypes.Deps) fiber.Handler {
 func groupAdd(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
-		tag := accountsNormalizeTag(c.Params("tag"))
+		tag := clashy.CorrectTag(decodeRouteTag(c.Params("tag")))
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `
 			UPDATE search_groups
 			SET tags = (
@@ -313,7 +248,7 @@ func groupAdd(a apptypes.Deps) fiber.Handler {
 func groupRemove(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
-		tag := accountsNormalizeTag(c.Params("tag"))
+		tag := clashy.CorrectTag(decodeRouteTag(c.Params("tag")))
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `UPDATE search_groups SET tags = array_remove(tags, $2), updated_at = now() WHERE group_id = $1`, groupID, tag); err != nil {
 			return err
 		}
@@ -423,7 +358,7 @@ func searchFetchGuildClans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query s
 	args := []any{strconv.FormatInt(guildID, 10)}
 	if len(query) > 1 {
 		sqlQuery += ` AND (name ILIKE $2 OR tag = $3)`
-		args = append(args, "%"+query+"%", accountsNormalizeTag(query))
+		args = append(args, "%"+query+"%", clashy.CorrectTag(query))
 	}
 	sqlQuery += ` ORDER BY name ASC LIMIT 25`
 	rows, err := a.Store.SQL.Query(c.UserContext(), sqlQuery, args...)

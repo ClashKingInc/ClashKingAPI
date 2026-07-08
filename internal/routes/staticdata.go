@@ -46,11 +46,8 @@ type categoryMeta struct {
 //
 // @Summary Get static categories
 // @Description Returns all available static data categories and item counts.
-// @Tags Static Data
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/categories [get]
-// @Router /v2/static/categories [get]
 func listCategories(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		raw := a.Clash.Client().StaticData().Raw
@@ -66,7 +63,6 @@ func listCategories(a apptypes.Deps) fiber.Handler {
 //
 // @Summary Get category items
 // @Description Returns static items for a category, with optional filters applied.
-// @Tags Static Data
 // @Produce json
 // @Param category path string true "Category name"
 // @Param locale query string false "Locale code"
@@ -77,8 +73,6 @@ func listCategories(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/{category} [get]
-// @Router /v2/static/{category} [get]
 func categoryItems(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -93,7 +87,6 @@ func categoryItems(a apptypes.Deps) fiber.Handler {
 //
 // @Summary Get category names
 // @Description Returns the names of static items for a category, with optional filters applied.
-// @Tags Static Data
 // @Produce json
 // @Param category path string true "Category name"
 // @Param locale query string false "Locale code"
@@ -104,8 +97,6 @@ func categoryItems(a apptypes.Deps) fiber.Handler {
 // @Success 200 {array} string
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/{category}/names [get]
-// @Router /v2/static/{category}/names [get]
 func categoryNames(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -126,14 +117,11 @@ func categoryNames(a apptypes.Deps) fiber.Handler {
 //
 // @Summary Get category item by id
 // @Description Returns a static data item resolved by item ID or name.
-// @Tags Static Data
 // @Produce json
 // @Param category path string true "Category name"
 // @Param item_id_or_name path string true "Item ID or name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/{category}/{item_id_or_name} [get]
-// @Router /v2/static/{category}/{item_id_or_name} [get]
 func categoryItem(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		item, err := findItem(a, c.Params("category"), c.Params("item_id_or_name"))
@@ -148,15 +136,12 @@ func categoryItem(a apptypes.Deps) fiber.Handler {
 //
 // @Summary Get item max level
 // @Description Returns the highest level defined for a static item.
-// @Tags Static Data
 // @Produce json
 // @Param category path string true "Category name"
 // @Param item_id_or_name path string true "Item ID or name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/{category}/{item_id_or_name}/maxlevel [get]
-// @Router /v2/static/{category}/{item_id_or_name}/maxlevel [get]
 func maxLevel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		category := c.Params("category")
@@ -178,10 +163,8 @@ func maxLevel(a apptypes.Deps) fiber.Handler {
 // appStaticDataBundle godoc
 // @Summary Get mobile app static data bundle
 // @Description Returns the static-data bundle used by mobile clients.
-// @Tags Static Data
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /v2/static/app-bundle [get]
 func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		raw := a.Clash.Client().StaticData().Raw
@@ -204,12 +187,10 @@ func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
 //
 // @Summary Get app static translations
 // @Description Returns locale-specific translations keyed by TID for the static-data app bundle.
-// @Tags Static Data
 // @Produce json
 // @Param locale query string true "Locale code"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
-// @Router /v2/static/app-translations [get]
 func appStaticTranslations(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		locale := strings.ToUpper(c.Query("locale"))

@@ -15,7 +15,7 @@ import (
 
 // getLinks godoc
 // @Summary Get server links
-// @Description Returns all player-Discord account links for server members.
+// @Description Returns all linked player accounts for server members.
 // @Tags Server Links
 // @Produce json
 // @Security ApiKeyAuth
@@ -64,17 +64,16 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 			})
 		}
 
-		// Resolve internal ClashKing UUIDs → Discord user IDs.
-		// Accounts created via the Go API store an internal UUID as user_id,
-		// while legacy Python-bot accounts stored Discord snowflake IDs directly.
-		// We need both to show all linked accounts for server members.
+		// Resolve internal ClashKing user IDs to Discord user IDs so links
+		// stored by auth user ID can be grouped under current server members.
 		internalToDiscord := map[string]string{}
 		internalIDs, err := sqlInternalUserIDsForDiscordMembers(c, rt, memberIDs, internalToDiscord)
 		if err != nil {
 			return err
 		}
 
-		// Query by both Discord IDs (legacy) and internal UUIDs (new accounts).
+		// Query the single player_links.user_id owner column. This may contain
+		// either Discord IDs supplied by bot callers or internal auth user IDs.
 		linkIDs := append([]string{}, memberIDs...)
 		if len(internalIDs) > 0 {
 			linkIDs = append(linkIDs, internalIDs...)
@@ -211,24 +210,24 @@ func getLinks(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // deleteLink godoc
 // @Summary Delete a link
-// @Description Removes the link between a Discord user and a player account.
+// @Description Removes the link between a user and a player account.
 // @Tags Server Links
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Param user_discord_id path string true "Discord User ID"
+// @Param user_id path string true "User ID"
 // @Param player_tag path string true "Player Tag"
 // @Success 200 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Failure 404 {object} map[string]interface{}
-// @Router /v2/server/{server_id}/links/{user_discord_id}/{player_tag} [delete]
+// @Router /v2/server/{server_id}/links/{user_id}/{player_tag} [delete]
 func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		_, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		userID := c.Params("user_discord_id")
+		userID := c.Params("user_id")
 		tag := serverNormalizeTag(c.Params("player_tag"))
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2`, userID, tag)
 		if err != nil {
@@ -243,7 +242,7 @@ func deleteLink(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // bulkUnlink godoc
 // @Summary Bulk unlink accounts
-// @Description Removes multiple player-Discord links for a user in bulk.
+// @Description Removes multiple player links for a user in bulk.
 // @Tags Server Links
 // @Accept json
 // @Produce json
@@ -260,8 +259,8 @@ func bulkUnlink(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		var body struct {
-			UserDiscordID string   `json:"user_discord_id"`
-			PlayerTags    []string `json:"player_tags"`
+			UserID     string   `json:"user_id"`
+			PlayerTags []string `json:"player_tags"`
 		}
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
@@ -270,7 +269,7 @@ func bulkUnlink(rt apptypes.Deps) apptypes.HandlerFunc {
 		for _, tag := range body.PlayerTags {
 			tags = append(tags, serverNormalizeTag(tag))
 		}
-		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = ANY($2)`, body.UserDiscordID, tags)
+		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = ANY($2)`, body.UserID, tags)
 		if err != nil {
 			return err
 		}
@@ -383,9 +382,9 @@ func sqlPlayerLinksByUsers(c *fiber.Ctx, rt apptypes.Deps, userIDs []string) ([]
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT user_id, discord_id, tag, is_verified, added_at
+		SELECT user_id, tag, is_verified, added_at
 		FROM player_links
-		WHERE user_id = ANY($1) OR discord_id = ANY($1)
+		WHERE user_id = ANY($1)
 		ORDER BY order_index ASC, added_at ASC
 	`, userIDs)
 	if err != nil {
@@ -394,18 +393,16 @@ func sqlPlayerLinksByUsers(c *fiber.Ctx, rt apptypes.Deps, userIDs []string) ([]
 	defer rows.Close()
 	links := []map[string]any{}
 	for rows.Next() {
-		var userID, discordID *string
+		var userID *string
 		var tag string
 		var verified bool
 		var addedAt time.Time
-		if err := rows.Scan(&userID, &discordID, &tag, &verified, &addedAt); err != nil {
+		if err := rows.Scan(&userID, &tag, &verified, &addedAt); err != nil {
 			return nil, err
 		}
 		linkUserID := ""
 		if userID != nil {
 			linkUserID = *userID
-		} else if discordID != nil {
-			linkUserID = *discordID
 		}
 		links = append(links, map[string]any{
 			"user_id":     linkUserID,

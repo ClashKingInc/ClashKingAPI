@@ -1,16 +1,23 @@
 package utils
 
 import (
-	"net/http"
+	"fmt"
+	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	sentrysdk "github.com/getsentry/sentry-go"
+	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber/v2"
 )
 
-// Init initializes Sentry with performance monitoring, profiling, and
-// environment/release tracking. No-op if the DSN is empty.
+const repeatedSentryErrorSampleRate = 0.10
+
+var seenSentryErrors sync.Map
+
+// Init initializes Sentry error tracking with environment/release tracking.
+// No-op if the DSN is empty.
 func Init(cfg Config) error {
 	if cfg.SentryDSN == "" {
 		return nil
@@ -22,47 +29,33 @@ func Init(cfg Config) error {
 	release := os.Getenv("SENTRY_RELEASE") // optional; set by CI/CD
 
 	return sentrysdk.Init(sentrysdk.ClientOptions{
-		Dsn:              cfg.SentryDSN,
-		Environment:      env,
-		Release:          release,
-		TracesSampleRate: 1.0, // lower in production if traffic is high
+		Dsn:         cfg.SentryDSN,
+		Environment: env,
+		Release:     release,
+		BeforeSend:  sampleRepeatedSentryErrors,
 	})
 }
 
-// FiberMiddleware clones the Sentry hub per request, starts a performance
-// transaction, propagates distributed tracing headers, and stores everything
-// in the user context for downstream handlers.
+// FiberMiddleware installs the official Sentry Fiber integration.
 func FiberMiddleware() fiber.Handler {
+	return sentryfiber.New(sentryfiber.Options{
+		Repanic:         true,
+		WaitForDelivery: false,
+		Timeout:         2 * time.Second,
+	})
+}
+
+func SentryScopeMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		hub := sentrysdk.CurrentHub().Clone()
-		hub.Scope().SetTag("request_id", RequestID(c))
-		hub.Scope().SetTag("method", c.Method())
-		hub.Scope().SetTag("path", c.Path())
-		hub.Scope().SetExtra("ip", c.IP())
-
-		ctx := sentrysdk.SetHubOnContext(c.UserContext(), hub)
-
-		// Start a transaction for performance monitoring.
-		// ContinueFromHeaders enables distributed tracing when callers
-		// (e.g. Next.js proxy) forward the sentry-trace/baggage headers.
-		transaction := sentrysdk.StartTransaction(
-			ctx,
-			c.Method()+" "+c.Path(),
-			sentrysdk.WithOpName("http.server"),
-			sentrysdk.ContinueFromHeaders(
-				c.Get("sentry-trace"),
-				c.Get("baggage"),
-			),
-		)
-		transaction.SetTag("request_id", RequestID(c))
-
-		c.SetUserContext(transaction.Context())
-
-		defer func() {
-			transaction.Status = httpStatusToSpanStatus(c.Response().StatusCode())
-			transaction.Finish()
-		}()
-
+		if hub := sentryfiber.GetHubFromContext(c); hub != nil {
+			hub.Scope().SetTag("request_id", RequestID(c))
+			hub.Scope().SetTag("method", c.Method())
+			hub.Scope().SetTag("path", c.Path())
+			hub.Scope().SetExtra("ip", c.IP())
+		}
+		if span := sentryfiber.GetSpanFromContext(c); span != nil {
+			span.SetTag("request_id", RequestID(c))
+		}
 		return c.Next()
 	}
 }
@@ -75,15 +68,19 @@ func FlushSentry(timeout time.Duration) {
 // It uses the per-request hub stored in the Fiber context when available,
 // falling back to the global hub.
 func CaptureFiberError(c *fiber.Ctx, err error, status int) {
-	if status < http.StatusInternalServerError {
+	if status < fiber.StatusInternalServerError {
 		return
 	}
-	hub := sentrysdk.GetHubFromContext(c.UserContext())
+	hub := sentryfiber.GetHubFromContext(c)
+	if hub == nil {
+		hub = sentrysdk.GetHubFromContext(c.UserContext())
+	}
 	if hub == nil {
 		hub = sentrysdk.CurrentHub()
 	}
 	hub.WithScope(func(scope *sentrysdk.Scope) {
 		scope.SetExtra("url", c.OriginalURL())
+		scope.SetTag("request_id", RequestID(c))
 		if userID := UserID(c.UserContext()); userID != "" {
 			scope.SetUser(sentrysdk.User{ID: userID})
 		}
@@ -91,27 +88,44 @@ func CaptureFiberError(c *fiber.Ctx, err error, status int) {
 	})
 }
 
-// httpStatusToSpanStatus maps an HTTP status code to a Sentry SpanStatus,
-// enabling correct performance data grouping in the Sentry dashboard.
-func httpStatusToSpanStatus(code int) sentrysdk.SpanStatus {
-	switch {
-	case code < 400:
-		return sentrysdk.SpanStatusOK
-	case code == 400:
-		return sentrysdk.SpanStatusInvalidArgument
-	case code == 401:
-		return sentrysdk.SpanStatusUnauthenticated
-	case code == 403:
-		return sentrysdk.SpanStatusPermissionDenied
-	case code == 404:
-		return sentrysdk.SpanStatusNotFound
-	case code == 409:
-		return sentrysdk.SpanStatusAlreadyExists
-	case code == 429:
-		return sentrysdk.SpanStatusResourceExhausted
-	case code >= 500:
-		return sentrysdk.SpanStatusInternalError
-	default:
-		return sentrysdk.SpanStatusUnknown
+func sampleRepeatedSentryErrors(event *sentrysdk.Event, hint *sentrysdk.EventHint) *sentrysdk.Event {
+	key := sentryErrorKey(event, hint)
+	if key == "" {
+		return event
 	}
+	if _, loaded := seenSentryErrors.LoadOrStore(key, struct{}{}); !loaded {
+		setSentrySampleTag(event, "first")
+		return event
+	}
+	if rand.Float64() >= repeatedSentryErrorSampleRate {
+		return nil
+	}
+	setSentrySampleTag(event, "repeat")
+	return event
+}
+
+func sentryErrorKey(event *sentrysdk.Event, hint *sentrysdk.EventHint) string {
+	if hint != nil {
+		if hint.OriginalException != nil {
+			return fmt.Sprintf("%T:%v", hint.OriginalException, hint.OriginalException)
+		}
+		if hint.RecoveredException != nil {
+			return fmt.Sprintf("%T:%v", hint.RecoveredException, hint.RecoveredException)
+		}
+	}
+	if event == nil {
+		return ""
+	}
+	if len(event.Exception) > 0 {
+		exception := event.Exception[len(event.Exception)-1]
+		return exception.Type + ":" + exception.Value
+	}
+	return event.Message
+}
+
+func setSentrySampleTag(event *sentrysdk.Event, value string) {
+	if event.Tags == nil {
+		event.Tags = map[string]string{}
+	}
+	event.Tags["error_sample"] = value
 }

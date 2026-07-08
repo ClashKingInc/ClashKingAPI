@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"sync"
 
 	docs "github.com/ClashKingInc/ClashKingAPI/internal/docs"
@@ -66,6 +67,23 @@ type swaggerUIConfig struct {
 	TagOrder             []string
 }
 
+type scalarUIConfig struct {
+	URL   string
+	Title string
+}
+
+func NewScalarHandler(specURL string) fiber.Handler {
+	index := template.Must(template.New("scalar_index.html").Parse(scalarIndexTemplate))
+	config := scalarUIConfig{
+		URL:   specURL,
+		Title: swaggerBaseTitle + " - Scalar",
+	}
+	return func(c *fiber.Ctx) error {
+		c.Type("html", "utf-8")
+		return index.Execute(c, config)
+	}
+}
+
 func NewUIHandler(specURL string) fiber.Handler {
 	var once sync.Once
 	handler := swaggerFiles.NewHandler()
@@ -114,6 +132,57 @@ func NewUIHandler(specURL string) fiber.Handler {
 		}
 	}
 }
+
+const scalarIndexTemplate = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{.Title}}</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script id="api-reference" data-url="{{.URL}}"></script>
+    <script>
+      const configuration = {
+        theme: "deepSpace",
+        layout: "modern",
+        defaultHttpClient: {
+          targetKey: "python",
+          clientKey: "requests",
+        },
+        hiddenClients: {
+          c: true,
+          clojure: true,
+          csharp: true,
+          dart: true,
+          fsharp: true,
+          go: true,
+          http: true,
+          java: true,
+          js: true,
+          kotlin: true,
+          node: ["axios", "ofetch", "undici"],
+          objc: true,
+          ocaml: true,
+          php: true,
+          powershell: true,
+          python: ["httpx_async", "httpx_sync", "python3"],
+          r: true,
+          ruby: true,
+          rust: true,
+          shell: true,
+          swift: true,
+        },
+      };
+
+      const script = document.getElementById("api-reference");
+      script.dataset.configuration = JSON.stringify(configuration);
+      script.src = "https://cdn.jsdelivr.net/npm/@scalar/api-reference";
+    </script>
+  </body>
+</html>
+`
 
 func EnsureSecurityDefinition(doc map[string]any) {
 	securityDefinitions, _ := doc["securityDefinitions"].(map[string]any)
@@ -203,6 +272,37 @@ window.onload = function() {
       }
       return a.localeCompare(b);
     },
+    operationsSorter: function(a, b) {
+      function pathRank(path, method) {
+        const key = method.toUpperCase() + " " + path;
+        const ranks = {
+          "GET /v2/links/{id}": 0,
+          "POST /v2/links/{id}": 1,
+          "PUT /v2/links/{id}/order": 2,
+          "DELETE /v2/links/{id}/{playerTag}": 3,
+          "GET /v2/links/{id}/bookmarks": 4,
+          "POST /v2/links/{id}/bookmarks": 5,
+          "PUT /v2/links/{id}/bookmarks/order": 6,
+          "DELETE /v2/links/{id}/bookmarks/{type}/{tag}": 7,
+          "GET /v2/links/{id}/searches": 8
+        };
+        return Object.prototype.hasOwnProperty.call(ranks, key) ? ranks[key] : null;
+      }
+      const ap = a.get("path");
+      const bp = b.get("path");
+      const am = a.get("method");
+      const bm = b.get("method");
+      const ar = pathRank(ap, am);
+      const br = pathRank(bp, bm);
+      if (ar !== null || br !== null) {
+        return (ar === null ? Number.MAX_SAFE_INTEGER : ar) - (br === null ? Number.MAX_SAFE_INTEGER : br);
+      }
+      const pathCompare = ap.localeCompare(bp);
+      if (pathCompare !== 0) {
+        return pathCompare;
+      }
+      return am.localeCompare(bm);
+    },
     presets: [
       SwaggerUIBundle.presets.apis,
       SwaggerUIStandalonePreset
@@ -229,25 +329,27 @@ func setSwaggerMetadata(doc map[string]any) {
 	info["title"] = swaggerBaseTitle
 	info["description"] = swaggerBaseDescription
 	info["version"] = swaggerVersion
-	doc["tags"] = swaggerTags(doc["tags"])
+	doc["tags"] = swaggerTags(doc)
 }
 
 func primaryTagOrder() []string {
 	return []string{
 		"Player",
 		"Clan",
-		"Dates",
-		"Leaderboard",
-		"Global",
-		"Battlelogs",
 		"War",
-		"Static Data",
-		"Configuration",
-		"Auth",
+		"Battlelogs",
+		"Leaderboard",
+		"Rankings",
+		"Global",
+		"Search",
+		"Links",
+		"Tracking",
+		"Dates",
+		"Lists",
 	}
 }
 
-func swaggerTags(existing any) []map[string]string {
+func swaggerTags(doc map[string]any) []map[string]string {
 	seen := map[string]bool{}
 	out := []map[string]string{}
 	for _, name := range primaryTagOrder() {
@@ -255,15 +357,60 @@ func swaggerTags(existing any) []map[string]string {
 		seen[name] = true
 	}
 
-	tags, _ := existing.([]any)
+	tags, _ := doc["tags"].([]any)
+	hasOther := false
 	for _, tag := range tags {
 		tagMap, _ := tag.(map[string]any)
 		name, _ := tagMap["name"].(string)
+		if name == "Other" {
+			hasOther = true
+			continue
+		}
 		if name == "" || seen[name] {
 			continue
 		}
 		out = append(out, map[string]string{"name": name})
 		seen[name] = true
 	}
+
+	operationTags := operationTagNames(doc)
+	for _, name := range operationTags {
+		if name == "Other" {
+			hasOther = true
+			continue
+		}
+		if seen[name] {
+			continue
+		}
+		out = append(out, map[string]string{"name": name})
+		seen[name] = true
+	}
+	if hasOther && !seen["Other"] {
+		out = append(out, map[string]string{"name": "Other"})
+	}
 	return out
+}
+
+func operationTagNames(doc map[string]any) []string {
+	paths, _ := doc["paths"].(map[string]any)
+	seen := map[string]bool{}
+	for _, rawPath := range paths {
+		path, _ := rawPath.(map[string]any)
+		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head"} {
+			operation, _ := path[method].(map[string]any)
+			rawTags, _ := operation["tags"].([]any)
+			for _, rawTag := range rawTags {
+				name, _ := rawTag.(string)
+				if name != "" {
+					seen[name] = true
+				}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

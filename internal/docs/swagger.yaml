@@ -50,7 +50,50 @@ definitions:
         type: string
       player_tag:
         type: string
-      player_token:
+    type: object
+  modelsv2.AccountsLinkResponse:
+    properties:
+      account:
+        $ref: '#/definitions/modelsv2.AccountsLinkedPlayer'
+      message:
+        type: string
+    type: object
+  modelsv2.AccountsLinkedAccount:
+    properties:
+      added_at:
+        type: string
+      is_verified:
+        type: boolean
+      order_index:
+        type: integer
+      player_tag:
+        type: string
+      user_id:
+        type: string
+      verified_at:
+        type: string
+    type: object
+  modelsv2.AccountsLinkedPlayer:
+    properties:
+      is_verified:
+        type: boolean
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
+    type: object
+  modelsv2.AccountsListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.AccountsLinkedAccount'
+        type: array
+    type: object
+  modelsv2.AccountsMessageResponse:
+    properties:
+      message:
         type: string
     type: object
   modelsv2.AccountsReorderAccountsRequest:
@@ -211,10 +254,6 @@ definitions:
   modelsv2.ClanBadgeURLs:
     properties:
       large:
-        type: string
-      medium:
-        type: string
-      small:
         type: string
     type: object
   modelsv2.ClanBasicRecords:
@@ -516,6 +555,124 @@ definitions:
           type: string
         type: array
     type: object
+  modelsv2.SearchBookmarkItem:
+    properties:
+      clan_tag:
+        type: string
+      created_at:
+        type: string
+      order_index:
+        type: integer
+      player_tag:
+        type: string
+      tag:
+        type: string
+      type:
+        enum:
+        - player
+        - clan
+        type: string
+    type: object
+  modelsv2.SearchBookmarkListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.SearchBookmarkItem'
+        type: array
+    type: object
+  modelsv2.SearchBookmarkOrderRequest:
+    properties:
+      ordered_tags:
+        items:
+          type: string
+        type: array
+      type:
+        enum:
+        - player
+        - clan
+        type: string
+    type: object
+  modelsv2.SearchBookmarkRequest:
+    properties:
+      clan_tag:
+        type: string
+      player_tag:
+        type: string
+      tag:
+        type: string
+      type:
+        enum:
+        - player
+        - clan
+        type: string
+    type: object
+  modelsv2.SearchRecentBadgeURLs:
+    properties:
+      large:
+        type: string
+    type: object
+  modelsv2.SearchRecentClan:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.SearchRecentBadgeURLs'
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.SearchRecentClanItem:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.SearchRecentBadgeURLs'
+      created_at:
+        type: string
+      members:
+        type: integer
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.SearchRecentGroupedResponse:
+    properties:
+      clans:
+        items:
+          $ref: '#/definitions/modelsv2.SearchRecentClanItem'
+        type: array
+      players:
+        items:
+          $ref: '#/definitions/modelsv2.SearchRecentPlayerItem'
+        type: array
+    type: object
+  modelsv2.SearchRecentLeague:
+    properties:
+      iconUrls:
+        $ref: '#/definitions/modelsv2.SearchRecentLeagueIconURLs'
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  modelsv2.SearchRecentLeagueIconURLs:
+    properties:
+      medium:
+        type: string
+    type: object
+  modelsv2.SearchRecentPlayerItem:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.SearchRecentClan'
+      created_at:
+        type: string
+      league:
+        $ref: '#/definitions/modelsv2.SearchRecentLeague'
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
+    type: object
   modelsv2.ServerPanelBody:
     properties:
       button_color:
@@ -558,35 +715,6 @@ info:
   title: ClashKing API
   version: "1.0"
 paths:
-  /bot/config:
-    get:
-      description: Returns ClashKing bot configuration for authorized bot tokens.
-      parameters:
-      - description: Bot token
-        in: header
-        name: bot_token
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get bot configuration
-      tags:
-      - Legacy Bot
   /builderbaseleagues:
     get:
       description: Returns legacy builder base league metadata.
@@ -605,14 +733,14 @@ paths:
             type: object
       summary: Get builder base leagues
       tags:
-      - Legacy Static Data
-  /cwl/{clan_tag}/{season}:
+      - Other
+  /cwl/{clanTag}/{season}:
     get:
       description: Returns the CWL group for a clan and season.
       parameters:
       - description: Clan tag
         in: path
-        name: clan_tag
+        name: clanTag
         required: true
         type: string
       - description: Season YYYY-MM
@@ -640,14 +768,14 @@ paths:
             type: object
       summary: Get CWL group by season
       tags:
-      - Legacy War
-  /cwl/{clan_tag}/group:
+      - War
+  /cwl/{clanTag}/group:
     get:
       description: Returns the current season CWL group for a clan.
       parameters:
       - description: Clan tag
         in: path
-        name: clan_tag
+        name: clanTag
         required: true
         type: string
       produces:
@@ -660,42 +788,7 @@ paths:
             type: object
       summary: Get current CWL group
       tags:
-      - Legacy War
-  /discord_links:
-    post:
-      consumes:
-      - application/json
-      description: Returns Discord user IDs linked to the provided player tags.
-      parameters:
-      - description: Player tags
-        in: body
-        name: body
-        required: true
-        schema:
-          items:
-            type: string
-          type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get Discord links for player tags
-      tags:
-      - Legacy Links
+      - War
   /global/counts:
     get:
       description: Returns global tracking counts used by legacy clients.
@@ -799,26 +892,6 @@ paths:
       summary: Get weekly town hall war hitrate
       tags:
       - War
-  /guild_links/{guild_id}:
-    get:
-      description: Returns linked player data for a Discord guild.
-      parameters:
-      - description: Discord guild ID
-        in: path
-        name: guild_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get guild links
-      tags:
-      - Legacy Links
   /list/seasons:
     get:
       description: Returns recent season identifiers in YYYY-MM format.
@@ -838,7 +911,7 @@ paths:
             type: array
       summary: List recent seasons
       tags:
-      - Legacy Lists
+      - Lists
   /list/townhalls:
     get:
       description: Returns distinct town hall levels seen in tracked player stats.
@@ -858,422 +931,7 @@ paths:
             type: object
       summary: List tracked town halls
       tags:
-      - Legacy Lists
-  /ranking/clan-builder/{location}/{date}:
-    get:
-      description: Returns a stored clan builder ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan builder ranking snapshot
-      tags:
-      - Legacy Rankings
-  /ranking/clan-capital/{location}/{date}:
-    get:
-      description: Returns a stored clan capital ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan capital ranking snapshot
-      tags:
-      - Legacy Rankings
-  /ranking/clan-trophies/{location}/{date}:
-    get:
-      description: Returns a stored clan trophy ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get clan trophy ranking snapshot
-      tags:
-      - Legacy Rankings
-  /ranking/player-builder/{location}/{date}:
-    get:
-      description: Returns a stored player builder ranking snapshot for a location
-        and date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player builder ranking snapshot
-      tags:
-      - Legacy Rankings
-  /ranking/player-trophies/{location}/{date}:
-    get:
-      description: Returns a stored player trophy ranking snapshot for a location
-        and date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get player trophy ranking snapshot
-      tags:
-      - Legacy Rankings
-  /server-settings/{server_id}:
-    get:
-      description: Returns server settings for a Discord server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy server settings
-      tags:
-      - Legacy Server
-  /shortlink:
-    get:
-      description: Redirects a ClashKing short link to its destination URL.
-      parameters:
-      - description: Short link ID
-        in: query
-        name: id
-        type: string
-      - description: Short link ID
-        in: query
-        name: link_id
-        type: string
-      responses:
-        "307":
-          description: Temporary Redirect
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Resolve short link
-      tags:
-      - Legacy Links
-  /shortner:
-    get:
-      description: Creates a ClashKing short link for the supplied URL.
-      parameters:
-      - description: Destination URL
-        in: query
-        name: url
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Create short link
-      tags:
-      - Legacy Links
-  /v2/{category}:
-    get:
-      description: Returns static items for a category, with optional filters applied.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Locale code
-        in: query
-        name: locale
-        type: string
-      - description: Substring to filter item names
-        in: query
-        name: name
-        type: string
-      - description: Village filter
-        in: query
-        name: village
-        type: string
-      - description: Type filter
-        in: query
-        name: type
-        type: string
-      - description: Category filter
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category items
-      tags:
-      - Static Data
-  /v2/{category}/{item_id_or_name}:
-    get:
-      description: Returns a static data item resolved by item ID or name.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Item ID or name
-        in: path
-        name: item_id_or_name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category item by id
-      tags:
-      - Static Data
-  /v2/{category}/{item_id_or_name}/maxlevel:
-    get:
-      description: Returns the highest level defined for a static item.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Item ID or name
-        in: path
-        name: item_id_or_name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get item max level
-      tags:
-      - Static Data
-  /v2/{category}/names:
-    get:
-      description: Returns the names of static items for a category, with optional
-        filters applied.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Locale code
-        in: query
-        name: locale
-        type: string
-      - description: Substring to filter item names
-        in: query
-        name: name
-        type: string
-      - description: Village filter
-        in: query
-        name: village
-        type: string
-      - description: Type filter
-        in: query
-        name: type
-        type: string
-      - description: Category filter
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category names
-      tags:
-      - Static Data
+      - Lists
   /v2/activity/guild-summary:
     get:
       description: Returns clan and member activity totals for a Discord guild.
@@ -2009,20 +1667,6 @@ paths:
       summary: Get ranked battlelog armies
       tags:
       - Battlelogs
-  /v2/categories:
-    get:
-      description: Returns all available static data categories and item counts.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get static categories
-      tags:
-      - Static Data
   /v2/cdn/upload:
     post:
       consumes:
@@ -2066,7 +1710,7 @@ paths:
       - ApiKeyAuth: []
       summary: Upload a file to the ClashKing CDN
       tags:
-      - CDN
+      - Other
   /v2/clan/{clan_tag}/badge:
     get:
       description: Returns the clan badge image as a PNG.
@@ -2570,7 +2214,7 @@ paths:
             type: object
       summary: Export CWL summary to Excel
       tags:
-      - Exports
+      - Other
   /v2/exports/war/player-stats:
     post:
       consumes:
@@ -2596,7 +2240,7 @@ paths:
             type: object
       summary: Export player war statistics to Excel
       tags:
-      - Exports
+      - Other
   /v2/forgot-password:
     post:
       consumes:
@@ -2908,7 +2552,7 @@ paths:
       - ApiKeyAuth: []
       summary: Get guild details by ID
       tags:
-      - Guild
+      - Other
   /v2/guilds:
     get:
       description: Returns the authenticated user's guilds and whether the bot is
@@ -2937,7 +2581,7 @@ paths:
       - ApiKeyAuth: []
       summary: Get user guilds with bot status
       tags:
-      - Guilds
+      - Other
   /v2/initialization:
     post:
       consumes:
@@ -2995,7 +2639,7 @@ paths:
       - ApiKeyAuth: []
       summary: Get bot info
       tags:
-      - Internal
+      - Other
   /v2/leaderboard/{league_tier_id}/trophy-buckets:
     get:
       description: Returns trophy buckets of players and trophies at bucket points,
@@ -3355,6 +2999,391 @@ paths:
       summary: List server clans (basic)
       tags:
       - Server Clans
+  /v2/links/{id}:
+    get:
+      description: Returns linked Clash of Clans accounts in order.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Clash of Clans accounts linked to a user
+      tags:
+      - Links
+    post:
+      consumes:
+      - application/json
+      description: Links a Clash of Clans account.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Account payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AccountsCOCAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsLinkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Link a Clash of Clans account
+      tags:
+      - Links
+  /v2/links/{id}/{playerTag}:
+    delete:
+      description: Unlinks a Clash of Clans account.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: playerTag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsMessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a linked Clash of Clans account
+      tags:
+      - Links
+  /v2/links/{id}/bookmarks:
+    get:
+      description: Returns saved search items.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: player or clan
+        enum:
+        - player
+        - clan
+        in: query
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.SearchBookmarkListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List bookmarks
+      tags:
+      - Links
+    post:
+      consumes:
+      - application/json
+      description: Saves a search item.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Bookmark payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.SearchBookmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.SearchBookmarkItem'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Save bookmark
+      tags:
+      - Links
+  /v2/links/{id}/bookmarks/{type}/{tag}:
+    delete:
+      description: Deletes a saved search item.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: player or clan
+        enum:
+        - player
+        - clan
+        in: path
+        name: type
+        required: true
+        type: string
+      - description: Tag
+        in: path
+        name: tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsMessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete bookmark
+      tags:
+      - Links
+  /v2/links/{id}/bookmarks/order:
+    put:
+      consumes:
+      - application/json
+      description: Reorders saved search items.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Bookmark order
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.SearchBookmarkOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsMessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Reorder bookmarks
+      tags:
+      - Links
+  /v2/links/{id}/order:
+    put:
+      consumes:
+      - application/json
+      description: Reorders linked Clash of Clans accounts.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reorder payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AccountsReorderAccountsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsMessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Reorder linked Clash of Clans accounts
+      tags:
+      - Links
+  /v2/links/{id}/searches:
+    get:
+      description: Returns recent search items.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.SearchRecentGroupedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List recent searches
+      tags:
+      - Links
   /v2/me:
     get:
       description: Returns the authenticated user's current profile information.
@@ -3898,6 +3927,161 @@ paths:
       summary: Get public app configuration
       tags:
       - Mobile App
+  /v2/ranking/clan-builder/{location}/{date}:
+    get:
+      description: Returns a stored clan builder ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan builder ranking snapshot
+      tags:
+      - Rankings
+  /v2/ranking/clan-capital/{location}/{date}:
+    get:
+      description: Returns a stored clan capital ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan capital ranking snapshot
+      tags:
+      - Rankings
+  /v2/ranking/clan-trophies/{location}/{date}:
+    get:
+      description: Returns a stored clan trophy ranking snapshot for a location and
+        date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get clan trophy ranking snapshot
+      tags:
+      - Rankings
+  /v2/ranking/player-builder/{location}/{date}:
+    get:
+      description: Returns a stored player builder ranking snapshot for a location
+        and date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player builder ranking snapshot
+      tags:
+      - Rankings
+  /v2/ranking/player-trophies/{location}/{date}:
+    get:
+      description: Returns a stored player trophy ranking snapshot for a location
+        and date.
+      parameters:
+      - description: Location
+        in: path
+        name: location
+        required: true
+        type: string
+      - description: Snapshot date
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get player trophy ranking snapshot
+      tags:
+      - Rankings
   /v2/refresh:
     post:
       consumes:
@@ -4875,49 +5059,6 @@ paths:
       summary: Search for banned players in a guild
       tags:
       - Search
-  /v2/search/bookmark/{user_id}/{search_type}/{tag}:
-    post:
-      description: Adds or moves the tag to the front of the user's bookmarks (limit
-        20).
-      parameters:
-      - description: Discord user ID
-        in: path
-        name: user_id
-        required: true
-        type: integer
-      - description: Type (0=player, 1=clan)
-        in: path
-        name: search_type
-        required: true
-        type: integer
-      - description: Tag to bookmark
-        in: path
-        name: tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Add or update a bookmark for a user
-      tags:
-      - Search
   /v2/search/clan:
     get:
       description: Returns clans from recent searches, bookmarks, guild-linked clans,
@@ -5155,49 +5296,6 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Create a player or clan group
-      tags:
-      - Search
-  /v2/search/recent/{user_id}/{search_type}/{tag}:
-    post:
-      description: Adds or moves the tag to the front of the user's recent searches
-        (limit 20).
-      parameters:
-      - description: Discord user ID
-        in: path
-        name: user_id
-        required: true
-        type: integer
-      - description: Type (0=player, 1=clan)
-        in: path
-        name: search_type
-        required: true
-        type: integer
-      - description: Tag to add
-        in: path
-        name: tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Add a recent search for a user
       tags:
       - Search
   /v2/server/{server_id}/all-roles:
@@ -6953,7 +7051,7 @@ paths:
       - Server Leaderboards
   /v2/server/{server_id}/links:
     get:
-      description: Returns all player-Discord account links for server members.
+      description: Returns all linked player accounts for server members.
       parameters:
       - description: Server ID
         in: path
@@ -6995,18 +7093,18 @@ paths:
       summary: Get server links
       tags:
       - Server Links
-  /v2/server/{server_id}/links/{user_discord_id}/{player_tag}:
+  /v2/server/{server_id}/links/{user_id}/{player_tag}:
     delete:
-      description: Removes the link between a Discord user and a player account.
+      description: Removes the link between a user and a player account.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
-      - description: Discord User ID
+      - description: User ID
         in: path
-        name: user_discord_id
+        name: user_id
         required: true
         type: string
       - description: Player Tag
@@ -7041,7 +7139,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Removes multiple player-Discord links for a user in bulk.
+      description: Removes multiple player links for a user in bulk.
       parameters:
       - description: Server ID
         in: path
@@ -8187,227 +8285,6 @@ paths:
       summary: Update open ticket status
       tags:
       - Server Tickets
-  /v2/static/{category}:
-    get:
-      description: Returns static items for a category, with optional filters applied.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Locale code
-        in: query
-        name: locale
-        type: string
-      - description: Substring to filter item names
-        in: query
-        name: name
-        type: string
-      - description: Village filter
-        in: query
-        name: village
-        type: string
-      - description: Type filter
-        in: query
-        name: type
-        type: string
-      - description: Category filter
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category items
-      tags:
-      - Static Data
-  /v2/static/{category}/{item_id_or_name}:
-    get:
-      description: Returns a static data item resolved by item ID or name.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Item ID or name
-        in: path
-        name: item_id_or_name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category item by id
-      tags:
-      - Static Data
-  /v2/static/{category}/{item_id_or_name}/maxlevel:
-    get:
-      description: Returns the highest level defined for a static item.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Item ID or name
-        in: path
-        name: item_id_or_name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get item max level
-      tags:
-      - Static Data
-  /v2/static/{category}/names:
-    get:
-      description: Returns the names of static items for a category, with optional
-        filters applied.
-      parameters:
-      - description: Category name
-        in: path
-        name: category
-        required: true
-        type: string
-      - description: Locale code
-        in: query
-        name: locale
-        type: string
-      - description: Substring to filter item names
-        in: query
-        name: name
-        type: string
-      - description: Village filter
-        in: query
-        name: village
-        type: string
-      - description: Type filter
-        in: query
-        name: type
-        type: string
-      - description: Category filter
-        in: query
-        name: category
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get category names
-      tags:
-      - Static Data
-  /v2/static/app-bundle:
-    get:
-      description: Returns the static-data bundle used by mobile clients.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get mobile app static data bundle
-      tags:
-      - Static Data
-  /v2/static/app-translations:
-    get:
-      description: Returns locale-specific translations keyed by TID for the static-data
-        app bundle.
-      parameters:
-      - description: Locale code
-        in: query
-        name: locale
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get app static translations
-      tags:
-      - Static Data
-  /v2/static/categories:
-    get:
-      description: Returns all available static data categories and item counts.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get static categories
-      tags:
-      - Static Data
   /v2/tracking/players/add:
     post:
       consumes:
@@ -8442,7 +8319,7 @@ paths:
       - ApiKeyAuth: []
       summary: Add players to tracking
       tags:
-      - Tracking Endpoints
+      - Tracking
   /v2/tracking/players/remove:
     post:
       consumes:
@@ -8477,254 +8354,7 @@ paths:
       - ApiKeyAuth: []
       summary: Remove players from tracking
       tags:
-      - Tracking Endpoints
-  /v2/users/coc-accounts:
-    get:
-      description: Returns the authenticated user's linked Clash of Clans accounts
-        in order.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Get all Clash of Clans accounts linked to a user
-      tags:
-      - Coc Accounts
-    post:
-      consumes:
-      - application/json
-      description: Links a Clash of Clans account to the authenticated user.
-      parameters:
-      - description: Account payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.AccountsCOCAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Link a Clash of Clans account to a user
-      tags:
-      - Coc Accounts
-  /v2/users/coc-accounts/{player_tag}:
-    delete:
-      description: Unlinks a Clash of Clans account from the authenticated user.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Remove a linked Clash of Clans account
-      tags:
-      - Coc Accounts
-  /v2/users/coc-accounts/{player_tag}/status:
-    get:
-      description: Checks whether a Clash of Clans account is linked to any user.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Check if a Clash of Clans account is linked
-      tags:
-      - Coc Accounts
-  /v2/users/coc-accounts/{player_tag}/verify:
-    post:
-      consumes:
-      - application/json
-      description: Verifies ownership of a linked account using the provided player
-        token.
-      parameters:
-      - description: Player tag
-        in: path
-        name: player_tag
-        required: true
-        type: string
-      - description: Verification payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.AccountsCOCAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: Forbidden
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Verify ownership of an existing linked Clash of Clans account
-      tags:
-      - Coc Accounts
-  /v2/users/coc-accounts/order:
-    put:
-      consumes:
-      - application/json
-      description: Reorders the authenticated user's linked Clash of Clans accounts.
-      parameters:
-      - description: Reorder payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.AccountsReorderAccountsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Reorder linked Clash of Clans accounts
-      tags:
-      - Coc Accounts
-  /v2/users/coc-accounts/verified:
-    post:
-      consumes:
-      - application/json
-      description: Links a Clash of Clans account to the authenticated user after
-        verifying the player token.
-      parameters:
-      - description: Verified account payload
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.AccountsCOCAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: Forbidden
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Link a Clash of Clans account to a user with verification
-      tags:
-      - Coc Accounts
+      - Tracking
   /v2/verify-email-code:
     post:
       consumes:
@@ -8984,51 +8614,13 @@ paths:
       summary: Get full war summary for multiple clans
       tags:
       - War
-  /war-stats:
-    get:
-      description: Returns scoped war hit-rate stats for players.
-      parameters:
-      - collectionFormat: csv
-        description: Player tags
-        in: query
-        items:
-          type: string
-        name: player_tags
-        type: array
-      - collectionFormat: csv
-        description: Clan tags
-        in: query
-        items:
-          type: string
-        name: clan_tags
-        type: array
-      - description: Discord server ID
-        in: query
-        name: server
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get legacy war stats
-      tags:
-      - Legacy War
-  /war/{clan_tag}/basic:
+  /war/{clanTag}/basic:
     get:
       description: Returns the current or most recent non-CWL war for a clan.
       parameters:
       - description: Clan tag
         in: path
-        name: clan_tag
+        name: clanTag
         required: true
         type: string
       produces:
@@ -9046,59 +8638,20 @@ paths:
             type: object
       summary: Get current or recent war
       tags:
-      - Legacy War
-  /war/{clan_tag}/previous:
-    get:
-      description: Returns stored previous wars for a clan.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Start Unix timestamp
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: Maximum number of wars
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              additionalProperties: true
-              type: object
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get previous wars
-      tags:
-      - Legacy War
-  /war/{clan_tag}/previous/{end_time}:
+      - War
+  /war/{clanTag}/previous:
     get:
       description: Returns the stored previous war near the supplied Clash API end
         time.
       parameters:
       - description: Clan tag
         in: path
-        name: clan_tag
+        name: clanTag
         required: true
         type: string
       - description: War end time in Clash format
-        in: path
-        name: end_time
+        in: query
+        name: endTime
         required: true
         type: string
       produces:
@@ -9121,7 +8674,7 @@ paths:
             type: object
       summary: Get previous war by end time
       tags:
-      - Legacy War
+      - War
 securityDefinitions:
   ApiKeyAuth:
     in: header

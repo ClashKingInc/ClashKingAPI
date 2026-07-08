@@ -16,7 +16,7 @@ import (
 // exportCWLSummary generates an Excel file with CWL stats for a clan.
 //
 // @Summary Export CWL summary to Excel
-// @Tags Exports
+// @Tags Other
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 // @Param tag query string true "Clan tag"
 // @Success 200 {file} binary
@@ -148,7 +148,7 @@ func exportCWLSummary(a apptypes.Deps) fiber.Handler {
 // exportPlayerWarStats generates an Excel file with war statistics for a player.
 //
 // @Summary Export player war statistics to Excel
-// @Tags Exports
+// @Tags Other
 // @Accept json
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 // @Param body body object true "Player tag and filters"

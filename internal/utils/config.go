@@ -24,9 +24,11 @@ type Config struct {
 	InternalAPIToken    string
 	Local               bool
 	AuthToken           string
+	APIBotToken         string
 	DevUserID           string
 	ClientSecret        string
 	BotToken            string
+	ProxyBaseURL        string
 	EncryptionKey       string
 	SecretKey           string
 	RefreshSecret       string
@@ -55,16 +57,18 @@ func Load() (Config, error) {
 		InternalAPIToken:    os.Getenv("INTERNAL_API_TOKEN"),
 		Local:               strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
 		AuthToken:           os.Getenv("AUTH_TOKEN"),
+		APIBotToken:         os.Getenv("API_BOT_TOKEN"),
 		DevUserID:           os.Getenv("DEV_USER_ID"),
 		ClientSecret:        os.Getenv("CLIENT_SECRET"),
 		BotToken:            os.Getenv("BOT_TOKEN"),
+		ProxyBaseURL:        os.Getenv("PROXY_BASE_URL"),
 		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
 		SecretKey:           os.Getenv("SECRET_KEY"),
 		RefreshSecret:       os.Getenv("REFRESH_SECRET"),
 		DiscordRedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
-		SentryDSN:           os.Getenv("SENTRY_DSN"),
+		SentryDSN:           os.Getenv("SENTRY_DSN_API"),
 		SentryDSNMobile:     os.Getenv("APP_SENTRY_DSN"),
 	}
 	if cfg.Local {

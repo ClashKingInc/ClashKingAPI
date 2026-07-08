@@ -3,13 +3,14 @@ package routes
 import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 )
 
 // addTrackingPlayers godoc
 // @Summary Add players to tracking
 // @Description Normalizes tags and inserts any not yet tracked into the database.
-// @Tags Tracking Endpoints
+// @Tags Tracking
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -27,7 +28,7 @@ func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 
 		tags := make([]string, 0, len(body.Tags))
 		for _, tag := range body.Tags {
-			tags = append(tags, accountsNormalizeTag(tag))
+			tags = append(tags, clashy.CorrectTag(tag))
 		}
 
 		if a.Store.SQL == nil {
@@ -90,7 +91,7 @@ func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 // removeTrackingPlayers godoc
 // @Summary Remove players from tracking
 // @Description Deletes the given player tags from the tracking database.
-// @Tags Tracking Endpoints
+// @Tags Tracking
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -107,7 +108,7 @@ func removeTrackingPlayers(a apptypes.Deps) fiber.Handler {
 		}
 		tags := make([]string, 0, len(body.Tags))
 		for _, tag := range body.Tags {
-			tags = append(tags, accountsNormalizeTag(tag))
+			tags = append(tags, clashy.CorrectTag(tag))
 		}
 		if a.Store.SQL == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")

@@ -15,49 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/bot/config": {
-            "get": {
-                "description": "Returns ClashKing bot configuration for authorized bot tokens.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Bot"
-                ],
-                "summary": "Get bot configuration",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Bot token",
-                        "name": "bot_token",
-                        "in": "header"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/builderbaseleagues": {
             "get": {
                 "description": "Returns legacy builder base league metadata.",
@@ -65,7 +22,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy Static Data"
+                    "Other"
                 ],
                 "summary": "Get builder base leagues",
                 "responses": {
@@ -86,21 +43,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/cwl/{clan_tag}/group": {
+        "/cwl/{clanTag}/group": {
             "get": {
                 "description": "Returns the current season CWL group for a clan.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy War"
+                    "War"
                 ],
                 "summary": "Get current CWL group",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Clan tag",
-                        "name": "clan_tag",
+                        "name": "clanTag",
                         "in": "path",
                         "required": true
                     }
@@ -116,21 +73,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/cwl/{clan_tag}/{season}": {
+        "/cwl/{clanTag}/{season}": {
             "get": {
                 "description": "Returns the CWL group for a clan and season.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy War"
+                    "War"
                 ],
                 "summary": "Get CWL group by season",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Clan tag",
-                        "name": "clan_tag",
+                        "name": "clanTag",
                         "in": "path",
                         "required": true
                     },
@@ -152,58 +109,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/discord_links": {
-            "post": {
-                "description": "Returns Discord user IDs linked to the provided player tags.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Links"
-                ],
-                "summary": "Get Discord links for player tags",
-                "parameters": [
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -368,36 +273,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/guild_links/{guild_id}": {
-            "get": {
-                "description": "Returns linked player data for a Discord guild.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Links"
-                ],
-                "summary": "Get guild links",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord guild ID",
-                        "name": "guild_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/list/seasons": {
             "get": {
                 "description": "Returns recent season identifiers in YYYY-MM format.",
@@ -405,7 +280,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy Lists"
+                    "Lists"
                 ],
                 "summary": "List recent seasons",
                 "parameters": [
@@ -436,7 +311,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy Lists"
+                    "Lists"
                 ],
                 "summary": "List tracked town halls",
                 "responses": {
@@ -447,363 +322,6 @@ const docTemplate = `{
                             "items": {
                                 "type": "integer"
                             }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/clan-builder/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan builder ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get clan builder ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/clan-capital/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan capital ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get clan capital ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/clan-trophies/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan trophy ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get clan trophy ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/player-builder/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored player builder ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get player builder ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ranking/player-trophies/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored player trophy ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Rankings"
-                ],
-                "summary": "Get player trophy ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/server-settings/{server_id}": {
-            "get": {
-                "description": "Returns server settings for a Discord server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Server"
-                ],
-                "summary": "Get legacy server settings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/shortlink": {
-            "get": {
-                "description": "Redirects a ClashKing short link to its destination URL.",
-                "tags": [
-                    "Legacy Links"
-                ],
-                "summary": "Resolve short link",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Short link ID",
-                        "name": "id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Short link ID",
-                        "name": "link_id",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "307": {
-                        "description": "Temporary Redirect"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/shortner": {
-            "get": {
-                "description": "Creates a ClashKing short link for the supplied URL.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy Links"
-                ],
-                "summary": "Create short link",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Destination URL",
-                        "name": "url",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -1027,11 +545,6 @@ const docTemplate = `{
         },
         "/v2/auth/link-discord": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Attaches a Discord account and stores its OAuth tokens for the current authenticated user.",
                 "consumes": [
                     "application/json"
@@ -1072,16 +585,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/auth/link-email": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/auth/link-email": {
+            "post": {
                 "description": "Attaches email credentials to the authenticated account.",
                 "consumes": [
                     "application/json"
@@ -1126,16 +639,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/auth/me": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/auth/me": {
+            "get": {
                 "description": "Returns the authenticated user's current profile information.",
                 "produces": [
                     "application/json"
@@ -1165,7 +678,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/auth/refresh": {
@@ -1886,34 +1404,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/categories": {
-            "get": {
-                "description": "Returns all available static data categories and item counts.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get static categories",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v2/cdn/upload": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Uploads an arbitrary file and returns its public CDN URL. Requires authentication.",
                 "consumes": [
                     "multipart/form-data"
@@ -1922,7 +1414,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CDN"
+                    "Other"
                 ],
                 "summary": "Upload a file to the ClashKing CDN",
                 "parameters": [
@@ -1971,7 +1463,12 @@ const docTemplate = `{
                             }
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/clan/{clan_tag}/badge": {
@@ -2686,7 +2183,7 @@ const docTemplate = `{
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 ],
                 "tags": [
-                    "Exports"
+                    "Other"
                 ],
                 "summary": "Export CWL summary to Excel",
                 "parameters": [
@@ -2724,7 +2221,7 @@ const docTemplate = `{
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 ],
                 "tags": [
-                    "Exports"
+                    "Other"
                 ],
                 "summary": "Export player war statistics to Excel",
                 "parameters": [
@@ -3159,17 +2656,12 @@ const docTemplate = `{
         },
         "/v2/guild/{server_id}": {
             "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Returns guild metadata for the requested server. The authenticated user must be a member of the guild.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Guild"
+                    "Other"
                 ],
                 "summary": "Get guild details by ID",
                 "parameters": [
@@ -3209,22 +2701,22 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/guilds": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/guilds": {
+            "get": {
                 "description": "Returns the authenticated user's guilds and whether the bot is present. Only guilds where the user has MANAGE_GUILD permission or is owner are returned.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Guilds"
+                    "Other"
                 ],
                 "summary": "Get user guilds with bot status",
                 "responses": {
@@ -3251,16 +2743,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/initialization": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/initialization": {
+            "post": {
                 "description": "Returns a minimal initialization payload for the mobile app based on the supplied player tags.",
                 "consumes": [
                     "application/json"
@@ -3305,22 +2797,22 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/internal/bot/info": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/internal/bot/info": {
+            "get": {
                 "description": "Returns internal bot cluster stats, system info, and database document counts.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Internal"
+                    "Other"
                 ],
                 "summary": "Get bot info",
                 "responses": {
@@ -3338,7 +2830,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/leaderboard/clan/win-streak": {
@@ -3729,11 +3226,6 @@ const docTemplate = `{
         },
         "/v2/link-discord": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Attaches a Discord account and stores its OAuth tokens for the current authenticated user.",
                 "consumes": [
                     "application/json"
@@ -3774,16 +3266,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/link-email": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/link-email": {
+            "post": {
                 "description": "Attaches email credentials to the authenticated account.",
                 "consumes": [
                     "application/json"
@@ -3828,16 +3320,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/link/server/{server_id}/clan/list": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/link/server/{server_id}/clan/list": {
+            "get": {
                 "description": "Returns a basic list of clans (tag+name) for a server.",
                 "produces": [
                     "application/json"
@@ -3870,16 +3362,598 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/me": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
+                ]
+            }
+        },
+        "/v2/links/{id}": {
+            "get": {
+                "description": "Returns linked Clash of Clans accounts in order.",
+                "produces": [
+                    "application/json"
                 ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Get all Clash of Clans accounts linked to a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "Links a Clash of Clans account.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Link a Clash of Clans account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Account payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsCOCAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsLinkResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/bookmarks": {
+            "get": {
+                "description": "Returns saved search items.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "List bookmarks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "player",
+                            "clan"
+                        ],
+                        "type": "string",
+                        "description": "player or clan",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchBookmarkListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "Saves a search item.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Save bookmark",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Bookmark payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchBookmarkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchBookmarkItem"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/bookmarks/order": {
+            "put": {
+                "description": "Reorders saved search items.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Reorder bookmarks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Bookmark order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchBookmarkOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/bookmarks/{type}/{tag}": {
+            "delete": {
+                "description": "Deletes a saved search item.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Delete bookmark",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "player",
+                            "clan"
+                        ],
+                        "type": "string",
+                        "description": "player or clan",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tag",
+                        "name": "tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/order": {
+            "put": {
+                "description": "Reorders linked Clash of Clans accounts.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Reorder linked Clash of Clans accounts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reorder payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsReorderAccountsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/searches": {
+            "get": {
+                "description": "Returns recent search items.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "List recent searches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchRecentGroupedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/links/{id}/{playerTag}": {
+            "delete": {
+                "description": "Unlinks a Clash of Clans account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Remove a linked Clash of Clans account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "playerTag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsMessageResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v2/me": {
+            "get": {
                 "description": "Returns the authenticated user's current profile information.",
                 "produces": [
                     "application/json"
@@ -3909,7 +3983,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/player/legends/{season}/battlelog-stats": {
@@ -4661,6 +4740,226 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/ranking/clan-builder/{location}/{date}": {
+            "get": {
+                "description": "Returns a stored clan builder ranking snapshot for a location and date.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rankings"
+                ],
+                "summary": "Get clan builder ranking snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location",
+                        "name": "location",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/ranking/clan-capital/{location}/{date}": {
+            "get": {
+                "description": "Returns a stored clan capital ranking snapshot for a location and date.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rankings"
+                ],
+                "summary": "Get clan capital ranking snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location",
+                        "name": "location",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/ranking/clan-trophies/{location}/{date}": {
+            "get": {
+                "description": "Returns a stored clan trophy ranking snapshot for a location and date.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rankings"
+                ],
+                "summary": "Get clan trophy ranking snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location",
+                        "name": "location",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/ranking/player-builder/{location}/{date}": {
+            "get": {
+                "description": "Returns a stored player builder ranking snapshot for a location and date.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rankings"
+                ],
+                "summary": "Get player builder ranking snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location",
+                        "name": "location",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/ranking/player-trophies/{location}/{date}": {
+            "get": {
+                "description": "Returns a stored player trophy ranking snapshot for a location and date.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Rankings"
+                ],
+                "summary": "Get player trophy ranking snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Location",
+                        "name": "location",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v2/refresh": {
             "post": {
                 "description": "Validates a refresh token and returns a new access token for the same user.",
@@ -4872,11 +5171,6 @@ const docTemplate = `{
         },
         "/v2/roster": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Creates a new roster for a Discord server.",
                 "consumes": [
                     "application/json"
@@ -4919,16 +5213,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-automation": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-automation": {
+            "post": {
                 "description": "Creates a new automation rule for rosters.",
                 "consumes": [
                     "application/json"
@@ -4957,16 +5251,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-automation/list": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-automation/list": {
+            "get": {
                 "description": "Returns all automation rules for a server.",
                 "produces": [
                     "application/json"
@@ -4992,16 +5286,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-automation/{automation_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-automation/{automation_id}": {
+            "delete": {
                 "description": "Deletes an automation rule.",
                 "produces": [
                     "application/json"
@@ -5041,14 +5335,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates an automation rule.",
                 "consumes": [
                     "application/json"
@@ -5091,16 +5385,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-group": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-group": {
+            "post": {
                 "description": "Creates a new roster group.",
                 "consumes": [
                     "application/json"
@@ -5136,7 +5430,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/roster-group/list": {
@@ -5206,11 +5505,6 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Deletes a roster group.",
                 "produces": [
                     "application/json"
@@ -5250,14 +5544,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates a roster group.",
                 "consumes": [
                     "application/json"
@@ -5300,16 +5594,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-signup-category": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-signup-category": {
+            "post": {
                 "description": "Creates a new signup category.",
                 "consumes": [
                     "application/json"
@@ -5338,16 +5632,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-signup-category/list": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-signup-category/list": {
+            "get": {
                 "description": "Returns signup categories for a server.",
                 "produces": [
                     "application/json"
@@ -5373,16 +5667,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-signup-category/{custom_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-signup-category/{custom_id}": {
+            "delete": {
                 "description": "Deletes a signup category.",
                 "produces": [
                     "application/json"
@@ -5422,14 +5716,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates a signup category.",
                 "consumes": [
                     "application/json"
@@ -5472,16 +5766,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster-token": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster-token": {
+            "post": {
                 "description": "Generates an access token for public roster viewing.",
                 "consumes": [
                     "application/json"
@@ -5510,7 +5804,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/roster/missing-members": {
@@ -5571,11 +5870,6 @@ const docTemplate = `{
         },
         "/v2/roster/refresh": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Refreshes member data from CoC API for one or more rosters.",
                 "produces": [
                     "application/json"
@@ -5619,7 +5913,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/roster/server/{server_id}/members": {
@@ -5696,11 +5995,6 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Permanently deletes a roster.",
                 "produces": [
                     "application/json"
@@ -5740,14 +6034,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates roster settings.",
                 "consumes": [
                     "application/json"
@@ -5797,16 +6091,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster/{roster_id}/clone": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster/{roster_id}/clone": {
+            "post": {
                 "description": "Creates a copy of an existing roster.",
                 "consumes": [
                     "application/json"
@@ -5849,16 +6143,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster/{roster_id}/members": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster/{roster_id}/members": {
+            "post": {
                 "description": "Adds or updates members in a roster.",
                 "consumes": [
                     "application/json"
@@ -5894,16 +6188,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster/{roster_id}/members/{member_tag}": {
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster/{roster_id}/members/{member_tag}": {
+            "patch": {
                 "description": "Updates a single member's data in a roster.",
                 "consumes": [
                     "application/json"
@@ -5946,16 +6240,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster/{roster_id}/members/{member_tag}/refresh": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster/{roster_id}/members/{member_tag}/refresh": {
+            "post": {
                 "description": "Refreshes a single member's data from the CoC API.",
                 "produces": [
                     "application/json"
@@ -5995,16 +6289,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/roster/{roster_id}/members/{player_tag}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/roster/{roster_id}/members/{player_tag}": {
+            "delete": {
                 "description": "Removes a player from a roster.",
                 "produces": [
                     "application/json"
@@ -6044,7 +6338,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v2/roster/{server_id}/list": {
@@ -6081,69 +6380,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/search/bookmark/{user_id}/{search_type}/{tag}": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Adds or moves the tag to the front of the user's bookmarks (limit 20).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Add or update a bookmark for a user",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord user ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Type (0=player, 1=clan)",
-                        "name": "search_type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Tag to bookmark",
-                        "name": "tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -6195,11 +6431,6 @@ const docTemplate = `{
         },
         "/v2/search/groups/create/{user_id}/{name}/{search_type}": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Creates a new group for organising clans or players for a user.",
                 "produces": [
                     "application/json"
@@ -6253,16 +6484,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/search/groups/{group_id}": {
+            "get": {
                 "description": "Returns the group document for the given group ID.",
                 "produces": [
                     "application/json"
@@ -6302,14 +6533,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Deletes the group with the given group ID.",
                 "produces": [
                     "application/json"
@@ -6349,16 +6580,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}/add/{tag}": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/search/groups/{group_id}/add/{tag}": {
+            "post": {
                 "description": "Adds a clan or player tag to the specified group.",
                 "produces": [
                     "application/json"
@@ -6405,16 +6636,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}/remove/{tag}": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/search/groups/{group_id}/remove/{tag}": {
+            "post": {
                 "description": "Removes a clan or player tag from the specified group.",
                 "produces": [
                     "application/json"
@@ -6461,16 +6692,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/search/groups/{user_id}/list": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/search/groups/{user_id}/list": {
+            "get": {
                 "description": "Returns all groups belonging to the given user.",
                 "produces": [
                     "application/json"
@@ -6510,79 +6741,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/search/recent/{user_id}/{search_type}/{tag}": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Adds or moves the tag to the front of the user's recent searches (limit 20).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Add a recent search for a user",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord user ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Type (0=player, 1=clan)",
-                        "name": "search_type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Tag to add",
-                        "name": "tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
+                ]
             }
         },
         "/v2/search/{guild_id}/banned-players": {
             "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Returns banned players matching the query in the given guild.",
                 "produces": [
                     "application/json"
@@ -6628,16 +6796,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/all-roles": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/all-roles": {
+            "get": {
                 "description": "Returns all roles of every type configured for the server.",
                 "produces": [
                     "application/json"
@@ -6677,16 +6845,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/autoboards": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/autoboards": {
+            "get": {
                 "description": "Returns all autoboards for a server with post/refresh counts and limit.",
                 "produces": [
                     "application/json"
@@ -6726,14 +6894,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Creates a new autoboard. Fails if the server autoboard limit is reached.",
                 "consumes": [
                     "application/json"
@@ -6783,16 +6951,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/autoboards/{autoboard_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/autoboards/{autoboard_id}": {
+            "delete": {
                 "description": "Deletes an autoboard by ID.",
                 "produces": [
                     "application/json"
@@ -6839,14 +7007,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates fields of an existing autoboard by ID.",
                 "consumes": [
                     "application/json"
@@ -6903,16 +7071,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/bans": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/bans": {
+            "get": {
                 "description": "Returns all banned players for a server.",
                 "produces": [
                     "application/json"
@@ -6945,16 +7113,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/bans/{player_tag}": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/bans/{player_tag}": {
+            "post": {
                 "description": "Bans a player on the server.",
                 "consumes": [
                     "application/json"
@@ -7004,14 +7172,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Removes a player ban from the server.",
                 "produces": [
                     "application/json"
@@ -7058,16 +7226,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/channels": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/channels": {
+            "get": {
                 "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
@@ -7107,16 +7275,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan-logs": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clan-logs": {
+            "get": {
                 "description": "Returns the full log configuration for every clan tracked on the server.",
                 "produces": [
                     "application/json"
@@ -7149,16 +7317,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan/{clan_tag}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clan/{clan_tag}": {
+            "delete": {
                 "description": "Removes a clan from the Discord server tracking list.",
                 "produces": [
                     "application/json"
@@ -7205,16 +7373,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan/{clan_tag}/countdowns": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clan/{clan_tag}/countdowns": {
+            "get": {
                 "description": "Returns all clan-level countdown types with enabled status and channel.",
                 "produces": [
                     "application/json"
@@ -7261,16 +7429,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan/{clan_tag}/logs": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clan/{clan_tag}/logs": {
+            "put": {
                 "description": "Creates a Discord webhook and assigns it to the specified log types on a clan.",
                 "consumes": [
                     "application/json"
@@ -7327,14 +7495,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Removes the webhook config for specified log types on a clan.",
                 "produces": [
                     "application/json"
@@ -7395,16 +7563,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan/{clan_tag}/settings": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clan/{clan_tag}/settings": {
+            "get": {
                 "description": "Returns detailed settings for a specific clan on a server.",
                 "produces": [
                     "application/json"
@@ -7451,14 +7619,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Partially updates the settings for a specific clan on a server.",
                 "consumes": [
                     "application/json"
@@ -7515,16 +7683,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clans": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clans": {
+            "get": {
                 "description": "Returns the full clan list for a server with live CoC API data.",
                 "produces": [
                     "application/json"
@@ -7564,14 +7732,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Adds a CoC clan to the Discord server tracking list.",
                 "consumes": [
                     "application/json"
@@ -7614,16 +7782,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clans-basic": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clans-basic": {
+            "get": {
                 "description": "Returns a basic list of clans (tag+name) for a server.",
                 "produces": [
                     "application/json"
@@ -7656,16 +7824,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clans/{clan_tag}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/clans/{clan_tag}": {
+            "delete": {
                 "description": "Removes a clan from the Discord server tracking list.",
                 "produces": [
                     "application/json"
@@ -7712,16 +7880,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/countdowns": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/countdowns": {
+            "get": {
                 "description": "Returns all server-level countdown types with enabled status and channel.",
                 "produces": [
                     "application/json"
@@ -7761,14 +7929,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Enables a countdown type for a server or clan.",
                 "consumes": [
                     "application/json"
@@ -7818,14 +7986,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Disables a countdown type for a server or clan.",
                 "consumes": [
                     "application/json"
@@ -7875,16 +8043,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/discord-channels": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/discord-channels": {
+            "get": {
                 "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
@@ -7924,16 +8092,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/discord-roles": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/discord-roles": {
+            "get": {
                 "description": "Returns all roles for the Discord server sorted by position.",
                 "produces": [
                     "application/json"
@@ -7973,16 +8141,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/discord-test": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/discord-test": {
+            "get": {
                 "description": "Tests whether the bot has access to the Discord server via the API.",
                 "produces": [
                     "application/json"
@@ -8015,16 +8183,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/embed-color/{hex_code}": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/embed-color/{hex_code}": {
+            "put": {
                 "description": "Sets the embed color (decimal integer) for a Discord server.",
                 "produces": [
                     "application/json"
@@ -8078,16 +8246,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/embeds": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/embeds": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -8112,14 +8280,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -8156,16 +8324,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/embeds/{embed_name}": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/embeds/{embed_name}": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -8200,14 +8368,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -8239,16 +8407,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/family-roles": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/family-roles": {
+            "get": {
                 "description": "Returns all family-related role configurations for the server.",
                 "produces": [
                     "application/json"
@@ -8288,14 +8456,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Adds a Discord role to a family role category.",
                 "consumes": [
                     "application/json"
@@ -8338,16 +8506,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/family-roles/{role_type}/{role_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/family-roles/{role_type}/{role_id}": {
+            "delete": {
                 "description": "Removes a Discord role from a family role category.",
                 "produces": [
                     "application/json"
@@ -8408,16 +8576,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/giveaways": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/giveaways": {
+            "get": {
                 "description": "Returns all giveaways for a server split by status (ongoing, scheduled, ended).",
                 "produces": [
                     "application/json"
@@ -8457,14 +8625,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Creates a new giveaway. Accepts multipart/form-data with optional image upload.",
                 "consumes": [
                     "multipart/form-data"
@@ -8553,16 +8721,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/giveaways/{giveaway_id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/giveaways/{giveaway_id}": {
+            "get": {
                 "description": "Returns a single giveaway by ID for a server.",
                 "produces": [
                     "application/json"
@@ -8609,14 +8777,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "Updates an existing giveaway. Accepts multipart/form-data with optional image upload.",
                 "consumes": [
                     "multipart/form-data"
@@ -8666,14 +8834,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Deletes a giveaway and its image from the CDN if applicable.",
                 "produces": [
                     "application/json"
@@ -8720,16 +8888,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/giveaways/{giveaway_id}/entries": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/giveaways/{giveaway_id}/entries": {
+            "get": {
                 "description": "Returns the list of users who entered a giveaway, with their entry count and win chance percentage.",
                 "produces": [
                     "application/json"
@@ -8769,16 +8937,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/giveaways/{giveaway_id}/reroll": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/giveaways/{giveaway_id}/reroll": {
+            "post": {
                 "description": "Replaces selected winners of an ended giveaway with new ones drawn at random.",
                 "consumes": [
                     "application/json"
@@ -8843,16 +9011,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards": {
+            "get": {
                 "description": "Returns player and clan ranking leaderboards for a server.",
                 "produces": [
                     "application/json"
@@ -8910,16 +9078,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/activity": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/activity": {
+            "get": {
                 "description": "Returns players ranked by season activity for a server.",
                 "produces": [
                     "application/json"
@@ -8964,16 +9132,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/capital-raids": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/capital-raids": {
+            "get": {
                 "description": "Returns players ranked by recent capital raid loot for a server.",
                 "produces": [
                     "application/json"
@@ -9012,16 +9180,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/clan-games": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/clan-games": {
+            "get": {
                 "description": "Returns players ranked by season clan games points for a server.",
                 "produces": [
                     "application/json"
@@ -9066,16 +9234,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/donations": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/donations": {
+            "get": {
                 "description": "Returns players ranked by season donations for a server.",
                 "produces": [
                     "application/json"
@@ -9120,16 +9288,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/legends": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/legends": {
+            "get": {
                 "description": "Returns tracked legend players ranked by trophies for a server.",
                 "produces": [
                     "application/json"
@@ -9168,16 +9336,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/looting": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/looting": {
+            "get": {
                 "description": "Returns players ranked by season loot totals for a server.",
                 "produces": [
                     "application/json"
@@ -9222,16 +9390,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/war-performance": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/leaderboards/war-performance": {
+            "get": {
                 "description": "Returns players ranked by war attack performance for a server.",
                 "produces": [
                     "application/json"
@@ -9270,17 +9438,17 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/links": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Returns all player-Discord account links for server members.",
+                ]
+            }
+        },
+        "/v2/server/{server_id}/links": {
+            "get": {
+                "description": "Returns all linked player accounts for server members.",
                 "produces": [
                     "application/json"
                 ],
@@ -9337,17 +9505,17 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/links/bulk-unlink": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Removes multiple player-Discord links for a user in bulk.",
+                ]
+            }
+        },
+        "/v2/server/{server_id}/links/bulk-unlink": {
+            "post": {
+                "description": "Removes multiple player links for a user in bulk.",
                 "consumes": [
                     "application/json"
                 ],
@@ -9389,17 +9557,17 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/links/{user_discord_id}/{player_tag}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Removes the link between a Discord user and a player account.",
+                ]
+            }
+        },
+        "/v2/server/{server_id}/links/{user_id}/{player_tag}": {
+            "delete": {
+                "description": "Removes the link between a user and a player account.",
                 "produces": [
                     "application/json"
                 ],
@@ -9417,8 +9585,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Discord User ID",
-                        "name": "user_discord_id",
+                        "description": "User ID",
+                        "name": "user_id",
                         "in": "path",
                         "required": true
                     },
@@ -9452,16 +9620,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/logs": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/logs": {
+            "get": {
                 "description": "Returns the aggregated log configuration across all clans for a server.",
                 "produces": [
                     "application/json"
@@ -9494,14 +9662,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "Bulk-updates log webhook/thread settings for multiple log types across clans.",
                 "consumes": [
                     "application/json"
@@ -9544,16 +9712,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/logs/{log_type}": {
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/logs/{log_type}": {
+            "patch": {
                 "description": "Updates the configuration for a single log type on a server.",
                 "consumes": [
                     "application/json"
@@ -9603,16 +9771,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/panel": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/panel": {
+            "get": {
                 "description": "Returns the welcome panel configuration for a server.",
                 "produces": [
                     "application/json"
@@ -9652,14 +9820,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "Updates the welcome panel configuration for a server.",
                 "consumes": [
                     "application/json"
@@ -9711,16 +9879,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/reminders": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/reminders": {
+            "get": {
                 "description": "Returns all reminders for a server grouped by type.",
                 "produces": [
                     "application/json"
@@ -9753,14 +9921,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Creates a new reminder (war, capital, clan games, inactivity, or roster).",
                 "consumes": [
                     "application/json"
@@ -9810,16 +9978,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/reminders/{reminder_id}": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/reminders/{reminder_id}": {
+            "put": {
                 "description": "Updates an existing reminder by ID.",
                 "consumes": [
                     "application/json"
@@ -9876,14 +10044,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Deletes a reminder by ID.",
                 "produces": [
                     "application/json"
@@ -9930,16 +10098,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/role-settings": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/role-settings": {
+            "get": {
                 "description": "Returns the role evaluation settings for a server.",
                 "produces": [
                     "application/json"
@@ -9979,14 +10147,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Partially updates the role evaluation settings for a server.",
                 "consumes": [
                     "application/json"
@@ -10029,16 +10197,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/roles/{role_type}": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/roles/{role_type}": {
+            "get": {
                 "description": "Returns all roles of a given type configured for the server.",
                 "produces": [
                     "application/json"
@@ -10085,14 +10253,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Creates a new role of a given type for the server.",
                 "consumes": [
                     "application/json"
@@ -10142,16 +10310,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/roles/{role_type}/{role_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/roles/{role_type}/{role_id}": {
+            "delete": {
                 "description": "Deletes a role by type and ID.",
                 "produces": [
                     "application/json"
@@ -10212,16 +10380,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/settings": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/settings": {
+            "get": {
                 "description": "Returns the full settings document for a Discord server.",
                 "produces": [
                     "application/json"
@@ -10267,14 +10435,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Partially updates server-level settings (nickname rules, eval config, etc.).",
                 "consumes": [
                     "application/json"
@@ -10324,16 +10492,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/strikes": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/strikes": {
+            "get": {
                 "description": "Returns all strikes for a server, optionally filtered by player tag or including expired.",
                 "produces": [
                     "application/json"
@@ -10378,16 +10546,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/strikes/player/{player_tag}/summary": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/strikes/player/{player_tag}/summary": {
+            "get": {
                 "description": "Returns all strikes and total weight for a player on the server.",
                 "produces": [
                     "application/json"
@@ -10427,16 +10595,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/strikes/{player_tag}": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/strikes/{player_tag}": {
+            "post": {
                 "description": "Adds a strike to a player on the server.",
                 "consumes": [
                     "application/json"
@@ -10486,16 +10654,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/strikes/{strike_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/strikes/{strike_id}": {
+            "delete": {
                 "description": "Deletes a strike by its ID.",
                 "produces": [
                     "application/json"
@@ -10542,16 +10710,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/threads": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/threads": {
+            "get": {
                 "description": "Returns all active threads for the Discord server.",
                 "produces": [
                     "application/json"
@@ -10591,16 +10759,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -10625,14 +10793,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -10669,16 +10837,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/open": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -10709,16 +10877,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/open/{channel_id}": {
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -10750,16 +10918,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}/clan": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/open/{channel_id}/clan": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -10794,16 +10962,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}/status": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/open/{channel_id}/status": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -10838,16 +11006,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/{panel_name}": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/{panel_name}": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -10882,14 +11050,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -10921,16 +11089,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/{panel_name}/approve-messages": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/{panel_name}/approve-messages": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -10965,16 +11133,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/{panel_name}/buttons": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/{panel_name}/buttons": {
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -11009,16 +11177,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id}": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id}": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -11060,14 +11228,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -11106,14 +11274,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -11155,340 +11323,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/static/app-bundle": {
-            "get": {
-                "description": "Returns the static-data bundle used by mobile clients.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get mobile app static data bundle",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/app-translations": {
-            "get": {
-                "description": "Returns locale-specific translations keyed by TID for the static-data app bundle.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get app static translations",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Locale code",
-                        "name": "locale",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/categories": {
-            "get": {
-                "description": "Returns all available static data categories and item counts.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get static categories",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/{category}": {
-            "get": {
-                "description": "Returns static items for a category, with optional filters applied.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category items",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Locale code",
-                        "name": "locale",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Substring to filter item names",
-                        "name": "name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Village filter",
-                        "name": "village",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Type filter",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Category filter",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/{category}/names": {
-            "get": {
-                "description": "Returns the names of static items for a category, with optional filters applied.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category names",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Locale code",
-                        "name": "locale",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Substring to filter item names",
-                        "name": "name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Village filter",
-                        "name": "village",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Type filter",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Category filter",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/{category}/{item_id_or_name}": {
-            "get": {
-                "description": "Returns a static data item resolved by item ID or name.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category item by id",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Item ID or name",
-                        "name": "item_id_or_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/static/{category}/{item_id_or_name}/maxlevel": {
-            "get": {
-                "description": "Returns the highest level defined for a static item.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get item max level",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Item ID or name",
-                        "name": "item_id_or_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/tracking/players/add": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/tracking/players/add": {
+            "post": {
                 "description": "Normalizes tags and inserts any not yet tracked into the database.",
                 "consumes": [
                     "application/json"
@@ -11497,7 +11341,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Tracking Endpoints"
+                    "Tracking"
                 ],
                 "summary": "Add players to tracking",
                 "parameters": [
@@ -11533,16 +11377,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/tracking/players/remove": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/v2/tracking/players/remove": {
+            "post": {
                 "description": "Deletes the given player tags from the tracking database.",
                 "consumes": [
                     "application/json"
@@ -11551,7 +11395,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Tracking Endpoints"
+                    "Tracking"
                 ],
                 "summary": "Remove players from tracking",
                 "parameters": [
@@ -11587,380 +11431,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/v2/users/coc-accounts": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Returns the authenticated user's linked Clash of Clans accounts in order.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Get all Clash of Clans accounts linked to a user",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Links a Clash of Clans account to the authenticated user.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Link a Clash of Clans account to a user",
-                "parameters": [
-                    {
-                        "description": "Account payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AccountsCOCAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/users/coc-accounts/order": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Reorders the authenticated user's linked Clash of Clans accounts.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Reorder linked Clash of Clans accounts",
-                "parameters": [
-                    {
-                        "description": "Reorder payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AccountsReorderAccountsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/users/coc-accounts/verified": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Links a Clash of Clans account to the authenticated user after verifying the player token.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Link a Clash of Clans account to a user with verification",
-                "parameters": [
-                    {
-                        "description": "Verified account payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AccountsCOCAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/users/coc-accounts/{player_tag}": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Unlinks a Clash of Clans account from the authenticated user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Remove a linked Clash of Clans account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/users/coc-accounts/{player_tag}/status": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Checks whether a Clash of Clans account is linked to any user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Check if a Clash of Clans account is linked",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/users/coc-accounts/{player_tag}/verify": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Verifies ownership of a linked account using the provided player token.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Coc Accounts"
-                ],
-                "summary": "Verify ownership of an existing linked Clash of Clans account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Verification payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AccountsCOCAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
+                ]
             }
         },
         "/v2/verify-email-code": {
@@ -12346,322 +11822,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/{category}": {
-            "get": {
-                "description": "Returns static items for a category, with optional filters applied.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category items",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Locale code",
-                        "name": "locale",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Substring to filter item names",
-                        "name": "name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Village filter",
-                        "name": "village",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Type filter",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Category filter",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/{category}/names": {
-            "get": {
-                "description": "Returns the names of static items for a category, with optional filters applied.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category names",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Locale code",
-                        "name": "locale",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Substring to filter item names",
-                        "name": "name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Village filter",
-                        "name": "village",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Type filter",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Category filter",
-                        "name": "category",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/{category}/{item_id_or_name}": {
-            "get": {
-                "description": "Returns a static data item resolved by item ID or name.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get category item by id",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Item ID or name",
-                        "name": "item_id_or_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/{category}/{item_id_or_name}/maxlevel": {
-            "get": {
-                "description": "Returns the highest level defined for a static item.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Static Data"
-                ],
-                "summary": "Get item max level",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Category name",
-                        "name": "category",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Item ID or name",
-                        "name": "item_id_or_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/war-stats": {
-            "get": {
-                "description": "Returns scoped war hit-rate stats for players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy War"
-                ],
-                "summary": "Get legacy war stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Player tags",
-                        "name": "player_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/war/{clan_tag}/basic": {
+        "/war/{clanTag}/basic": {
             "get": {
                 "description": "Returns the current or most recent non-CWL war for a clan.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy War"
+                    "War"
                 ],
                 "summary": "Get current or recent war",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Clan tag",
-                        "name": "clan_tag",
+                        "name": "clanTag",
                         "in": "path",
                         "required": true
                     }
@@ -12684,87 +11859,29 @@ const docTemplate = `{
                 }
             }
         },
-        "/war/{clan_tag}/previous": {
-            "get": {
-                "description": "Returns stored previous wars for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Legacy War"
-                ],
-                "summary": "Get previous wars",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of wars",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": true
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/war/{clan_tag}/previous/{end_time}": {
+        "/war/{clanTag}/previous": {
             "get": {
                 "description": "Returns the stored previous war near the supplied Clash API end time.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Legacy War"
+                    "War"
                 ],
                 "summary": "Get previous war by end time",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Clan tag",
-                        "name": "clan_tag",
+                        "name": "clanTag",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
                         "description": "War end time in Clash format",
-                        "name": "end_time",
-                        "in": "path",
+                        "name": "endTime",
+                        "in": "query",
                         "required": true
                     }
                 ],
@@ -12858,8 +11975,75 @@ const docTemplate = `{
                 },
                 "player_tag": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.AccountsLinkResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "$ref": "#/definitions/modelsv2.AccountsLinkedPlayer"
                 },
-                "player_token": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.AccountsLinkedAccount": {
+            "type": "object",
+            "properties": {
+                "added_at": {
+                    "type": "string"
+                },
+                "is_verified": {
+                    "type": "boolean"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "verified_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.AccountsLinkedPlayer": {
+            "type": "object",
+            "properties": {
+                "is_verified": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.AccountsListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.AccountsLinkedAccount"
+                    }
+                }
+            }
+        },
+        "modelsv2.AccountsMessageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
                     "type": "string"
                 }
             }
@@ -13108,12 +12292,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "large": {
-                    "type": "string"
-                },
-                "medium": {
-                    "type": "string"
-                },
-                "small": {
                     "type": "string"
                 }
             }
@@ -13571,6 +12749,187 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.SearchBookmarkItem": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "clan"
+                    ]
+                }
+            }
+        },
+        "modelsv2.SearchBookmarkListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.SearchBookmarkItem"
+                    }
+                }
+            }
+        },
+        "modelsv2.SearchBookmarkOrderRequest": {
+            "type": "object",
+            "properties": {
+                "ordered_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "clan"
+                    ]
+                }
+            }
+        },
+        "modelsv2.SearchBookmarkRequest": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "clan"
+                    ]
+                }
+            }
+        },
+        "modelsv2.SearchRecentBadgeURLs": {
+            "type": "object",
+            "properties": {
+                "large": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchRecentClan": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.SearchRecentBadgeURLs"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchRecentClanItem": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.SearchRecentBadgeURLs"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchRecentGroupedResponse": {
+            "type": "object",
+            "properties": {
+                "clans": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.SearchRecentClanItem"
+                    }
+                },
+                "players": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.SearchRecentPlayerItem"
+                    }
+                }
+            }
+        },
+        "modelsv2.SearchRecentLeague": {
+            "type": "object",
+            "properties": {
+                "iconUrls": {
+                    "$ref": "#/definitions/modelsv2.SearchRecentLeagueIconURLs"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchRecentLeagueIconURLs": {
+            "type": "object",
+            "properties": {
+                "medium": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchRecentPlayerItem": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.SearchRecentClan"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.SearchRecentLeague"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
                 }
             }
         },

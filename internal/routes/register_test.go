@@ -147,6 +147,8 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/links/:id/:playerTag/upgrades",
 		"/v2/links/:id/:playerTag/upgrade-preferences",
 		"/v2/home/activity",
+		"/v2/notifications/devices",
+		"/v2/notifications/preferences",
 		"/war/:clanTag/previous",
 		"/war/:clanTag/basic",
 		"/cwl/:clanTag/group",

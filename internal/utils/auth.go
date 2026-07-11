@@ -46,13 +46,13 @@ func newAuthenticator(cfg Config, users authUserLookup) *Authenticator {
 
 func (a *Authenticator) Wrap(next fiber.Handler) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		if a.cfg.Local {
+			ctx := context.WithValue(c.UserContext(), userIDKey, a.cfg.DevUserID)
+			WithUserContext(c, ctx)
+			return next(c)
+		}
 		token := bearerToken(c.Get("Authorization"))
 		if token == "" {
-			if a.cfg.Local {
-				ctx := context.WithValue(c.UserContext(), userIDKey, a.cfg.DevUserID)
-				WithUserContext(c, ctx)
-				return next(c)
-			}
 			return Error(fiber.StatusUnauthorized, "Authentication token missing")
 		}
 		claims, err := a.parseJWT(token)

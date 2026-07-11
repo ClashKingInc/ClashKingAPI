@@ -548,6 +548,189 @@ definitions:
           type: string
         type: array
     type: object
+  modelsv2.NotificationDeviceRequest:
+    properties:
+      app_version:
+        type: string
+      authorization_status:
+        enum:
+        - authorized
+        - provisional
+        - denied
+        - not_determined
+        type: string
+      build_number:
+        type: string
+      device_id:
+        type: string
+      device_model:
+        type: string
+      environment:
+        enum:
+        - sandbox
+        - production
+        type: string
+      locale:
+        type: string
+      os_version:
+        type: string
+      platform:
+        enum:
+        - android
+        - ios
+        type: string
+      provider:
+        enum:
+        - fcm
+        - apns
+        type: string
+      timezone:
+        type: string
+      token:
+        type: string
+    type: object
+  modelsv2.NotificationDeviceResponse:
+    properties:
+      authorization_status:
+        type: string
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      environment:
+        type: string
+      last_seen_at:
+        type: string
+      platform:
+        type: string
+      provider:
+        type: string
+    type: object
+  modelsv2.NotificationMessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  modelsv2.NotificationPreferencesRequest:
+    properties:
+      account_scope:
+        enum:
+        - all
+        - selected
+        type: string
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      enabled_types:
+        items:
+          type: string
+        type: array
+      environment:
+        enum:
+        - sandbox
+        - production
+        type: string
+      event_types:
+        items:
+          type: string
+        type: array
+      locale:
+        type: string
+      reminder_timings:
+        items:
+          type: string
+        type: array
+      selected_accounts:
+        items:
+          type: string
+        type: array
+      selected_clan_tags:
+        items:
+          type: string
+        type: array
+      selected_town_halls:
+        items:
+          type: integer
+        type: array
+      subscriptions:
+        items:
+          $ref: '#/definitions/modelsv2.NotificationSubscription'
+        type: array
+      timezone:
+        type: string
+      war_attack_modes:
+        items:
+          type: string
+        type: array
+    type: object
+  modelsv2.NotificationPreferencesResponse:
+    properties:
+      account_scope:
+        enum:
+        - all
+        - selected
+        type: string
+      device_id:
+        type: string
+      enabled:
+        type: boolean
+      enabled_types:
+        items:
+          type: string
+        type: array
+      environment:
+        enum:
+        - sandbox
+        - production
+        type: string
+      event_types:
+        items:
+          type: string
+        type: array
+      locale:
+        type: string
+      reminder_timings:
+        items:
+          type: string
+        type: array
+      selected_accounts:
+        items:
+          type: string
+        type: array
+      selected_clan_tags:
+        items:
+          type: string
+        type: array
+      selected_town_halls:
+        items:
+          type: integer
+        type: array
+      subscriptions:
+        items:
+          $ref: '#/definitions/modelsv2.NotificationSubscription'
+        type: array
+      timezone:
+        type: string
+      updated_at:
+        type: string
+      war_attack_modes:
+        items:
+          type: string
+        type: array
+    type: object
+  modelsv2.NotificationSubscription:
+    properties:
+      enabled:
+        type: boolean
+      player_tag:
+        type: string
+      settings:
+        additionalProperties: {}
+        type: object
+      type:
+        type: string
+    type: object
   modelsv2.PlayerBattlelogStatsRequest:
     properties:
       player_tags:
@@ -3409,6 +3592,95 @@ paths:
       summary: Get current user information
       tags:
       - App Authentication
+  /v2/notifications/devices:
+    delete:
+      parameters:
+      - description: Device id when the access token has no device claim
+        in: query
+        name: device_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationMessageResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Disable notification device
+      tags:
+      - Notifications
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Push device
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.NotificationDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationDeviceResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Register notification device
+      tags:
+      - Notifications
+  /v2/notifications/preferences:
+    get:
+      parameters:
+      - description: Device id when the access token has no device claim
+        in: query
+        name: device_id
+        type: string
+      - description: Push environment
+        enum:
+        - sandbox
+        - production
+        in: query
+        name: environment
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationPreferencesResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get notification preferences
+      tags:
+      - Notifications
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Notification preferences
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.NotificationPreferencesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationPreferencesResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Save notification preferences
+      tags:
+      - Notifications
   /v2/player/{player_tag}/battlelog/history:
     get:
       description: Returns historical returned battlelogs for a player, including

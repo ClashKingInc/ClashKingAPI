@@ -78,6 +78,16 @@ func Load() (Config, error) {
 		cfg.ListenHost = "0.0.0.0"
 		cfg.ListenPort = 8010
 	}
+	if listenHost := strings.TrimSpace(os.Getenv("LISTEN_HOST")); listenHost != "" {
+		cfg.ListenHost = listenHost
+	}
+	if listenPort := strings.TrimSpace(os.Getenv("LISTEN_PORT")); listenPort != "" {
+		port, err := strconv.Atoi(listenPort)
+		if err != nil || port < 1 || port > 65535 {
+			return Config{}, fmt.Errorf("invalid LISTEN_PORT: %s", listenPort)
+		}
+		cfg.ListenPort = port
+	}
 
 	if err := cfg.validate(); err != nil {
 		return Config{}, err

@@ -116,6 +116,8 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/links/:id/bookmarks/:type/:tag",
 		"/v2/links/:id/bookmarks/order",
 		"/v2/links/:id/searches",
+		"/v2/notifications/devices",
+		"/v2/notifications/preferences",
 		"/war/:clanTag/previous",
 		"/war/:clanTag/basic",
 		"/cwl/:clanTag/group",

@@ -1,4 +1,4 @@
-package main
+package api_test
 
 import (
 	"io"
@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ClashKingInc/ClashKingAPI/internal/swaggerdocs"
 	"github.com/gofiber/fiber/v2"
 )
 
 func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing.T) {
 	app := fiber.New()
-	a := &App{}
-	if err := a.registerSwaggerRoutes(app); err != nil {
+	if err := swaggerdocs.RegisterRoutes(app); err != nil {
 		t.Fatalf("register swagger routes: %v", err)
 	}
 

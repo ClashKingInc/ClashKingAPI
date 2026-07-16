@@ -51,6 +51,47 @@ func BuildDoc() (string, error) {
 	return string(data), nil
 }
 
+func RegisterRoutes(app *fiber.App) error {
+	ConfigureInfo()
+
+	doc, err := BuildDoc()
+	if err != nil {
+		return err
+	}
+
+	scalarHandler := NewScalarHandler("/openapi.json")
+	swaggerHandler := NewUIHandler("/openapi.json")
+
+	app.Get("/", NoStore(func(c *fiber.Ctx) error {
+		return scalarHandler(c)
+	}))
+	app.Get("/openapi.json", NoStore(func(c *fiber.Ctx) error {
+		c.Type("json")
+		return c.SendString(doc)
+	}))
+	app.Get("/docs", NoStore(func(c *fiber.Ctx) error {
+		return scalarHandler(c)
+	}))
+	app.Get("/docs/*", NoStore(func(c *fiber.Ctx) error {
+		return scalarHandler(c)
+	}))
+	app.Get("/swagger", NoStore(func(c *fiber.Ctx) error {
+		return c.Redirect("/swagger/index.html", fiber.StatusTemporaryRedirect)
+	}))
+	app.Get("/swagger/*", NoStore(func(c *fiber.Ctx) error {
+		path := c.Path()
+		if strings.HasPrefix(path, "/swagger/public") || strings.HasPrefix(path, "/swagger/private") {
+			return fiber.ErrNotFound
+		}
+		return swaggerHandler(c)
+	}))
+	app.Get("/redoc", NoStore(func(c *fiber.Ctx) error {
+		return c.Redirect("/", fiber.StatusTemporaryRedirect)
+	}))
+
+	return nil
+}
+
 func NoStore(next fiber.Handler) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		c.Set(fiber.HeaderCacheControl, "no-store, no-cache, must-revalidate, private")

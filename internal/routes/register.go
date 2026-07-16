@@ -130,6 +130,10 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/link/server/:server_id/clan/list", serverRead(serverroutes.GetServerClansBasic(a)))
 
 	app.Get("/v2/public-config", publicMobileConfig(a))
+	app.Get("/v2/app/announcements/active", getActiveAppAnnouncement(a))
+	app.Get("/v2/app/announcements/:id", getAppAnnouncement(a))
+	app.Get("/v2/app/posts", listPublishedAppPosts(a))
+	app.Get("/v2/app/config", getAppConfig(a))
 	app.Post("/v2/initialization", wrap(mobileInitialization(a)))
 	app.All("/proxy/v1/*", wrap(proxyForward(a, "/proxy/")))
 

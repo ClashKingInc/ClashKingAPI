@@ -76,6 +76,7 @@ class DBClient():
         self.player_history: collection_class = self.new_looper.get_collection("player_history")
         self.link_shortner: collection_class = client.clashking.short_links
         self.api_users: collection_class = client.clashking.api_users
+        self.privacy_requests: collection_class = client.clashking.privacy_requests
         self.tokens: collection_class = client.clashking.tokens
         self.giveaways: collection_class = client.clashking.giveaways
 

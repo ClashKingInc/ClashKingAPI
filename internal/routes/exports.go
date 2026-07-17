@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/xuri/excelize/v2"
@@ -20,7 +21,7 @@ import (
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 // @Param tag query string true "Clan tag"
 // @Success 200 {file} binary
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/exports/war/cwl-summary [get]
 func exportCWLSummary(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -151,18 +152,13 @@ func exportCWLSummary(a apptypes.Deps) fiber.Handler {
 // @Tags Other
 // @Accept json
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-// @Param body body object true "Player tag and filters"
+// @Param body body modelsv2.PlayerWarStatsExportRequest true "Player tag and filters"
 // @Success 200 {file} binary
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/exports/war/player-stats [post]
 func exportPlayerWarStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var body struct {
-			PlayerTag      string  `json:"player_tag"`
-			TimestampStart float64 `json:"timestamp_start"`
-			TimestampEnd   float64 `json:"timestamp_end"`
-			Limit          int     `json:"limit"`
-		}
+		var body modelsv2.PlayerWarStatsExportRequest
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
@@ -287,7 +283,7 @@ func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[str
 	var season, clanName string
 	err := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT to_char(max(war_end_time), 'YYYY-MM'), COALESCE((SELECT name FROM basic_clan WHERE tag = $1), $1)
-		FROM war_attack_events
+		FROM war_attacks
 		WHERE attacking_clan_tag = $1 AND war_type = 'cwl'
 	`, clanTag).Scan(&season, &clanName)
 	if err != nil || season == "" {
@@ -300,7 +296,7 @@ func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[str
 			count(*),
 			sum(stars),
 			sum(destruction_percentage)
-		FROM war_attack_events
+		FROM war_attacks
 		WHERE attacking_clan_tag = $1 AND war_type = 'cwl' AND to_char(war_end_time, 'YYYY-MM') = $2
 		GROUP BY attacker_tag
 		ORDER BY sum(stars) DESC, sum(destruction_percentage) DESC
@@ -350,7 +346,7 @@ func sqlExportPlayerWarHits(c *fiber.Ctx, a apptypes.Deps, playerTag string, sta
 		SELECT e.war_end_time, e.attacking_clan_tag, e.attacker_tag,
 			COALESCE(p.name, e.attacker_tag), e.attacker_townhall,
 			e.defender_tag, e.defender_townhall, e.stars, e.destruction_percentage, e.attack_order
-		FROM war_attack_events e
+		FROM war_attacks e
 		LEFT JOIN player_current_stats p ON p.player_tag = e.attacker_tag
 		WHERE e.attacker_tag = $1
 	`

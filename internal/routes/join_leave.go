@@ -24,8 +24,8 @@ import (
 // @Param time[after] query string false "Only include events at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include events at or before this ISO-8601 time"
 // @Success 200 {object} modelsv2.JoinLeaveResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/join-leave [get]
 func clanJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -46,8 +46,8 @@ func clanJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Param time[after] query string false "Only include events at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include events at or before this ISO-8601 time"
 // @Success 200 {object} modelsv2.JoinLeaveStatsResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/join-leave/stats [get]
 func clanJoinLeaveStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -69,8 +69,8 @@ func clanJoinLeaveStats(a apptypes.Deps) fiber.Handler {
 // @Param time[after] query string false "Only include events at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include events at or before this ISO-8601 time"
 // @Success 200 {object} modelsv2.JoinLeaveResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/join-leave [get]
 func playerJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -89,8 +89,8 @@ func playerJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} modelsv2.JoinLeaveTotalsResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/join-leave/totals [get]
 func playerJoinLeaveTotals(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -118,8 +118,8 @@ func playerJoinLeaveTotals(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param tag query string true "Other player tag"
 // @Success 200 {object} modelsv2.JoinLeaveSharedResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/join-leave/shared [get]
 func playerJoinLeaveShared(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

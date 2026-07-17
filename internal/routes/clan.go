@@ -26,8 +26,8 @@ import (
 // @Param limit query int false "Maximum number of wars. Max 250."
 // @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, cwl, all."
 // @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarListResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/wars [get]
 func clanWars(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -51,7 +51,7 @@ func clanWars(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {object} modelsv2.ClanRankingsResponse
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/rankings [get]
 func clanRanking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -183,8 +183,8 @@ func nullableLocalRank(value *int64) any {
 // @Param clan_tag path string true "Clan tag"
 // @Param body body modelsv2.ClanPlayerTagsBody false "Player tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func boardTotals(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanPlayerTagsBody
@@ -218,7 +218,7 @@ func boardTotals(a apptypes.Deps) fiber.Handler {
 // @Param clan_tag path string true "Clan tag"
 // @Param season path string true "Season"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := clanFixTag(c.Params("clan_tag"))
@@ -251,8 +251,8 @@ func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clan_tags query []string false "Clan tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanComposition(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags := clanFixTags(apptypes.QueryValues(c, "clan_tags"))
@@ -299,7 +299,7 @@ func clanComposition(a apptypes.Deps) fiber.Handler {
 // @Param season path string true "Season"
 // @Param clan_tags query []string false "Clan tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanDonationsMany(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -350,8 +350,8 @@ func clanDonationsMany(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body modelsv2.ClanTagsBody true "Clan tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clansDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanTagsBody
@@ -382,8 +382,8 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clan, err := a.Clash.GetClan(c.UserContext(), c.Params("clan_tag"))
@@ -401,8 +401,8 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body modelsv2.ClanTagsBody true "Clan tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clansCapitalRaids(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv2.ClanTagsBody

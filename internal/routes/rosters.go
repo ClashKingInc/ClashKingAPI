@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"encoding/base64"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +29,13 @@ func rosterQueryServerID(c *fiber.Ctx) (int64, error) {
 
 // rosterNormalizeTag normalizes a player tag to #TAG format.
 func rosterNormalizeTag(tag string) string {
+	for range 2 {
+		decoded, err := url.PathUnescape(tag)
+		if err != nil || decoded == tag {
+			break
+		}
+		tag = decoded
+	}
 	tag = strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(tag, "#")))
 	if tag == "" {
 		return ""
@@ -41,11 +48,6 @@ func rosterGenID() string {
 	return strings.ReplaceAll(uuid.New().String(), "-", "")[:12]
 }
 
-func rosterAccessToken() string {
-	id := uuid.New()
-	return base64.RawURLEncoding.EncodeToString(id[:])
-}
-
 // createRoster godoc
 // @Summary Create roster
 // @Description Creates a new roster for a Discord server.
@@ -54,9 +56,10 @@ func rosterAccessToken() string {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 201 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Param body body modelsv2.CreateRosterRequest true "Roster"
+// @Success 201 {object} modelsv2.RosterMutationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/roster [post]
 func createRoster(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -78,9 +81,14 @@ func createRoster(a apptypes.Deps) fiber.Handler {
 		if err := rosterSave(c, a, body); err != nil {
 			return err
 		}
+		created, err := rosterGet(c, a, serverAsString(body["custom_id"]), &serverID)
+		if err != nil {
+			return err
+		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":   "Roster created successfully",
 			"roster_id": body["custom_id"],
+			"roster":    sanitize(created),
 		})
 	}
 }
@@ -93,9 +101,9 @@ func createRoster(a apptypes.Deps) fiber.Handler {
 // @Param server_id query int true "Discord server ID"
 // @Param roster_id query string false "Roster ID"
 // @Param group_id query string false "Group ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MissingRosterMembersResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/missing-members [get]
 func getMissingMembers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -159,7 +167,7 @@ func getMissingMembers(a apptypes.Deps) fiber.Handler {
 		return apptypes.JSON(c, http.StatusOK, map[string]any{
 			"query_type":            map[bool]string{true: "roster", false: "group"}[rosterID != ""],
 			"query_value":           map[bool]string{true: rosterID, false: groupID}[rosterID != ""],
-			"server_id":             serverID,
+			"server_id":             rosterServerIDText(serverID),
 			"results":               results,
 			"total_rosters_checked": len(results),
 		})
@@ -175,9 +183,10 @@ func getMissingMembers(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.UpdateRosterRequest true "Roster fields"
+// @Success 200 {object} modelsv2.RosterMutationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id} [patch]
 func updateRoster(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -211,8 +220,8 @@ func updateRoster(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param roster_id path string true "Roster ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id} [get]
 func getRoster(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -237,8 +246,8 @@ func getRoster(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id} [delete]
 func deleteRoster(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -247,6 +256,18 @@ func deleteRoster(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		rosterID := c.Params("roster_id")
+		if c.QueryBool("members_only") {
+			doc, err := rosterGet(c, a, rosterID, &serverID)
+			if err != nil {
+				return notFoundErr(err, "Roster not found")
+			}
+			doc["members"] = []any{}
+			doc["updated_at"] = time.Now().UTC()
+			if err := rosterSave(c, a, doc); err != nil {
+				return err
+			}
+			return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Roster members cleared"})
+		}
 		deleted, err := rosterDelete(c, a, rosterID, serverID)
 		if err != nil {
 			return err
@@ -266,8 +287,8 @@ func deleteRoster(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param player_tag path string true "Player tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id}/members/{player_tag} [delete]
 func removeRosterMember(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -307,31 +328,37 @@ func removeRosterMember(a apptypes.Deps) fiber.Handler {
 // @Param server_id query int false "Discord server ID"
 // @Param group_id query string false "Group ID"
 // @Param roster_id query string false "Roster ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterRefreshResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/refresh [post]
 func refreshRosters(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		serverID, err := rosterQueryServerID(c)
+		if err != nil {
+			return err
+		}
 		rosterID := c.Query("roster_id")
 		groupID := c.Query("group_id")
-		serverIDRaw := c.Query("server_id")
-		filter := rosterFilter{}
+		filter := rosterFilter{serverID: &serverID}
 		if rosterID != "" {
 			filter.customID = rosterID
 		} else if groupID != "" {
 			filter.groupID = groupID
-		} else if serverIDRaw != "" {
-			sid, err := strconv.ParseInt(serverIDRaw, 10, 64)
-			if err != nil {
-				return apptypes.Error(http.StatusBadRequest, "invalid server_id")
-			}
-			filter.serverID = &sid
-		} else {
-			return apptypes.Error(http.StatusBadRequest, "Must provide roster_id, group_id, or server_id")
 		}
 		rosters, err := rosterList(c, a, filter)
 		if err != nil {
 			return err
+		}
+		for _, roster := range rosters {
+			members := rosterMemberList(roster["members"])
+			for _, member := range members {
+				rosterHydrateMember(c, a, member)
+			}
+			roster["members"] = rosterMembersAny(members)
+			roster["updated_at"] = time.Now().UTC()
+			if err := rosterSave(c, a, roster); err != nil {
+				return err
+			}
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{
 			"message":           "Refreshed " + strconv.Itoa(len(rosters)) + " roster(s)",
@@ -349,8 +376,9 @@ func refreshRosters(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Source roster ID"
 // @Param server_id query int true "Target Discord server ID"
-// @Success 201 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterCloneRequest true "Clone options"
+// @Success 201 {object} modelsv2.RosterCloneResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id}/clone [post]
 func cloneRoster(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -367,6 +395,9 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		src, err := rosterGet(c, a, rosterID, nil)
 		if err != nil {
 			return notFoundErr(err, "Source roster not found")
+		}
+		if err := authorizeDiscordServerAccess(c, a, serverAsString(src["server_id"]), true); err != nil {
+			return err
 		}
 		cloned := make(map[string]any, len(src))
 		for k, v := range src {
@@ -385,6 +416,10 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		if err := rosterSave(c, a, cloned); err != nil {
 			return err
 		}
+		created, err := rosterGet(c, a, serverAsString(cloned["custom_id"]), &serverID)
+		if err != nil {
+			return err
+		}
 		memberCount := 0
 		if members, ok := cloned["members"].([]any); ok {
 			memberCount = len(members)
@@ -393,9 +428,10 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 			"message":          "Roster cloned successfully",
 			"new_roster_id":    cloned["custom_id"],
 			"new_alias":        cloned["alias"],
-			"target_server_id": serverID,
+			"target_server_id": rosterServerIDText(serverID),
 			"source_server_id": src["server_id"],
 			"members_copied":   memberCount,
+			"roster":           sanitize(created),
 		})
 	}
 }
@@ -408,7 +444,7 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Discord server ID"
 // @Param group_id query string false "Filter by group"
 // @Param clan_tag query string false "Filter by clan"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterListResponse
 // @Router /v2/roster/{server_id}/list [get]
 func listRosters(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -443,8 +479,9 @@ func listRosters(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 201 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Param body body modelsv2.RosterGroupRequest true "Roster group"
+// @Success 201 {object} modelsv2.RosterGroupMutationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-group [post]
 func createRosterGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -463,9 +500,14 @@ func createRosterGroup(a apptypes.Deps) fiber.Handler {
 		if err := rosterGroupSave(c, a, body); err != nil {
 			return err
 		}
+		created, err := rosterGroupGet(c, a, serverAsString(body["group_id"]), &serverID)
+		if err != nil {
+			return err
+		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":  "Roster group created",
 			"group_id": body["group_id"],
+			"group":    sanitize(created),
 		})
 	}
 }
@@ -476,7 +518,7 @@ func createRosterGroup(a apptypes.Deps) fiber.Handler {
 // @Tags Rosters
 // @Produce json
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterGroupListResponse
 // @Router /v2/roster-group/list [get]
 func listRosterGroups(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -498,17 +540,20 @@ func listRosterGroups(a apptypes.Deps) fiber.Handler {
 // @Tags Rosters
 // @Produce json
 // @Param group_id path string true "Group ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterGroupResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-group/{group_id} [get]
 func getRosterGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		serverID, err := rosterQueryServerID(c)
+		if err != nil {
+			return err
+		}
 		groupID := c.Params("group_id")
-		doc, err := rosterGroupGet(c, a, groupID, nil)
+		doc, err := rosterGroupGet(c, a, groupID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster group not found")
 		}
-		serverID := asInt64(doc["server_id"])
 		rosters, _ := rosterList(c, a, rosterFilter{groupID: groupID, serverID: &serverID})
 		doc["rosters"] = sanitize(rosters)
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"group": sanitize(doc)})
@@ -524,8 +569,9 @@ func getRosterGroup(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterGroupRequest true "Roster group fields"
+// @Success 200 {object} modelsv2.RosterGroupMutationResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-group/{group_id} [patch]
 func updateRosterGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -563,8 +609,8 @@ func updateRosterGroup(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterGroupDeleteResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-group/{group_id} [delete]
 func deleteRosterGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -615,7 +661,8 @@ func deleteRosterGroup(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 201 {object} map[string]interface{}
+// @Param body body modelsv2.RosterSignupCategoryRequest true "Signup category"
+// @Success 201 {object} modelsv2.RosterSignupCategoryMutationResponse
 // @Router /v2/roster-signup-category [post]
 func createRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -640,9 +687,17 @@ func createRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 		if err := rosterSignupSave(c, a, body); err != nil {
 			return err
 		}
+		created, err := rosterSignupList(c, a, serverID, serverAsString(body["custom_id"]))
+		if err != nil {
+			return err
+		}
+		if len(created) == 0 {
+			return apptypes.Error(http.StatusInternalServerError, "Created signup category could not be loaded")
+		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":   "Signup category created",
 			"custom_id": body["custom_id"],
+			"category":  sanitize(created[0]),
 		})
 	}
 }
@@ -654,7 +709,7 @@ func createRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterSignupCategoryListResponse
 // @Router /v2/roster-signup-category/list [get]
 func listRosterSignupCategories(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -667,7 +722,7 @@ func listRosterSignupCategories(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		items := sanitize(cats)
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items, "categories": items, "count": len(cats), "server_id": serverID})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items, "categories": items, "count": len(cats), "server_id": rosterServerIDText(serverID)})
 	}
 }
 
@@ -680,8 +735,9 @@ func listRosterSignupCategories(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param custom_id path string true "Custom ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterSignupCategoryRequest true "Signup category fields"
+// @Success 200 {object} modelsv2.RosterSignupCategoryMutationResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-signup-category/{custom_id} [patch]
 func updateRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -723,8 +779,8 @@ func updateRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param custom_id path string true "Custom ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-signup-category/{custom_id} [delete]
 func deleteRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -755,8 +811,9 @@ func deleteRosterSignupCategory(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterMembersRequest true "Roster member operation"
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id}/members [post]
 func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -767,6 +824,7 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 		rosterID := c.Params("roster_id")
 		var body struct {
 			Members    []map[string]any `json:"members"`
+			Add        []map[string]any `json:"add"`
 			Operation  string           `json:"operation"` // "add" | "remove" | "update"
 			PlayerTags []string         `json:"player_tags"`
 		}
@@ -778,6 +836,9 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 			return notFoundErr(err, "Roster not found")
 		}
 		members := rosterMemberList(existing["members"])
+		if len(body.Members) == 0 && len(body.Add) > 0 {
+			body.Members = body.Add
+		}
 
 		switch body.Operation {
 		case "remove":
@@ -795,6 +856,7 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 			existing["members"] = kept
 		default: // "add" or unspecified
 			for _, m := range body.Members {
+				rosterHydrateMember(c, a, m)
 				m["added_at"] = time.Now().UTC()
 				members = append(members, m)
 			}
@@ -817,8 +879,9 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param member_tag path string true "Player tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterMemberUpdateRequest true "Roster member fields"
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id}/members/{member_tag} [patch]
 func updateRosterMember(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -867,8 +930,8 @@ func updateRosterMember(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param roster_id path string true "Roster ID"
 // @Param member_tag path string true "Player tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterMemberResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster/{roster_id}/members/{member_tag}/refresh [post]
 func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -878,27 +941,19 @@ func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		rosterID := c.Params("roster_id")
 		memberTag := rosterNormalizeTag(c.Params("member_tag"))
-		update := map[string]any{}
-		if a.Clash != nil {
-			if player, err := a.Clash.GetPlayer(c.UserContext(), memberTag); err == nil && player != nil {
-				update["name"] = player.Name
-				update["trophies"] = player.Trophies
-				update["town_hall"] = player.TownHall
-			}
-		}
 		doc, err := rosterGet(c, a, rosterID, &serverID)
 		if err != nil {
 			return notFoundErr(err, "Roster not found")
 		}
 		members := rosterMemberList(doc["members"])
 		found := false
+		var refreshed map[string]any
 		for _, member := range members {
 			if serverAsString(member["tag"]) != memberTag {
 				continue
 			}
-			for k, v := range update {
-				member[k] = v
-			}
+			rosterHydrateMember(c, a, member)
+			refreshed = member
 			found = true
 		}
 		if !found {
@@ -909,7 +964,7 @@ func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 		if err := rosterSave(c, a, doc); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member refreshed"})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member refreshed", "member": sanitize(refreshed)})
 	}
 }
 
@@ -921,7 +976,8 @@ func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 201 {object} map[string]interface{}
+// @Param body body modelsv2.RosterAutomationRequest true "Automation rule"
+// @Success 201 {object} modelsv2.RosterAutomationMutationResponse
 // @Router /v2/roster-automation [post]
 func createRosterAutomation(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -942,9 +998,24 @@ func createRosterAutomation(a apptypes.Deps) fiber.Handler {
 		if err := rosterAutomationSave(c, a, body); err != nil {
 			return err
 		}
+		created, err := rosterAutomationList(c, a, serverID, "", "", false)
+		if err != nil {
+			return err
+		}
+		var rule map[string]any
+		for _, item := range created {
+			if serverAsString(item["automation_id"]) == serverAsString(body["automation_id"]) {
+				rule = item
+				break
+			}
+		}
+		if rule == nil {
+			return apptypes.Error(http.StatusInternalServerError, "Created automation rule could not be loaded")
+		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":       "Automation rule created",
 			"automation_id": body["automation_id"],
+			"rule":          sanitize(rule),
 		})
 	}
 }
@@ -956,7 +1027,7 @@ func createRosterAutomation(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RosterAutomationListResponse
 // @Router /v2/roster-automation/list [get]
 func listRosterAutomation(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -982,7 +1053,7 @@ func listRosterAutomation(a apptypes.Deps) fiber.Handler {
 			"items":     sanitize(rules),
 			"rules":     sanitize(rules),
 			"count":     len(rules),
-			"server_id": serverID,
+			"server_id": rosterServerIDText(serverID),
 			"roster_id": c.Query("roster_id"),
 			"group_id":  c.Query("group_id"),
 		})
@@ -998,8 +1069,9 @@ func listRosterAutomation(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param automation_id path string true "Automation ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.RosterAutomationRequest true "Automation fields"
+// @Success 200 {object} modelsv2.RosterAutomationMutationResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-automation/{automation_id} [patch]
 func updateRosterAutomation(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1047,8 +1119,8 @@ func updateRosterAutomation(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param automation_id path string true "Automation ID"
 // @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/roster-automation/{automation_id} [delete]
 func deleteRosterAutomation(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1077,7 +1149,7 @@ func deleteRosterAutomation(a apptypes.Deps) fiber.Handler {
 // @Tags Rosters
 // @Produce json
 // @Param server_id path int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerClanMembersResponse
 // @Router /v2/roster/server/{server_id}/members [get]
 func getServerClanMembers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1116,60 +1188,6 @@ func getServerClanMembers(a apptypes.Deps) fiber.Handler {
 			return strings.ToLower(serverAsString(members[i]["name"])) < strings.ToLower(serverAsString(members[j]["name"]))
 		})
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"members": members, "count": len(members)})
-	}
-}
-
-// generateRosterToken godoc
-// @Summary Generate roster token
-// @Description Generates an access token for public roster viewing.
-// @Tags Rosters
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id query int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Router /v2/roster-token [post]
-func generateRosterToken(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := rosterQueryServerID(c)
-		if err != nil {
-			return err
-		}
-		rosterID := c.Query("roster_id")
-		token := rosterAccessToken()
-		expiresAt := time.Now().UTC().Add(time.Hour)
-		tokenDoc := map[string]any{"server_id": serverID, "type": "roster", "expires_at": expiresAt}
-		if rosterID != "" {
-			tokenDoc["roster_id"] = rosterID
-		}
-		if _, err := a.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO api_tokens (token_hash, user_id, server_id, token_type, expires_at, metadata, created_at)
-			VALUES ($1, '', $2, 'roster', $3, $4::jsonb, now())
-		`, tokenHash(token), strconv.FormatInt(serverID, 10), expiresAt, apptypes.Marshal(tokenDoc)); err != nil {
-			return err
-		}
-		var rosterCount int
-		_ = a.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM rosters WHERE server_id = $1`, strconv.FormatInt(serverID, 10)).Scan(&rosterCount)
-		baseURL := "https://api.clashk.ing"
-		if a.Config.Local {
-			baseURL = "http://localhost:8000"
-		}
-		dashboardURL := baseURL + "/ui/roster/dashboard?token=" + token
-		if rosterID != "" {
-			dashboardURL += "&server_id=" + strconv.FormatInt(serverID, 10) + "&roster_id=" + rosterID
-		} else {
-			dashboardURL += "&server_id=" + strconv.FormatInt(serverID, 10)
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{
-			"message": "Server roster access token generated successfully",
-			"server_info": map[string]any{
-				"server_id":    serverID,
-				"roster_count": rosterCount,
-			},
-			"access_url": dashboardURL,
-			"token":      token,
-			"expires_at": expiresAt.Format(time.RFC3339),
-		})
 	}
 }
 
@@ -1213,9 +1231,40 @@ func rosterMembersAny(members []map[string]any) []any {
 	return out
 }
 
+func rosterHydrateMember(c *fiber.Ctx, a apptypes.Deps, member map[string]any) {
+	tag := rosterNormalizeTag(serverAsString(member["tag"]))
+	if tag == "" {
+		return
+	}
+	member["tag"] = tag
+	if a.Clash == nil {
+		return
+	}
+	player, err := a.Clash.GetPlayer(c.UserContext(), tag)
+	if err != nil || player == nil {
+		return
+	}
+	member["name"] = player.Name
+	member["townhall"] = player.TownHall
+	member["trophies"] = player.Trophies
+	member["last_updated"] = time.Now().UTC().Unix()
+	if player.Clan != nil {
+		member["current_clan"] = player.Clan.Name
+		member["current_clan_tag"] = player.Clan.Tag
+	} else {
+		member["current_clan"] = ""
+		member["current_clan_tag"] = ""
+	}
+	if player.League != nil {
+		member["current_league"] = player.League.Name
+	} else if player.LeagueTier != nil {
+		member["current_league"] = player.LeagueTier.Name
+	}
+}
+
 func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	customID := serverAsString(doc["custom_id"])
-	serverID := rosterServerIDText(asInt64(doc["server_id"]))
+	serverID := serverAsString(doc["server_id"])
 	groupID := rosterOptionalString(doc["group_id"])
 	clanTag := rosterOptionalString(doc["clan_tag"])
 	alias := rosterOptionalString(doc["alias"])
@@ -1290,11 +1339,7 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 		}
 		item := playerDecodeJSONObject(dataRaw)
 		item["custom_id"] = customID
-		if parsed, err := strconv.ParseInt(serverID, 10, 64); err == nil {
-			item["server_id"] = parsed
-		} else {
-			item["server_id"] = serverID
-		}
+		item["server_id"] = serverID
 		if groupID != nil {
 			item["group_id"] = *groupID
 		}
@@ -1339,7 +1384,7 @@ func rosterUpdate(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64
 
 func rosterGroupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	groupID := serverAsString(doc["group_id"])
-	serverID := rosterServerIDText(asInt64(doc["server_id"]))
+	serverID := serverAsString(doc["server_id"])
 	name := rosterOptionalString(doc["name"])
 	description := rosterOptionalString(doc["description"])
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
@@ -1386,11 +1431,7 @@ func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string
 		}
 		item := playerDecodeJSONObject(dataRaw)
 		item["group_id"] = gid
-		if parsed, err := strconv.ParseInt(sid, 10, 64); err == nil {
-			item["server_id"] = parsed
-		} else {
-			item["server_id"] = sid
-		}
+		item["server_id"] = sid
 		item["name"] = name
 		item["description"] = description
 		item["created_at"] = createdAt
@@ -1422,7 +1463,7 @@ func rosterSignupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 			sort_order = EXCLUDED.sort_order,
 			data = EXCLUDED.data,
 			updated_at = EXCLUDED.updated_at
-	`, serverAsString(doc["custom_id"]), rosterServerIDText(asInt64(doc["server_id"])), rosterOptionalString(doc["name"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	`, serverAsString(doc["custom_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["name"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
 	return err
 }
 
@@ -1454,7 +1495,7 @@ func rosterSignupList(c *fiber.Ctx, a apptypes.Deps, serverID int64, customID st
 		}
 		item := playerDecodeJSONObject(dataRaw)
 		item["custom_id"] = cid
-		item["server_id"] = serverID
+		item["server_id"] = sid
 		item["name"] = name
 		item["description"] = description
 		item["sort_order"] = sortOrder
@@ -1476,7 +1517,7 @@ func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) err
 			trigger_type = EXCLUDED.trigger_type,
 			data = EXCLUDED.data,
 			updated_at = EXCLUDED.updated_at
-	`, serverAsString(doc["automation_id"]), rosterServerIDText(asInt64(doc["server_id"])), rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"), rosterOptionalString(doc["trigger_type"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	`, serverAsString(doc["automation_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"), rosterOptionalString(doc["trigger_type"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
 	return err
 }
 
@@ -1516,7 +1557,7 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 		}
 		item := playerDecodeJSONObject(dataRaw)
 		item["automation_id"] = automationID
-		item["server_id"] = serverID
+		item["server_id"] = sid
 		if group != nil {
 			item["group_id"] = *group
 		}

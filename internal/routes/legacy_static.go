@@ -25,8 +25,8 @@ var staticDataPath = filepath.Join(".venv", "lib", "python3.13", "site-packages"
 // @Description Returns legacy builder base league metadata.
 // @Tags Other
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.BuilderBaseLeaguesResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /builderbaseleagues [get]
 func builderBaseLeagues() fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -79,7 +79,7 @@ func builderBaseLeagues() fiber.Handler {
 // @Tags Lists
 // @Produce json
 // @Success 200 {array} int
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /list/townhalls [get]
 func listTownhalls(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -132,25 +132,28 @@ func listSeasons() fiber.Handler {
 // @Description Returns global tracking counts used by legacy clients.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GlobalCountsResponse
 // @Router /global/counts [get]
 func globalCounts(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		ctx := c.UserContext()
-		count := func(query string, args ...any) int64 {
-			var value int64
-			_ = a.Store.SQL.QueryRow(ctx, query, args...).Scan(&value)
-			return value
+		var playersInWar, clansInWar, totalJoinLeaves, playersInLegends, playerCount, clanCount, warsStored int64
+		err := a.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT players_in_war, clans_in_war, total_join_leaves, players_in_legends,
+				player_count, clan_count, wars_stored
+			FROM api_global_counts
+			WHERE id = 1
+		`).Scan(&playersInWar, &clansInWar, &totalJoinLeaves, &playersInLegends, &playerCount, &clanCount, &warsStored)
+		if err != nil {
+			return err
 		}
-		now := time.Now().UTC()
 		return apptypes.JSON(c, http.StatusOK, map[string]any{
-			"players_in_war":     count(`SELECT count(DISTINCT attacker_tag) FROM war_attack_events WHERE war_end_time >= $1`, now),
-			"clans_in_war":       count(`SELECT count(DISTINCT clan_tag) FROM war_log_index WHERE end_time >= $1`, now),
-			"total_join_leaves":  count(`SELECT count(*) FROM join_leave_history`),
-			"players_in_legends": count(`SELECT count(*) FROM legend_rankings_current`),
-			"player_count":       count(`SELECT count(*) FROM player_current_stats`),
-			"clan_count":         count(`SELECT count(*) FROM basic_clan`),
-			"wars_stored":        count(`SELECT count(DISTINCT war_id) FROM war_log_index`),
+			"players_in_war":     playersInWar,
+			"clans_in_war":       clansInWar,
+			"total_join_leaves":  totalJoinLeaves,
+			"players_in_legends": playersInLegends,
+			"player_count":       playerCount,
+			"clan_count":         clanCount,
+			"wars_stored":        warsStored,
 		})
 	}
 }
@@ -163,8 +166,8 @@ func globalCounts(a apptypes.Deps) fiber.Handler {
 // @Param clan_tag path string true "Clan tag"
 // @Param date path string true "Legend day YYYY-MM-DD"
 // @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendsClan(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := fixTag(c.Params("clan_tag"))
@@ -217,7 +220,7 @@ func legendsClan(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendStreaks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := clamp(queryInt(c, "limit", 50), 1, 500)
@@ -250,7 +253,7 @@ func legendStreaks(a apptypes.Deps) fiber.Handler {
 // @Tags Legacy Legends
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendTrophyBuckets(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
@@ -281,7 +284,7 @@ func legendTrophyBuckets(a apptypes.Deps) fiber.Handler {
 // @Tags Legacy Legends
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendEOSWinners(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
@@ -306,8 +309,8 @@ func legendEOSWinners(a apptypes.Deps) fiber.Handler {
 // @Param top_ranking query int false "First rank"
 // @Param lower_ranking query int false "Last rank"
 // @Success 200 {array} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func liveLegendRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		topRanking := queryInt(c, "top_ranking", 1)
@@ -336,7 +339,7 @@ func liveLegendRankings(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func liveLegendRankingByPlayer(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		playerTag := fixTag(c.Params("player_tag"))
@@ -372,8 +375,8 @@ func liveLegendRankingByPlayer(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerRankingSnapshotResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/ranking/player-trophies/{location}/{date} [get]
 func playerTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "player_trophies") }
 
@@ -384,8 +387,8 @@ func playerTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerRankingSnapshotResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/ranking/player-builder/{location}/{date} [get]
 func playerBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "player_builder") }
 
@@ -396,8 +399,8 @@ func playerBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanRankingSnapshotResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/ranking/clan-trophies/{location}/{date} [get]
 func clanTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_trophies") }
 
@@ -408,8 +411,8 @@ func clanTrophiesRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanRankingSnapshotResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/ranking/clan-builder/{location}/{date} [get]
 func clanBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_builder") }
 
@@ -420,8 +423,8 @@ func clanBuilderRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a,
 // @Produce json
 // @Param location path string true "Location"
 // @Param date path string true "Snapshot date"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanRankingSnapshotResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/ranking/clan-capital/{location}/{date} [get]
 func clanCapitalRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a, "clan_capital") }
 
@@ -432,7 +435,7 @@ func clanCapitalRanking(a apptypes.Deps) fiber.Handler { return rankingByDate(a,
 // @Produce json
 // @Param player_tags query []string true "Player tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerTodo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		values := collectQueryValues(c, "player_tags")
@@ -480,7 +483,7 @@ func playerTodo(a apptypes.Deps) fiber.Handler {
 // @Param trophies query string false "Trophy range as min,max"
 // @Param donations query string false "Donation range as min,max"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerFullSearch(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		name := c.Params("name")

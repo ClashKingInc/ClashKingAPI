@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
@@ -34,6 +35,52 @@ func TestAuthUserOrBotAllowsConfiguredBotToken(t *testing.T) {
 	}
 	if wrapCalled {
 		t.Fatal("expected bot token path not to call user auth wrapper")
+	}
+}
+
+func TestDashboardAccessCacheTTLIsSixtySeconds(t *testing.T) {
+	if serverAccessCacheTTL != 60*time.Second {
+		t.Fatalf("serverAccessCacheTTL = %s, want 60s", serverAccessCacheTTL)
+	}
+}
+
+func TestDashboardEntryAllowsUnionedAccess(t *testing.T) {
+	entry := serverAccessCacheEntry{sections: map[string]string{"links": "view", "rosters": "manage"}}
+	if !dashboardEntryAllows(entry, "links", false, false) {
+		t.Fatal("view grant should allow reading links")
+	}
+	if dashboardEntryAllows(entry, "links", true, false) {
+		t.Fatal("view grant should not allow managing links")
+	}
+	if !dashboardEntryAllows(entry, "rosters", true, false) {
+		t.Fatal("manage grant should allow managing rosters")
+	}
+	if !dashboardEntryAllows(entry, "", false, false) {
+		t.Fatal("any granted section should allow shared metadata")
+	}
+}
+
+func TestDashboardManagerAlwaysAllowed(t *testing.T) {
+	entry := serverAccessCacheEntry{manager: true}
+	if !dashboardEntryAllows(entry, "tickets", true, true) {
+		t.Fatal("manager should pass manager-only access")
+	}
+}
+
+func TestDashboardSectionForPath(t *testing.T) {
+	tests := map[string]string{
+		"/v2/links/server/123":                "links",
+		"/v2/server/123/tickets/open":         "tickets",
+		"/v2/server/123/bans":                 "moderation",
+		"/v2/server/123/role-settings":        "roles",
+		"/v2/server/123/bot-profile":          "settings",
+		"/v2/server/123/leaderboards/legends": "leaderboards",
+	}
+	for path, expected := range tests {
+		section, _ := dashboardSectionForPath(path)
+		if section != expected {
+			t.Errorf("dashboardSectionForPath(%q) = %q, want %q", path, section, expected)
+		}
 	}
 }
 

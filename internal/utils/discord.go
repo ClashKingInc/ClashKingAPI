@@ -8,11 +8,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	disgo "github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
+	"golang.org/x/sync/singleflight"
+)
+
+const (
+	botGuildProfileCacheTTL  = 5 * time.Minute
+	botGlobalProfileCacheTTL = 15 * time.Minute
 )
 
 type DiscordAdapter struct {
@@ -20,15 +27,69 @@ type DiscordAdapter struct {
 	client  disgo.Rest
 	http    *http.Client
 	limiter <-chan time.Time
+
+	profileMu       sync.RWMutex
+	profileCache    map[int64]cachedBotGuildProfile
+	profileRequests singleflight.Group
+	globalProfile   cachedBotGlobalProfile
+	globalRequests  singleflight.Group
+}
+
+type cachedBotGuildProfile struct {
+	profile   *DiscordBotGuildProfile
+	expiresAt time.Time
+}
+
+type cachedBotGlobalProfile struct {
+	profile   *discordCurrentApplication
+	expiresAt time.Time
+}
+
+type DiscordBotGuildProfile struct {
+	UserID             string  `json:"-"`
+	Name               string  `json:"name"`
+	Avatar             *string `json:"avatar"`
+	Banner             *string `json:"banner"`
+	Bio                string  `json:"bio"`
+	NameGuildProfile   bool    `json:"-"`
+	AvatarGuildProfile bool    `json:"-"`
+	BannerGuildProfile bool    `json:"-"`
+	BioGuildProfile    bool    `json:"-"`
+}
+
+type discordBotGuildMember struct {
+	Nick   *string `json:"nick"`
+	Avatar *string `json:"avatar"`
+	Banner *string `json:"banner"`
+	Bio    *string `json:"bio"`
+	User   struct {
+		ID         string  `json:"id"`
+		Username   string  `json:"username"`
+		GlobalName *string `json:"global_name"`
+	} `json:"user"`
+}
+
+type discordCurrentApplication struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Bot         struct {
+		ID         string  `json:"id"`
+		Username   string  `json:"username"`
+		GlobalName *string `json:"global_name"`
+		Avatar     *string `json:"avatar"`
+		Banner     *string `json:"banner"`
+	} `json:"bot"`
 }
 
 func NewDiscordAdapter(cfg Config) (*DiscordAdapter, error) {
 	client := disgo.New(disgo.NewClient(cfg.BotToken))
 	return &DiscordAdapter{
-		cfg:     cfg,
-		client:  client,
-		http:    &http.Client{Timeout: 15 * time.Second},
-		limiter: time.Tick(500 * time.Millisecond),
+		cfg:          cfg,
+		client:       client,
+		http:         &http.Client{Timeout: 15 * time.Second},
+		limiter:      time.Tick(500 * time.Millisecond),
+		profileCache: make(map[int64]cachedBotGuildProfile),
 	}, nil
 }
 
@@ -134,6 +195,28 @@ func (a *DiscordAdapter) GetGuildChannels(_ context.Context, guildID int64) ([]d
 	return a.client.GetGuildChannels(snowflake.ID(guildID))
 }
 
+// CreateCountdownChannel creates a read-only voice channel used as a live stat display.
+func (a *DiscordAdapter) CreateCountdownChannel(_ context.Context, guildID int64, name string) (discord.GuildChannel, error) {
+	a.wait()
+	guildSnowflake := snowflake.ID(guildID)
+	return a.client.CreateGuildChannel(guildSnowflake, discord.GuildVoiceChannelCreate{
+		Name: name,
+		PermissionOverwrites: []discord.PermissionOverwrite{
+			discord.RolePermissionOverwrite{
+				RoleID: guildSnowflake,
+				Allow:  discord.PermissionViewChannel,
+				Deny:   discord.PermissionConnect,
+			},
+		},
+	})
+}
+
+// DeleteChannel removes a channel using the bot token.
+func (a *DiscordAdapter) DeleteChannel(_ context.Context, channelID int64) error {
+	a.wait()
+	return a.client.DeleteChannel(snowflake.ID(channelID))
+}
+
 // GetGuildWebhooks fetches all webhooks for a guild using the bot token.
 func (a *DiscordAdapter) GetGuildWebhooks(_ context.Context, guildID int64) ([]discord.Webhook, error) {
 	a.wait()
@@ -150,6 +233,12 @@ func (a *DiscordAdapter) GetWebhook(_ context.Context, webhookID int64) (discord
 func (a *DiscordAdapter) CreateWebhook(_ context.Context, channelID int64, name string) (*discord.IncomingWebhook, error) {
 	a.wait()
 	return a.client.CreateWebhook(snowflake.ID(channelID), discord.WebhookCreate{Name: name})
+}
+
+// DeleteWebhook removes a webhook using the bot token.
+func (a *DiscordAdapter) DeleteWebhook(_ context.Context, webhookID int64) error {
+	a.wait()
+	return a.client.DeleteWebhook(snowflake.ID(webhookID))
 }
 
 // GetActiveGuildThreads fetches active threads for a guild using the bot token.
@@ -184,6 +273,171 @@ func (a *DiscordAdapter) GetMemberDirect(_ context.Context, guildID, userID int6
 		return nil
 	}
 	return m
+}
+
+func (a *DiscordAdapter) GetBotGuildProfile(ctx context.Context, guildID int64) (*DiscordBotGuildProfile, error) {
+	if profile := a.cachedBotGuildProfile(guildID); profile != nil {
+		return profile, nil
+	}
+
+	value, err, _ := a.profileRequests.Do(fmt.Sprintf("%d", guildID), func() (any, error) {
+		if profile := a.cachedBotGuildProfile(guildID); profile != nil {
+			return profile, nil
+		}
+		// Discord's Guild Member GET omits the newer per-guild bot profile fields.
+		// Modify Current Member accepts an empty body and returns the complete profile.
+		raw, err := a.requestBotGuildProfile(ctx, guildID, map[string]any{})
+		if err != nil {
+			return nil, fmt.Errorf("discord profile lookup failed: %w", err)
+		}
+		profile, err := a.hydrateBotGuildProfile(ctx, *raw)
+		if err != nil {
+			return nil, err
+		}
+		a.cacheBotGuildProfile(guildID, profile)
+		return profile, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cloneBotGuildProfile(value.(*DiscordBotGuildProfile)), nil
+}
+
+func (a *DiscordAdapter) UpdateBotGuildProfile(ctx context.Context, guildID int64, payload map[string]any) (*DiscordBotGuildProfile, error) {
+	raw, err := a.requestBotGuildProfile(ctx, guildID, payload)
+	if err != nil {
+		return nil, fmt.Errorf("discord profile update failed: %w", err)
+	}
+	profile, err := a.hydrateBotGuildProfile(ctx, *raw)
+	if err != nil {
+		return nil, err
+	}
+	a.cacheBotGuildProfile(guildID, profile)
+	return cloneBotGuildProfile(profile), nil
+}
+
+func (a *DiscordAdapter) requestBotGuildProfile(ctx context.Context, guildID int64, payload map[string]any) (*discordBotGuildMember, error) {
+	var raw discordBotGuildMember
+	err := a.client.Do(disgo.UpdateCurrentMember.Compile(nil, snowflake.ID(guildID)), payload, &raw, disgo.WithCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return &raw, nil
+}
+
+func (a *DiscordAdapter) cachedBotGuildProfile(guildID int64) *DiscordBotGuildProfile {
+	a.profileMu.RLock()
+	cached, ok := a.profileCache[guildID]
+	a.profileMu.RUnlock()
+	if !ok || time.Now().After(cached.expiresAt) {
+		return nil
+	}
+	return cloneBotGuildProfile(cached.profile)
+}
+
+func (a *DiscordAdapter) cacheBotGuildProfile(guildID int64, profile *DiscordBotGuildProfile) {
+	a.profileMu.Lock()
+	if a.profileCache == nil {
+		a.profileCache = make(map[int64]cachedBotGuildProfile)
+	}
+	a.profileCache[guildID] = cachedBotGuildProfile{
+		profile: cloneBotGuildProfile(profile), expiresAt: time.Now().Add(botGuildProfileCacheTTL),
+	}
+	a.profileMu.Unlock()
+}
+
+func cloneBotGuildProfile(profile *DiscordBotGuildProfile) *DiscordBotGuildProfile {
+	if profile == nil {
+		return nil
+	}
+	clone := *profile
+	return &clone
+}
+
+func (a *DiscordAdapter) hydrateBotGuildProfile(ctx context.Context, member discordBotGuildMember) (*DiscordBotGuildProfile, error) {
+	profile := &DiscordBotGuildProfile{
+		UserID:             member.User.ID,
+		Name:               discordMemberDisplayName(member.Nick, member.User.GlobalName, member.User.Username),
+		Avatar:             member.Avatar,
+		Banner:             member.Banner,
+		NameGuildProfile:   member.Nick != nil && strings.TrimSpace(*member.Nick) != "",
+		AvatarGuildProfile: member.Avatar != nil,
+		BannerGuildProfile: member.Banner != nil,
+		BioGuildProfile:    member.Bio != nil && strings.TrimSpace(*member.Bio) != "",
+	}
+	if member.Bio != nil {
+		profile.Bio = *member.Bio
+	}
+	if profile.NameGuildProfile && profile.AvatarGuildProfile && profile.BannerGuildProfile && profile.BioGuildProfile {
+		return profile, nil
+	}
+
+	global, err := a.getBotGlobalProfile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if profile.UserID == "" {
+		profile.UserID = global.Bot.ID
+	}
+	if !profile.NameGuildProfile {
+		profile.Name = discordMemberDisplayName(nil, global.Bot.GlobalName, global.Bot.Username)
+		if profile.Name == "" {
+			profile.Name = global.Name
+		}
+	}
+	if profile.Avatar == nil {
+		profile.Avatar = global.Bot.Avatar
+	}
+	if profile.Banner == nil {
+		profile.Banner = global.Bot.Banner
+	}
+	if !profile.BioGuildProfile {
+		profile.Bio = global.Description
+	}
+	return profile, nil
+}
+
+func (a *DiscordAdapter) getBotGlobalProfile(ctx context.Context) (*discordCurrentApplication, error) {
+	a.profileMu.RLock()
+	cached := a.globalProfile
+	a.profileMu.RUnlock()
+	if cached.profile != nil && time.Now().Before(cached.expiresAt) {
+		clone := *cached.profile
+		return &clone, nil
+	}
+
+	value, err, _ := a.globalRequests.Do("global", func() (any, error) {
+		a.profileMu.RLock()
+		cached := a.globalProfile
+		a.profileMu.RUnlock()
+		if cached.profile != nil && time.Now().Before(cached.expiresAt) {
+			clone := *cached.profile
+			return &clone, nil
+		}
+		var profile discordCurrentApplication
+		if err := a.client.Do(disgo.GetBotApplicationInfo.Compile(nil), nil, &profile, disgo.WithCtx(ctx)); err != nil {
+			return nil, fmt.Errorf("discord bot profile lookup failed: %w", err)
+		}
+		a.profileMu.Lock()
+		a.globalProfile = cachedBotGlobalProfile{profile: &profile, expiresAt: time.Now().Add(botGlobalProfileCacheTTL)}
+		a.profileMu.Unlock()
+		clone := profile
+		return &clone, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(*discordCurrentApplication), nil
+}
+
+func discordMemberDisplayName(nick, globalName *string, username string) string {
+	if nick != nil && strings.TrimSpace(*nick) != "" {
+		return *nick
+	}
+	if globalName != nil && strings.TrimSpace(*globalName) != "" {
+		return *globalName
+	}
+	return username
 }
 
 // IsMember checks whether a user is a member of a guild (using bot token).

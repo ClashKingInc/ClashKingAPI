@@ -22,9 +22,9 @@ import (
 // @Param limit_players query int false "Maximum number of players"
 // @Param limit_clans query int false "Maximum number of clans"
 // @Param sort_by query string false "Player sort key"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerLeaderboardsResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards [get]
 func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -162,8 +162,8 @@ func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerWarLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/war-performance [get]
 func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -183,7 +183,7 @@ func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT attacker_tag, count(*)::bigint, COALESCE(sum(stars), 0)::bigint,
 			       COALESCE(avg(stars), 0)::float8, COALESCE(avg(destruction_percentage), 0)::float8
-			FROM war_attack_events
+			FROM war_attacks
 			WHERE attacker_tag = ANY($1)
 			  AND war_type <> 'friendly'
 			GROUP BY attacker_tag
@@ -234,8 +234,8 @@ func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/donations [get]
 func getServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -253,8 +253,8 @@ func getServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerCapitalLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/capital-raids [get]
 func getServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -312,8 +312,8 @@ func getServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerLegendsLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/legends [get]
 func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -364,8 +364,8 @@ func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/clan-games [get]
 func getServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -384,8 +384,8 @@ func getServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/activity [get]
 func getServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -404,8 +404,8 @@ func getServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/looting [get]
 func getServerLootingLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

@@ -25,8 +25,8 @@ import (
 // @Param timestamp_start query int false "Start Unix timestamp"
 // @Param timestamp_end query int false "End Unix timestamp"
 // @Param limit query int false "Maximum number of rows. Max 500."
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerWarAttacksResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/war/attacks [get]
 func playerWarAttacks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -70,8 +70,8 @@ func playerWarAttacks(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
 // @Param timestamp_end query int false "End Unix timestamp"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerWarStatsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/war/stats [get]
 func playerWarStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -374,7 +374,7 @@ func playersSummaryTop(a apptypes.Deps) fiber.Handler {
 
 		warRows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT attacker_tag, COALESCE(sum(stars), 0)::bigint AS total_stars
-			FROM war_attack_events
+			FROM war_attacks
 			WHERE attacker_tag = ANY($1)
 			  AND war_type <> 'friendly'
 			GROUP BY attacker_tag

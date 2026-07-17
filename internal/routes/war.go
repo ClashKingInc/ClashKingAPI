@@ -29,9 +29,9 @@ import (
 // @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint."
 // @Param war_types query string false "Comma-separated war type filter. Values: random,friendly."
 // @Param same_townhall query bool false "Only include same town hall attacks"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarWeeklyHitrateResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/war/townhall/{townhall_level}/hitrate/weekly [get]
 // @Router /global/war/townhall/{townhall_level}/hitrate/weekly [get]
 func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
@@ -102,8 +102,8 @@ func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
 // @Param timestamp_end query int false "End Unix timestamp"
 // @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, cwl, all."
 // @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarCompletedDailyResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/war/completed/daily [get]
 // @Router /global/war/completed/daily [get]
 func warCompletedDaily(a apptypes.Deps) fiber.Handler {
@@ -146,8 +146,8 @@ func warCompletedDaily(a apptypes.Deps) fiber.Handler {
 // @Param timestamp_end query int false "End timestamp"
 // @Param include_cwl query bool false "Include CWL wars"
 // @Param limit query int false "Maximum number of results"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarListResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/{clan_tag}/previous [get]
 func previousWars(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -177,9 +177,9 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.CWLRankingHistoryResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/cwl/{clan_tag}/ranking-history [get]
 func cwlRankingHistory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -210,7 +210,7 @@ func cwlRankingHistory(a apptypes.Deps) fiber.Handler {
 // @Description Returns the static CWL promotion and demotion thresholds list.
 // @Tags War
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.CWLThresholdResponse
 // @Router /v2/cwl/league-thresholds [get]
 func cwlThresholds(c *fiber.Ctx) error {
 	return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []modelsv2.CWLThresholdItem{
@@ -232,8 +232,8 @@ func cwlThresholds(c *fiber.Ctx) error {
 // @Produce json
 // @Param clan_tags query []string false "Clan tags"
 // @Param clan_tag query string false "Single clan tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarStatsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/clan/stats [get]
 // @Router /v2/war/stats [get]
 func clanStats(a apptypes.Deps) fiber.Handler {
@@ -253,9 +253,9 @@ func clanStats(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param body body modelsv2.WarClanTagsBody true "Clan tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarSummaryListResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/war-summary [post]
 func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -263,13 +263,35 @@ func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
+		tags := make([]string, 0, len(body.ClanTags))
+		seen := make(map[string]struct{}, len(body.ClanTags))
+		for _, rawTag := range body.ClanTags {
+			tag := warFixTag(rawTag)
+			if tag == "" {
+				continue
+			}
+			if _, exists := seen[tag]; exists {
+				continue
+			}
+			seen[tag] = struct{}{}
+			tags = append(tags, tag)
+		}
+		if len(tags) == 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
+		}
+		if len(tags) > 100 {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot contain more than 100 unique tags")
+		}
 		ctx := c.UserContext()
-		results := make([]map[string]any, len(body.ClanTags))
+		results := make([]map[string]any, len(tags))
+		sem := make(chan struct{}, 10)
 		var wg sync.WaitGroup
-		for i, tag := range body.ClanTags {
+		for i, tag := range tags {
 			wg.Add(1)
 			go func(idx int, t string) {
 				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
 				defer func() {
 					if r := recover(); r != nil {
 						results[idx] = warSummaryResponse(t, false, false, map[string]any{"state": "notInWar"}, nil, nil)
@@ -289,8 +311,8 @@ func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarSummaryResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/{clan_tag}/war-summary [get]
 func warSummarySingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -304,9 +326,9 @@ func warSummarySingle(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param body body modelsv2.WarPlayersBody true "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerWarHitsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/players/warhits [post]
 func playerWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -327,9 +349,9 @@ func playerWarhits(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param body body modelsv2.WarClanTagsBody true "Clan tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanWarHitsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/war/clans/warhits [post]
 func clanWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -342,60 +364,6 @@ func clanWarhits(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileFetchClanWarStatsWithFilter(c.UserContext(), a, filter)})
 	}
-}
-
-func sqlPreviousWarRows(c *fiber.Ctx, a apptypes.Deps, clanTag string, start string, end string, includeCWL bool, limit int) ([]map[string]any, error) {
-	query := `
-		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, war_type, state, battle_modifier, cwl_war_tag, r2_key
-		FROM war_log_index
-		WHERE (clan_tag = $1 OR opponent_tag = $1)
-			AND prep_time >= $2::timestamptz
-			AND prep_time <= $3::timestamptz
-	`
-	args := []any{clanTag, warTimestampToTime(start), warTimestampToTime(end)}
-	if !includeCWL {
-		query += ` AND war_type <> 'cwl'`
-	}
-	query += ` ORDER BY end_time DESC LIMIT $` + strconv.Itoa(len(args)+1)
-	args = append(args, limit)
-	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var warID, rowClanTag, opponentTag, warType, state, modifier string
-		var startTime *time.Time
-		var prepTime, endTime time.Time
-		var size int
-		var cwlWarTag, r2Key *string
-		if err := rows.Scan(&warID, &rowClanTag, &opponentTag, &prepTime, &startTime, &endTime, &size, &warType, &state, &modifier, &cwlWarTag, &r2Key); err != nil {
-			return nil, err
-		}
-		item := map[string]any{
-			"war_id":               warID,
-			"clan":                 map[string]any{"tag": rowClanTag},
-			"opponent":             map[string]any{"tag": opponentTag},
-			"preparationStartTime": prepTime.UTC().Format(time.RFC3339),
-			"endTime":              endTime.UTC().Format(time.RFC3339),
-			"teamSize":             size,
-			"type":                 warType,
-			"state":                state,
-			"battleModifier":       modifier,
-		}
-		if startTime != nil {
-			item["startTime"] = startTime.UTC().Format(time.RFC3339)
-		}
-		if cwlWarTag != nil {
-			item["cwlWarTag"] = *cwlWarTag
-		}
-		if r2Key != nil {
-			item["r2_key"] = *r2Key
-		}
-		out = append(out, item)
-	}
-	return out, rows.Err()
 }
 
 func sqlCWLGroups(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]map[string]any, error) {

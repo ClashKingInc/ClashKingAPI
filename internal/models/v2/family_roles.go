@@ -1,7 +1,7 @@
 package modelsv2
 
 type FamilyRoleRequest struct {
-	Role any    `json:"role"`
+	Role string `json:"role"`
 	Type string `json:"type"`
 }
 

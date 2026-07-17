@@ -174,6 +174,17 @@ func asIntWithDefault(value any, fallback int) int {
 	}
 }
 
+func intPtrMaybe(value any) *int {
+	if value == nil {
+		return nil
+	}
+	parsed := asIntWithDefault(value, -1)
+	if parsed < 0 {
+		return nil
+	}
+	return &parsed
+}
+
 func numericMaybe(raw string) any {
 	if value, err := strconv.ParseInt(raw, 10, 64); err == nil {
 		return value

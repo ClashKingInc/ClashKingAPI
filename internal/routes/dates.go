@@ -18,8 +18,8 @@ import (
 // @Produce json
 // @Param number_of_seasons query int false "Number of seasons to return"
 // @Param as_text query bool false "Return seasons as text"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.DateItemsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/dates/seasons [get]
 func seasons(c *fiber.Ctx) error {
 	count, _ := strconv.Atoi(c.Query("number_of_seasons"))
@@ -27,7 +27,7 @@ func seasons(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": genSeasonDate(count, asText)})
+	return apptypes.JSON(c, fiber.StatusOK, modelsv2.DateItemsResponse{Items: dateItems(genSeasonDate(count, asText))})
 }
 
 // raidWeekends returns raid weekend start dates.
@@ -37,11 +37,11 @@ func seasons(c *fiber.Ctx) error {
 // @Tags Dates
 // @Produce json
 // @Param number_of_weeks query int false "Number of raid weekends to return"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.DateItemsResponse
 // @Router /v2/dates/raid-weekends [get]
 func raidWeekends(c *fiber.Ctx) error {
 	count, _ := strconv.Atoi(c.Query("number_of_weeks"))
-	return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": genRaidDate(count)})
+	return apptypes.JSON(c, fiber.StatusOK, modelsv2.DateItemsResponse{Items: dateItems(genRaidDate(count))})
 }
 
 // currentDates returns the current season, raid, legend, and clan games dates.
@@ -50,12 +50,12 @@ func raidWeekends(c *fiber.Ctx) error {
 // @Description Returns current season and event date identifiers.
 // @Tags Dates
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.CurrentDatesResponse
 // @Router /v2/dates/current [get]
 func currentDates(c *fiber.Ctx) error {
 	return apptypes.JSON(c, fiber.StatusOK, modelsv2.CurrentDatesResponse{
-		Season:    genSeasonDate(0, false),
-		Raid:      genRaidDate(0),
+		Season:    genSeasonDate(0, false).(string),
+		Raid:      genRaidDate(0).(string),
 		Legend:    genLegendDate(),
 		ClanGames: genGamesSeason(),
 	})
@@ -69,8 +69,8 @@ func currentDates(c *fiber.Ctx) error {
 // @Produce json
 // @Param season query string false "Season in YYYY-MM format"
 // @Param gold_pass_season query bool false "Use gold pass season boundaries"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SeasonBoundsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/dates/season-start-end [get]
 func seasonStartEnd(c *fiber.Ctx) error {
 	season := c.Query("season")
@@ -98,8 +98,8 @@ func seasonStartEnd(c *fiber.Ctx) error {
 // @Tags Dates
 // @Produce json
 // @Param season query string false "Season in YYYY-MM format"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.DateItemsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/dates/season-raid-dates [get]
 func seasonRaidDates(c *fiber.Ctx) error {
 	season := c.Query("season")
@@ -110,7 +110,18 @@ func seasonRaidDates(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
+	return apptypes.JSON(c, fiber.StatusOK, modelsv2.DateItemsResponse{Items: items})
+}
+
+func dateItems(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []string:
+		return typed
+	default:
+		return []string{}
+	}
 }
 
 func genSeasonDate(numSeasons int, asText bool) any {

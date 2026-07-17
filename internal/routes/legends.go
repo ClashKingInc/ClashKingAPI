@@ -26,8 +26,8 @@ var legendsDayParam = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 // @Param day path string true "Legend day YYYY-MM-DD"
 // @Param players query []string false "Player tags"
 // @Success 200 {array} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendStatsDay(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		day := c.Params("day")
@@ -62,8 +62,8 @@ func legendStatsDay(a apptypes.Deps) fiber.Handler {
 // @Param season path string true "Season YYYY-MM"
 // @Param players query []string false "Player tags"
 // @Success 200 {array} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := c.Params("season")
@@ -121,9 +121,9 @@ func legendStatsSeason(a apptypes.Deps) fiber.Handler {
 // @Param season query string false "Season (YYYY-MM)"
 // @Param limit_top_players query int false "Max number of top players to return"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func guildStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)
@@ -299,9 +299,9 @@ func guildStats(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of players to return"
 // @Param offset query int false "Number of players to skip"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func dailyTracking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)

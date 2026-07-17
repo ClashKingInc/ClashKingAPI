@@ -10,6 +10,7 @@ type GuildInfo struct {
 	Features    []string `json:"features"`
 	HasBot      bool     `json:"has_bot"`
 	MemberCount *int     `json:"member_count,omitempty"`
+	Delegated   bool     `json:"delegated"`
 }
 
 type GuildDetails struct {

@@ -8,14 +8,18 @@ import (
 	"strconv"
 	"strings"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	"github.com/gofiber/fiber/v2"
 )
 
 type HandlerFunc = fiber.Handler
 
 type AppError struct {
-	Status int    `json:"-"`
-	Detail string `json:"detail"`
+	Status  int                            `json:"-"`
+	Code    modelsv2.ErrorCode             `json:"-"`
+	Detail  string                         `json:"-"`
+	Details []modelsv2.FieldError          `json:"-"`
+	Account *modelsv2.AccountsLinkedPlayer `json:"-"`
 }
 
 func (e *AppError) Error() string {
@@ -23,7 +27,7 @@ func (e *AppError) Error() string {
 }
 
 func Error(status int, detail string) error {
-	return &AppError{Status: status, Detail: detail}
+	return &AppError{Status: status, Code: errorCodeForStatus(status), Detail: detail}
 }
 
 func ErrorHandler(c *fiber.Ctx, err error) error {
@@ -40,7 +44,25 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 			)
 			CaptureFiberError(c, err, appErr.Status)
 		}
-		return JSON(c, appErr.Status, map[string]any{"detail": appErr.Detail})
+		message := appErr.Detail
+		if appErr.Status >= fiber.StatusInternalServerError {
+			message = publicErrorMessage(appErr.Status)
+		}
+		response := modelsv2.ErrorResponse{
+			Code:      appErr.Code,
+			Message:   message,
+			RequestID: RequestID(c),
+			Details:   appErr.Details,
+		}
+		if appErr.Account != nil {
+			return JSON(c, appErr.Status, modelsv2.AccountConflictErrorResponse{
+				Code:      response.Code,
+				Message:   response.Message,
+				RequestID: response.RequestID,
+				Account:   *appErr.Account,
+			})
+		}
+		return JSON(c, appErr.Status, response)
 	}
 
 	var fiberErr *fiber.Error
@@ -56,7 +78,11 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 			)
 			CaptureFiberError(c, err, fiberErr.Code)
 		}
-		return JSON(c, fiberErr.Code, map[string]any{"detail": fiberErr.Message})
+		return JSON(c, fiberErr.Code, modelsv2.ErrorResponse{
+			Code:      errorCodeForStatus(fiberErr.Code),
+			Message:   fiberErr.Message,
+			RequestID: RequestID(c),
+		})
 	}
 
 	Logger().Log(context.Background(), slog.LevelError, "unhandled_error",
@@ -68,7 +94,44 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		"user_id", UserID(c.UserContext()),
 	)
 	CaptureFiberError(c, err, fiber.StatusInternalServerError)
-	return JSON(c, fiber.StatusInternalServerError, map[string]any{"detail": err.Error()})
+	return JSON(c, fiber.StatusInternalServerError, modelsv2.ErrorResponse{
+		Code:      modelsv2.ErrorCodeInternal,
+		Message:   "Internal server error",
+		RequestID: RequestID(c),
+	})
+}
+
+func errorCodeForStatus(status int) modelsv2.ErrorCode {
+	switch status {
+	case fiber.StatusBadRequest, fiber.StatusUnprocessableEntity:
+		return modelsv2.ErrorCodeInvalidRequest
+	case fiber.StatusUnauthorized:
+		return modelsv2.ErrorCodeUnauthenticated
+	case fiber.StatusForbidden:
+		return modelsv2.ErrorCodeForbidden
+	case fiber.StatusNotFound:
+		return modelsv2.ErrorCodeNotFound
+	case fiber.StatusConflict:
+		return modelsv2.ErrorCodeConflict
+	case fiber.StatusTooManyRequests:
+		return modelsv2.ErrorCodeRateLimited
+	case fiber.StatusBadGateway, fiber.StatusServiceUnavailable, fiber.StatusGatewayTimeout:
+		return modelsv2.ErrorCodeUpstreamUnavailable
+	default:
+		if status >= fiber.StatusInternalServerError {
+			return modelsv2.ErrorCodeInternal
+		}
+		return modelsv2.ErrorCodeInvalidRequest
+	}
+}
+
+func publicErrorMessage(status int) string {
+	switch status {
+	case fiber.StatusBadGateway, fiber.StatusServiceUnavailable, fiber.StatusGatewayTimeout:
+		return "Upstream service unavailable"
+	default:
+		return "Internal server error"
+	}
 }
 
 func JSON(c *fiber.Ctx, status int, body any) error {
@@ -116,8 +179,4 @@ func QueryBool(c *fiber.Ctx, key string, defaultValue bool) (bool, error) {
 
 func WithUserContext(c *fiber.Ctx, ctx context.Context) {
 	c.SetUserContext(ctx)
-}
-
-var NotImplemented fiber.Handler = func(c *fiber.Ctx) error {
-	return JSON(c, fiber.StatusNotImplemented, map[string]string{"detail": "Not implemented"})
 }

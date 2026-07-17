@@ -10,8 +10,8 @@ type ReminderConfig struct {
 	TownhallFilter  []int    `json:"townhall_filter,omitempty"`
 	Roles           []string `json:"roles,omitempty"`
 	WarTypes        []string `json:"war_types,omitempty"`
-	PointThreshold  any      `json:"point_threshold,omitempty"`
-	AttackThreshold any      `json:"attack_threshold,omitempty"`
+	PointThreshold  *int     `json:"point_threshold,omitempty"`
+	AttackThreshold *int     `json:"attack_threshold,omitempty"`
 	RosterID        *string  `json:"roster_id,omitempty"`
 	PingType        *string  `json:"ping_type,omitempty"`
 }
@@ -33,8 +33,8 @@ type CreateReminderRequest struct {
 	TownhallFilter  []int    `json:"townhall_filter"`
 	Roles           []string `json:"roles"`
 	WarTypes        []string `json:"war_types"`
-	PointThreshold  any      `json:"point_threshold"`
-	AttackThreshold any      `json:"attack_threshold"`
+	PointThreshold  *int     `json:"point_threshold,omitempty"`
+	AttackThreshold *int     `json:"attack_threshold,omitempty"`
 	RosterID        string   `json:"roster_id"`
 	PingType        string   `json:"ping_type"`
 }
@@ -46,8 +46,8 @@ type UpdateReminderRequest struct {
 	TownhallFilter  []int    `json:"townhall_filter,omitempty"`
 	Roles           []string `json:"roles,omitempty"`
 	WarTypes        []string `json:"war_types,omitempty"`
-	PointThreshold  any      `json:"point_threshold,omitempty"`
-	AttackThreshold any      `json:"attack_threshold,omitempty"`
+	PointThreshold  *int     `json:"point_threshold,omitempty"`
+	AttackThreshold *int     `json:"attack_threshold,omitempty"`
 	PingType        *string  `json:"ping_type,omitempty"`
 }
 

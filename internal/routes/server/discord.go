@@ -17,9 +17,9 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 502 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.DiscordChannel
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/channels [get]
 func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -82,9 +82,9 @@ func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 502 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.DiscordThread
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/threads [get]
 func getServerThreads(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -146,9 +146,9 @@ func getServerThreads(a apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 502 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.DiscordRolesResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/discord-roles [get]
 func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -193,9 +193,9 @@ func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 502 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.DiscordChannel
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/discord-channels [get]
 func getServerDiscordChannels(a apptypes.Deps) apptypes.HandlerFunc {
 	return getServerChannels(a)
@@ -208,8 +208,8 @@ func getServerDiscordChannels(a apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.DiscordStatusResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/discord-test [get]
 func testDiscordAPIStatus(a apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {

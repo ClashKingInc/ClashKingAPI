@@ -5,12 +5,17 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const maxBadgeResponseSize = 5 * 1024 * 1024
+
+var badgeHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // clanBadge godoc
 // @Summary Get clan badge image
@@ -19,8 +24,8 @@ import (
 // @Produce png
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {file} binary
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/badge [get]
 func clanBadge(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -38,13 +43,30 @@ func clanBadge(a apptypes.Deps) fiber.Handler {
 			}
 			imageLink = liveClan.Badge.Large
 		}
-		resp, err := http.Get(imageLink)
+		req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, imageLink, nil)
 		if err != nil {
 			return err
 		}
+		resp, err := badgeHTTPClient.Do(req)
+		if err != nil {
+			return apptypes.Error(http.StatusBadGateway, "Clan badge request failed")
+		}
 		defer resp.Body.Close()
-		data, _ := io.ReadAll(resp.Body)
-		c.Set("Content-Type", "image/png")
+		if resp.StatusCode != http.StatusOK {
+			return apptypes.Error(http.StatusBadGateway, "Clan badge upstream returned an error")
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxBadgeResponseSize+1))
+		if err != nil {
+			return apptypes.Error(http.StatusBadGateway, "Failed to read clan badge")
+		}
+		if len(data) > maxBadgeResponseSize {
+			return apptypes.Error(http.StatusBadGateway, "Clan badge response is too large")
+		}
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "image/png"
+		}
+		c.Set("Content-Type", contentType)
 		return c.Send(data)
 	}
 }
@@ -56,10 +78,10 @@ func clanBadge(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param server_id path int true "Server ID"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func serverSettingsLegacy(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		serverID, err := strconv.ParseInt(c.Params("server_id"), 10, 64)
@@ -95,8 +117,8 @@ func guildLinks(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param url query string true "Destination URL"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func shortener(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		url := c.Query("url")
@@ -117,7 +139,7 @@ func shortener(a apptypes.Deps) fiber.Handler {
 // @Param id query string false "Short link ID"
 // @Param link_id query string false "Short link ID"
 // @Success 307
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
 func shortlink(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		linkID := legacyFirstNonEmpty(c.Query("id"), c.Query("link_id"))
@@ -138,7 +160,7 @@ func shortlink(a apptypes.Deps) fiber.Handler {
 // @Param clan_tags query []string false "Clan tags"
 // @Param server query int false "Discord server ID"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func capitalLegacy(a apptypes.Deps) fiber.Handler {
 	return statsFromPlayerDocs(a, "raided", func(doc map[string]any, season string) map[string]any {
 		return map[string]any{"donated": intValue(doc["capital_gold_donos"]), "raided": intValue(doc["capital_resources_looted"]), "attacks": intValue(doc["attack_count"]), "medals": intValue(doc["medals"])}
@@ -154,7 +176,7 @@ func capitalLegacy(a apptypes.Deps) fiber.Handler {
 // @Param clan_tags query []string false "Clan tags"
 // @Param server query int false "Discord server ID"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func warStatsLegacy(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tags, names, err := scopedPlayerTags(c, a)
@@ -163,7 +185,7 @@ func warStatsLegacy(a apptypes.Deps) fiber.Handler {
 		}
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT attacker_tag, count(*)::int, sum(stars)::int, sum(destruction_percentage)::float8
-			FROM war_attack_events
+			FROM war_attacks
 			WHERE attacker_tag = ANY($1)
 			GROUP BY attacker_tag
 		`, tags)

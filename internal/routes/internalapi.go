@@ -16,8 +16,8 @@ import (
 // @Tags Other
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.BotInfoResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/internal/bot/info [get]
 func botInfo(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -104,7 +104,7 @@ func sqlInternalCounts(ctx context.Context, a apptypes.Deps) map[string]any {
 	queries := map[string]string{
 		"clans_tracked":   `SELECT count(*) FROM server_clans`,
 		"players_tracked": `SELECT count(*) FROM player_current_stats`,
-		"wars_stored":     `SELECT count(*) FROM war_log_index`,
+		"wars_stored":     `SELECT count(*) FROM wars`,
 		"tickets_open":    `SELECT count(*) FROM tickets WHERE closed_at IS NULL`,
 		"capital_raids":   `SELECT count(*) FROM raid_weekends`,
 	}

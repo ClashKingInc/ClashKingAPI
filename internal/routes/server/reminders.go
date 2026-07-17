@@ -19,8 +19,8 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerRemindersResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders [get]
 func getServerReminders(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -66,10 +66,10 @@ func getServerReminders(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ReminderOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders [post]
 func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -171,10 +171,10 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param reminder_id path string true "Reminder ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ReminderOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders/{reminder_id} [put]
 func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -243,9 +243,9 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param reminder_id path string true "Reminder ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ReminderOperationResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders/{reminder_id} [delete]
 func deleteReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -283,8 +283,8 @@ func reminderConfigFromDoc(reminder map[string]any) modelsv2.ReminderConfig {
 		TownhallFilter:  thFilter,
 		Roles:           stringSlice(reminder["roles"]),
 		WarTypes:        stringSlice(reminder["types"]),
-		PointThreshold:  reminder["point_threshold"],
-		AttackThreshold: reminder["attack_threshold"],
+		PointThreshold:  intPtrMaybe(reminder["point_threshold"]),
+		AttackThreshold: intPtrMaybe(reminder["attack_threshold"]),
 		RosterID:        stringPtrMaybe(reminder["roster"]),
 		PingType:        stringPtrMaybe(reminder["ping_type"]),
 	}

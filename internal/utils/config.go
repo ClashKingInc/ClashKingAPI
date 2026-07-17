@@ -23,7 +23,6 @@ type Config struct {
 	LinkAPIPassword     string
 	InternalAPIToken    string
 	Local               bool
-	AuthToken           string
 	APIBotToken         string
 	DevUserID           string
 	ClientSecret        string
@@ -37,6 +36,14 @@ type Config struct {
 	DiscordClientSecret string
 	SentryDSN           string
 	SentryDSNMobile     string
+	SMTPUsername        string
+	SMTPPassword        string
+	SMTPFrom            string
+	SMTPReplyTo         string
+	SMTPServer          string
+	SMTPPort            int
+	SMTPStartTLS        bool
+	SMTPSSLTLS          bool
 	ListenHost          string
 	ListenPort          int
 }
@@ -56,7 +63,6 @@ func Load() (Config, error) {
 		LinkAPIPassword:     os.Getenv("LINK_API_PW"),
 		InternalAPIToken:    os.Getenv("INTERNAL_API_TOKEN"),
 		Local:               strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
-		AuthToken:           os.Getenv("AUTH_TOKEN"),
 		APIBotToken:         os.Getenv("API_BOT_TOKEN"),
 		DevUserID:           os.Getenv("DEV_USER_ID"),
 		ClientSecret:        os.Getenv("CLIENT_SECRET"),
@@ -70,6 +76,14 @@ func Load() (Config, error) {
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 		SentryDSN:           os.Getenv("SENTRY_DSN_API"),
 		SentryDSNMobile:     os.Getenv("APP_SENTRY_DSN"),
+		SMTPUsername:        os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:        os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:            os.Getenv("SMTP_FROM"),
+		SMTPReplyTo:         firstNonEmpty(os.Getenv("SMTP_REPLY_TO"), "noreply@clashk.ing"),
+		SMTPServer:          firstNonEmpty(os.Getenv("SMTP_SERVER"), "smtp.gmail.com"),
+		SMTPPort:            envInt("SMTP_PORT", 587),
+		SMTPStartTLS:        envBool("SMTP_STARTTLS", true),
+		SMTPSSLTLS:          envBool("SMTP_SSL_TLS", false),
 	}
 	if cfg.Local {
 		cfg.ListenHost = "127.0.0.1"
@@ -99,6 +113,8 @@ func (c Config) validate() error {
 		"DISCORD_CLIENT_ID":     c.DiscordClientID,
 		"DISCORD_CLIENT_SECRET": c.DiscordClientSecret,
 		"DISCORD_REDIRECT_URI":  c.DiscordRedirectURI,
+		"API_BOT_TOKEN":         c.APIBotToken,
+		"PROXY_BASE_URL":        c.ProxyBaseURL,
 	}
 	var missing []string
 	for key, value := range required {
@@ -112,6 +128,24 @@ func (c Config) validate() error {
 	if c.Local && c.DevUserID == "" {
 		return errors.New("LOCAL=TRUE requires DEV_USER_ID")
 	}
+	if !c.Local {
+		for key, value := range map[string]string{
+			"SMTP_USERNAME": c.SMTPUsername,
+			"SMTP_PASSWORD": c.SMTPPassword,
+			"SMTP_FROM":     c.SMTPFrom,
+			"SMTP_SERVER":   c.SMTPServer,
+		} {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("%s is required outside local mode", key)
+			}
+		}
+	}
+	if c.SMTPPort < 1 || c.SMTPPort > 65535 {
+		return errors.New("SMTP_PORT must be between 1 and 65535")
+	}
+	if c.SMTPStartTLS && c.SMTPSSLTLS {
+		return errors.New("SMTP_STARTTLS and SMTP_SSL_TLS cannot both be enabled")
+	}
 	return nil
 }
 
@@ -122,4 +156,28 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func envInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }

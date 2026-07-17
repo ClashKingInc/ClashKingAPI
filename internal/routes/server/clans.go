@@ -18,9 +18,9 @@ import (
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanSettingsDetail
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clan/{clan_tag}/settings [get]
 func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -44,8 +44,8 @@ func getServerClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.ClanReference
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clans-basic [get]
 // @Router /v2/link/server/{server_id}/clan/list [get]
 func getServerClansBasic(rt apptypes.Deps) apptypes.HandlerFunc {
@@ -73,9 +73,9 @@ func getServerClansBasic(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.ClanListItem
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clans [get]
 func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -108,10 +108,10 @@ func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 						item.BadgeURL = &liveClan.Badge.URL
 					}
 					if liveClan.Level > 0 {
-						item.Level = liveClan.Level
+						item.Level = &liveClan.Level
 					}
 					if liveClan.MemberCount > 0 {
-						item.MemberCount = liveClan.MemberCount
+						item.MemberCount = &liveClan.MemberCount
 					}
 				}
 			}
@@ -131,10 +131,10 @@ func getServerClans(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanSettingsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clan/{clan_tag}/settings [patch]
 func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -177,9 +177,9 @@ func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.AddClanResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clans [post]
 func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -225,9 +225,9 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RemoveClanResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clans/{clan_tag} [delete]
 // @Router /v2/server/{server_id}/clan/{clan_tag} [delete]
 func removeServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
@@ -263,18 +263,18 @@ func buildServerClanListItem(clanDoc map[string]any) modelsv2.ClanListItem {
 			GeneralRole:       stringPtrMaybe(clanDoc["generalRole"]),
 			LeaderRole:        stringPtrMaybe(clanDoc["leaderRole"]),
 			ClanChannel:       stringPtrMaybe(clanDoc["clanChannel"]),
-			Category:          clanDoc["category"],
-			Abbreviation:      clanDoc["abbreviation"],
-			Greeting:          clanDoc["greeting"],
-			AutoGreetOption:   clanDoc["auto_greet_option"],
-			LeadershipEval:    clanDoc["leadership_eval"],
+			Category:          stringPtrMaybe(clanDoc["category"]),
+			Abbreviation:      stringPtrMaybe(clanDoc["abbreviation"]),
+			Greeting:          stringPtrMaybe(clanDoc["greeting"]),
+			AutoGreetOption:   stringPtrMaybe(clanDoc["auto_greet_option"]),
+			LeadershipEval:    boolPtrMaybe(clanDoc["leadership_eval"]),
 			WarCountdown:      stringPtrMaybe(clanDoc["warCountdown"]),
 			WarTimerCountdown: stringPtrMaybe(clanDoc["warTimerCountdown"]),
 			BanAlertChannel:   stringPtrMaybe(clanDoc["ban_alert_channel"]),
 			MemberCountWarning: &modelsv2.MemberCountWarning{
 				Channel: stringPtrMaybe(valueAtPath(clanDoc, "member_count_warning.channel")),
-				Above:   valueAtPath(clanDoc, "member_count_warning.above"),
-				Below:   valueAtPath(clanDoc, "member_count_warning.below"),
+				Above:   intPtrMaybe(valueAtPath(clanDoc, "member_count_warning.above")),
+				Below:   intPtrMaybe(valueAtPath(clanDoc, "member_count_warning.below")),
 				Role:    stringPtrMaybe(valueAtPath(clanDoc, "member_count_warning.role")),
 			},
 			Logs: &modelsv2.ClanLogSettings{

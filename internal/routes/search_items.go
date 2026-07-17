@@ -24,9 +24,9 @@ const recentSearchRetention = "90 days"
 // @Param id path string true "user id"
 // @Param type query string true "player or clan" Enums(player, clan)
 // @Success 200 {object} modelsv2.SearchBookmarkListResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/bookmarks [get]
 func listBookmarks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -57,9 +57,9 @@ func listBookmarks(a apptypes.Deps) fiber.Handler {
 // @Param id path string true "user id"
 // @Param body body modelsv2.SearchBookmarkRequest true "Bookmark payload"
 // @Success 200 {object} modelsv2.SearchBookmarkItem
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/bookmarks [post]
 func addBookmark(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -94,10 +94,10 @@ func addBookmark(a apptypes.Deps) fiber.Handler {
 // @Param type path string true "player or clan" Enums(player, clan)
 // @Param tag path string true "Tag"
 // @Success 200 {object} modelsv2.AccountsMessageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/bookmarks/{type}/{tag} [delete]
 func deleteBookmark(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -138,9 +138,9 @@ func deleteBookmark(a apptypes.Deps) fiber.Handler {
 // @Param id path string true "user id"
 // @Param body body modelsv2.SearchBookmarkOrderRequest true "Bookmark order"
 // @Success 200 {object} modelsv2.AccountsMessageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/bookmarks/order [put]
 func reorderBookmarks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -178,14 +178,15 @@ func reorderBookmarks(a apptypes.Deps) fiber.Handler {
 		if count != len(tags) {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid bookmark tags provided")
 		}
-		for index, tag := range tags {
-			if _, err := a.Store.SQL.Exec(c.UserContext(), `
-				UPDATE user_bookmarks
-				SET order_index = $1
-				WHERE user_id = $2 AND entity_type = $3 AND tag = $4
-			`, index, userID, entityType, tag); err != nil {
-				return err
-			}
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			UPDATE user_bookmarks AS bookmarks
+			SET order_index = (ordered.ordinal - 1)::integer
+			FROM unnest($3::text[]) WITH ORDINALITY AS ordered(tag, ordinal)
+			WHERE bookmarks.user_id = $1
+				AND bookmarks.entity_type = $2
+				AND bookmarks.tag = ordered.tag
+		`, userID, entityType, tags); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsMessageResponse{Message: "Bookmarks reordered"})
 	}
@@ -200,9 +201,9 @@ func reorderBookmarks(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param id path string true "user id"
 // @Success 200 {object} modelsv2.SearchRecentGroupedResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/searches [get]
 func listRecentSearches(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -291,15 +292,23 @@ func sqlAddBookmark(c *fiber.Ctx, a apptypes.Deps, userID, entityType, tag strin
 	if a.Store == nil || a.Store.SQL == nil {
 		return modelsv2.SearchBookmarkItem{}, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
+	tx, err := a.Store.SQL.Begin(c.UserContext())
+	if err != nil {
+		return modelsv2.SearchBookmarkItem{}, err
+	}
+	defer tx.Rollback(c.UserContext())
+	if _, err := tx.Exec(c.UserContext(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID+":"+entityType); err != nil {
+		return modelsv2.SearchBookmarkItem{}, err
+	}
 	var orderIndex int
-	if err := a.Store.SQL.QueryRow(c.UserContext(), `
+	if err := tx.QueryRow(c.UserContext(), `
 		SELECT count(*)
 		FROM user_bookmarks
 		WHERE user_id = $1 AND entity_type = $2
 	`, userID, entityType).Scan(&orderIndex); err != nil {
 		return modelsv2.SearchBookmarkItem{}, err
 	}
-	if _, err := a.Store.SQL.Exec(c.UserContext(), `
+	if _, err := tx.Exec(c.UserContext(), `
 		INSERT INTO user_bookmarks (user_id, entity_type, tag, order_index, created_at)
 		VALUES ($1, $2, $3, $4, now())
 		ON CONFLICT (user_id, entity_type, tag) DO NOTHING
@@ -307,14 +316,19 @@ func sqlAddBookmark(c *fiber.Ctx, a apptypes.Deps, userID, entityType, tag strin
 		return modelsv2.SearchBookmarkItem{}, err
 	}
 	var item modelsv2.SearchBookmarkItem
-	row := a.Store.SQL.QueryRow(c.UserContext(), `
+	row := tx.QueryRow(c.UserContext(), `
 		SELECT entity_type, tag, order_index, created_at
 		FROM user_bookmarks
 		WHERE user_id = $1 AND entity_type = $2 AND tag = $3
 	`, userID, entityType, tag)
-	var err error
 	item, err = scanBookmarkItem(row)
-	return item, err
+	if err != nil {
+		return modelsv2.SearchBookmarkItem{}, err
+	}
+	if err := tx.Commit(c.UserContext()); err != nil {
+		return modelsv2.SearchBookmarkItem{}, err
+	}
+	return item, nil
 }
 
 type recentSearchItem struct {
@@ -332,18 +346,13 @@ func sqlRecentItems(c *fiber.Ctx, a apptypes.Deps, userID, entityType string) ([
 	if a.Store == nil || a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	if _, err := a.Store.SQL.Exec(c.UserContext(), `
-		DELETE FROM user_recent_searches
-		WHERE created_at < now() - $1::interval
-	`, recentSearchRetention); err != nil {
-		return nil, err
-	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT entity_type, tag, data, created_at
 		FROM user_recent_searches
 		WHERE user_id = $1 AND entity_type = $2
+			AND created_at >= now() - $3::interval
 		ORDER BY created_at DESC
-	`, userID, entityType)
+	`, userID, entityType, recentSearchRetention)
 	if err != nil {
 		return nil, err
 	}
@@ -378,18 +387,27 @@ func recordRecentSearchFromProxy(c *fiber.Ctx, a apptypes.Deps, pathAndQuery str
 	if data == nil {
 		return
 	}
-	_, _ = a.Store.SQL.Exec(c.UserContext(), `
-		DELETE FROM user_recent_searches
-		WHERE created_at < now() - $1::interval
-	`, recentSearchRetention)
-	_, _ = a.Store.SQL.Exec(c.UserContext(), `
+	tx, err := a.Store.SQL.Begin(c.UserContext())
+	if err != nil {
+		return
+	}
+	defer tx.Rollback(c.UserContext())
+	if _, err := tx.Exec(c.UserContext(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID+":"+entityType+":"+tag); err != nil {
+		return
+	}
+	if _, err := tx.Exec(c.UserContext(), `
 		DELETE FROM user_recent_searches
 		WHERE user_id = $1 AND entity_type = $2 AND tag = $3
-	`, userID, entityType, tag)
-	_, _ = a.Store.SQL.Exec(c.UserContext(), `
+	`, userID, entityType, tag); err != nil {
+		return
+	}
+	if _, err := tx.Exec(c.UserContext(), `
 		INSERT INTO user_recent_searches (user_id, entity_type, tag, data, created_at)
 		VALUES ($1, $2, $3, $4::jsonb, now())
-	`, userID, entityType, tag, apptypes.Marshal(data))
+	`, userID, entityType, tag, apptypes.Marshal(data)); err != nil {
+		return
+	}
+	_ = tx.Commit(c.UserContext())
 }
 
 func proxyRecentTarget(pathAndQuery string) (string, string, bool) {

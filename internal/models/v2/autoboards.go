@@ -34,16 +34,18 @@ type CreateAutoBoardRequest struct {
 }
 
 type UpdateAutoBoardRequest struct {
-	Type      *string  `json:"type,omitempty"`
-	Days      []string `json:"days,omitempty"`
-	WebhookID *string  `json:"webhook_id,omitempty"`
-	ThreadID  *string  `json:"thread_id,omitempty"`
+	Type      *string   `json:"type,omitempty"`
+	BoardType *string   `json:"board_type,omitempty"`
+	ChannelID *string   `json:"channel_id,omitempty"`
+	Days      *[]string `json:"days,omitempty"`
+	WebhookID *string   `json:"webhook_id,omitempty"`
+	ThreadID  *string   `json:"thread_id,omitempty"`
 }
 
 type AutoBoardOperationResponse struct {
-	Message     string `json:"message"`
-	AutoboardID string `json:"autoboard_id"`
-	ServerID    int    `json:"server_id,omitempty"`
-	Type        any    `json:"type,omitempty"`
-	UpdatedFields int  `json:"updated_fields,omitempty"`
+	Message       string `json:"message"`
+	AutoboardID   string `json:"autoboard_id"`
+	ServerID      int    `json:"server_id,omitempty"`
+	Type          string `json:"type,omitempty"`
+	UpdatedFields int    `json:"updated_fields,omitempty"`
 }

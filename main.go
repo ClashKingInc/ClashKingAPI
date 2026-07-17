@@ -55,6 +55,9 @@ func New(ctx context.Context) (*App, error) {
 	}
 	logger := utils.InitLogger(cfg)
 	logger.Info("initializing_app")
+	if err := utils.InitEncryption(cfg.EncryptionKey); err != nil {
+		return nil, errors.New("invalid ENCRYPTION_KEY: " + err.Error())
+	}
 	if err := utils.Init(cfg); err != nil {
 		return nil, err
 	}
@@ -81,6 +84,7 @@ func New(ctx context.Context) (*App, error) {
 			Discord:   discordAdapter,
 			Auth:      utils.NewAuthenticator(cfg, stores),
 			Cache:     utils.NewCacheAdapter(cfg),
+			Mailer:    utils.NewMailer(cfg),
 			StartedAt: time.Now().UTC(),
 		},
 		StartedAt: time.Now().UTC(),
@@ -97,6 +101,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		ErrorHandler:          utils.ErrorHandler,
+		BodyLimit:             30 * 1024 * 1024,
 	})
 	app.Use(requestid.New())
 	app.Use(utils.HTTPLoggerMiddleware(a.Config))
@@ -133,6 +138,7 @@ func (a *App) Run(ctx context.Context) error {
 		"docs_url", docsURL(a.Config),
 	)
 	errCh := make(chan error, 1)
+	go a.refreshMaterializedViews(ctx)
 	go func() {
 		errCh <- a.Server.Listen(a.Config.Addr())
 	}()
@@ -149,6 +155,25 @@ func (a *App) Run(ctx context.Context) error {
 			utils.Logger().Error("server_listen_failed", "error", err)
 		}
 		return err
+	}
+}
+
+func (a *App) refreshMaterializedViews(ctx context.Context) {
+	const refreshInterval = 5 * time.Minute
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+	for {
+		refreshCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+		err := a.Store.RefreshAPIMaterializedViews(refreshCtx)
+		cancel()
+		if err != nil && !errors.Is(err, context.Canceled) {
+			utils.Logger().Error("materialized_view_refresh_failed", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

@@ -19,9 +19,9 @@ import (
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_settings query bool false "Include clan settings"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSettingsDocument
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/settings [get]
 func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -58,10 +58,10 @@ func getServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param hex_code path int true "Embed color as decimal integer"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.EmbedColorResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/embed-color/{hex_code} [put]
 func putEmbedColor(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -96,10 +96,10 @@ func putEmbedColor(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerSettingsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/settings [patch]
 func patchServerSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {

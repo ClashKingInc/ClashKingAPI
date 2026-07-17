@@ -1,35 +1,33 @@
-FROM python:3.13.7-slim
+FROM golang:1.26.5-alpine AS builder
+
+WORKDIR /src
+
+RUN apk add --no-cache ca-certificates git
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -trimpath -ldflags="-s -w" -o /out/clashking-api .
+
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.source=https://github.com/ClashKingInc/ClashKingAPI
 LABEL org.opencontainers.image.description="Image for the ClashKing API"
 LABEL org.opencontainers.image.licenses=MIT
 
-# Install uv and system dependencies
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsnappy-dev \
-    git \
-    curl \
-    build-essential \
-    gcc \
-    python3-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -S clashking \
+    && adduser -S -G clashking clashking
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy pyproject.toml first for better caching
-COPY pyproject.toml .
+COPY --from=builder --chown=clashking:clashking /out/clashking-api /app/clashking-api
 
-# Install dependencies using uv
-RUN uv pip install --system . \
-    && apt-get remove -y build-essential gcc python3-dev \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /root/.cache/pip
-
-# Copy the rest of the application code into the container
-COPY . .
+USER clashking
 
 EXPOSE 8010
 
-CMD ["python", "main.py"]
+CMD ["/app/clashking-api"]

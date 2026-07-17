@@ -11,11 +11,16 @@ type AccountsReorderAccountsRequest struct {
 	OrderedTags []string `json:"ordered_tags"`
 }
 
+type AccountsLinkVisibilityRequest struct {
+	Hidden bool `json:"hidden"`
+}
+
 type AccountsLinkedPlayer struct {
 	Tag           string `json:"tag"`
 	Name          string `json:"name"`
 	TownHallLevel int    `json:"townHallLevel"`
 	IsVerified    bool   `json:"is_verified"`
+	Hidden        bool   `json:"hidden"`
 }
 
 type AccountsLinkResponse struct {
@@ -28,6 +33,7 @@ type AccountsLinkedAccount struct {
 	PlayerTag  string     `json:"player_tag"`
 	OrderIndex int        `json:"order_index"`
 	IsVerified bool       `json:"is_verified"`
+	Hidden     bool       `json:"hidden"`
 	AddedAt    time.Time  `json:"added_at"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
 }

@@ -22,8 +22,8 @@ import (
 // @Param server_id path int true "Server ID"
 // @Param player_tag query string false "Filter by player tag"
 // @Param view_expired query bool false "Include expired strikes (default false)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.StrikeListResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/strikes [get]
 func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -123,9 +123,9 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param player_tag path string true "Player Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.StrikeMutationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/strikes/{player_tag} [post]
 func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -190,9 +190,9 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param strike_id path string true "Strike ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.StrikeMutationResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/strikes/{strike_id} [delete]
 func deleteStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -224,8 +224,8 @@ func deleteStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param player_tag path string true "Player Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.StrikeSummaryResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/strikes/player/{player_tag}/summary [get]
 func strikeSummary(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -247,9 +247,39 @@ func strikeSummary(rt apptypes.Deps) apptypes.HandlerFunc {
 			ServerID:     serverID,
 			TotalStrikes: len(items),
 			TotalWeight:  totalWeight,
-			Strikes:      sanitize(items).([]map[string]any),
+			Strikes:      strikeItemsFromMaps(items),
 		})
 	}
+}
+
+func strikeItemsFromMaps(items []map[string]any) []modelsv2.StrikeItem {
+	out := make([]modelsv2.StrikeItem, 0, len(items))
+	for _, item := range items {
+		var rolloverDate *int64
+		if value := asInt64(item["rollover_date"]); value > 0 {
+			rolloverDate = &value
+		}
+		out = append(out, modelsv2.StrikeItem{
+			StrikeID:         serverAsString(item["strike_id"]),
+			Tag:              serverAsString(item["tag"]),
+			Server:           asIntWithDefault(item["server"], 0),
+			Reason:           serverAsString(item["reason"]),
+			AddedBy:          serverAsString(item["added_by"]),
+			AddedByUsername:  stringPtrMaybe(item["added_by_username"]),
+			AddedByAvatarURL: stringPtrMaybe(item["added_by_avatar_url"]),
+			StrikeWeight:     asIntWithDefault(item["strike_weight"], 1),
+			Image:            stringPtrMaybe(item["image"]),
+			DateCreated:      serverAsString(item["date_created"]),
+			RolloverDate:     rolloverDate,
+			PlayerName:       stringPtrMaybe(item["player_name"]),
+			TownHall:         intPtrMaybe(item["town_hall"]),
+			ClanTag:          stringPtrMaybe(item["clan_tag"]),
+			ClanName:         stringPtrMaybe(item["clan_name"]),
+			CurrentRole:      stringPtrMaybe(item["current_role"]),
+			Trophies:         intPtrMaybe(item["trophies"]),
+		})
+	}
+	return out
 }
 
 func sqlStrikes(c *fiber.Ctx, rt apptypes.Deps, serverID int, playerTag string, includeExpired bool) ([]map[string]any, error) {

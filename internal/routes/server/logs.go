@@ -21,8 +21,8 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerLogsResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/logs [get]
 func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -72,9 +72,9 @@ func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerLogOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/logs [put]
 func updateServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -121,9 +121,9 @@ func updateServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param log_type path string true "Log type identifier"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerLogOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/logs/{log_type} [patch]
 func patchServerLogType(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -159,8 +159,8 @@ func patchServerLogType(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {array} modelsv2.ClanLogsConfig
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clan-logs [get]
 func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -231,10 +231,10 @@ func getAllClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanLogsOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clan/{clan_tag}/logs [put]
 func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -259,9 +259,11 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 			return apptypes.Error(http.StatusBadRequest, "No log types provided")
 		}
 
-		if _, err := sqlServerClanDoc(c, rt, serverID, tag); err != nil {
+		clanDoc, err := sqlServerClanDoc(c, rt, serverID, tag)
+		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
+		replacedWebhookIDs := clanLogWebhookIDs(mapMaybe(clanDoc["logs"]), logTypes)
 
 		threadID, err := parseOptionalInt64(body.ThreadID)
 		if err != nil {
@@ -297,9 +299,9 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		updateOps := map[string]any{}
 		for _, logType := range logTypes {
 			if webhookID != nil {
-				entry := map[string]any{"webhook": *webhookID}
+				entry := map[string]any{"webhook": strconv.FormatInt(*webhookID, 10)}
 				if threadID != nil {
-					entry["thread"] = *threadID
+					entry["thread"] = strconv.FormatInt(*threadID, 10)
 				} else {
 					entry["thread"] = nil
 				}
@@ -312,11 +314,18 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 
 		result, err := updateSQLClanLogs(c, rt, serverID, tag, updateOps)
 		if err != nil {
+			if webhookID != nil {
+				_ = rt.Discord.DeleteWebhook(c.UserContext(), *webhookID)
+			}
 			return err
 		}
 		if result.RowsAffected() == 0 {
+			if webhookID != nil {
+				_ = rt.Discord.DeleteWebhook(c.UserContext(), *webhookID)
+			}
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
+		cleanupUnusedClanLogWebhooks(c, rt, serverID, replacedWebhookIDs)
 
 		response := modelsv2.ClanLogsOperationResponse{
 			Message:         "Clan logs updated successfully",
@@ -344,10 +353,10 @@ func putClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
 // @Param log_types query string true "Comma-separated list of log types to delete"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ClanLogsOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/clan/{clan_tag}/logs [delete]
 func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -370,6 +379,11 @@ func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		if len(logTypes) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No log types provided")
 		}
+		clanDoc, err := sqlServerClanDoc(c, rt, serverID, tag)
+		if err != nil {
+			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
+		}
+		removedWebhookIDs := clanLogWebhookIDs(mapMaybe(clanDoc["logs"]), logTypes)
 
 		result, err := deleteSQLClanLogs(c, rt, serverID, tag, logTypes)
 		if err != nil {
@@ -378,6 +392,7 @@ func deleteClanLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
+		cleanupUnusedClanLogWebhooks(c, rt, serverID, removedWebhookIDs)
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanLogsOperationResponse{
 			Message:         "Clan logs deleted successfully",
 			ClanTag:         tag,
@@ -417,6 +432,41 @@ func parseClanLogType(raw any, webhookToChannel map[string]string) *modelsv2.Cla
 		out.Thread = &thread
 	}
 	return out
+}
+
+func clanLogWebhookIDs(logs map[string]any, logTypes []string) []int64 {
+	ids := make([]int64, 0, len(logTypes))
+	for _, logType := range logTypes {
+		webhookID := normalizeSnowflakeString(mapMaybe(logs[logType])["webhook"])
+		parsed, err := strconv.ParseInt(webhookID, 10, 64)
+		if err == nil && !slices.Contains(ids, parsed) {
+			ids = append(ids, parsed)
+		}
+	}
+	return ids
+}
+
+func cleanupUnusedClanLogWebhooks(c *fiber.Ctx, rt apptypes.Deps, serverID int, candidates []int64) {
+	if rt.Discord == nil || len(candidates) == 0 {
+		return
+	}
+	clans, err := sqlServerClanDocs(c, rt, serverID)
+	if err != nil {
+		return
+	}
+	used := map[string]bool{}
+	for _, clanDoc := range clans {
+		for _, raw := range mapMaybe(clanDoc["logs"]) {
+			if webhookID := normalizeSnowflakeString(mapMaybe(raw)["webhook"]); webhookID != "" {
+				used[webhookID] = true
+			}
+		}
+	}
+	for _, webhookID := range candidates {
+		if !used[strconv.FormatInt(webhookID, 10)] {
+			_ = rt.Discord.DeleteWebhook(c.UserContext(), webhookID)
+		}
+	}
 }
 
 func updateSQLClanLogs(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag string, updates map[string]any) (pgconn.CommandTag, error) {

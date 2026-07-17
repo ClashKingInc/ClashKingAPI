@@ -26,9 +26,9 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerGiveawaysResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways [get]
 func getServerGiveaways(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -70,9 +70,9 @@ func getServerGiveaways(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param giveaway_id path string true "Giveaway ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GiveawayConfig
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways/{giveaway_id} [get]
 func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -104,9 +104,9 @@ func getServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Param start_time formData string false "Start time (ISO 8601)"
 // @Param now formData string false "Start immediately (true/false)"
 // @Param image formData file false "Giveaway banner image"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GiveawayMutationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways [post]
 func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -138,9 +138,9 @@ func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param giveaway_id path string true "Giveaway ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GiveawayMutationResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways/{giveaway_id} [put]
 func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -177,9 +177,9 @@ func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param giveaway_id path string true "Giveaway ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GiveawayMutationResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways/{giveaway_id} [delete]
 func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -217,8 +217,8 @@ func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param giveaway_id path string true "Giveaway ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GiveawayEntriesResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways/{giveaway_id}/entries [get]
 func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -286,10 +286,10 @@ func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param giveaway_id path string true "Giveaway ID"
-// @Param body body map[string][]string true "user_ids_to_replace"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Param body body modelsv2.GiveawayRerollRequest true "Users to replace"
+// @Success 200 {object} modelsv2.GiveawayRerollResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/giveaways/{giveaway_id}/reroll [post]
 func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

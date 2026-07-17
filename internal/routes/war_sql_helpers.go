@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"strings"
@@ -218,11 +219,15 @@ func orientWarForClan(war sqlWarRow, clanTag string) sqlWarRow {
 }
 
 func sqlWarMembers(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[string][]sqlWarMemberRow, error) {
+	return sqlWarMembersContext(c.UserContext(), a, warIDs)
+}
+
+func sqlWarMembersContext(ctx context.Context, a apptypes.Deps, warIDs []string) (map[string][]sqlWarMemberRow, error) {
 	out := map[string][]sqlWarMemberRow{}
 	if len(warIDs) == 0 {
 		return out, nil
 	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
+	rows, err := a.Store.SQL.Query(ctx, `
 		SELECT war_id, clan_tag, opponent_tag, player_tag, player_name, townhall_level, map_position
 		FROM war_members
 		WHERE war_id = ANY($1)
@@ -274,11 +279,15 @@ func sqlWarMissedAttacks(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[st
 }
 
 func sqlWarAttacks(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[string][]sqlWarAttackRow, error) {
+	return sqlWarAttacksContext(c.UserContext(), a, warIDs)
+}
+
+func sqlWarAttacksContext(ctx context.Context, a apptypes.Deps, warIDs []string) (map[string][]sqlWarAttackRow, error) {
 	out := map[string][]sqlWarAttackRow{}
 	if len(warIDs) == 0 {
 		return out, nil
 	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
+	rows, err := a.Store.SQL.Query(ctx, `
 		SELECT war_id, war_end_time, war_type, war_size, attacking_clan_tag, defending_clan_tag,
 			attacker_tag, attacker_name, defender_tag, defender_name, attacker_townhall, defender_townhall,
 			attacker_map_position, defender_map_position, stars, destruction_percentage, duration, attack_order,

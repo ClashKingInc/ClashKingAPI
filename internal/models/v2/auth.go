@@ -1,9 +1,11 @@
 package modelsv2
 
 type AuthUserInfo struct {
-	UserID    string `json:"user_id"`
-	Username  string `json:"username"`
-	AvatarURL string `json:"avatar_url"`
+	UserID      string   `json:"user_id"`
+	Username    string   `json:"username"`
+	AvatarURL   string   `json:"avatar_url"`
+	AuthMethods []string `json:"auth_methods"`
+	Email       *string  `json:"email,omitempty"`
 }
 
 type AuthResponse struct {
@@ -15,6 +17,11 @@ type AuthResponse struct {
 type AuthRefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 	DeviceID     string `json:"device_id"`
+}
+
+type AuthRefreshTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type AuthEmailAuthRequest struct {
@@ -55,4 +62,14 @@ type AuthDiscordOAuthRequest struct {
 	DeviceID     string `json:"device_id"`
 	DeviceName   string `json:"device_name"`
 	RedirectURI  string `json:"redirect_uri"`
+}
+
+type AuthVerificationResponse struct {
+	Message          string  `json:"message"`
+	VerificationCode *string `json:"verification_code,omitempty"`
+}
+
+type AuthForgotPasswordResponse struct {
+	Message   string  `json:"message"`
+	ResetCode *string `json:"reset_code,omitempty"`
 }

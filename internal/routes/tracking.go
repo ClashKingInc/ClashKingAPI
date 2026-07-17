@@ -15,9 +15,9 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param body body modelsv2.TrackingPlayerListRequest true "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.TrackingPlayersResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/tracking/players/add [post]
 func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -96,9 +96,9 @@ func addTrackingPlayers(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param body body modelsv2.TrackingPlayerListRequest true "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.TrackingPlayersResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/tracking/players/remove [post]
 func removeTrackingPlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

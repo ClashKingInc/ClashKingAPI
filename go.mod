@@ -1,6 +1,6 @@
 module github.com/ClashKingInc/ClashKingAPI
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/clashkinginc/clashy.go v0.0.0-20260406132723-846551b0007c
@@ -27,6 +27,7 @@ require (
 	github.com/disgoorg/godave v0.1.0 // indirect
 	github.com/disgoorg/json/v2 v2.0.0 // indirect
 	github.com/disgoorg/omit v1.0.0 // indirect
+	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
 	github.com/go-openapi/jsonreference v0.21.5 // indirect
 	github.com/go-openapi/spec v0.22.4 // indirect

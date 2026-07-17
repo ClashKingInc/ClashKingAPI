@@ -21,9 +21,9 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerAutoBoardsResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/autoboards [get]
 func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -125,10 +125,10 @@ func getAutoboards(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.AutoBoardOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/autoboards [post]
 func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -192,10 +192,10 @@ func createAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param autoboard_id path string true "Autoboard ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.AutoBoardOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/autoboards/{autoboard_id} [patch]
 func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -212,8 +212,15 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		if body.Type != nil {
 			updateBody["type"] = *body.Type
 		}
+		if body.BoardType != nil {
+			updateBody["board_type"] = *body.BoardType
+			updateBody["button_id"] = *body.BoardType + ":" + strconv.Itoa(serverID) + ":page=0"
+		}
+		if body.ChannelID != nil {
+			updateBody["channel_id"] = *body.ChannelID
+		}
 		if body.Days != nil {
-			updateBody["days"] = body.Days
+			updateBody["days"] = *body.Days
 		}
 		if body.WebhookID != nil {
 			updateBody["webhook_id"] = *body.WebhookID
@@ -227,13 +234,16 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `
 			UPDATE autoboards
 			SET type = COALESCE($3, type),
-				days = COALESCE($4, days),
-				webhook_id = COALESCE($5, webhook_id),
-				thread_id = COALESCE($6, thread_id),
-				data = data || $7::jsonb,
+				board_type = COALESCE($4, board_type),
+				button_id = COALESCE($5, button_id),
+				channel_id = COALESCE($6, channel_id),
+				days = COALESCE($7, days),
+				webhook_id = COALESCE($8, webhook_id),
+				thread_id = COALESCE($9, thread_id),
+				data = data || $10::jsonb,
 				updated_at = now()
 			WHERE server_id = $1 AND id = $2::uuid
-		`, strconv.Itoa(serverID), id, optionalString(updateBody["type"]), autoboardUpdateDays(updateBody), optionalString(updateBody["webhook_id"]), optionalString(updateBody["thread_id"]), apptypes.Marshal(updateBody))
+		`, strconv.Itoa(serverID), id, optionalString(updateBody["type"]), optionalString(updateBody["board_type"]), optionalString(updateBody["button_id"]), optionalString(updateBody["channel_id"]), autoboardUpdateDays(updateBody), optionalString(updateBody["webhook_id"]), optionalString(updateBody["thread_id"]), apptypes.Marshal(updateBody))
 		if err != nil {
 			return err
 		}
@@ -252,9 +262,9 @@ func updateAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param autoboard_id path string true "Autoboard ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.AutoBoardOperationResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/autoboards/{autoboard_id} [delete]
 func deleteAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {

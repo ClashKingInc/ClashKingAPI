@@ -1,6 +1,7 @@
 package routes
 
 import (
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
@@ -11,13 +12,11 @@ import (
 // @Description Returns client-safe configuration values.
 // @Tags Configuration
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PublicConfigResponse
 // @Router /v2/public [get]
 // @Router /v2/config/public [get]
 func publicConfig(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
-			"sentry_dsn_mobile": a.Config.SentryDSNMobile,
-		})
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.PublicConfigResponse{SentryDSNMobile: a.Config.SentryDSNMobile})
 	}
 }

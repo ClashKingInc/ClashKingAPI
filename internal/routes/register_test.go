@@ -70,6 +70,13 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/users/coc-accounts/:player_tag/status",
 		"/v2/users/coc-accounts/:player_tag/verify",
 		"/v2/users/coc-accounts/verified",
+		"/v2/server/:server_id/links",
+		"/v2/server/:server_id/links/:user_id/:player_tag",
+		"/v2/server/:server_id/links/bulk-unlink",
+		"/v2/link-discord",
+		"/v2/auth/link-discord",
+		"/v2/link-email",
+		"/v2/auth/link-email",
 		"/v2/search/bookmark/:user_id/:search_type/:tag",
 		"/v2/search/recent/:user_id/:search_type/:tag",
 		"/v2/search/:id/items",
@@ -126,9 +133,29 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/ranking/clan-builder/:location/:date",
 		"/v2/ranking/clan-capital/:location/:date",
 		"/builderbaseleagues",
+		"/v2/links/server/:server_id",
+		"/v2/server/:server_id/dashboard-capabilities",
+		"/v2/server/:server_id/dashboard-access",
+		"/v2/server/:server_id/bot-profile",
 	} {
 		if !paths[path] {
 			t.Fatalf("expected %s to be registered", path)
+		}
+	}
+}
+
+func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *testing.T) {
+	app := fiber.New()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	for _, method := range []string{fiber.MethodDelete} {
+		serverIndex := registeredRouteIndex(app, method, "/v2/links/server/:server_id")
+		personalIndex := registeredRouteIndex(app, method, "/v2/links/:id/:playerTag")
+		if serverIndex < 0 || personalIndex < 0 {
+			t.Fatalf("expected both %s link routes to be registered", method)
+		}
+		if serverIndex >= personalIndex {
+			t.Fatalf("expected static server %s route before generic personal route", method)
 		}
 	}
 }
@@ -155,4 +182,17 @@ func registeredRoutePaths(app *fiber.App) map[string]bool {
 		}
 	}
 	return paths
+}
+
+func registeredRouteIndex(app *fiber.App, method, path string) int {
+	index := 0
+	for _, routes := range app.Stack() {
+		for _, route := range routes {
+			if route.Method == method && route.Path == path {
+				return index
+			}
+			index++
+		}
+	}
+	return -1
 }

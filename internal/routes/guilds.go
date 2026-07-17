@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
@@ -22,8 +23,8 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Success 200 {array} modelsv2.GuildInfo
-// @Failure 401 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/guilds [get]
 func getUserGuilds(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -42,23 +43,37 @@ func getUserGuilds(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusInternalServerError, "Failed to fetch guilds from Discord: "+err.Error())
 		}
 
-		// Filter: only guilds where user has MANAGE_GUILD or is owner
-		var adminGuilds []discord.OAuth2Guild
+		guildIDs := make([]string, 0, len(allGuilds))
+		for _, guild := range allGuilds {
+			guildIDs = append(guildIDs, guild.ID.String())
+		}
+		delegated, err := delegatedDashboardGuilds(c, a, userID, guildIDs)
+		if err != nil {
+			return err
+		}
+
+		var accessibleGuilds []discord.OAuth2Guild
 		for _, g := range allGuilds {
-			if hasManageGuild(g) {
-				adminGuilds = append(adminGuilds, g)
+			serverID := g.ID.String()
+			manager := hasManageGuild(g)
+			sections := delegated[serverID]
+			if manager || len(sections) > 0 {
+				accessibleGuilds = append(accessibleGuilds, g)
+				setCachedServerAccess(userID, serverID, serverAccessCacheEntry{manager: manager, sections: sections})
 			}
 		}
 
-		hasBotFlags, err := resolveBotPresence(c.UserContext(), a.Discord, adminGuilds)
+		hasBotFlags, err := resolveBotPresence(c.UserContext(), a.Discord, accessibleGuilds)
 		if err != nil {
 			return apptypes.Error(http.StatusInternalServerError, "Failed to verify bot guild access with Discord: "+err.Error())
 		}
 
-		result := make([]modelsv2.GuildInfo, 0, len(adminGuilds))
-		for i, g := range adminGuilds {
+		result := make([]modelsv2.GuildInfo, 0, len(accessibleGuilds))
+		for i, g := range accessibleGuilds {
 			hasBot := hasBotFlags[i]
-			result = append(result, buildGuildInfo(g, hasBot))
+			info := buildGuildInfo(g, hasBot)
+			info.Delegated = !hasManageGuild(g)
+			result = append(result, info)
 		}
 
 		return apptypes.JSON(c, http.StatusOK, result)
@@ -98,9 +113,9 @@ func resolveBotPresence(ctx context.Context, discordAdapter *apptypes.DiscordAda
 // @Security ApiKeyAuth
 // @Param server_id path string true "Server ID"
 // @Success 200 {object} modelsv2.GuildDetails
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/guild/{server_id} [get]
 func getGuildDetails(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -114,21 +129,10 @@ func getGuildDetails(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		// Parse userID as int64 for member check
-		userIDInt, err := strconv.ParseInt(userID, 10, 64)
-		if err != nil {
-			return apptypes.Error(fiber.StatusBadRequest, "Invalid user ID format")
-		}
-
 		// Fetch guild using bot token
 		guild, err := a.Discord.GetGuild(c.UserContext(), serverID)
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "Guild not found or bot does not have access")
-		}
-
-		// Verify user is a member
-		if !a.Discord.IsMember(c.UserContext(), serverID, userIDInt) {
-			return apptypes.Error(fiber.StatusForbidden, "You are not a member of this guild")
 		}
 
 		ownerID := guild.OwnerID.String()
@@ -198,13 +202,22 @@ func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID string
 	}
 
 	newEncryptedAccess := apptypes.EncryptToString(newAuth.AccessToken)
+	newEncryptedRefresh := refreshCipher
+	if strings.TrimSpace(newAuth.RefreshToken) != "" {
+		newEncryptedRefresh = apptypes.EncryptToString(newAuth.RefreshToken)
+	}
 	_, _ = a.Store.SQL.Exec(c.UserContext(), `
 		UPDATE auth_discord_tokens
 		SET access_token_ciphertext = $1,
-			expires_at = $2,
+			refresh_token_ciphertext = $2,
+			expires_at = $3,
+			data = jsonb_set(
+				jsonb_set(data, '{discord_access_token}', to_jsonb($1::text), true),
+				'{discord_refresh_token}', to_jsonb($2::text), true
+			),
 			updated_at = now()
-		WHERE user_id = $3 AND device_id = $4
-	`, newEncryptedAccess, time.Now().UTC().Add(newAuth.ExpiresIn), userID, tokenDeviceID)
+		WHERE user_id = $4 AND device_id = $5
+	`, newEncryptedAccess, newEncryptedRefresh, time.Now().UTC().Add(newAuth.ExpiresIn), userID, tokenDeviceID)
 
 	return newAuth.AccessToken, nil
 }

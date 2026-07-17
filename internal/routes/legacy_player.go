@@ -34,9 +34,9 @@ func fixTag(tag string) string {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} modelsv1.PlayerStatsResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legacyPlayerStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -83,8 +83,8 @@ func legacyPlayerStats(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param season query string false "Season YYYY-MM"
 // @Success 200 {object} modelsv1.PlayerLegendsResponse
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerLegends(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -164,8 +164,8 @@ func parseYearMonth(yearStr, monthStr string, year, month *int) (bool, error) {
 // @Param player_tag path string true "Player tag"
 // @Param season path string true "Season YYYY-MM"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerHistorical(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -217,7 +217,7 @@ func playerHistorical(a apptypes.Deps) fiber.Handler {
 // @Param timestamp_end query int false "End Unix timestamp"
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return playerWarAttacks(a)(c)
@@ -232,7 +232,7 @@ func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param limit query int false "Maximum number of raid weekends"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerRaids(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -269,7 +269,7 @@ func playerRaids(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param limit query int false "Maximum number of snapshots"
 // @Success 200 {array} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerLegendRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -316,7 +316,7 @@ func playerWartimer(a apptypes.Deps) fiber.Handler {
 // @Param time_stamp_end query int false "End Unix timestamp"
 // @Param limit query int false "Maximum number of rows"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("player_tag"))
@@ -370,7 +370,7 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param name path string true "Player name search"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func playerSearchByName(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := a.Store.SQL.Query(c.UserContext(), `

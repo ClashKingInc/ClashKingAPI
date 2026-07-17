@@ -19,7 +19,7 @@ import (
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {object} modelsv2.ClanBasicResponse
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/basic [get]
 func clanBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -43,7 +43,7 @@ func clanBasic(a apptypes.Deps) fiber.Handler {
 // @Param timestamp_start query int false "Start Unix timestamp"
 // @Param time_stamp_end query int false "End Unix timestamp"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func legacyClanJoinLeave(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()
@@ -79,7 +79,7 @@ func legacyClanJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of clans"
 // @Param member_list query bool false "Include member tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanSearch(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := clamp(legacyClanParseIntDefault(c.Query("limit"), 100), 1, 500)
@@ -132,7 +132,7 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 // @Param timestamp_start query int false "Start Unix timestamp"
 // @Param time_stamp_end query int false "End Unix timestamp"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func clanHistorical(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()

@@ -71,8 +71,8 @@ func listCategories(a apptypes.Deps) fiber.Handler {
 // @Param type query string false "Type filter"
 // @Param category query string false "Category filter"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 func categoryItems(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -95,8 +95,8 @@ func categoryItems(a apptypes.Deps) fiber.Handler {
 // @Param type query string false "Type filter"
 // @Param category query string false "Category filter"
 // @Success 200 {array} string
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 func categoryNames(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -121,7 +121,7 @@ func categoryNames(a apptypes.Deps) fiber.Handler {
 // @Param category path string true "Category name"
 // @Param item_id_or_name path string true "Item ID or name"
 // @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} modelsv2.ErrorResponse
 func categoryItem(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		item, err := findItem(a, c.Params("category"), c.Params("item_id_or_name"))
@@ -140,8 +140,8 @@ func categoryItem(a apptypes.Deps) fiber.Handler {
 // @Param category path string true "Category name"
 // @Param item_id_or_name path string true "Item ID or name"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 func maxLevel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		category := c.Params("category")
@@ -190,7 +190,7 @@ func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param locale query string true "Locale code"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
 func appStaticTranslations(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		locale := strings.ToUpper(c.Query("locale"))

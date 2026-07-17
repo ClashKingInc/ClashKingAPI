@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 const (
@@ -30,7 +30,7 @@ var searchTypeFieldMap = map[int64]string{0: "player", 1: "clan"}
 // @Param query query string false "Search query (clan name or tag)"
 // @Param user_id query int false "Discord user ID for personalised results"
 // @Param guild_id query int false "Discord guild ID for guild clan filtering"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SearchClanResponse
 // @Router /v2/search/clan [get]
 func searchClan(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -110,8 +110,6 @@ func searchClan(a apptypes.Deps) fiber.Handler {
 		// Sort by type priority
 		searchSortByType(finalData)
 
-		// TODO: add CoC API name search results when SearchClans is available on ClashAdapter
-
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": finalData})
 	}
 }
@@ -124,9 +122,9 @@ func searchClan(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param guild_id path int true "Discord guild ID"
 // @Param query query string false "Player name search query"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SearchPlayerReferenceResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/{guild_id}/banned-players [get]
 func searchBannedPlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -165,15 +163,15 @@ func searchBannedPlayers(a apptypes.Deps) fiber.Handler {
 // @Param user_id path int true "Discord user ID"
 // @Param name path string true "Group name"
 // @Param search_type path int true "Type (0=player, 1=clan)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SearchGroupCreateResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/create/{user_id}/{name}/{search_type} [post]
 func groupCreate(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		userID, err := strconv.ParseInt(c.Params("user_id"), 10, 64)
+		userID, err := resolveLinkSubject(c.UserContext(), a, c, c.Params("user_id"))
 		if err != nil {
-			return apptypes.Error(fiber.StatusBadRequest, "Invalid user_id")
+			return err
 		}
 		name := c.Params("name")
 		searchType, _ := strconv.ParseInt(c.Params("search_type"), 10, 64)
@@ -191,12 +189,12 @@ func groupCreate(a apptypes.Deps) fiber.Handler {
 		}
 
 		// Generate a unique group ID
-		groupID := strconv.FormatInt(time.Now().UnixNano(), 36) + strconv.FormatInt(userID, 36)
+		groupID := uuid.NewString()
 
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `
 			INSERT INTO search_groups (group_id, user_id, type, name, tags, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, '{}', now(), now())
-		`, groupID, strconv.FormatInt(userID, 10), typeField, name); err != nil {
+		`, groupID, userID, typeField, name); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"success": true, "group_id": groupID})
@@ -211,13 +209,16 @@ func groupCreate(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
 // @Param tag path string true "Tag to add"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SuccessResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/{group_id}/add/{tag} [post]
 func groupAdd(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
+		if err := authorizeSearchGroup(c, a, groupID); err != nil {
+			return err
+		}
 		tag := clashy.CorrectTag(decodeRouteTag(c.Params("tag")))
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `
 			UPDATE search_groups
@@ -241,13 +242,16 @@ func groupAdd(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
 // @Param tag path string true "Tag to remove"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SuccessResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/{group_id}/remove/{tag} [post]
 func groupRemove(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
+		if err := authorizeSearchGroup(c, a, groupID); err != nil {
+			return err
+		}
 		tag := clashy.CorrectTag(decodeRouteTag(c.Params("tag")))
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `UPDATE search_groups SET tags = array_remove(tags, $2), updated_at = now() WHERE group_id = $1`, groupID, tag); err != nil {
 			return err
@@ -263,9 +267,9 @@ func groupRemove(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SearchGroup
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/{group_id} [get]
 func groupGet(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -273,6 +277,9 @@ func groupGet(a apptypes.Deps) fiber.Handler {
 		doc, err := searchGroup(c, a, groupID)
 		if err != nil {
 			return apptypes.Error(fiber.StatusNotFound, "Group not found")
+		}
+		if err := authorizeSearchGroupOwner(c, searchGetString(doc, "user_id")); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, doc)
 	}
@@ -285,15 +292,15 @@ func groupGet(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param user_id path int true "Discord user ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SearchGroupListResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/{user_id}/list [get]
 func groupList(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		userID, err := strconv.ParseInt(c.Params("user_id"), 10, 64)
+		userID, err := resolveLinkSubject(c.UserContext(), a, c, c.Params("user_id"))
 		if err != nil {
-			return apptypes.Error(fiber.StatusBadRequest, "Invalid user_id")
+			return err
 		}
 		groups, err := searchGroups(c, a, userID)
 		if err != nil {
@@ -313,13 +320,16 @@ func groupList(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param group_id path string true "Group ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.SuccessResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/search/groups/{group_id} [delete]
 func groupDelete(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		groupID := c.Params("group_id")
+		if err := authorizeSearchGroup(c, a, groupID); err != nil {
+			return err
+		}
 		if _, err := a.Store.SQL.Exec(c.UserContext(), `DELETE FROM search_groups WHERE group_id = $1`, groupID); err != nil {
 			return err
 		}
@@ -384,7 +394,7 @@ func searchFetchLocalClans(c *fiber.Ctx, a apptypes.Deps, tags []string) []map[s
 		return nil
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT tag, name, member_count, clan_level, data
+		SELECT tag, name, member_count, clan_level
 		FROM basic_clan
 		WHERE tag = ANY($1)
 	`, tags)
@@ -396,16 +406,10 @@ func searchFetchLocalClans(c *fiber.Ctx, a apptypes.Deps, tags []string) []map[s
 	for rows.Next() {
 		var tag, name string
 		var members, level int
-		var raw []byte
-		if err := rows.Scan(&tag, &name, &members, &level, &raw); err != nil {
+		if err := rows.Scan(&tag, &name, &members, &level); err != nil {
 			return nil
 		}
-		doc := map[string]any{}
-		_ = json.Unmarshal(raw, &doc)
-		doc["tag"] = tag
-		doc["name"] = name
-		doc["members"] = members
-		doc["level"] = level
+		doc := map[string]any{"tag": tag, "name": name, "members": members, "level": level}
 		docs = append(docs, doc)
 	}
 	return docs
@@ -554,11 +558,11 @@ func searchUpsertTag(c *fiber.Ctx, a apptypes.Deps, userID int64, typeField, lis
 	return searchSaveUserSettings(c, a, userID, searchData)
 }
 
-func searchGroupCount(c *fiber.Ctx, a apptypes.Deps, userID int64, groupType, name string) (int, error) {
+func searchGroupCount(c *fiber.Ctx, a apptypes.Deps, userID string, groupType, name string) (int, error) {
 	var count int
 	err := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT count(*) FROM search_groups WHERE user_id = $1 AND type = $2 AND name = $3
-	`, strconv.FormatInt(userID, 10), groupType, name).Scan(&count)
+	`, userID, groupType, name).Scan(&count)
 	return count, err
 }
 
@@ -584,13 +588,13 @@ func searchGroup(c *fiber.Ctx, a apptypes.Deps, groupID string) (map[string]any,
 	return map[string]any{"group_id": groupID, "user_id": userID, "type": groupType, "name": name, "tags": tags}, nil
 }
 
-func searchGroups(c *fiber.Ctx, a apptypes.Deps, userID int64) ([]map[string]any, error) {
+func searchGroups(c *fiber.Ctx, a apptypes.Deps, userID string) ([]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT group_id, user_id, type, name, tags
 		FROM search_groups
 		WHERE user_id = $1
 		ORDER BY name ASC
-	`, strconv.FormatInt(userID, 10))
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -605,4 +609,23 @@ func searchGroups(c *fiber.Ctx, a apptypes.Deps, userID int64) ([]map[string]any
 		groups = append(groups, map[string]any{"group_id": groupID, "user_id": rawUserID, "type": groupType, "name": name, "tags": tags})
 	}
 	return groups, rows.Err()
+}
+
+func authorizeSearchGroup(c *fiber.Ctx, a apptypes.Deps, groupID string) error {
+	var ownerID string
+	err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT user_id FROM search_groups WHERE group_id = $1`, groupID).Scan(&ownerID)
+	if err != nil {
+		return apptypes.Error(fiber.StatusNotFound, "Group not found")
+	}
+	return authorizeSearchGroupOwner(c, ownerID)
+}
+
+func authorizeSearchGroupOwner(c *fiber.Ctx, ownerID string) error {
+	if isBotPrincipal(c) {
+		return nil
+	}
+	if ownerID != apptypes.UserID(c.UserContext()) {
+		return apptypes.Error(fiber.StatusForbidden, "You cannot manage another user's search group")
+	}
+	return nil
 }

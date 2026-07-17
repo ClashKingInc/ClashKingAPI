@@ -266,7 +266,7 @@ func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[strin
 	return items, rows.Err()
 }
 
-func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data map[string]any) error {
+func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data modelsv2.DiscordEmbed) error {
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
 		INSERT INTO custom_embeds (server_id, name, data, created_at, updated_at)
 		VALUES ($1, $2, $3::jsonb, now(), now())
@@ -377,7 +377,7 @@ func openTicketDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, channelID s
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.TicketPanelsResponse
 // @Router /v2/server/{server_id}/tickets [get]
 func getTicketPanels(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -423,8 +423,8 @@ func getTicketPanels(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
-// @Param body body object true "Panel name"
-// @Success 200 {object} map[string]interface{}
+// @Param body body modelsv2.CreatePanelRequest true "Panel name"
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets [post]
 func createTicketPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -462,7 +462,7 @@ func createTicketPanel(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name} [delete]
 func deleteTicketPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -491,7 +491,7 @@ func deleteTicketPanel(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name}/buttons [post]
 func createTicketButton(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -541,7 +541,7 @@ func createTicketButton(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
 // @Param custom_id path string true "Button custom ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id} [delete]
 func deleteTicketButton(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -583,7 +583,7 @@ func deleteTicketButton(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
 // @Param custom_id path string true "Button custom ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id} [patch]
 func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -604,7 +604,7 @@ func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 		}
 
 		components := anySlice(panel["components"])
-		for _, component := range components {
+		for index, component := range components {
 			doc := mapMaybe(component)
 			if serverAsString(doc["custom_id"]) != customID {
 				continue
@@ -612,6 +612,7 @@ func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 			doc["label"] = body.Label
 			doc["style"] = body.Style
 			doc["emoji"] = body.Emoji
+			components[index] = doc
 		}
 		panel["components"] = components
 		if err := ticketPanelSave(c, a, panel); err != nil {
@@ -629,7 +630,7 @@ func updateTicketButtonAppearance(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param status query string false "Filter by status"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.OpenTicketsResponse
 // @Router /v2/server/{server_id}/tickets/open [get]
 func getOpenTickets(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1029,7 +1030,7 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name} [put]
 func updateTicketPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1096,7 +1097,7 @@ func updateTicketPanel(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
 // @Param custom_id path string true "Button custom ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id} [put]
 func updateTicketButtonSettings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1160,7 +1161,7 @@ func updateTicketButtonSettings(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param panel_name path string true "Panel name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/{panel_name}/approve-messages [put]
 func updateTicketApproveMessages(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1214,7 +1215,7 @@ func normalizeApproveMessages(messages []modelsv2.ApproveMessage) []modelsv2.App
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param channel_id path string true "Ticket channel ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/open/{channel_id}/status [put]
 func updateOpenTicketStatus(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1270,7 +1271,7 @@ func updateOpenTicketStatus(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param channel_id path string true "Ticket channel ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/open/{channel_id}/clan [put]
 func updateOpenTicketClan(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1317,7 +1318,7 @@ func updateOpenTicketClan(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param channel_id path string true "Ticket channel ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/tickets/open/{channel_id} [delete]
 func deleteOpenTicket(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1354,7 +1355,7 @@ func deleteOpenTicket(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerEmbedsResponse
 // @Router /v2/server/{server_id}/embeds [get]
 func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1369,11 +1370,7 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
 		for _, d := range docs {
 			if _, ok := d["name"].(string); ok {
-				sanitizedData, _ := sanitize(d["data"]).(map[string]any)
-				if sanitizedData == nil {
-					sanitizedData = map[string]any{}
-				}
-				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: sanitizedData})
+				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: ticketEmbedFromMap(mapMaybe(d["data"]))})
 			}
 		}
 		sort.Slice(items, func(i, j int) bool {
@@ -1391,8 +1388,8 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
-// @Param body body object true "Embed name and data"
-// @Success 200 {object} map[string]interface{}
+// @Param body body modelsv2.UpsertEmbedRequest true "Embed name and data"
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/embeds [post]
 func createServerEmbed(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1426,7 +1423,7 @@ func createServerEmbed(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param embed_name path string true "Embed name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/embeds/{embed_name} [put]
 func updateServerEmbed(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1454,7 +1451,7 @@ func updateServerEmbed(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
 // @Param embed_name path string true "Embed name"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.MessageResponse
 // @Router /v2/server/{server_id}/embeds/{embed_name} [delete]
 func deleteServerEmbed(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -1501,7 +1498,7 @@ func ticketButtons(value any) []modelsv2.TicketButton {
 				CustomID: asStringOr(doc["custom_id"], ""),
 				Label:    asStringOr(doc["label"], ""),
 				Style:    asIntWithDefault(doc["style"], 2),
-				Emoji:    mapMaybe(doc["emoji"]),
+				Emoji:    ticketEmojiFromMap(mapMaybe(doc["emoji"])),
 				Type:     asIntWithDefault(doc["type"], 2),
 			})
 		}
@@ -1529,11 +1526,58 @@ func ticketButtonSettings(panel map[string]any) map[string]modelsv2.TicketButton
 			ApplyClans:           stringSlice(settings["apply_clans"]),
 			RolesToAdd:           stringSlice(settings["roles_to_add"]),
 			RolesToRemove:        stringSlice(settings["roles_to_remove"]),
-			TownhallRequirements: mapMaybe(settings["townhall_requirements"]),
+			TownhallRequirements: ticketIntMap(settings["townhall_requirements"]),
 			NewMessage:           stringPtrMaybe(settings["new_message"]),
 		}
 	}
 	return out
+}
+
+func ticketEmojiFromMap(value map[string]any) *modelsv2.DiscordEmoji {
+	if len(value) == 0 {
+		return nil
+	}
+	return &modelsv2.DiscordEmoji{
+		ID:       stringPtrMaybe(value["id"]),
+		Name:     stringPtrMaybe(value["name"]),
+		Animated: asBool(value["animated"]),
+	}
+}
+
+func ticketIntMap(value any) map[string]int {
+	raw := mapMaybe(value)
+	out := make(map[string]int, len(raw))
+	for key, item := range raw {
+		out[key] = asIntWithDefault(item, 0)
+	}
+	return out
+}
+
+func ticketEmbedFromMap(value map[string]any) modelsv2.DiscordEmbed {
+	embed := modelsv2.DiscordEmbed{
+		Title:       stringPtrMaybe(value["title"]),
+		Description: stringPtrMaybe(value["description"]),
+		URL:         stringPtrMaybe(value["url"]),
+		Timestamp:   stringPtrMaybe(value["timestamp"]),
+		Color:       intPtrMaybe(value["color"]),
+	}
+	if footer := mapMaybe(value["footer"]); len(footer) > 0 {
+		embed.Footer = &modelsv2.DiscordEmbedFooter{Text: serverAsString(footer["text"]), IconURL: stringPtrMaybe(footer["icon_url"])}
+	}
+	if image := mapMaybe(value["image"]); len(image) > 0 {
+		embed.Image = &modelsv2.DiscordEmbedMedia{URL: serverAsString(image["url"])}
+	}
+	if thumbnail := mapMaybe(value["thumbnail"]); len(thumbnail) > 0 {
+		embed.Thumbnail = &modelsv2.DiscordEmbedMedia{URL: serverAsString(thumbnail["url"])}
+	}
+	if author := mapMaybe(value["author"]); len(author) > 0 {
+		embed.Author = &modelsv2.DiscordEmbedAuthor{Name: serverAsString(author["name"]), URL: stringPtrMaybe(author["url"]), IconURL: stringPtrMaybe(author["icon_url"])}
+	}
+	for _, raw := range anySlice(value["fields"]) {
+		field := mapMaybe(raw)
+		embed.Fields = append(embed.Fields, modelsv2.DiscordEmbedField{Name: serverAsString(field["name"]), Value: serverAsString(field["value"]), Inline: asBool(field["inline"])})
+	}
+	return embed
 }
 
 func ticketApproveMessages(value any) []modelsv2.ApproveMessage {

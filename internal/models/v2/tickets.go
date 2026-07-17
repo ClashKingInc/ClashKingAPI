@@ -1,11 +1,11 @@
 package modelsv2
 
 type TicketButton struct {
-	CustomID string         `json:"custom_id"`
-	Label    string         `json:"label"`
-	Style    int            `json:"style"`
-	Emoji    map[string]any `json:"emoji,omitempty"`
-	Type     int            `json:"type"`
+	CustomID string        `json:"custom_id"`
+	Label    string        `json:"label"`
+	Style    int           `json:"style"`
+	Emoji    *DiscordEmoji `json:"emoji,omitempty"`
+	Type     int           `json:"type"`
 }
 
 type TicketButtonSettings struct {
@@ -21,7 +21,7 @@ type TicketButtonSettings struct {
 	ApplyClans           []string       `json:"apply_clans"`
 	RolesToAdd           []string       `json:"roles_to_add"`
 	RolesToRemove        []string       `json:"roles_to_remove"`
-	TownhallRequirements map[string]any `json:"townhall_requirements"`
+	TownhallRequirements map[string]int `json:"townhall_requirements"`
 	NewMessage           *string        `json:"new_message,omitempty"`
 }
 
@@ -109,7 +109,7 @@ type UpdateButtonSettingsRequest struct {
 	ApplyClans           []string       `json:"apply_clans"`
 	RolesToAdd           []string       `json:"roles_to_add"`
 	RolesToRemove        []string       `json:"roles_to_remove"`
-	TownhallRequirements map[string]any `json:"townhall_requirements"`
+	TownhallRequirements map[string]int `json:"townhall_requirements"`
 	NewMessage           *string        `json:"new_message,omitempty"`
 }
 
@@ -118,8 +118,8 @@ type UpdateApproveMessagesRequest struct {
 }
 
 type ServerEmbed struct {
-	Name string         `json:"name"`
-	Data map[string]any `json:"data,omitempty"`
+	Name string       `json:"name"`
+	Data DiscordEmbed `json:"data"`
 }
 
 type ServerEmbedsResponse struct {
@@ -128,8 +128,8 @@ type ServerEmbedsResponse struct {
 }
 
 type UpsertEmbedRequest struct {
-	Name string         `json:"name"`
-	Data map[string]any `json:"data"`
+	Name string       `json:"name"`
+	Data DiscordEmbed `json:"data"`
 }
 
 type CreatePanelRequest struct {
@@ -137,15 +137,15 @@ type CreatePanelRequest struct {
 }
 
 type CreateButtonRequest struct {
-	Label string         `json:"label"`
-	Style int            `json:"style"`
-	Emoji map[string]any `json:"emoji,omitempty"`
+	Label string        `json:"label"`
+	Style int           `json:"style"`
+	Emoji *DiscordEmoji `json:"emoji,omitempty"`
 }
 
 type UpdateButtonAppearanceRequest struct {
-	Label string         `json:"label"`
-	Style int            `json:"style"`
-	Emoji map[string]any `json:"emoji,omitempty"`
+	Label string        `json:"label"`
+	Style int           `json:"style"`
+	Emoji *DiscordEmoji `json:"emoji,omitempty"`
 }
 
 type UpdateOpenTicketStatusRequest struct {
@@ -154,4 +154,44 @@ type UpdateOpenTicketStatusRequest struct {
 
 type UpdateOpenTicketClanRequest struct {
 	SetClan *string `json:"set_clan,omitempty"`
+}
+
+type DiscordEmoji struct {
+	ID       *string `json:"id,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	Animated bool    `json:"animated,omitempty"`
+}
+
+type DiscordEmbed struct {
+	Title       *string             `json:"title,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	URL         *string             `json:"url,omitempty"`
+	Timestamp   *string             `json:"timestamp,omitempty"`
+	Color       *int                `json:"color,omitempty"`
+	Footer      *DiscordEmbedFooter `json:"footer,omitempty"`
+	Image       *DiscordEmbedMedia  `json:"image,omitempty"`
+	Thumbnail   *DiscordEmbedMedia  `json:"thumbnail,omitempty"`
+	Author      *DiscordEmbedAuthor `json:"author,omitempty"`
+	Fields      []DiscordEmbedField `json:"fields,omitempty"`
+}
+
+type DiscordEmbedFooter struct {
+	Text    string  `json:"text"`
+	IconURL *string `json:"icon_url,omitempty"`
+}
+
+type DiscordEmbedMedia struct {
+	URL string `json:"url"`
+}
+
+type DiscordEmbedAuthor struct {
+	Name    string  `json:"name"`
+	URL     *string `json:"url,omitempty"`
+	IconURL *string `json:"icon_url,omitempty"`
+}
+
+type DiscordEmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
 }

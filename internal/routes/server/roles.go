@@ -18,9 +18,9 @@ import (
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param role_type path string true "Role type (clan, league, townhall, status...)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RolesListResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/roles/{role_type} [get]
 func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -73,9 +73,9 @@ func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param role_type path string true "Role type"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RoleResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/roles/{role_type} [post]
 func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -93,7 +93,7 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		body["server"] = serverID
 		if roleType == "status" {
-			roleID := body["id"]
+			roleID := serverAsString(body["id"])
 			err := sqlAddStatusRole(c, rt, serverID, body)
 			if err != nil {
 				return err
@@ -108,7 +108,7 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		if serverRoleCollections[roleType] == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
 		}
-		roleID := serverAsString(firstNonNil(body["role"], body["id"]))
+		roleID := serverAsString(firstNonNil(body["role_id"], body["role"], body["id"]))
 		if roleID == "" {
 			return apptypes.Error(http.StatusBadRequest, "role is required")
 		}
@@ -138,10 +138,10 @@ func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Param server_id path int true "Server ID"
 // @Param role_type path string true "Role type"
 // @Param role_id path string true "Role ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RoleResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/roles/{role_type}/{role_id} [delete]
 func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -189,9 +189,9 @@ func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RoleSettingsResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/role-settings [get]
 func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -208,8 +208,8 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			AutoEvalStatus:   boolPtrMaybe(serverDoc["autoeval"]),
 			AutoEvalNickname: boolPtrMaybe(serverDoc["auto_eval_nickname"]),
 			AutoevalTriggers: stringSlice(serverDoc["autoeval_triggers"]),
-			AutoevalLog:      serverDoc["autoeval_log"],
-			BlacklistedRoles: anySlice(serverDoc["blacklisted_roles"]),
+			AutoevalLog:      stringPtrMaybe(serverDoc["autoeval_log"]),
+			BlacklistedRoles: stringSlice(serverDoc["blacklisted_roles"]),
 			RoleTreatment:    stringSlice(serverDoc["role_treatment"]),
 			CategoryRoles:    categoryRolesStrings(serverDoc["category_roles"]),
 		})
@@ -224,9 +224,9 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.RoleResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/role-settings [patch]
 func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -239,7 +239,6 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		setDoc := map[string]any{}
-		unsetDoc := map[string]any{}
 		if body.AutoEvalStatus != nil {
 			setDoc["autoeval"] = *body.AutoEvalStatus
 		} else if body.Autoeval != nil {
@@ -260,20 +259,26 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if body.RoleTreatment != nil {
 			setDoc["role_treatment"] = body.RoleTreatment
 		}
-		for category, roleVal := range body.CategoryRoles {
-			key := "category_roles." + category
-			roleStr := serverAsString(roleVal)
-			if roleStr == "" || roleVal == nil {
-				unsetDoc[key] = ""
-			} else {
-				setDoc[key] = numericMaybe(roleStr)
+		if body.CategoryRoles != nil {
+			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
+			if err != nil {
+				return notFoundErr(err, "Server not found")
 			}
+			categoryRoles := categoryRolesStrings(serverDoc["category_roles"])
+			if categoryRoles == nil {
+				categoryRoles = map[string]string{}
+			}
+			for category, roleStr := range body.CategoryRoles {
+				if roleStr == "" {
+					delete(categoryRoles, category)
+				} else {
+					categoryRoles[category] = roleStr
+				}
+			}
+			setDoc["category_roles"] = categoryRoles
 		}
-		if len(setDoc) == 0 && len(unsetDoc) == 0 {
+		if len(setDoc) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
-		}
-		for key := range unsetDoc {
-			delete(setDoc, key)
 		}
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET data = data || $2::jsonb, updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(setDoc))
 		if err != nil {
@@ -286,7 +291,7 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			Message:  "Role settings updated successfully",
 			ServerID: serverID,
 			RoleType: "settings",
-			RoleID:   nil,
+			RoleID:   "",
 		})
 	}
 }
@@ -298,9 +303,9 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.AllRolesResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/all-roles [get]
 func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -311,7 +316,7 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
 			return notFoundErr(err, "Server not found")
 		}
-		out := map[string][]map[string]any{}
+		out := map[string][]modelsv2.RoleBinding{}
 		totalCount := 0
 		for roleType := range serverRoleCollections {
 			items, _ := sqlRoleBindings(c, rt, serverID, roleType)
@@ -340,9 +345,9 @@ func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.FamilyRolesResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/family-roles [get]
 func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -382,9 +387,9 @@ func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.FamilyRoleOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/family-roles [post]
 func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -408,15 +413,16 @@ func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 			doc["type"] = internalType
 		}
 		_ = collectionName
+		storedRoleType := body.Type
 		roleKey := internalType
-		if roleKey == "" {
-			roleKey = body.Type
+		if roleKey != "" {
+			storedRoleType = "family_position"
 		}
 		_, err = rt.Store.SQL.Exec(c.UserContext(), `
 			INSERT INTO role_bindings (server_id, role_type, role_key, role_id, data, created_at, updated_at)
-			VALUES ($1, 'family_position', $2, $3, $4::jsonb, now(), now())
+			VALUES ($1, $2, $3, $4, $5::jsonb, now(), now())
 			ON CONFLICT (server_id, role_type, role_key, role_id) DO NOTHING
-		`, strconv.Itoa(serverID), roleKey, serverAsString(body.Role), apptypes.Marshal(doc))
+		`, strconv.Itoa(serverID), storedRoleType, roleKey, serverAsString(body.Role), apptypes.Marshal(doc))
 		if err != nil {
 			return err
 		}
@@ -438,10 +444,10 @@ func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Param server_id path int true "Server ID"
 // @Param role_type path string true "Family role type"
 // @Param role_id path string true "Discord Role ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.FamilyRoleOperationResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/family-roles/{role_type}/{role_id} [delete]
 func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -456,14 +462,15 @@ func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		roleID := c.Params("role_id")
 		_ = collectionName
+		storedRoleType := roleType
 		roleKey := internalType
-		if roleKey == "" {
-			roleKey = roleType
+		if roleKey != "" {
+			storedRoleType = "family_position"
 		}
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `
 			DELETE FROM role_bindings
-			WHERE server_id = $1 AND role_type = 'family_position' AND role_key = $2 AND role_id = $3
-		`, strconv.Itoa(serverID), roleKey, roleID)
+			WHERE server_id = $1 AND role_type = $2 AND role_key = $3 AND role_id = $4
+		`, strconv.Itoa(serverID), storedRoleType, roleKey, roleID)
 		if err != nil {
 			return err
 		}
@@ -479,18 +486,17 @@ func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
-func sanitizeRoleList(items []map[string]any) []map[string]any {
-	sanitized := make([]map[string]any, 0, len(items))
+func sanitizeRoleList(items []map[string]any) []modelsv2.RoleBinding {
+	sanitized := make([]modelsv2.RoleBinding, 0, len(items))
 	for _, item := range items {
 		role := sanitize(item).(map[string]any)
-		delete(role, "toggle")
-		if value, ok := role["role"]; ok {
-			role["role"] = serverAsString(value)
-		}
-		if value, ok := role["id"]; ok {
-			role["id"] = serverAsString(value)
-		}
-		sanitized = append(sanitized, role)
+		sanitized = append(sanitized, modelsv2.RoleBinding{
+			ID:     stringPtrMaybe(role["id"]),
+			Role:   serverAsString(role["role"]),
+			Type:   stringPtrMaybe(role["type"]),
+			Number: intPtrMaybe(role["number"]),
+			Key:    stringPtrMaybe(role["key"]),
+		})
 	}
 	return sanitized
 }

@@ -21,7 +21,7 @@ import (
 // @Param timestamp_end query int false "End Unix timestamp"
 // @Param limit query int false "Maximum number of wars"
 // @Success 200 {array} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func warPrevious(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := fixTag(c.Params("clanTag"))
@@ -43,9 +43,9 @@ func warPrevious(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clanTag path string true "Clan tag"
 // @Param endTime query string true "War end time in Clash format"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /war/{clanTag}/previous [get]
 func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -68,8 +68,8 @@ func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param clanTag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.WarResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /war/{clanTag}/basic [get]
 func warBasic(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -91,7 +91,7 @@ func warBasic(a apptypes.Deps) fiber.Handler {
 // @Tags War
 // @Produce json
 // @Param clanTag path string true "Clan tag"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.CWLGroupResponse
 // @Router /cwl/{clanTag}/group [get]
 func cwlGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -110,9 +110,9 @@ func cwlGroup(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clanTag path string true "Clan tag"
 // @Param season path string true "Season YYYY-MM"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.CWLGroupResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /cwl/{clanTag}/{season} [get]
 func cwlSeason(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -141,7 +141,7 @@ func cwlRankingsFromSQL(c *fiber.Ctx, a apptypes.Deps, data map[string]any) []mo
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT attacking_clan_tag, defending_clan_tag, stars, destruction_percentage
-		FROM war_attack_events
+		FROM war_attacks
 		WHERE war_id = ANY($1)
 	`, warIDs)
 	if err != nil {

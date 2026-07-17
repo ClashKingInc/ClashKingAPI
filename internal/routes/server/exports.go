@@ -13,8 +13,6 @@ func AddServerClan(a apptypes.Deps) fiber.Handler { return addServerClan(a) }
 
 func AddStrike(a apptypes.Deps) fiber.Handler { return addStrike(a) }
 
-func BulkUnlink(a apptypes.Deps) fiber.Handler { return bulkUnlink(a) }
-
 func CreateAutoboard(a apptypes.Deps) fiber.Handler { return createAutoboard(a) }
 
 func CreateReminder(a apptypes.Deps) fiber.Handler { return createReminder(a) }
@@ -34,6 +32,8 @@ func DeleteAutoboard(a apptypes.Deps) fiber.Handler { return deleteAutoboard(a) 
 func DeleteClanLogs(a apptypes.Deps) fiber.Handler { return deleteClanLogs(a) }
 
 func DeleteLink(a apptypes.Deps) fiber.Handler { return deleteLink(a) }
+
+func CreateLink(a apptypes.Deps) fiber.Handler { return createLink(a) }
 
 func DeleteOpenTicket(a apptypes.Deps) fiber.Handler { return deleteOpenTicket(a) }
 

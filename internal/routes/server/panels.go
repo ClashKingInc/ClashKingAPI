@@ -16,9 +16,9 @@ import (
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerPanelResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/panel [get]
 func getServerPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -44,9 +44,9 @@ func getServerPanel(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param body body modelsv2.ServerPanelBody true "Panel configuration"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.ServerPanelResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/panel [put]
 func updateServerPanel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

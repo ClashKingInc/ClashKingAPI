@@ -25,10 +25,10 @@ import (
 // @Param id path string true "user id"
 // @Param body body modelsv2.AccountsCOCAccountRequest true "Account payload"
 // @Success 200 {object} modelsv2.AccountsLinkResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 409 {object} modelsv2.AccountConflictErrorResponse
 // @Router /v2/links/{id} [post]
 func addAccount(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -46,10 +46,6 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account does not exist")
 		}
 
-		oldAccount, err := findAccountByTag(c.UserContext(), a, playerTag)
-		if err != nil && err != pgx.ErrNoRows {
-			return err
-		}
 		apiToken := strings.TrimSpace(body.APIToken)
 		verifyOwnership := apiToken != ""
 		if verifyOwnership {
@@ -59,39 +55,54 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 				return apptypes.Error(fiber.StatusForbidden, "Invalid player token. Check your Clash of Clans account settings and try again.")
 			}
 		}
-		oldUserID := ""
-		if oldAccount != nil {
-			oldUserID = accountsStringify(oldAccount["user_id"])
+		tx, err := a.Store.SQL.Begin(c.UserContext())
+		if err != nil {
+			return err
 		}
-		if oldAccount != nil && oldUserID != userID && !verifyOwnership {
-			return apptypes.JSON(c, fiber.StatusConflict, map[string]any{
-				"detail": map[string]any{
-					"message": "This Clash of Clans account is already linked to another user",
-					"account": map[string]any{
-						"tag":           player.Tag,
-						"name":          player.Name,
-						"townHallLevel": player.TownHall,
-					},
-				},
-			})
-		}
-		if oldAccount != nil && oldUserID != userID && verifyOwnership {
-			if _, err := a.Store.SQL.Exec(c.UserContext(), `DELETE FROM player_links WHERE tag = $1`, playerTag); err != nil {
-				return err
-			}
-			if err := reorderUserAccounts(c.UserContext(), a, oldUserID); err != nil {
-				return err
-			}
-		}
-
+		defer tx.Rollback(c.UserContext())
+		var oldUserID *string
 		var orderIndex int
 		existingVerified := false
-		if oldAccount != nil && oldUserID == userID {
-			orderIndex = int(asInt64(oldAccount["order_index"]))
-			existingVerified, _ = oldAccount["is_verified"].(bool)
-		} else {
-			err = a.Store.SQL.QueryRow(c.UserContext(), `SELECT count(*) FROM player_links WHERE user_id = $1`, userID).Scan(&orderIndex)
-			if err != nil {
+		existingHidden := false
+		err = tx.QueryRow(c.UserContext(), `
+			SELECT user_id, order_index, is_verified, hidden
+			FROM player_links
+			WHERE tag = $1
+			FOR UPDATE
+		`, playerTag).Scan(&oldUserID, &orderIndex, &existingVerified, &existingHidden)
+		if err != nil && err != pgx.ErrNoRows {
+			return err
+		}
+		hasExisting := err == nil
+		previousOwner := ""
+		if oldUserID != nil {
+			previousOwner = *oldUserID
+		}
+		if hasExisting && previousOwner != userID && !verifyOwnership {
+			return &apptypes.AppError{
+				Status: fiber.StatusConflict,
+				Code:   modelsv2.ErrorCodeConflict,
+				Detail: "This Clash of Clans account is already linked to another user",
+				Account: &modelsv2.AccountsLinkedPlayer{
+					Tag:           player.Tag,
+					Name:          player.Name,
+					TownHallLevel: player.TownHall,
+				},
+			}
+		}
+		if hasExisting && previousOwner != userID {
+			if _, err := tx.Exec(c.UserContext(), `DELETE FROM player_links WHERE tag = $1`, playerTag); err != nil {
+				return err
+			}
+			if err := reorderUserAccountsTx(c.UserContext(), tx, previousOwner); err != nil {
+				return err
+			}
+			hasExisting = false
+			existingVerified = false
+			existingHidden = false
+		}
+		if !hasExisting {
+			if err := tx.QueryRow(c.UserContext(), `SELECT count(*) FROM player_links WHERE user_id = $1`, userID).Scan(&orderIndex); err != nil {
 				return err
 			}
 		}
@@ -100,9 +111,9 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 			now := time.Now().UTC()
 			verifiedAt = &now
 		}
-		_, err = a.Store.SQL.Exec(c.UserContext(), `
+		_, err = tx.Exec(c.UserContext(), `
 			INSERT INTO player_links (tag, user_id, source, order_index, is_verified, added_at, verified_at, updated_at)
-			VALUES ($1, $2, 'api', $3, $4, now(), $5, now())
+			VALUES ($1, $2, 'clashking', $3, $4, now(), $5, now())
 			ON CONFLICT (tag) DO UPDATE SET
 				user_id = EXCLUDED.user_id,
 				source = EXCLUDED.source,
@@ -112,6 +123,9 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 				updated_at = now()
 		`, player.Tag, userID, orderIndex, verifyOwnership, verifiedAt)
 		if err != nil {
+			return err
+		}
+		if err := tx.Commit(c.UserContext()); err != nil {
 			return err
 		}
 		message := "Clash of Clans account linked successfully"
@@ -125,6 +139,7 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 				Name:          player.Name,
 				TownHallLevel: player.TownHall,
 				IsVerified:    existingVerified || verifyOwnership,
+				Hidden:        existingHidden,
 			},
 		})
 	}
@@ -139,8 +154,8 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param id path string true "user id"
 // @Success 200 {object} modelsv2.AccountsListResponse
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id} [get]
 func listAccounts(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -153,7 +168,7 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 		}
 		accounts := make([]modelsv2.AccountsLinkedAccount, 0)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT user_id, tag, order_index, is_verified, added_at, verified_at
+			SELECT user_id, tag, order_index, is_verified, hidden, added_at, verified_at
 			FROM player_links
 			WHERE user_id = $1
 			ORDER BY order_index ASC, added_at ASC
@@ -166,9 +181,10 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 			var userID, tag string
 			var orderIndex int
 			var isVerified bool
+			var hidden bool
 			var addedAt time.Time
 			var verifiedAt *time.Time
-			if err := rows.Scan(&userID, &tag, &orderIndex, &isVerified, &addedAt, &verifiedAt); err != nil {
+			if err := rows.Scan(&userID, &tag, &orderIndex, &isVerified, &hidden, &addedAt, &verifiedAt); err != nil {
 				return err
 			}
 			account := modelsv2.AccountsLinkedAccount{
@@ -176,6 +192,7 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 				PlayerTag:  tag,
 				OrderIndex: orderIndex,
 				IsVerified: isVerified,
+				Hidden:     hidden,
 				AddedAt:    addedAt,
 			}
 			if verifiedAt != nil {
@@ -200,9 +217,9 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 // @Param id path string true "user id"
 // @Param playerTag path string true "Player tag"
 // @Success 200 {object} modelsv2.AccountsMessageResponse
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/{playerTag} [delete]
 func removeAccount(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -211,17 +228,89 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		playerTag := clashy.CorrectTag(decodeRouteTag(c.Params("playerTag")))
-		tag, err := deleteUserAccount(c.UserContext(), a, userID, playerTag)
+		tx, err := a.Store.SQL.Begin(c.UserContext())
 		if err != nil {
+			return err
+		}
+		defer tx.Rollback(c.UserContext())
+		var tag string
+		err = tx.QueryRow(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2 RETURNING tag`, userID, playerTag).Scan(&tag)
+		if err != nil && err != pgx.ErrNoRows {
 			return err
 		}
 		if tag == "" {
 			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account not found or not linked to your profile")
 		}
-		if err := reorderUserAccounts(c.UserContext(), a, userID); err != nil {
+		if err := reorderUserAccountsTx(c.UserContext(), tx, userID); err != nil {
+			return err
+		}
+		if err := tx.Commit(c.UserContext()); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsMessageResponse{Message: "Clash of Clans account unlinked successfully"})
+	}
+}
+
+// setAccountVisibility updates the hidden status of a verified linked account.
+//
+// @Summary Set linked account visibility
+// @Description Sets hidden for a verified account owned by the requested link subject. Unverified accounts cannot be hidden.
+// @Tags Links
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "user id"
+// @Param playerTag path string true "Player tag"
+// @Param body body modelsv2.AccountsLinkVisibilityRequest true "Visibility payload"
+// @Success 200 {object} modelsv2.AccountsLinkedAccount
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Router /v2/links/{id}/{playerTag} [patch]
+func setAccountVisibility(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID, err := resolveLinkSubject(c.UserContext(), a, c, c.Params("id"))
+		if err != nil {
+			return err
+		}
+		playerTag := clashy.CorrectTag(decodeRouteTag(c.Params("playerTag")))
+		var body modelsv2.AccountsLinkVisibilityRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		if a.Store == nil || a.Store.SQL == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+		}
+		var account modelsv2.AccountsLinkedAccount
+		err = a.Store.SQL.QueryRow(c.UserContext(), `
+			UPDATE player_links
+			SET hidden = $1, updated_at = now()
+			WHERE user_id = $2 AND tag = $3 AND is_verified = true
+			RETURNING user_id, tag, order_index, is_verified, hidden, added_at, verified_at
+		`, body.Hidden, userID, playerTag).Scan(
+			&account.UserID,
+			&account.PlayerTag,
+			&account.OrderIndex,
+			&account.IsVerified,
+			&account.Hidden,
+			&account.AddedAt,
+			&account.VerifiedAt,
+		)
+		if err == nil {
+			return apptypes.JSON(c, fiber.StatusOK, account)
+		}
+		if err != pgx.ErrNoRows {
+			return err
+		}
+		var verified bool
+		lookupErr := a.Store.SQL.QueryRow(c.UserContext(), `SELECT is_verified FROM player_links WHERE user_id = $1 AND tag = $2`, userID, playerTag).Scan(&verified)
+		if lookupErr == pgx.ErrNoRows {
+			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account not found or not linked to your profile")
+		}
+		if lookupErr != nil {
+			return lookupErr
+		}
+		return apptypes.Error(fiber.StatusForbidden, "Only verified links can be hidden")
 	}
 }
 
@@ -236,9 +325,9 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 // @Param id path string true "user id"
 // @Param body body modelsv2.AccountsReorderAccountsRequest true "Reorder payload"
 // @Success 200 {object} modelsv2.AccountsMessageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 403 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
 // @Router /v2/links/{id}/order [put]
 func reorderAccounts(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -268,10 +357,13 @@ func reorderAccounts(a apptypes.Deps) fiber.Handler {
 		if count != len(normalized) {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid account tags provided")
 		}
-		for index, tag := range normalized {
-			if _, err := a.Store.SQL.Exec(c.UserContext(), `UPDATE player_links SET order_index = $1, updated_at = now() WHERE user_id = $2 AND tag = $3`, index, userID, tag); err != nil {
-				return err
-			}
+		if _, err := a.Store.SQL.Exec(c.UserContext(), `
+			UPDATE player_links AS links
+			SET order_index = (ordered.ordinal - 1)::integer, updated_at = now()
+			FROM unnest($2::text[]) WITH ORDINALITY AS ordered(tag, ordinal)
+			WHERE links.user_id = $1 AND links.tag = ordered.tag
+		`, userID, normalized); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsMessageResponse{Message: "Accounts reordered successfully"})
 	}
@@ -299,26 +391,46 @@ func findAccountByTag(ctx context.Context, a apptypes.Deps, playerTag string) (m
 	return scanPlayerLink(ctx, a, `WHERE tag = $1`, playerTag)
 }
 
+func reorderUserAccountsTx(ctx context.Context, tx pgx.Tx, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `
+		WITH ordered AS (
+			SELECT tag, (row_number() OVER (ORDER BY order_index, added_at) - 1)::integer AS order_index
+			FROM player_links
+			WHERE user_id = $1
+		)
+		UPDATE player_links AS links
+		SET order_index = ordered.order_index, updated_at = now()
+		FROM ordered
+		WHERE links.tag = ordered.tag
+	`, userID)
+	return err
+}
+
 func scanPlayerLink(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {
 	if a.Store == nil || a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	query := `
-		SELECT user_id, tag, order_index, is_verified, added_at, verified_at
+		SELECT user_id, tag, order_index, is_verified, hidden, added_at, verified_at
 		FROM player_links ` + where + ` LIMIT 1`
 	var userID *string
 	var tag string
 	var orderIndex int
 	var verified bool
+	var hidden bool
 	var addedAt time.Time
 	var verifiedAt *time.Time
-	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&userID, &tag, &orderIndex, &verified, &addedAt, &verifiedAt); err != nil {
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&userID, &tag, &orderIndex, &verified, &hidden, &addedAt, &verifiedAt); err != nil {
 		return nil, err
 	}
 	account := map[string]any{
 		"player_tag":  tag,
 		"order_index": orderIndex,
 		"is_verified": verified,
+		"hidden":      hidden,
 		"added_at":    addedAt,
 	}
 	if userID != nil {
@@ -335,7 +447,7 @@ func listUserAccountLinks(ctx context.Context, a apptypes.Deps, userID string) (
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT tag, order_index, is_verified, added_at, verified_at
+		SELECT tag, order_index, is_verified, hidden, added_at, verified_at
 		FROM player_links
 		WHERE user_id = $1
 		ORDER BY order_index ASC, added_at ASC
@@ -349,9 +461,10 @@ func listUserAccountLinks(ctx context.Context, a apptypes.Deps, userID string) (
 		var tag string
 		var orderIndex int
 		var verified bool
+		var hidden bool
 		var addedAt time.Time
 		var verifiedAt *time.Time
-		if err := rows.Scan(&tag, &orderIndex, &verified, &addedAt, &verifiedAt); err != nil {
+		if err := rows.Scan(&tag, &orderIndex, &verified, &hidden, &addedAt, &verifiedAt); err != nil {
 			return nil, err
 		}
 		account := map[string]any{
@@ -359,6 +472,7 @@ func listUserAccountLinks(ctx context.Context, a apptypes.Deps, userID string) (
 			"player_tag":  tag,
 			"order_index": orderIndex,
 			"is_verified": verified,
+			"hidden":      hidden,
 			"added_at":    addedAt,
 		}
 		if verifiedAt != nil {

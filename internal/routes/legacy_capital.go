@@ -17,7 +17,7 @@ import (
 // @Produce json
 // @Param weekend query string false "Weekend filter"
 // @Success 200 {array} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func districtStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := capitalRows(c, a, "", c.Query("weekend"), 0)
@@ -35,7 +35,7 @@ func districtStats(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param weekend query string false "Weekend filter"
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func leagueStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := capitalRows(c, a, "", c.Query("weekend"), 0)
@@ -53,7 +53,7 @@ func leagueStats(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {array} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 func capitalLog(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := capitalRows(c, a, capitalFixTag(c.Params("clan_tag")), "", 0)
@@ -72,8 +72,8 @@ func capitalLog(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param body body modelsv1.V1CapitalClanTagsBody true "Clan tags"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func capitalBulk(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body modelsv1.V1CapitalClanTagsBody

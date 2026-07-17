@@ -20,10 +20,10 @@ import (
 // @Produce json
 // @Param guild_id query int true "Discord guild ID"
 // @Param inactive_threshold_days query int false "Days without login to be considered inactive (default 7)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GuildSummaryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/guild-summary [get]
 // @Router /v2/activity/guild-summary [get]
 func guildSummary(a apptypes.Deps) fiber.Handler {
@@ -171,9 +171,9 @@ func guildSummary(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Maximum number of results"
 // @Param offset query int false "Number of results to skip"
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 func inactivePlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		guildID, _ := strconv.ParseInt(c.Query("guild_id"), 10, 64)

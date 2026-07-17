@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
@@ -24,9 +25,9 @@ const legendLeagueID = 105000036
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerRankingsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/rankings [get]
 func playerRankings(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -48,9 +49,9 @@ func playerRankings(a apptypes.Deps) fiber.Handler {
 // @Param days query int false "Days of history, max 365"
 // @Param type query string false "Battle type"
 // @Param attack query bool false "Filter attacks or defenses"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerBattlelogHistoryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/battlelog/history [get]
 func playerBattlelogHistory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -105,10 +106,10 @@ func playerBattlelogHistory(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Param day path string true "Legend day YYYY-MM-DD"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLegendsDayResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/legends/{day}/day [get]
 func playerLegendsDayBattlelog(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -148,10 +149,10 @@ func playerLegendsDayBattlelog(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Param season path string true "Legend season YYYY-MM"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLegendSeasonResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/legends/{season}/season [get]
 func playerLegendsSeasonBattlelog(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -176,9 +177,9 @@ func playerLegendsSeasonBattlelog(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param season path string true "Legend season YYYY-MM"
 // @Param body body modelsv2.PlayerBattlelogStatsRequest true "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayersLegendSeasonResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/legends/{season}/battlelog-stats [post]
 func playersLegendsBattlelogStats(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -215,9 +216,9 @@ func playersLegendsBattlelogStats(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param season path int true "Ranked season ID"
 // @Param limit query int false "Battlelog row limit, max 200"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerRankedBattlelogResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/ranked/{season}/battlelog [get]
 func playerRankedBattlelog(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -234,15 +235,20 @@ func playerRankedBattlelog(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		limit := clamp(queryInt(c, "limit", 100), 1, 200)
+		seasonStart := time.Unix(seasonID, 0).UTC()
+		seasonEnd := seasonStart.Add(7 * 24 * time.Hour)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT battle_id::text, player_tag, player_name, player_th, opponent_tag, opponent_name, opponent_th,
 				battle_type, attack, stars, destruction_percentage, gold, elixir, dark_elixir, "timestamp",
 				army_items, army_counts, duration, army_share_code
 			FROM battlelogs
-			WHERE player_tag = $1 AND battle_type = 'ranked'
+			WHERE player_tag = $1
+				AND battle_type = 'ranked'
+				AND "timestamp" >= $2
+				AND "timestamp" < $3
 			ORDER BY "timestamp" DESC
-			LIMIT $2
-		`, tag, limit)
+			LIMIT $4
+		`, tag, seasonStart, seasonEnd, limit)
 		if err != nil {
 			return err
 		}
@@ -262,9 +268,9 @@ func playerRankedBattlelog(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Param season path int true "Ranked season ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerRankedGroupResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/ranked/{season}/group [get]
 func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -318,9 +324,9 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 // @Param player_tag path string true "Player tag"
 // @Param limit query int false "Result limit, max 500"
 // @Param type query string false "Change type"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerChangesResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/changes [get]
 func playerChanges(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -370,9 +376,9 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param league_tier_id path int true "League tier ID"
 // @Param limit query int false "Result limit, max 500"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/league/{league_tier_id} [get]
 func leaderboardLeague(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -421,8 +427,8 @@ func leaderboardLeague(a apptypes.Deps) fiber.Handler {
 // @Param league_tier_id path int true "League tier ID"
 // @Param date path string true "Snapshot date YYYY-MM-DD"
 // @Param limit query int false "Result limit, max 200"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLeaderboardHistoryResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/league/{league_tier_id}/history/{date} [get]
 func leaderboardLeagueHistory(a apptypes.Deps) fiber.Handler {
 	return leaderboardSnapshot(a, "league", "league_tier_id")
@@ -435,9 +441,9 @@ func leaderboardLeagueHistory(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param townhall_level path int true "Townhall level"
 // @Param limit query int false "Result limit, max 500"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/townhalls/{townhall_level} [get]
 func leaderboardTownhalls(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -473,8 +479,8 @@ func leaderboardTownhalls(a apptypes.Deps) fiber.Handler {
 // @Param townhall_level path int true "Townhall level"
 // @Param date path string true "Snapshot date YYYY-MM-DD"
 // @Param limit query int false "Result limit, max 200"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PlayerLeaderboardHistoryResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/townhalls/{townhall_level}/history/{date} [get]
 func leaderboardTownhallsHistory(a apptypes.Deps) fiber.Handler {
 	return leaderboardSnapshot(a, "townhall", "townhall_level")
@@ -487,9 +493,9 @@ func leaderboardTownhallsHistory(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param location_id path int true "Location ID"
 // @Param limit query int false "Result limit, max 500"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PublicClanLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/{location_id}/clan/donations [get]
 func leaderboardClanDonations(a apptypes.Deps) fiber.Handler {
 	return clanLeaderboard(a, "donations")
@@ -502,9 +508,9 @@ func leaderboardClanDonations(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param location_id path int true "Location ID"
 // @Param limit query int false "Result limit, max 500"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PublicClanLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/{location_id}/clan/war-wins [get]
 func leaderboardClanWarWins(a apptypes.Deps) fiber.Handler {
 	return clanLeaderboard(a, "war_wins")
@@ -516,8 +522,8 @@ func leaderboardClanWarWins(a apptypes.Deps) fiber.Handler {
 // @Tags Leaderboard
 // @Produce json
 // @Param limit query int false "Result limit, max 500"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.PublicClanLeaderboardResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/clan/win-streak [get]
 func leaderboardClanWinStreak(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -549,9 +555,9 @@ func leaderboardClanWinStreak(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param league_tier_id path int true "League tier ID"
 // @Param days query int false "History days, max 30"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.TrophyBucketsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/{league_tier_id}/trophy-buckets [get]
 func leaderboardTrophyBuckets(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -612,8 +618,8 @@ func leaderboardTrophyBuckets(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of clans at different CWL leagues.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/cwl-leagues [get]
 func globalCWLLeagues(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "cwl_league_id", `SELECT cwl_league_id, clan_count FROM war_league_counts ORDER BY cwl_league_id`)
@@ -624,8 +630,8 @@ func globalCWLLeagues(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of clans in different locations.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/clan/locations [get]
 func globalClanLocations(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "location_id", `SELECT location_id, count(*) FROM basic_clan GROUP BY location_id ORDER BY location_id NULLS LAST`)
@@ -636,8 +642,8 @@ func globalClanLocations(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of players at each townhall level.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/townhalls [get]
 func globalTownhalls(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "townhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 0 ORDER BY level`)
@@ -648,8 +654,8 @@ func globalTownhalls(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of players at each builder hall level.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/builderhalls [get]
 func globalBuilderhalls(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "builderhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 1 ORDER BY level`)
@@ -660,8 +666,8 @@ func globalBuilderhalls(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of clans at different capital leagues.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/capital-leagues [get]
 func globalCapitalLeagues(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "capital_league_id", `SELECT capital_league_id, count(*) FROM basic_clan GROUP BY capital_league_id ORDER BY capital_league_id NULLS LAST`)
@@ -672,11 +678,11 @@ func globalCapitalLeagues(a apptypes.Deps) fiber.Handler {
 // @Description Returns counts of players at different league tiers.
 // @Tags Global
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.GroupedCountsResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/global/leaguetiers [get]
 func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
-	return groupedCounts(a, "league_tier_id", `SELECT league_id, count(*) FROM basic_player GROUP BY league_id ORDER BY league_id NULLS LAST`)
+	return groupedCounts(a, "league_tier_id", `SELECT league_tier_id, player_count FROM api_league_tier_counts ORDER BY league_tier_id`)
 }
 
 // clanChanges godoc
@@ -688,7 +694,7 @@ func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 // @Param limit query int false "Result limit, max 500"
 // @Param type query string false "Change type"
 // @Success 200 {object} modelsv2.ClanChangesResponse
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/changes [get]
 func clanChanges(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -720,8 +726,8 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 			items = append(items, modelsv2.ClanChangeRecord{
 				Time:     eventTime,
 				Type:     clanChangeAPIType(changeType),
-				Previous: jsonValue(previousRaw, nil),
-				Current:  jsonValue(currentRaw, nil),
+				Previous: clanChangeValue(previousRaw),
+				Current:  clanChangeValue(currentRaw),
 			})
 		}
 		if err := rows.Err(); err != nil {
@@ -729,6 +735,18 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, clanChangesResponse(name, tag, badgeToken, items))
 	}
+}
+
+func clanChangeValue(raw []byte) modelsv2.ClanChangeValue {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return modelsv2.ClanChangeValue{Kind: "text", Text: &text}
+	}
+	var integer int
+	if json.Unmarshal(raw, &integer) == nil {
+		return modelsv2.ClanChangeValue{Kind: "integer", Integer: &integer}
+	}
+	return modelsv2.ClanChangeValue{Kind: "text"}
 }
 
 func clanChangeIdentity(c *fiber.Ctx, a apptypes.Deps, tag string) (string, string, error) {
@@ -749,11 +767,15 @@ func clanChangesResponse(name string, tag string, badgeToken string, items []mod
 		return items[i].Time.After(items[j].Time)
 	})
 	return modelsv2.ClanChangesResponse{
-		Name:      name,
-		Tag:       tag,
-		BadgeURLs: badgeURLs(badgeToken),
-		Count:     len(items),
-		Items:     items,
+		Name: name,
+		Tag:  tag,
+		BadgeURLs: modelsv2.PublicBadgeURLs{
+			Small:  badgeURL(badgeToken, 70),
+			Medium: badgeURL(badgeToken, 200),
+			Large:  badgeURL(badgeToken, 512),
+		},
+		Count: len(items),
+		Items: items,
 	}
 }
 
@@ -811,9 +833,9 @@ func snakeToLowerCamel(value string) string {
 // @Param timeframe query string false "Timeframe such as 7d or 24h"
 // @Param sort_by query string false "hitrate or usage_rate"
 // @Param limit query int false "Result limit, max 100"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.BattlelogArmiesResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/ranked/armies [get]
 func battlelogsRankedArmies(a apptypes.Deps) fiber.Handler {
 	return battlelogArmies(a, "ranked")
@@ -829,9 +851,9 @@ func battlelogsRankedArmies(a apptypes.Deps) fiber.Handler {
 // @Param excludes query []string false "Excluded troop, spell, pet, or equipment IDs/names"
 // @Param timeframe query string false "Timeframe such as 7d or 24h"
 // @Param limit query int false "Result limit, max 100"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} modelsv2.BattlelogArmiesResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/farming/armies [get]
 func battlelogsFarmingArmies(a apptypes.Deps) fiber.Handler {
 	return battlelogArmies(a, "farming")
@@ -845,8 +867,8 @@ func battlelogsFarmingArmies(a apptypes.Deps) fiber.Handler {
 // @Param townhall_level path int true "Townhall level"
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/townhall/{townhall_level}/usage [get]
 func battlelogItemTownhallUsage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTownhall, battlelogItemMetricUsage)
@@ -860,8 +882,8 @@ func battlelogItemTownhallUsage(a apptypes.Deps) fiber.Handler {
 // @Param townhall_level path int true "Townhall level"
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/townhall/{townhall_level}/hitrate [get]
 func battlelogItemTownhallHitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTownhall, battlelogItemMetricHitrate)
@@ -875,8 +897,8 @@ func battlelogItemTownhallHitrate(a apptypes.Deps) fiber.Handler {
 // @Param league_id path int true "Ranked league tier ID"
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/league/{league_id}/usage [get]
 func battlelogItemLeagueUsage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionLeague, battlelogItemMetricUsage)
@@ -890,8 +912,8 @@ func battlelogItemLeagueUsage(a apptypes.Deps) fiber.Handler {
 // @Param league_id path int true "Ranked league tier ID"
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/league/{league_id}/hitrate [get]
 func battlelogItemLeagueHitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionLeague, battlelogItemMetricHitrate)
@@ -904,8 +926,8 @@ func battlelogItemLeagueHitrate(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/top200/usage [get]
 func battlelogItemTop200Usage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricUsage)
@@ -918,8 +940,8 @@ func battlelogItemTop200Usage(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/battlelogs/items/top200/hitrate [get]
 func battlelogItemTop200Hitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricHitrate)
@@ -1453,19 +1475,6 @@ func leaderboardSnapshot(a apptypes.Deps, kind string, paramName string) fiber.H
 			item["name"] = name
 			item["rank"] = rank
 			items = append(items, item)
-		}
-		if len(items) == 0 {
-			var raw []byte
-			err := a.Store.SQL.QueryRow(c.UserContext(), `
-				SELECT data FROM ranking_snapshots
-				WHERE ranking_type = $1 AND location = $2 AND snapshot_date = $3
-			`, kind, location, date).Scan(&raw)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			if len(raw) > 0 {
-				return apptypes.JSON(c, fiber.StatusOK, map[string]any{"kind": kind, "location": location, "date": date, "data": jsonValue(raw, nil)})
-			}
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"kind": kind, "location": location, "date": date, "items": items, "count": len(items)})
 	}

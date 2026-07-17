@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -15,6 +17,8 @@ import (
 
 // maxCDNUploadSize is 25 MB — enough for Discord attachment limits.
 const maxCDNUploadSize = 25 * 1024 * 1024
+
+var cdnHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 var cdnAllowedExtensions = map[string]bool{
 	// images
@@ -35,10 +39,10 @@ var cdnAllowedExtensions = map[string]bool{
 // @Produce json
 // @Security ApiKeyAuth
 // @Param file formData file true "File to upload (max 25 MB)"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 413 {object} map[string]string
-// @Failure 415 {object} map[string]string
+// @Success 200 {object} modelsv2.CDNUploadResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 413 {object} modelsv2.ErrorResponse
+// @Failure 415 {object} modelsv2.ErrorResponse
 // @Router /v2/cdn/upload [post]
 func uploadFileToCDN(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -83,10 +87,7 @@ func uploadFileToCDN(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(http.StatusInternalServerError, "Failed to upload file to CDN")
 		}
 
-		return apptypes.JSON(c, http.StatusOK, map[string]string{
-			"url":      cdnURL,
-			"filename": fmt.Sprintf("%s.%s", title, ext),
-		})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.CDNUploadResponse{URL: cdnURL, Filename: fmt.Sprintf("%s.%s", title, ext)})
 	}
 }
 
@@ -103,7 +104,7 @@ func bunnyUploadFileWithExt(accessKey, title, ext string, data []byte) (string, 
 	req.Header.Set("AccessKey", accessKey)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cdnHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}

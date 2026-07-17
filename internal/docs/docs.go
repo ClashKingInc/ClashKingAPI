@@ -545,6 +545,11 @@ const docTemplate = `{
         },
         "/v2/auth/link-discord": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Attaches a Discord account and stores its OAuth tokens for the current authenticated user.",
                 "consumes": [
                     "application/json"
@@ -585,16 +590,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/auth/link-email": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Attaches email credentials to the authenticated account.",
                 "consumes": [
                     "application/json"
@@ -639,16 +644,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/auth/me": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the authenticated user's current profile information.",
                 "produces": [
                     "application/json"
@@ -678,12 +683,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/auth/refresh": {
@@ -1406,6 +1406,11 @@ const docTemplate = `{
         },
         "/v2/cdn/upload": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Uploads an arbitrary file and returns its public CDN URL. Requires authentication.",
                 "consumes": [
                     "multipart/form-data"
@@ -1463,12 +1468,7 @@ const docTemplate = `{
                             }
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/clan/{clan_tag}/badge": {
@@ -2656,6 +2656,11 @@ const docTemplate = `{
         },
         "/v2/guild/{server_id}": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns guild metadata for the requested server. The authenticated user must be a member of the guild.",
                 "produces": [
                     "application/json"
@@ -2701,16 +2706,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/guilds": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the authenticated user's guilds and whether the bot is present. Only guilds where the user has MANAGE_GUILD permission or is owner are returned.",
                 "produces": [
                     "application/json"
@@ -2743,16 +2748,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/initialization": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns a minimal initialization payload for the mobile app based on the supplied player tags.",
                 "consumes": [
                     "application/json"
@@ -2797,16 +2802,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/internal/bot/info": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns internal bot cluster stats, system info, and database document counts.",
                 "produces": [
                     "application/json"
@@ -2830,12 +2835,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/leaderboard/clan/win-streak": {
@@ -3226,6 +3226,11 @@ const docTemplate = `{
         },
         "/v2/link-discord": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Attaches a Discord account and stores its OAuth tokens for the current authenticated user.",
                 "consumes": [
                     "application/json"
@@ -3266,16 +3271,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/link-email": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Attaches email credentials to the authenticated account.",
                 "consumes": [
                     "application/json"
@@ -3320,16 +3325,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/link/server/{server_id}/clan/list": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns a basic list of clans (tag+name) for a server.",
                 "produces": [
                     "application/json"
@@ -3362,16 +3367,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns linked Clash of Clans accounts in order.",
                 "produces": [
                     "application/json"
@@ -3410,14 +3415,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Links a Clash of Clans account.",
                 "consumes": [
                     "application/json"
@@ -3482,16 +3487,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/bookmarks": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns saved search items.",
                 "produces": [
                     "application/json"
@@ -3548,14 +3553,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Saves a search item.",
                 "consumes": [
                     "application/json"
@@ -3613,16 +3618,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/bookmarks/order": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Reorders saved search items.",
                 "consumes": [
                     "application/json"
@@ -3680,16 +3685,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/bookmarks/{type}/{tag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes a saved search item.",
                 "produces": [
                     "application/json"
@@ -3760,16 +3765,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/order": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Reorders linked Clash of Clans accounts.",
                 "consumes": [
                     "application/json"
@@ -3827,16 +3832,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/searches": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns recent search items.",
                 "produces": [
                     "application/json"
@@ -3882,16 +3887,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/links/{id}/{playerTag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Unlinks a Clash of Clans account.",
                 "produces": [
                     "application/json"
@@ -3944,16 +3949,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/me": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the authenticated user's current profile information.",
                 "produces": [
                     "application/json"
@@ -3983,12 +3988,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/player/legends/{season}/battlelog-stats": {
@@ -5171,6 +5171,11 @@ const docTemplate = `{
         },
         "/v2/roster": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a new roster for a Discord server.",
                 "consumes": [
                     "application/json"
@@ -5213,16 +5218,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-automation": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a new automation rule for rosters.",
                 "consumes": [
                     "application/json"
@@ -5251,16 +5256,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-automation/list": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all automation rules for a server.",
                 "produces": [
                     "application/json"
@@ -5286,16 +5291,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-automation/{automation_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes an automation rule.",
                 "produces": [
                     "application/json"
@@ -5335,14 +5340,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Updates an automation rule.",
                 "consumes": [
                     "application/json"
@@ -5385,16 +5390,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-group": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a new roster group.",
                 "consumes": [
                     "application/json"
@@ -5430,12 +5435,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-group/list": {
@@ -5505,6 +5505,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes a roster group.",
                 "produces": [
                     "application/json"
@@ -5544,14 +5549,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Updates a roster group.",
                 "consumes": [
                     "application/json"
@@ -5594,16 +5599,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-signup-category": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a new signup category.",
                 "consumes": [
                     "application/json"
@@ -5632,16 +5637,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-signup-category/list": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns signup categories for a server.",
                 "produces": [
                     "application/json"
@@ -5667,16 +5672,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-signup-category/{custom_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes a signup category.",
                 "produces": [
                     "application/json"
@@ -5716,14 +5721,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Updates a signup category.",
                 "consumes": [
                     "application/json"
@@ -5766,16 +5771,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster-token": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Generates an access token for public roster viewing.",
                 "consumes": [
                     "application/json"
@@ -5804,12 +5809,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/missing-members": {
@@ -5870,6 +5870,11 @@ const docTemplate = `{
         },
         "/v2/roster/refresh": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Refreshes member data from CoC API for one or more rosters.",
                 "produces": [
                     "application/json"
@@ -5913,12 +5918,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/server/{server_id}/members": {
@@ -5995,6 +5995,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Permanently deletes a roster.",
                 "produces": [
                     "application/json"
@@ -6034,14 +6039,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Updates roster settings.",
                 "consumes": [
                     "application/json"
@@ -6091,16 +6096,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{roster_id}/clone": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a copy of an existing roster.",
                 "consumes": [
                     "application/json"
@@ -6143,16 +6148,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{roster_id}/members": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Adds or updates members in a roster.",
                 "consumes": [
                     "application/json"
@@ -6188,16 +6193,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{roster_id}/members/{member_tag}": {
             "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Updates a single member's data in a roster.",
                 "consumes": [
                     "application/json"
@@ -6240,16 +6245,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{roster_id}/members/{member_tag}/refresh": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Refreshes a single member's data from the CoC API.",
                 "produces": [
                     "application/json"
@@ -6289,16 +6294,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{roster_id}/members/{player_tag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes a player from a roster.",
                 "produces": [
                     "application/json"
@@ -6338,12 +6343,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/roster/{server_id}/list": {
@@ -6431,6 +6431,11 @@ const docTemplate = `{
         },
         "/v2/search/groups/create/{user_id}/{name}/{search_type}": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a new group for organising clans or players for a user.",
                 "produces": [
                     "application/json"
@@ -6484,16 +6489,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/search/groups/{group_id}": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the group document for the given group ID.",
                 "produces": [
                     "application/json"
@@ -6533,14 +6538,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Deletes the group with the given group ID.",
                 "produces": [
                     "application/json"
@@ -6580,16 +6585,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/search/groups/{group_id}/add/{tag}": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Adds a clan or player tag to the specified group.",
                 "produces": [
                     "application/json"
@@ -6636,16 +6641,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/search/groups/{group_id}/remove/{tag}": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes a clan or player tag from the specified group.",
                 "produces": [
                     "application/json"
@@ -6692,16 +6697,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/search/groups/{user_id}/list": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all groups belonging to the given user.",
                 "produces": [
                     "application/json"
@@ -6741,16 +6746,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/search/{guild_id}/banned-players": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns banned players matching the query in the given guild.",
                 "produces": [
                     "application/json"
@@ -6796,16 +6801,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/all-roles": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all roles of every type configured for the server.",
                 "produces": [
                     "application/json"
@@ -6845,16 +6850,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/autoboards": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all autoboards for a server with post/refresh counts and limit.",
                 "produces": [
                     "application/json"
@@ -6894,14 +6899,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Creates a new autoboard. Fails if the server autoboard limit is reached.",
                 "consumes": [
                     "application/json"
@@ -6951,16 +6956,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/autoboards/{autoboard_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes an autoboard by ID.",
                 "produces": [
                     "application/json"
@@ -7007,14 +7012,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Updates fields of an existing autoboard by ID.",
                 "consumes": [
                     "application/json"
@@ -7071,16 +7076,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/bans": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all banned players for a server.",
                 "produces": [
                     "application/json"
@@ -7113,16 +7118,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/bans/{player_tag}": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Bans a player on the server.",
                 "consumes": [
                     "application/json"
@@ -7172,14 +7177,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Removes a player ban from the server.",
                 "produces": [
                     "application/json"
@@ -7226,16 +7231,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/channels": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
@@ -7275,16 +7280,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clan-logs": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the full log configuration for every clan tracked on the server.",
                 "produces": [
                     "application/json"
@@ -7317,16 +7322,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clan/{clan_tag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes a clan from the Discord server tracking list.",
                 "produces": [
                     "application/json"
@@ -7373,16 +7378,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clan/{clan_tag}/countdowns": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all clan-level countdown types with enabled status and channel.",
                 "produces": [
                     "application/json"
@@ -7429,16 +7434,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clan/{clan_tag}/logs": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Creates a Discord webhook and assigns it to the specified log types on a clan.",
                 "consumes": [
                     "application/json"
@@ -7495,14 +7500,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Removes the webhook config for specified log types on a clan.",
                 "produces": [
                     "application/json"
@@ -7563,16 +7568,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clan/{clan_tag}/settings": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns detailed settings for a specific clan on a server.",
                 "produces": [
                     "application/json"
@@ -7619,14 +7624,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Partially updates the settings for a specific clan on a server.",
                 "consumes": [
                     "application/json"
@@ -7683,16 +7688,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clans": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the full clan list for a server with live CoC API data.",
                 "produces": [
                     "application/json"
@@ -7732,14 +7737,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Adds a CoC clan to the Discord server tracking list.",
                 "consumes": [
                     "application/json"
@@ -7782,16 +7787,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clans-basic": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns a basic list of clans (tag+name) for a server.",
                 "produces": [
                     "application/json"
@@ -7824,16 +7829,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/clans/{clan_tag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes a clan from the Discord server tracking list.",
                 "produces": [
                     "application/json"
@@ -7880,16 +7885,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/countdowns": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all server-level countdown types with enabled status and channel.",
                 "produces": [
                     "application/json"
@@ -7929,14 +7934,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Enables a countdown type for a server or clan.",
                 "consumes": [
                     "application/json"
@@ -7986,14 +7991,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Disables a countdown type for a server or clan.",
                 "consumes": [
                     "application/json"
@@ -8043,16 +8048,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/discord-channels": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
@@ -8092,16 +8097,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/discord-roles": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all roles for the Discord server sorted by position.",
                 "produces": [
                     "application/json"
@@ -8141,16 +8146,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/discord-test": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Tests whether the bot has access to the Discord server via the API.",
                 "produces": [
                     "application/json"
@@ -8183,16 +8188,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/embed-color/{hex_code}": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Sets the embed color (decimal integer) for a Discord server.",
                 "produces": [
                     "application/json"
@@ -8246,16 +8251,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/embeds": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -8280,14 +8285,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -8324,16 +8329,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/embeds/{embed_name}": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -8368,14 +8373,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -8407,16 +8412,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/family-roles": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all family-related role configurations for the server.",
                 "produces": [
                     "application/json"
@@ -8456,14 +8461,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Adds a Discord role to a family role category.",
                 "consumes": [
                     "application/json"
@@ -8506,16 +8511,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/family-roles/{role_type}/{role_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes a Discord role from a family role category.",
                 "produces": [
                     "application/json"
@@ -8576,16 +8581,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/giveaways": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all giveaways for a server split by status (ongoing, scheduled, ended).",
                 "produces": [
                     "application/json"
@@ -8625,14 +8630,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Creates a new giveaway. Accepts multipart/form-data with optional image upload.",
                 "consumes": [
                     "multipart/form-data"
@@ -8721,16 +8726,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/giveaways/{giveaway_id}": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns a single giveaway by ID for a server.",
                 "produces": [
                     "application/json"
@@ -8777,14 +8782,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "description": "Updates an existing giveaway. Accepts multipart/form-data with optional image upload.",
                 "consumes": [
                     "multipart/form-data"
@@ -8834,14 +8839,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Deletes a giveaway and its image from the CDN if applicable.",
                 "produces": [
                     "application/json"
@@ -8888,16 +8893,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/giveaways/{giveaway_id}/entries": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the list of users who entered a giveaway, with their entry count and win chance percentage.",
                 "produces": [
                     "application/json"
@@ -8937,16 +8942,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/giveaways/{giveaway_id}/reroll": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Replaces selected winners of an ended giveaway with new ones drawn at random.",
                 "consumes": [
                     "application/json"
@@ -9011,16 +9016,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns player and clan ranking leaderboards for a server.",
                 "produces": [
                     "application/json"
@@ -9078,16 +9083,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/activity": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by season activity for a server.",
                 "produces": [
                     "application/json"
@@ -9132,16 +9137,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/capital-raids": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by recent capital raid loot for a server.",
                 "produces": [
                     "application/json"
@@ -9180,16 +9185,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/clan-games": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by season clan games points for a server.",
                 "produces": [
                     "application/json"
@@ -9234,16 +9239,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/donations": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by season donations for a server.",
                 "produces": [
                     "application/json"
@@ -9288,16 +9293,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/legends": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns tracked legend players ranked by trophies for a server.",
                 "produces": [
                     "application/json"
@@ -9336,16 +9341,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/looting": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by season loot totals for a server.",
                 "produces": [
                     "application/json"
@@ -9390,16 +9395,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/leaderboards/war-performance": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns players ranked by war attack performance for a server.",
                 "produces": [
                     "application/json"
@@ -9438,16 +9443,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/links": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all linked player accounts for server members.",
                 "produces": [
                     "application/json"
@@ -9505,16 +9510,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/links/bulk-unlink": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes multiple player links for a user in bulk.",
                 "consumes": [
                     "application/json"
@@ -9557,16 +9562,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/links/{user_id}/{player_tag}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Removes the link between a user and a player account.",
                 "produces": [
                     "application/json"
@@ -9620,16 +9625,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/logs": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the aggregated log configuration across all clans for a server.",
                 "produces": [
                     "application/json"
@@ -9662,14 +9667,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "description": "Bulk-updates log webhook/thread settings for multiple log types across clans.",
                 "consumes": [
                     "application/json"
@@ -9712,16 +9717,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/logs/{log_type}": {
             "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Updates the configuration for a single log type on a server.",
                 "consumes": [
                     "application/json"
@@ -9771,16 +9776,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/panel": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the welcome panel configuration for a server.",
                 "produces": [
                     "application/json"
@@ -9820,14 +9825,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "description": "Updates the welcome panel configuration for a server.",
                 "consumes": [
                     "application/json"
@@ -9879,16 +9884,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/reminders": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all reminders for a server grouped by type.",
                 "produces": [
                     "application/json"
@@ -9921,14 +9926,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Creates a new reminder (war, capital, clan games, inactivity, or roster).",
                 "consumes": [
                     "application/json"
@@ -9978,16 +9983,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/reminders/{reminder_id}": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Updates an existing reminder by ID.",
                 "consumes": [
                     "application/json"
@@ -10044,14 +10049,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "description": "Deletes a reminder by ID.",
                 "produces": [
                     "application/json"
@@ -10098,16 +10103,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/role-settings": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the role evaluation settings for a server.",
                 "produces": [
                     "application/json"
@@ -10147,14 +10152,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Partially updates the role evaluation settings for a server.",
                 "consumes": [
                     "application/json"
@@ -10197,16 +10202,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/roles/{role_type}": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all roles of a given type configured for the server.",
                 "produces": [
                     "application/json"
@@ -10253,14 +10258,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "description": "Creates a new role of a given type for the server.",
                 "consumes": [
                     "application/json"
@@ -10310,16 +10315,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/roles/{role_type}/{role_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes a role by type and ID.",
                 "produces": [
                     "application/json"
@@ -10380,16 +10385,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/settings": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns the full settings document for a Discord server.",
                 "produces": [
                     "application/json"
@@ -10435,14 +10440,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "description": "Partially updates server-level settings (nickname rules, eval config, etc.).",
                 "consumes": [
                     "application/json"
@@ -10492,16 +10497,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/strikes": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all strikes for a server, optionally filtered by player tag or including expired.",
                 "produces": [
                     "application/json"
@@ -10546,16 +10551,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/strikes/player/{player_tag}/summary": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all strikes and total weight for a player on the server.",
                 "produces": [
                     "application/json"
@@ -10595,16 +10600,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/strikes/{player_tag}": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Adds a strike to a player on the server.",
                 "consumes": [
                     "application/json"
@@ -10654,16 +10659,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/strikes/{strike_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes a strike by its ID.",
                 "produces": [
                     "application/json"
@@ -10710,16 +10715,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/threads": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Returns all active threads for the Discord server.",
                 "produces": [
                     "application/json"
@@ -10759,16 +10764,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -10793,14 +10798,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -10837,16 +10842,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/open": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -10877,16 +10882,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/open/{channel_id}": {
             "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -10918,16 +10923,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/open/{channel_id}/clan": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -10962,16 +10967,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/open/{channel_id}/status": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11006,16 +11011,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/{panel_name}": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11050,14 +11055,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -11089,16 +11094,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/{panel_name}/approve-messages": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11133,16 +11138,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/{panel_name}/buttons": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11177,16 +11182,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/server/{server_id}/tickets/{panel_name}/buttons/{custom_id}": {
             "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11228,14 +11233,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -11274,14 +11279,14 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ]
-            },
-            "patch": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -11323,16 +11328,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/tracking/players/add": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Normalizes tags and inserts any not yet tracked into the database.",
                 "consumes": [
                     "application/json"
@@ -11377,16 +11382,16 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/tracking/players/remove": {
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Deletes the given player tags from the tracking database.",
                 "consumes": [
                     "application/json"
@@ -11431,12 +11436,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v2/verify-email-code": {

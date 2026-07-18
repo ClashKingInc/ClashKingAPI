@@ -26,7 +26,8 @@ func proxyForward(a apptypes.Deps, routePrefix string) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid proxy path")
 		}
 
-		req, err := http.NewRequestWithContext(c.UserContext(), c.Method(), baseURL+"/"+pathAndQuery, bytes.NewReader(c.BodyRaw()))
+		upstreamURL := baseURL + "/" + strings.TrimLeft(pathAndQuery, "/")
+		req, err := http.NewRequestWithContext(c.UserContext(), c.Method(), upstreamURL, bytes.NewReader(c.BodyRaw()))
 		if err != nil {
 			return err
 		}

@@ -839,6 +839,9 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 	}
 
 	userID := discordUser.ID.String()
+	if collidingUser, _ := scanAuthUser(ctx, a, `WHERE user_id = $1`, userID); collidingUser != nil {
+		userID = generateUserID()
+	}
 	insert := map[string]any{
 		"user_id":      userID,
 		"auth_methods": []string{"discord"},
@@ -899,7 +902,10 @@ func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string)
 }
 
 func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (map[string]any, error) {
-	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1 OR data #>> '{linked_accounts,discord,discord_user_id}' = $1 OR user_id = $1`, discordUserID)
+	return scanAuthUser(ctx, a, `
+		WHERE discord_user_id = $1
+			OR data #>> '{linked_accounts,discord,discord_user_id}' = $1
+			OR (user_id = $1 AND email_hash IS NULL AND password_hash IS NULL)`, discordUserID)
 }
 
 func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {

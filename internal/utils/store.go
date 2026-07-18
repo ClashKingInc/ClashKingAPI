@@ -12,6 +12,15 @@ type Store struct {
 	SQL *pgxpool.Pool
 }
 
+func (s *Store) AuthUserExists(ctx context.Context, userID string) (bool, error) {
+	if s == nil || s.SQL == nil {
+		return false, errors.New("SQL store is not configured")
+	}
+	var exists bool
+	err := s.SQL.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM auth_users WHERE user_id = $1)`, userID).Scan(&exists)
+	return exists, err
+}
+
 func NewStore(ctx context.Context, cfg Config) (*Store, error) {
 	if cfg.TimescaleURL == "" {
 		return nil, errors.New("TIMESCALE_URL or DATABASE_URL is required")

@@ -53,26 +53,3 @@ func TestDiscordIdentityDataIgnoresDiscordEmail(t *testing.T) {
 		}
 	}
 }
-
-func TestNormalizeLegacyDiscordIdentityDropsHistoricalEmail(t *testing.T) {
-	user := map[string]any{
-		"user_id":      "123456789",
-		"email_hash":   "historical-discord-email-hash",
-		"auth_methods": []string{"email", "discord"},
-		"linked_accounts": map[string]any{
-			"email": map[string]any{"email_hash": "historical-discord-email-hash"},
-		},
-	}
-
-	normalizeLegacyDiscordIdentity(user, "123456789")
-
-	if _, exists := user["email_hash"]; exists {
-		t.Fatal("historical Discord email hash was not removed")
-	}
-	if slicesContains(toStringSlice(user["auth_methods"]), "email") {
-		t.Fatal("legacy Discord identity still advertises email authentication")
-	}
-	if linked := user["linked_accounts"].(map[string]any); linked["email"] != nil {
-		t.Fatal("legacy Discord email link was not removed")
-	}
-}

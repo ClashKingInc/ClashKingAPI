@@ -19,8 +19,8 @@ func unregisterNotificationDevice(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusUnauthorized, "Missing authenticated user")
 		}
 
-		var request notificationDeviceUnregistration
-		if err := apptypes.DecodeJSON(c, &request); err != nil {
+		request, err := decodeNotificationDeviceUnregistration(c)
+		if err != nil {
 			return err
 		}
 
@@ -65,4 +65,15 @@ func unregisterNotificationDevice(a apptypes.Deps) fiber.Handler {
 			"removed": tag.RowsAffected(),
 		})
 	}
+}
+
+func decodeNotificationDeviceUnregistration(c *fiber.Ctx) (notificationDeviceUnregistration, error) {
+	var request notificationDeviceUnregistration
+	if strings.TrimSpace(string(c.Body())) == "" {
+		return request, nil
+	}
+	if err := apptypes.DecodeJSON(c, &request); err != nil {
+		return notificationDeviceUnregistration{}, err
+	}
+	return request, nil
 }

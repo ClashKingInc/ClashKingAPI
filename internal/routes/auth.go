@@ -820,7 +820,6 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 		if userID == "" {
 			userID = discordUser.ID.String()
 		}
-		normalizeLegacyDiscordIdentity(existingUser, discordUser.ID.String())
 		authMethods := append(toStringSlice(existingUser["auth_methods"]), "discord")
 		update := map[string]any{
 			"auth_methods": uniqueStrings(authMethods),
@@ -867,27 +866,6 @@ func discordIdentityData(discordUser *discord.OAuth2User) map[string]any {
 			},
 		},
 	}
-}
-
-func normalizeLegacyDiscordIdentity(user map[string]any, discordUserID string) {
-	if authStringify(user["user_id"]) != discordUserID || !slicesContains(toStringSlice(user["auth_methods"]), "discord") {
-		return
-	}
-
-	for _, key := range []string{"email", "email_hash", "email_encrypted"} {
-		delete(user, key)
-	}
-	if linkedAccounts, ok := user["linked_accounts"].(map[string]any); ok {
-		delete(linkedAccounts, "email")
-	}
-
-	authMethods := make([]string, 0, len(toStringSlice(user["auth_methods"])))
-	for _, method := range toStringSlice(user["auth_methods"]) {
-		if method != "email" {
-			authMethods = append(authMethods, method)
-		}
-	}
-	user["auth_methods"] = uniqueStrings(authMethods)
 }
 
 func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, deviceName string, token *discord.AccessTokenResponse) error {

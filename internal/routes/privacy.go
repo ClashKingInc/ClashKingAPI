@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -14,20 +15,39 @@ func privacyExport(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := apptypes.UserID(c.UserContext())
 		user, err := findUserByID(c.UserContext(), a, userID)
-		if err != nil || user == nil {
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return apptypes.Error(fiber.StatusNotFound, "User not found")
+			}
+			return err
+		}
+		if user == nil {
 			return apptypes.Error(fiber.StatusNotFound, "User not found")
 		}
 
-		export := map[string]any{
-			"account":                privacySafeUser(user),
-			"player_links":           privacyQuery(c.UserContext(), a, `SELECT tag, source, order_index, is_verified, added_at, verified_at, updated_at FROM player_links WHERE user_id = $1 ORDER BY order_index ASC`, userID),
-			"bookmarks":              privacyQuery(c.UserContext(), a, `SELECT entity_type, tag, order_index, created_at FROM user_bookmarks WHERE user_id = $1 ORDER BY order_index ASC`, userID),
-			"recent_searches":        privacyQuery(c.UserContext(), a, `SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC LIMIT 250`, userID),
-			"search_groups":          privacyQuery(c.UserContext(), a, `SELECT id, type, name, data, created_at, updated_at FROM search_groups WHERE user_id = $1 ORDER BY updated_at DESC`, userID),
-			"notification_settings":  privacyQuery(c.UserContext(), a, `SELECT device_id, environment, enabled, account_scope, enabled_types, account_filters, updated_at FROM mobile_notification_preferences WHERE user_id = $1`, userID),
-			"notification_devices":   privacyQuery(c.UserContext(), a, `SELECT device_id, provider, platform, environment, app_version, build_number, authorization_status, enabled, created_at, updated_at FROM mobile_push_devices WHERE user_id = $1`, userID),
-			"notification_war_clans": privacyQuery(c.UserContext(), a, `SELECT device_id, clan_tag, environment, enabled, notification_types, created_at, updated_at FROM mobile_war_subscriptions WHERE user_id = $1`, userID),
-			"live_activities":        privacyQuery(c.UserContext(), a, `SELECT device_id, activity_id, clan_tag, war_id, status, created_at, updated_at FROM mobile_live_activities WHERE user_id = $1`, userID),
+		export := map[string]any{"account": privacySafeUser(user)}
+		queries := []struct {
+			name     string
+			query    string
+			optional bool
+		}{
+			{"player_links", `SELECT tag, source, order_index, is_verified, added_at, verified_at, updated_at FROM player_links WHERE user_id = $1 ORDER BY order_index ASC`, false},
+			{"bookmarks", `SELECT entity_type, tag, order_index, created_at FROM user_bookmarks WHERE user_id = $1 ORDER BY order_index ASC`, false},
+			{"recent_searches", `SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC`, false},
+			{"search_groups", `SELECT group_id, type, name, tags, data, created_at, updated_at FROM search_groups WHERE user_id = $1 ORDER BY updated_at DESC`, false},
+			{"legacy_search_settings", `SELECT search, updated_at FROM user_settings WHERE user_id = $1`, false},
+			{"discord_sessions", `SELECT device_id, data ->> 'device_name' AS device_name, expires_at, scopes, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC`, false},
+			{"notification_settings", `SELECT device_id, environment, enabled, locale, timezone, enabled_types, war_attack_modes, event_types, reminder_timings, account_scope, selected_accounts, selected_town_halls, selected_clan_tags, created_at, updated_at FROM mobile_notification_preferences WHERE user_id = $1`, true},
+			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, build_number, os_version, device_model, locale, timezone, authorization_status, enabled, last_seen_at, disabled_at, created_at, updated_at FROM mobile_push_devices WHERE user_id = $1`, true},
+			{"notification_war_clans", `SELECT device_id, clan_tag, war_start_enabled, score_change_enabled, war_end_enabled, cwl_rank_enabled, live_activity_enabled, enabled, created_at, updated_at FROM mobile_war_subscriptions WHERE user_id = $1`, true},
+			{"live_activities", `SELECT device_id, activity_id, clan_tag, war_id, war_tag, environment, status, started_at, ended_at, created_at, updated_at FROM mobile_live_activities WHERE user_id = $1`, true},
+		}
+		for _, item := range queries {
+			rows, err := privacyQuery(c.UserContext(), a, item.optional, item.query, userID)
+			if err != nil {
+				return err
+			}
+			export[item.name] = rows
 		}
 		return apptypes.JSON(c, fiber.StatusOK, export)
 	}
@@ -53,6 +73,7 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 			{"user_recent_searches", `DELETE FROM user_recent_searches WHERE user_id = $1`},
 			{"user_bookmarks", `DELETE FROM user_bookmarks WHERE user_id = $1`},
 			{"search_groups", `DELETE FROM search_groups WHERE user_id = $1`},
+			{"user_settings", `DELETE FROM user_settings WHERE user_id = $1`},
 			{"player_links", `DELETE FROM player_links WHERE user_id = $1`},
 			{"auth_discord_tokens", `DELETE FROM auth_discord_tokens WHERE user_id = $1`},
 			{"auth_refresh_tokens", `DELETE FROM auth_refresh_tokens WHERE user_id = $1`},
@@ -93,16 +114,16 @@ func privacySafeUser(user map[string]any) map[string]any {
 	return out
 }
 
-func privacyQuery(ctx context.Context, a apptypes.Deps, query string, args ...any) []map[string]any {
+func privacyQuery(ctx context.Context, a apptypes.Deps, optional bool, query string, args ...any) ([]map[string]any, error) {
 	if a.Store.SQL == nil {
-		return []map[string]any{}
+		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := a.Store.SQL.Query(ctx, query, args...)
-	if privacyOptionalSQLError(err) {
-		return []map[string]any{}
+	if optional && privacyOptionalSQLError(err) {
+		return []map[string]any{}, nil
 	}
 	if err != nil {
-		return []map[string]any{{"error": "query_failed"}}
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -111,7 +132,7 @@ func privacyQuery(ctx context.Context, a apptypes.Deps, query string, args ...an
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
-			return out
+			return nil, err
 		}
 		item := map[string]any{}
 		for index, field := range fields {
@@ -119,7 +140,10 @@ func privacyQuery(ctx context.Context, a apptypes.Deps, query string, args ...an
 		}
 		out = append(out, item)
 	}
-	return out
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func privacyExec(ctx context.Context, a apptypes.Deps, query string, args ...any) (int64, error) {

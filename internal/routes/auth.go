@@ -820,6 +820,7 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 		if userID == "" {
 			userID = discordUser.ID.String()
 		}
+		normalizeLegacyDiscordIdentity(existingUser, discordUser.ID.String())
 		authMethods := append(toStringSlice(existingUser["auth_methods"]), "discord")
 		update := map[string]any{
 			"auth_methods": uniqueStrings(authMethods),
@@ -839,9 +840,6 @@ func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discor
 	}
 
 	userID := discordUser.ID.String()
-	if collidingUser, _ := scanAuthUser(ctx, a, `WHERE user_id = $1`, userID); collidingUser != nil {
-		userID = generateUserID()
-	}
 	insert := map[string]any{
 		"user_id":      userID,
 		"auth_methods": []string{"discord"},
@@ -869,6 +867,27 @@ func discordIdentityData(discordUser *discord.OAuth2User) map[string]any {
 			},
 		},
 	}
+}
+
+func normalizeLegacyDiscordIdentity(user map[string]any, discordUserID string) {
+	if authStringify(user["user_id"]) != discordUserID || !slicesContains(toStringSlice(user["auth_methods"]), "discord") {
+		return
+	}
+
+	for _, key := range []string{"email", "email_hash", "email_encrypted"} {
+		delete(user, key)
+	}
+	if linkedAccounts, ok := user["linked_accounts"].(map[string]any); ok {
+		delete(linkedAccounts, "email")
+	}
+
+	authMethods := make([]string, 0, len(toStringSlice(user["auth_methods"])))
+	for _, method := range toStringSlice(user["auth_methods"]) {
+		if method != "email" {
+			authMethods = append(authMethods, method)
+		}
+	}
+	user["auth_methods"] = uniqueStrings(authMethods)
 }
 
 func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, deviceName string, token *discord.AccessTokenResponse) error {
@@ -902,10 +921,7 @@ func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string)
 }
 
 func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (map[string]any, error) {
-	return scanAuthUser(ctx, a, `
-		WHERE discord_user_id = $1
-			OR data #>> '{linked_accounts,discord,discord_user_id}' = $1
-			OR (user_id = $1 AND email_hash IS NULL AND password_hash IS NULL)`, discordUserID)
+	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1 OR data #>> '{linked_accounts,discord,discord_user_id}' = $1 OR user_id = $1`, discordUserID)
 }
 
 func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {

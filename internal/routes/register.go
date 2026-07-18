@@ -96,6 +96,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/privacy/export", wrap(privacyExport(a)))
 	app.Delete("/v2/auth/me", wrap(privacyDelete(a)))
 	app.Post("/v2/privacy/delete-request", wrap(privacyDelete(a)))
+	app.Delete("/v2/notifications/devices", wrap(unregisterNotificationDevice(a)))
 	app.Post("/v2/discord", discordAuth(a))
 	app.Post("/v2/auth/discord", discordAuth(a))
 	app.Post("/v2/refresh", refreshToken(a))

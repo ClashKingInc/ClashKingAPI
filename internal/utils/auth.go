@@ -25,11 +25,23 @@ type Claims struct {
 }
 
 type Authenticator struct {
-	cfg Config
+	cfg   Config
+	users authUserLookup
 }
 
-func NewAuthenticator(cfg Config, _ *Store) *Authenticator {
-	return &Authenticator{cfg: cfg}
+type authUserLookup interface {
+	AuthUserExists(context.Context, string) (bool, error)
+}
+
+func NewAuthenticator(cfg Config, store *Store) *Authenticator {
+	if store == nil {
+		return newAuthenticator(cfg, nil)
+	}
+	return newAuthenticator(cfg, store)
+}
+
+func newAuthenticator(cfg Config, users authUserLookup) *Authenticator {
+	return &Authenticator{cfg: cfg, users: users}
 }
 
 func (a *Authenticator) Wrap(next fiber.Handler) fiber.Handler {
@@ -46,6 +58,16 @@ func (a *Authenticator) Wrap(next fiber.Handler) fiber.Handler {
 		claims, err := a.parseJWT(token)
 		if err != nil {
 			return err
+		}
+		if a.users == nil {
+			return Error(fiber.StatusServiceUnavailable, "Authentication state is unavailable")
+		}
+		exists, err := a.users.AuthUserExists(c.UserContext(), claims.Sub)
+		if err != nil {
+			return Error(fiber.StatusServiceUnavailable, "Authentication state is unavailable")
+		}
+		if !exists {
+			return Error(fiber.StatusUnauthorized, "User session is no longer valid")
 		}
 		ctx := context.WithValue(c.UserContext(), userIDKey, claims.Sub)
 		if claims.Device != "" {

@@ -14,6 +14,13 @@ import (
 
 type HandlerFunc = fiber.Handler
 
+const MethodQuery = "QUERY"
+
+func APIRequestMethods() []string {
+	methods := append([]string(nil), fiber.DefaultMethods...)
+	return append(methods, MethodQuery)
+}
+
 type AppError struct {
 	Status  int                            `json:"-"`
 	Code    modelsv2.ErrorCode             `json:"-"`

@@ -329,22 +329,31 @@ func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, 
 			return err
 		}
 	}
-	values := []struct {
-		column string
-		value  any
-	}{
-		{"greeting", body.Greeting},
-		{"auto_greet_option", body.AutoGreetOption},
-		{"ban_alert_channel_id", body.BanAlertChannel},
-	}
-	for _, item := range values {
-		if item.value != nil {
-			if err := set(item.column, item.value); err != nil {
-				return err
-			}
+	for _, item := range normalizedClanSettingUpdates(body) {
+		if err := set(item.column, item.value); err != nil {
+			return err
 		}
 	}
 	return tx.Commit(c.UserContext())
+}
+
+type normalizedClanSettingUpdate struct {
+	column string
+	value  string
+}
+
+func normalizedClanSettingUpdates(body modelsv2.ClanSettingsUpdate) []normalizedClanSettingUpdate {
+	updates := make([]normalizedClanSettingUpdate, 0, 3)
+	if body.Greeting != nil {
+		updates = append(updates, normalizedClanSettingUpdate{column: "greeting", value: *body.Greeting})
+	}
+	if body.AutoGreetOption != nil {
+		updates = append(updates, normalizedClanSettingUpdate{column: "auto_greet_option", value: *body.AutoGreetOption})
+	}
+	if body.BanAlertChannel != nil {
+		updates = append(updates, normalizedClanSettingUpdate{column: "ban_alert_channel_id", value: *body.BanAlertChannel})
+	}
+	return updates
 }
 
 // removeServerClan godoc

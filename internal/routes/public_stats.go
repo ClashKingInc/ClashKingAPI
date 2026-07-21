@@ -620,7 +620,6 @@ func leaderboardTrophyBuckets(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/cwl-leagues [get]
 func globalCWLLeagues(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "cwl_league_id", `SELECT cwl_league_id, clan_count FROM war_league_counts ORDER BY cwl_league_id`)
 }
@@ -632,7 +631,6 @@ func globalCWLLeagues(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/clan/locations [get]
 func globalClanLocations(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "location_id", `SELECT location_id, count(*) FROM basic_clan GROUP BY location_id ORDER BY location_id NULLS LAST`)
 }
@@ -644,7 +642,6 @@ func globalClanLocations(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/townhalls [get]
 func globalTownhalls(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "townhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 0 ORDER BY level`)
 }
@@ -656,7 +653,6 @@ func globalTownhalls(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/builderhalls [get]
 func globalBuilderhalls(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "builderhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 1 ORDER BY level`)
 }
@@ -668,7 +664,6 @@ func globalBuilderhalls(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/capital-leagues [get]
 func globalCapitalLeagues(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "capital_league_id", `SELECT capital_league_id, count(*) FROM basic_clan GROUP BY capital_league_id ORDER BY capital_league_id NULLS LAST`)
 }
@@ -680,7 +675,6 @@ func globalCapitalLeagues(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Success 200 {object} modelsv2.GroupedCountsResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/leaguetiers [get]
 func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "league_tier_id", `SELECT league_tier_id, player_count FROM api_league_tier_counts ORDER BY league_tier_id`)
 }
@@ -836,7 +830,6 @@ func snakeToLowerCamel(value string) string {
 // @Success 200 {object} modelsv2.BattlelogArmiesResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/ranked/armies [get]
 func battlelogsRankedArmies(a apptypes.Deps) fiber.Handler {
 	return battlelogArmies(a, "ranked")
 }
@@ -854,7 +847,6 @@ func battlelogsRankedArmies(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogArmiesResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/farming/armies [get]
 func battlelogsFarmingArmies(a apptypes.Deps) fiber.Handler {
 	return battlelogArmies(a, "farming")
 }
@@ -869,7 +861,6 @@ func battlelogsFarmingArmies(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/townhall/{townhall_level}/usage [get]
 func battlelogItemTownhallUsage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTownhall, battlelogItemMetricUsage)
 }
@@ -884,7 +875,6 @@ func battlelogItemTownhallUsage(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/townhall/{townhall_level}/hitrate [get]
 func battlelogItemTownhallHitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTownhall, battlelogItemMetricHitrate)
 }
@@ -899,7 +889,6 @@ func battlelogItemTownhallHitrate(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/league/{league_id}/usage [get]
 func battlelogItemLeagueUsage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionLeague, battlelogItemMetricUsage)
 }
@@ -914,7 +903,6 @@ func battlelogItemLeagueUsage(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/league/{league_id}/hitrate [get]
 func battlelogItemLeagueHitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionLeague, battlelogItemMetricHitrate)
 }
@@ -928,7 +916,6 @@ func battlelogItemLeagueHitrate(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemUsageResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/top200/usage [get]
 func battlelogItemTop200Usage(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricUsage)
 }
@@ -942,7 +929,6 @@ func battlelogItemTop200Usage(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/battlelogs/items/top200/hitrate [get]
 func battlelogItemTop200Hitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricHitrate)
 }
@@ -1084,6 +1070,7 @@ func battlelogItemStatsQuery(item string, dimension battlelogItemDimension, filt
 				SELECT 1
 				FROM ranked_league_group_members m
 				WHERE m.player_tag = b.player_tag
+				  AND m.season_id = to_char(b."timestamp" AT TIME ZONE 'UTC', 'YYYYMM')::bigint
 				  AND m.league_tier_id = $4
 			)`
 	case battlelogItemDimensionTop200:
@@ -1107,7 +1094,7 @@ func battlelogItemStatsQuery(item string, dimension battlelogItemDimension, filt
 				FROM battlelogs b
 				WHERE b."timestamp" >= $2::date
 				  AND b."timestamp" < ($3::date + interval '1 day')
-				  AND b.battle_type IN ('ranked', 'legend')
+				  AND lower(b.battle_type) IN ('ranked', 'legend')
 				  AND b.player_th = b.opponent_th
 				  AND b.army_items @> ARRAY[$1]::text[]
 				  ` + filterSQL + `
@@ -1136,7 +1123,7 @@ func battlelogItemStatsQuery(item string, dimension battlelogItemDimension, filt
 			FROM battlelogs b
 			WHERE b."timestamp" >= $2::date
 			  AND b."timestamp" < ($3::date + interval '1 day')
-			  AND b.battle_type IN ('ranked', 'legend')
+			  AND lower(b.battle_type) IN ('ranked', 'legend')
 			  ` + filterSQL + `
 		), agg AS (
 			SELECT day,
@@ -1590,14 +1577,19 @@ func battlelogArmies(a apptypes.Deps, battleType string) fiber.Handler {
 			WITH filtered AS (
 				SELECT b.army_share_code, b.army_items, b.army_counts, b.stars, b.destruction_percentage
 				FROM battlelogs b
-				LEFT JOIN basic_player p ON p.tag = b.player_tag
 				WHERE b.attack = true
 				  AND b.player_th = b.opponent_th
-				  AND b.battle_type = $1
+				  AND lower(b.battle_type) = lower($1)
 				  AND b."timestamp" >= $2
 				  AND b."timestamp" <= $3
 				  AND ($4::int = 0 OR b.player_th = $4)
-				  AND ($5::int = 0 OR p.league_id = $5)
+				  AND ($5::int = 0 OR EXISTS (
+					SELECT 1
+					FROM ranked_league_group_members membership
+					WHERE membership.player_tag = b.player_tag
+					  AND membership.season_id = to_char(b."timestamp" AT TIME ZONE 'UTC', 'YYYYMM')::bigint
+					  AND membership.league_tier_id = $5
+				  ))
 				  AND ($6::text[] IS NULL OR b.army_items @> $6::text[])
 				  AND ($7::text[] IS NULL OR NOT (b.army_items && $7::text[]))
 			), total AS (

@@ -230,15 +230,29 @@ type PlayerChangesResponse struct {
 }
 
 type PlayerLeaderboardItem struct {
-	Rank          int     `json:"rank"`
-	Tag           string  `json:"tag"`
-	Name          string  `json:"name"`
-	LeagueID      *int    `json:"league_id,omitempty"`
-	ClanTag       *string `json:"clan_tag,omitempty"`
-	TownhallLevel int     `json:"townhall_level"`
-	Trophies      int     `json:"trophies"`
-	CountryCode   string  `json:"country_code,omitempty"`
-	CountryName   string  `json:"country_name,omitempty"`
+	Rank          int                `json:"rank"`
+	Tag           string             `json:"tag"`
+	Name          string             `json:"name"`
+	LeagueID      *int               `json:"league_id,omitempty"`
+	League        *LeaderboardLeague `json:"league,omitempty"`
+	ClanTag       *string            `json:"clan_tag,omitempty"`
+	Clan          *LeaderboardClan   `json:"clan,omitempty"`
+	TownhallLevel int                `json:"townhall_level"`
+	Trophies      int                `json:"trophies"`
+	CountryCode   string             `json:"country_code,omitempty"`
+	CountryName   string             `json:"country_name,omitempty"`
+}
+
+type LeaderboardLeague struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Badge string `json:"badge"`
+}
+
+type LeaderboardClan struct {
+	Tag   string  `json:"tag"`
+	Name  *string `json:"name,omitempty"`
+	Badge string  `json:"badge"`
 }
 
 type PlayerLeaderboardResponse struct {
@@ -246,6 +260,7 @@ type PlayerLeaderboardResponse struct {
 	Townhall     *int                    `json:"townhall_level,omitempty"`
 	Items        []PlayerLeaderboardItem `json:"items"`
 	Count        int                     `json:"count"`
+	GeneratedAt  *time.Time              `json:"generated_at,omitempty"`
 }
 
 type PlayerLeaderboardHistoryResponse struct {

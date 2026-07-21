@@ -2411,7 +2411,7 @@ const docTemplate = `{
         },
         "/v2/leaderboard/townhalls/{townhall_level}": {
             "get": {
-                "description": "Returns top tracked players for a townhall level.",
+                "description": "Returns the current top tracked players for a townhall level from the Valkey leaderboard snapshot.",
                 "produces": [
                     "application/json"
                 ],
@@ -14137,6 +14137,34 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.LeaderboardClan": {
+            "type": "object",
+            "properties": {
+                "badge": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.LeaderboardLeague": {
+            "type": "object",
+            "properties": {
+                "badge": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.LegendBattle": {
             "type": "object",
             "properties": {
@@ -14583,6 +14611,9 @@ const docTemplate = `{
         "modelsv2.PlayerLeaderboardItem": {
             "type": "object",
             "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardClan"
+                },
                 "clan_tag": {
                     "type": "string"
                 },
@@ -14591,6 +14622,9 @@ const docTemplate = `{
                 },
                 "country_name": {
                     "type": "string"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardLeague"
                 },
                 "league_id": {
                     "type": "integer"
@@ -14617,6 +14651,9 @@ const docTemplate = `{
             "properties": {
                 "count": {
                     "type": "integer"
+                },
+                "generated_at": {
+                    "type": "string"
                 },
                 "items": {
                     "type": "array",

@@ -436,7 +436,7 @@ func leaderboardLeagueHistory(a apptypes.Deps) fiber.Handler {
 
 // leaderboardTownhalls godoc
 // @Summary Get townhall leaderboard
-// @Description Returns top tracked players for a townhall level.
+// @Description Returns the current top tracked players for a townhall level from the Valkey leaderboard snapshot.
 // @Tags Leaderboard
 // @Produce json
 // @Param townhall_level path int true "Townhall level"
@@ -452,23 +452,38 @@ func leaderboardTownhalls(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid townhall_level")
 		}
 		limit := clamp(queryInt(c, "limit", 500), 1, 500)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT tag, name, league_id, clan_tag, townhall_level, trophies
-			FROM basic_player
-			WHERE townhall_level = $1
-			ORDER BY trophies DESC, tag
-			LIMIT $2
-		`, townhall, limit)
-		if err != nil {
-			return err
+		if a.Cache == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "townhall leaderboard is unavailable")
 		}
-		defer rows.Close()
-		items, err := scanBasicPlayerLeaderboard(rows)
-		if err != nil {
-			return err
+		raw, ok := a.Cache.GetTownhallLeaderboard(c.UserContext(), townhall)
+		if !ok {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "townhall leaderboard is unavailable")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"townhall_level": townhall, "items": items, "count": len(items)})
+		response, err := decodeTownhallLeaderboard(raw, townhall, limit)
+		if err != nil {
+			return apptypes.Error(fiber.StatusInternalServerError, "invalid townhall leaderboard payload")
+		}
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
+}
+
+func decodeTownhallLeaderboard(raw []byte, townhall, limit int) (modelsv2.PlayerLeaderboardResponse, error) {
+	var cached struct {
+		Items       []modelsv2.PlayerLeaderboardItem `json:"items"`
+		GeneratedAt *time.Time                       `json:"generated_at,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &cached); err != nil {
+		return modelsv2.PlayerLeaderboardResponse{}, err
+	}
+	if len(cached.Items) > limit {
+		cached.Items = cached.Items[:limit]
+	}
+	return modelsv2.PlayerLeaderboardResponse{
+		Townhall:    &townhall,
+		Items:       cached.Items,
+		Count:       len(cached.Items),
+		GeneratedAt: cached.GeneratedAt,
+	}, nil
 }
 
 // leaderboardTownhallsHistory godoc

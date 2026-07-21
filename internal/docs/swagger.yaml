@@ -1898,6 +1898,24 @@ definitions:
           $ref: '#/definitions/modelsv2.JoinLeaveClanTotal'
         type: array
     type: object
+  modelsv2.LeaderboardClan:
+    properties:
+      badge:
+        type: string
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.LeaderboardLeague:
+    properties:
+      badge:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
   modelsv2.LegendBattle:
     properties:
       destructionPercentage:
@@ -2189,12 +2207,16 @@ definitions:
     type: object
   modelsv2.PlayerLeaderboardItem:
     properties:
+      clan:
+        $ref: '#/definitions/modelsv2.LeaderboardClan'
       clan_tag:
         type: string
       country_code:
         type: string
       country_name:
         type: string
+      league:
+        $ref: '#/definitions/modelsv2.LeaderboardLeague'
       league_id:
         type: integer
       name:
@@ -2212,6 +2234,8 @@ definitions:
     properties:
       count:
         type: integer
+      generated_at:
+        type: string
       items:
         items:
           $ref: '#/definitions/modelsv2.PlayerLeaderboardItem'
@@ -6500,7 +6524,8 @@ paths:
       - Leaderboard
   /v2/leaderboard/townhalls/{townhall_level}:
     get:
-      description: Returns top tracked players for a townhall level.
+      description: Returns the current top tracked players for a townhall level from
+        the Valkey leaderboard snapshot.
       parameters:
       - description: Townhall level
         in: path

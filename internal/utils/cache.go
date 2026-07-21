@@ -68,6 +68,24 @@ func (c *CacheAdapter) GetDiscordMember(ctx context.Context, guildID int64, user
 	return &entry, true
 }
 
+// GetTownhallLeaderboard returns the current leaderboard snapshot produced by
+// clashking_tracking. Key format: leaderboards:townhall:{townhall_level}.
+func (c *CacheAdapter) GetTownhallLeaderboard(ctx context.Context, townhall int) ([]byte, bool) {
+	if c == nil || c.client == nil {
+		return nil, false
+	}
+	key := fmt.Sprintf("leaderboards:townhall:%d", townhall)
+	result := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
+	if result.Error() != nil {
+		return nil, false
+	}
+	data, err := result.AsBytes()
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
 // Close releases the Valkey connection.
 func (c *CacheAdapter) Close() {
 	if c.client != nil {

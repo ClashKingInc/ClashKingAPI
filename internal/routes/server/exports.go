@@ -7,8 +7,6 @@ import (
 
 func AddBan(a apptypes.Deps) fiber.Handler { return addBan(a) }
 
-func AddFamilyRole(a apptypes.Deps) fiber.Handler { return addFamilyRole(a) }
-
 func AddServerClan(a apptypes.Deps) fiber.Handler { return addServerClan(a) }
 
 func AddStrike(a apptypes.Deps) fiber.Handler { return addStrike(a) }
@@ -17,7 +15,7 @@ func CreateAutoboard(a apptypes.Deps) fiber.Handler { return createAutoboard(a) 
 
 func CreateReminder(a apptypes.Deps) fiber.Handler { return createReminder(a) }
 
-func CreateRole(a apptypes.Deps) fiber.Handler { return createRole(a) }
+func CreateServerRole(a apptypes.Deps) fiber.Handler { return createServerRole(a) }
 
 func CreateServerEmbed(a apptypes.Deps) fiber.Handler { return createServerEmbed(a) }
 
@@ -29,7 +27,7 @@ func CreateTicketPanel(a apptypes.Deps) fiber.Handler { return createTicketPanel
 
 func DeleteAutoboard(a apptypes.Deps) fiber.Handler { return deleteAutoboard(a) }
 
-func DeleteClanLogs(a apptypes.Deps) fiber.Handler { return deleteClanLogs(a) }
+func DeleteServerLogs(a apptypes.Deps) fiber.Handler { return deleteServerLogs(a) }
 
 func DeleteLink(a apptypes.Deps) fiber.Handler { return deleteLink(a) }
 
@@ -39,7 +37,7 @@ func DeleteOpenTicket(a apptypes.Deps) fiber.Handler { return deleteOpenTicket(a
 
 func DeleteReminder(a apptypes.Deps) fiber.Handler { return deleteReminder(a) }
 
-func DeleteRole(a apptypes.Deps) fiber.Handler { return deleteRole(a) }
+func DeleteServerRole(a apptypes.Deps) fiber.Handler { return deleteServerRole(a) }
 
 func DeleteServerEmbed(a apptypes.Deps) fiber.Handler { return deleteServerEmbed(a) }
 
@@ -57,10 +55,6 @@ func DiscordRoles(a apptypes.Deps) fiber.Handler { return getDiscordRoles(a) }
 
 func EnableCountdown(a apptypes.Deps) fiber.Handler { return enableCountdown(a) }
 
-func GetAllClanLogs(a apptypes.Deps) fiber.Handler { return getAllClanLogs(a) }
-
-func GetAllRoles(a apptypes.Deps) fiber.Handler { return getAllRoles(a) }
-
 func GetAutoboards(a apptypes.Deps) fiber.Handler { return getAutoboards(a) }
 
 func GetBans(a apptypes.Deps) fiber.Handler { return getBans(a) }
@@ -69,11 +63,9 @@ func GetClanCountdowns(a apptypes.Deps) fiber.Handler { return getClanCountdowns
 
 func GetDiscordChannels(a apptypes.Deps) fiber.Handler { return getServerDiscordChannels(a) }
 
-func GetFamilyRoles(a apptypes.Deps) fiber.Handler { return getFamilyRoles(a) }
-
 func GetLinks(a apptypes.Deps) fiber.Handler { return getLinks(a) }
 
-func ListRoles(a apptypes.Deps) fiber.Handler { return listRoles(a) }
+func ListServerRoles(a apptypes.Deps) fiber.Handler { return listServerRoles(a) }
 
 func GetOpenTickets(a apptypes.Deps) fiber.Handler { return getOpenTickets(a) }
 
@@ -136,19 +128,19 @@ func GetTicketPanels(a apptypes.Deps) fiber.Handler { return getTicketPanels(a) 
 
 func PatchClanSettings(a apptypes.Deps) fiber.Handler { return patchClanSettings(a) }
 
+func PatchServerLogs(a apptypes.Deps) fiber.Handler { return patchServerLogs(a) }
+
 func PatchRoleSettings(a apptypes.Deps) fiber.Handler { return patchRoleSettings(a) }
 
-func PatchServerLogType(a apptypes.Deps) fiber.Handler { return patchServerLogType(a) }
+func PatchServerRole(a apptypes.Deps) fiber.Handler { return patchServerRole(a) }
 
 func PatchServerSettings(a apptypes.Deps) fiber.Handler { return patchServerSettings(a) }
 
-func PutClanLogs(a apptypes.Deps) fiber.Handler { return putClanLogs(a) }
+func PutServerLogs(a apptypes.Deps) fiber.Handler { return putServerLogs(a) }
 
 func PutEmbedColor(a apptypes.Deps) fiber.Handler { return putEmbedColor(a) }
 
 func RemoveBan(a apptypes.Deps) fiber.Handler { return removeBan(a) }
-
-func RemoveFamilyRole(a apptypes.Deps) fiber.Handler { return removeFamilyRole(a) }
 
 func RemoveServerClan(a apptypes.Deps) fiber.Handler { return removeServerClan(a) }
 
@@ -173,8 +165,6 @@ func UpdateReminder(a apptypes.Deps) fiber.Handler { return updateReminder(a) }
 func UpdateServerEmbed(a apptypes.Deps) fiber.Handler { return updateServerEmbed(a) }
 
 func UpdateServerGiveaway(a apptypes.Deps) fiber.Handler { return updateServerGiveaway(a) }
-
-func UpdateServerLogs(a apptypes.Deps) fiber.Handler { return updateServerLogs(a) }
 
 func UpdateServerPanel(a apptypes.Deps) fiber.Handler { return updateServerPanel(a) }
 

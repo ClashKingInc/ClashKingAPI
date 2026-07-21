@@ -139,23 +139,6 @@ definitions:
       server_id:
         type: integer
     type: object
-  modelsv2.AllRolesResponse:
-    properties:
-      category_roles:
-        additionalProperties:
-          type: string
-        type: object
-      roles:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/modelsv2.RoleBinding'
-          type: array
-        type: object
-      server_id:
-        type: integer
-      total_count:
-        type: integer
-    type: object
   modelsv2.Announcement:
     properties:
       banner_image_url:
@@ -636,29 +619,6 @@ definitions:
       metric:
         type: string
     type: object
-  modelsv2.BotClusterInfo:
-    properties:
-      clan_count:
-        type: integer
-      cluster_id:
-        type: integer
-      member_count:
-        type: integer
-      server_count:
-        type: integer
-      servers:
-        items:
-          type: string
-        type: array
-      shard_ids:
-        items:
-          type: integer
-        type: array
-      shards:
-        items:
-          type: integer
-        type: array
-    type: object
   modelsv2.BotGuildProfile:
     properties:
       avatar_inherited:
@@ -696,30 +656,6 @@ definitions:
         type: boolean
       name:
         type: string
-    type: object
-  modelsv2.BotInfoResponse:
-    properties:
-      bot:
-        $ref: '#/definitions/modelsv2.BotRuntimeInfo'
-      database:
-        $ref: '#/definitions/modelsv2.DatabaseRuntimeInfo'
-      system:
-        $ref: '#/definitions/modelsv2.SystemRuntimeInfo'
-    type: object
-  modelsv2.BotRuntimeInfo:
-    properties:
-      clusters:
-        items:
-          $ref: '#/definitions/modelsv2.BotClusterInfo'
-        type: array
-      total_clans:
-        type: integer
-      total_members:
-        type: integer
-      total_servers:
-        type: integer
-      total_shards:
-        type: integer
     type: object
   modelsv2.BuilderBaseLeague:
     properties:
@@ -978,96 +914,6 @@ definitions:
       tag:
         type: string
     type: object
-  modelsv2.ClanLogSettings:
-    properties:
-      join_log:
-        $ref: '#/definitions/modelsv2.LogButtonSettings'
-      leave_log:
-        $ref: '#/definitions/modelsv2.LogButtonSettings'
-    type: object
-  modelsv2.ClanLogTypeConfig:
-    properties:
-      channel:
-        type: string
-      thread:
-        type: string
-      webhook:
-        type: string
-    type: object
-  modelsv2.ClanLogsConfig:
-    properties:
-      capital_attacks:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      capital_donations:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      capital_weekly_summary:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      clan_achievement_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      clan_description_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      clan_requirements_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      cwl_lineup_change_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      donation_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      hero_equipment_upgrade:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      hero_upgrade:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      join_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      league_change:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      leave_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      legend_log_attacks:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      legend_log_defenses:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      name:
-        type: string
-      name_change:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      raid_panel:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      role_change:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      spell_upgrade:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      super_troop_boost_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      tag:
-        type: string
-      th_upgrade:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      troop_upgrade:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      war_log:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-      war_panel:
-        $ref: '#/definitions/modelsv2.ClanLogTypeConfig'
-    type: object
-  modelsv2.ClanLogsOperationResponse:
-    properties:
-      clan_tag:
-        type: string
-      deleted_log_types:
-        items:
-          type: string
-        type: array
-      message:
-        type: string
-      thread_id:
-        type: string
-      updated_log_types:
-        items:
-          type: string
-        type: array
-      webhook_id:
-        type: string
-    type: object
   modelsv2.ClanPlayerTagsBody:
     properties:
       player_tags:
@@ -1162,23 +1008,9 @@ definitions:
         type: string
       category:
         type: string
-      clanChannel:
-        type: string
-      generalRole:
+      clan_channel:
         type: string
       greeting:
-        type: string
-      leaderRole:
-        type: string
-      leadership_eval:
-        type: boolean
-      logs:
-        $ref: '#/definitions/modelsv2.ClanLogSettings'
-      member_count_warning:
-        $ref: '#/definitions/modelsv2.MemberCountWarning'
-      warCountdown:
-        type: string
-      warTimerCountdown:
         type: string
     type: object
   modelsv2.ClanSettingsDetail:
@@ -1191,29 +1023,15 @@ definitions:
         type: string
       category:
         type: string
-      clanChannel:
-        type: string
-      generalRole:
+      clan_channel:
         type: string
       greeting:
         type: string
-      leaderRole:
-        type: string
-      leadership_eval:
-        type: boolean
-      logs:
-        $ref: '#/definitions/modelsv2.ClanLogSettings'
-      member_count_warning:
-        $ref: '#/definitions/modelsv2.MemberCountWarning'
       name:
         type: string
-      server:
+      server_id:
         type: integer
       tag:
-        type: string
-      warCountdown:
-        type: string
-      warTimerCountdown:
         type: string
     type: object
   modelsv2.ClanSettingsResponse:
@@ -1369,25 +1187,19 @@ definitions:
       server_id:
         type: string
     type: object
-  modelsv2.DatabaseRuntimeInfo:
-    properties:
-      capital_raids:
-        type: integer
-      clans_tracked:
-        type: integer
-      players_tracked:
-        type: integer
-      tickets_open:
-        type: integer
-      wars_stored:
-        type: integer
-    type: object
   modelsv2.DateItemsResponse:
     properties:
       items:
         items:
           type: string
         type: array
+    type: object
+  modelsv2.DisableCountdownRequest:
+    properties:
+      clan_tag:
+        type: string
+      countdown_type:
+        type: string
     type: object
   modelsv2.DisableCountdownResponse:
     properties:
@@ -1534,6 +1346,13 @@ definitions:
       server_id:
         type: integer
     type: object
+  modelsv2.EnableCountdownRequest:
+    properties:
+      clan_tag:
+        type: string
+      countdown_type:
+        type: string
+    type: object
   modelsv2.EnableCountdownResponse:
     properties:
       channel_id:
@@ -1544,6 +1363,45 @@ definitions:
         type: string
       message:
         type: string
+    type: object
+  modelsv2.EnumCatalogResponse:
+    properties:
+      countdown_types:
+        items:
+          $ref: '#/definitions/modelsv2.EnumValue'
+        type: array
+      log_types:
+        items:
+          $ref: '#/definitions/modelsv2.EnumValue'
+        type: array
+      role_modes:
+        items:
+          $ref: '#/definitions/modelsv2.EnumValue'
+        type: array
+      role_types:
+        items:
+          $ref: '#/definitions/modelsv2.EnumValue'
+        type: array
+    type: object
+  modelsv2.EnumValue:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      scope:
+        type: string
+      value:
+        type: string
+    type: object
+  modelsv2.EnumValuesResponse:
+    properties:
+      count:
+        type: integer
+      values:
+        items:
+          $ref: '#/definitions/modelsv2.EnumValue'
+        type: array
     type: object
   modelsv2.ErrorCode:
     enum:
@@ -1579,54 +1437,6 @@ definitions:
         type: string
       request_id:
         type: string
-    type: object
-  modelsv2.FamilyRoleOperationResponse:
-    properties:
-      message:
-        type: string
-      role_id:
-        type: string
-      role_type:
-        type: string
-      server_id:
-        type: integer
-    type: object
-  modelsv2.FamilyRolesResponse:
-    properties:
-      family_coleader_roles:
-        items:
-          type: string
-        type: array
-      family_elder_roles:
-        items:
-          type: string
-        type: array
-      family_leader_roles:
-        items:
-          type: string
-        type: array
-      family_member_roles:
-        items:
-          type: string
-        type: array
-      family_roles:
-        items:
-          type: string
-        type: array
-      ignored_roles:
-        items:
-          type: string
-        type: array
-      not_family_roles:
-        items:
-          type: string
-        type: array
-      only_family_roles:
-        items:
-          type: string
-        type: array
-      server_id:
-        type: integer
     type: object
   modelsv2.FieldError:
     properties:
@@ -2097,6 +1907,10 @@ definitions:
         type: boolean
       base:
         type: boolean
+      channels:
+        items:
+          type: string
+        type: array
       clan:
         type: boolean
       player:
@@ -2112,45 +1926,6 @@ definitions:
         type: string
       town_hall:
         type: integer
-    type: object
-  modelsv2.LogButtonSettings:
-    properties:
-      ban_button:
-        type: boolean
-      profile_button:
-        type: boolean
-      strike_button:
-        type: boolean
-    type: object
-  modelsv2.LogConfig:
-    properties:
-      channel:
-        type: string
-      clans:
-        items:
-          type: string
-        type: array
-      enabled:
-        type: boolean
-      include_buttons:
-        type: boolean
-      ping_role:
-        type: string
-      thread:
-        type: string
-      webhook:
-        type: string
-    type: object
-  modelsv2.MemberCountWarning:
-    properties:
-      above:
-        type: integer
-      below:
-        type: integer
-      channel:
-        type: string
-      role:
-        type: string
     type: object
   modelsv2.MessageResponse:
     properties:
@@ -2832,70 +2607,6 @@ definitions:
       server_id:
         type: integer
     type: object
-  modelsv2.RoleBinding:
-    properties:
-      id:
-        type: string
-      key:
-        type: string
-      number:
-        type: integer
-      role:
-        type: string
-      type:
-        type: string
-    type: object
-  modelsv2.RoleResponse:
-    properties:
-      message:
-        type: string
-      role_id:
-        type: string
-      role_type:
-        type: string
-      server_id:
-        type: integer
-    type: object
-  modelsv2.RoleSettingsResponse:
-    properties:
-      auto_eval_nickname:
-        type: boolean
-      auto_eval_status:
-        type: boolean
-      autoeval_log:
-        type: string
-      autoeval_triggers:
-        items:
-          type: string
-        type: array
-      blacklisted_roles:
-        items:
-          type: string
-        type: array
-      category_roles:
-        additionalProperties:
-          type: string
-        type: object
-      role_treatment:
-        items:
-          type: string
-        type: array
-      server_id:
-        type: integer
-    type: object
-  modelsv2.RolesListResponse:
-    properties:
-      count:
-        type: integer
-      role_type:
-        type: string
-      roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      server_id:
-        type: integer
-    type: object
   modelsv2.Roster:
     properties:
       alias:
@@ -3410,38 +3121,6 @@ definitions:
       warLeague:
         type: string
     type: object
-  modelsv2.SearchGroup:
-    properties:
-      group_id:
-        type: string
-      name:
-        type: string
-      tags:
-        items:
-          type: string
-        type: array
-      type:
-        enum:
-        - player
-        - clan
-        type: string
-      user_id:
-        type: string
-    type: object
-  modelsv2.SearchGroupCreateResponse:
-    properties:
-      group_id:
-        type: string
-      success:
-        type: boolean
-    type: object
-  modelsv2.SearchGroupListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.SearchGroup'
-        type: array
-    type: object
   modelsv2.SearchPlayerReference:
     properties:
       name:
@@ -3618,21 +3297,6 @@ definitions:
       member_count:
         type: integer
     type: object
-  modelsv2.ServerCountdownDocument:
-    properties:
-      cwlCountdown:
-        type: string
-      eosCountdown:
-        type: string
-      gamesCountdown:
-        type: string
-      memberCountWarning:
-        type: string
-      raidCountdown:
-        type: string
-      seasonCountdown:
-        type: string
-    type: object
   modelsv2.ServerCountdownsResponse:
     properties:
       countdowns:
@@ -3798,45 +3462,50 @@ definitions:
       verified_accounts:
         type: integer
     type: object
-  modelsv2.ServerLogOperationResponse:
+  modelsv2.ServerLog:
     properties:
-      log_type:
+      channel_id:
         type: string
+      clan_tag:
+        type: string
+      disabled:
+        type: boolean
+      thread_id:
+        type: string
+      type:
+        type: string
+      webhook_id:
+        type: string
+    type: object
+  modelsv2.ServerLogsOperationResponse:
+    properties:
+      clan_tag:
+        type: string
+      deleted_log_types:
+        items:
+          type: string
+        type: array
+      logs:
+        items:
+          $ref: '#/definitions/modelsv2.ServerLog'
+        type: array
       message:
         type: string
       server_id:
         type: integer
+      updated_log_types:
+        items:
+          type: string
+        type: array
     type: object
   modelsv2.ServerLogsResponse:
     properties:
-      capital_donation_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      capital_raid_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      capital_weekly_summary:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      clan_achievement_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      clan_description_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      clan_requirements_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      cwl_lineup_change_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      donation_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      join_leave_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      legend_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      player_upgrade_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      raid_panel:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      war_log:
-        $ref: '#/definitions/modelsv2.LogConfig'
-      war_panel:
-        $ref: '#/definitions/modelsv2.LogConfig'
+      count:
+        type: integer
+      logs:
+        items:
+          $ref: '#/definitions/modelsv2.ServerLog'
+        type: array
     type: object
   modelsv2.ServerPanelBody:
     properties:
@@ -3912,6 +3581,45 @@ definitions:
           $ref: '#/definitions/modelsv2.ReminderConfig'
         type: array
     type: object
+  modelsv2.ServerRole:
+    properties:
+      clan_tag:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      mode:
+        type: string
+      option:
+        type: string
+      role_id:
+        type: string
+      server_id:
+        type: integer
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  modelsv2.ServerRoleResponse:
+    properties:
+      message:
+        type: string
+      role:
+        $ref: '#/definitions/modelsv2.ServerRole'
+    type: object
+  modelsv2.ServerRolesResponse:
+    properties:
+      count:
+        type: integer
+      roles:
+        items:
+          $ref: '#/definitions/modelsv2.ServerRole'
+        type: array
+      server_id:
+        type: integer
+    type: object
   modelsv2.ServerSeasonLeaderboardItem:
     properties:
       activity_score:
@@ -3979,11 +3687,11 @@ definitions:
           $ref: '#/definitions/modelsv2.ClanSettingsDetail'
         type: array
       countdowns:
-        $ref: '#/definitions/modelsv2.ServerCountdownDocument'
+        additionalProperties:
+          type: string
+        type: object
       embed_color:
         type: string
-      eval:
-        $ref: '#/definitions/modelsv2.ServerSettingsEval'
       family_label:
         type: string
       flair_non_family:
@@ -3992,14 +3700,8 @@ definitions:
         type: string
       greeting:
         type: string
-      leadership_eval:
-        type: boolean
       link_parse:
         $ref: '#/definitions/modelsv2.LinkParseSettings'
-      logs:
-        $ref: '#/definitions/modelsv2.ServerLogsResponse'
-      logs_config:
-        $ref: '#/definitions/modelsv2.ServerLogsResponse'
       name:
         type: string
       nickname_rule:
@@ -4008,67 +3710,18 @@ definitions:
         type: string
       reddit_feed:
         type: string
-      role_treatment:
-        items:
-          type: string
-        type: array
       server:
         type: integer
       server_id:
         type: string
-      status_roles:
-        $ref: '#/definitions/modelsv2.StatusRolesDocument'
+      server_roles:
+        items:
+          $ref: '#/definitions/modelsv2.ServerRole'
+        type: array
       strike_log:
         type: string
       tied:
         type: boolean
-    type: object
-  modelsv2.ServerSettingsEval:
-    properties:
-      achievement_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      builder_league_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      builderhall_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      family_position_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      family_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      ignored_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      league_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      not_family_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      only_family_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      status_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
-      townhall_roles:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
     type: object
   modelsv2.ServerSettingsResponse:
     properties:
@@ -4118,13 +3771,6 @@ definitions:
         type: integer
       total:
         type: integer
-    type: object
-  modelsv2.StatusRolesDocument:
-    properties:
-      discord:
-        items:
-          $ref: '#/definitions/modelsv2.RoleBinding'
-        type: array
     type: object
   modelsv2.StrikeItem:
     properties:
@@ -4203,30 +3849,6 @@ definitions:
         type: integer
       total_weight:
         type: integer
-    type: object
-  modelsv2.SuccessResponse:
-    properties:
-      success:
-        type: boolean
-    type: object
-  modelsv2.SystemRuntimeInfo:
-    properties:
-      cpu_percent:
-        type: number
-      disk_usage_percent:
-        type: number
-      go_version:
-        type: string
-      memory_percent:
-        type: number
-      memory_total_gb:
-        type: number
-      memory_used_mb:
-        type: number
-      platform:
-        type: string
-      python_version:
-        type: string
     type: object
   modelsv2.TicketButton:
     properties:
@@ -4450,6 +4072,30 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  modelsv2.UpdateServerLogsDisabledRequest:
+    properties:
+      clan_tag:
+        type: string
+      disabled:
+        type: boolean
+      log_types:
+        items:
+          type: string
+        type: array
+    type: object
+  modelsv2.UpdateServerLogsRequest:
+    properties:
+      channel_id:
+        type: string
+      clan_tag:
+        type: string
+      log_types:
+        items:
+          type: string
+        type: array
+      thread_id:
+        type: string
     type: object
   modelsv2.UpsertEmbedRequest:
     properties:
@@ -6220,6 +5866,68 @@ paths:
       summary: Authenticate with email
       tags:
       - App Authentication
+  /v2/enums:
+    get:
+      description: Returns stable IDs, values, scopes, and descriptions for settings
+        enums.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.EnumCatalogResponse'
+      summary: Get all API enums
+      tags:
+      - Enums
+  /v2/enums/countdown-types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.EnumValuesResponse'
+      summary: Get countdown types
+      tags:
+      - Enums
+  /v2/enums/log-types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.EnumValuesResponse'
+      summary: Get log types
+      tags:
+      - Enums
+  /v2/enums/role-modes:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.EnumValuesResponse'
+      summary: Get role modes
+      tags:
+      - Enums
+  /v2/enums/role-types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.EnumValuesResponse'
+      summary: Get role types
+      tags:
+      - Enums
   /v2/exports/war/cwl-summary:
     get:
       parameters:
@@ -6577,26 +6285,6 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get user guilds with bot status
-      tags:
-      - Other
-  /v2/internal/bot/info:
-    get:
-      description: Returns internal bot cluster stats, system info, and database document
-        counts.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BotInfoResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get bot info
       tags:
       - Other
   /v2/leaderboard/{league_tier_id}/trophy-buckets:
@@ -9040,228 +8728,6 @@ paths:
       summary: Search for a clan by name or tag
       tags:
       - Search
-  /v2/search/groups/{group_id}:
-    delete:
-      description: Deletes the group with the given group ID.
-      parameters:
-      - description: Group ID
-        in: path
-        name: group_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SuccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Delete a group
-      tags:
-      - Search
-    get:
-      description: Returns the group document for the given group ID.
-      parameters:
-      - description: Group ID
-        in: path
-        name: group_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SearchGroup'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get a specific group
-      tags:
-      - Search
-  /v2/search/groups/{group_id}/add/{tag}:
-    post:
-      description: Adds a clan or player tag to the specified group.
-      parameters:
-      - description: Group ID
-        in: path
-        name: group_id
-        required: true
-        type: string
-      - description: Tag to add
-        in: path
-        name: tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SuccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Add a tag to a group
-      tags:
-      - Search
-  /v2/search/groups/{group_id}/remove/{tag}:
-    post:
-      description: Removes a clan or player tag from the specified group.
-      parameters:
-      - description: Group ID
-        in: path
-        name: group_id
-        required: true
-        type: string
-      - description: Tag to remove
-        in: path
-        name: tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SuccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Remove a tag from a group
-      tags:
-      - Search
-  /v2/search/groups/{user_id}/list:
-    get:
-      description: Returns all groups belonging to the given user.
-      parameters:
-      - description: Discord user ID
-        in: path
-        name: user_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SearchGroupListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: List groups for a user
-      tags:
-      - Search
-  /v2/search/groups/create/{user_id}/{name}/{search_type}:
-    post:
-      description: Creates a new group for organising clans or players for a user.
-      parameters:
-      - description: Discord user ID
-        in: path
-        name: user_id
-        required: true
-        type: integer
-      - description: Group name
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Type (0=player, 1=clan)
-        in: path
-        name: search_type
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.SearchGroupCreateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Create a player or clan group
-      tags:
-      - Search
-  /v2/server/{server_id}/all-roles:
-    get:
-      description: Returns all roles of every type configured for the server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.AllRolesResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get all roles
-      tags:
-      - Server Roles
   /v2/server/{server_id}/autoboards:
     get:
       description: Returns all autoboards for a server with post/refresh counts and
@@ -9589,34 +9055,6 @@ paths:
       summary: Get Discord channels
       tags:
       - Server Discord
-  /v2/server/{server_id}/clan-logs:
-    get:
-      description: Returns the full log configuration for every clan tracked on the
-        server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/modelsv2.ClanLogsConfig'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get all clan logs
-      tags:
-      - Server Logs
   /v2/server/{server_id}/clan/{clan_tag}:
     delete:
       description: Removes a clan from the Discord server tracking list.
@@ -9653,8 +9091,7 @@ paths:
       - Server Clans
   /v2/server/{server_id}/clan/{clan_tag}/countdowns:
     get:
-      description: Returns all clan-level countdown types with enabled status and
-        channel.
+      description: Returns all clan countdown types and their channel state.
       parameters:
       - description: Server ID
         in: path
@@ -9686,89 +9123,6 @@ paths:
       summary: Get clan countdowns
       tags:
       - Server Countdowns
-  /v2/server/{server_id}/clan/{clan_tag}/logs:
-    delete:
-      description: Removes the webhook config for specified log types on a clan.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Clan Tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Comma-separated list of log types to delete
-        in: query
-        name: log_types
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ClanLogsOperationResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Delete clan log webhooks
-      tags:
-      - Server Logs
-    put:
-      consumes:
-      - application/json
-      description: Creates a Discord webhook and assigns it to the specified log types
-        on a clan.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Clan Tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ClanLogsOperationResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Set clan log webhooks
-      tags:
-      - Server Logs
   /v2/server/{server_id}/clan/{clan_tag}/settings:
     get:
       description: Returns detailed settings for a specific clan on a server.
@@ -9844,7 +9198,8 @@ paths:
       - Server Clans
   /v2/server/{server_id}/clans:
     get:
-      description: Returns the full clan list for a server with live CoC API data.
+      description: Returns the full clan list for a server from Timescale basic_clan
+        data.
       parameters:
       - description: Server ID
         in: path
@@ -9968,13 +9323,19 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Disables a countdown type for a server or clan.
+      description: Deletes the Discord channel and its countdown rule.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
+      - description: Countdown
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.DisableCountdownRequest'
       produces:
       - application/json
       responses:
@@ -10000,8 +9361,7 @@ paths:
       tags:
       - Server Countdowns
     get:
-      description: Returns all server-level countdown types with enabled status and
-        channel.
+      description: Returns all server countdown types and their channel state.
       parameters:
       - description: Server ID
         in: path
@@ -10031,13 +9391,19 @@ paths:
     post:
       consumes:
       - application/json
-      description: Enables a countdown type for a server or clan.
+      description: Creates a Discord channel and stores one countdown rule.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
+      - description: Countdown
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.EnableCountdownRequest'
       produces:
       - application/json
       responses:
@@ -10197,7 +9563,8 @@ paths:
       - Server Discord
   /v2/server/{server_id}/discord-roles:
     get:
-      description: Returns all roles for the Discord server sorted by position.
+      description: Returns assignable roles for the Discord server sorted by position.
+        Excludes @everyone and Discord-managed roles, including bot roles.
       parameters:
       - description: Server ID
         in: path
@@ -10386,108 +9753,6 @@ paths:
       summary: Update a server embed
       tags:
       - Server Tickets
-  /v2/server/{server_id}/family-roles:
-    get:
-      description: Returns all family-related role configurations for the server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.FamilyRolesResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get family roles
-      tags:
-      - Server Roles
-    post:
-      consumes:
-      - application/json
-      description: Adds a Discord role to a family role category.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.FamilyRoleOperationResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Add a family role
-      tags:
-      - Server Roles
-  /v2/server/{server_id}/family-roles/{role_type}/{role_id}:
-    delete:
-      description: Removes a Discord role from a family role category.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Family role type
-        in: path
-        name: role_type
-        required: true
-        type: string
-      - description: Discord Role ID
-        in: path
-        name: role_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.FamilyRoleOperationResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Remove a family role
-      tags:
-      - Server Roles
   /v2/server/{server_id}/giveaways:
     get:
       description: Returns all giveaways for a server split by status (ongoing, scheduled,
@@ -11019,9 +10284,47 @@ paths:
       tags:
       - Server Leaderboards
   /v2/server/{server_id}/logs:
+    delete:
+      description: Removes independent log configurations from one server or clan
+        scope. A webhook is deleted only when no remaining log uses it.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: query
+        name: clan_tag
+        type: string
+      - description: Comma-separated log types
+        in: query
+        name: log_types
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ServerLogsOperationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete server logs
+      tags:
+      - Server Logs
     get:
-      description: Returns the aggregated log configuration across all clans for a
-        server.
+      description: Returns each log configuration as an independent server, clan,
+        and type row. Channel IDs are resolved from Discord and are not stored.
       parameters:
       - description: Server ID
         in: path
@@ -11041,27 +10344,75 @@ paths:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       security:
       - ApiKeyAuth: []
-      summary: Get server logs config
+      summary: Get server logs
+      tags:
+      - Server Logs
+    patch:
+      consumes:
+      - application/json
+      description: Changes the disabled state without deleting the saved webhook or
+        thread setup.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Disabled state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.UpdateServerLogsDisabledRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ServerLogsOperationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Enable or disable server logs
       tags:
       - Server Logs
     put:
       consumes:
       - application/json
-      description: Bulk-updates log webhook/thread settings for multiple log types
-        across clans.
+      description: Assigns a Discord channel to independent log types in one optional
+        clan scope. The API reuses a bot-owned webhook in the channel or creates one
+        with the bot profile.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
+      - description: Log settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.UpdateServerLogsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.ServerLogOperationResponse'
+            $ref: '#/definitions/modelsv2.ServerLogsOperationResponse'
         "400":
           description: Bad Request
           schema:
@@ -11070,45 +10421,17 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update server logs config
-      tags:
-      - Server Logs
-  /v2/server/{server_id}/logs/{log_type}:
-    patch:
-      consumes:
-      - application/json
-      description: Updates the configuration for a single log type on a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Log type identifier
-        in: path
-        name: log_type
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ServerLogOperationResponse'
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       security:
       - ApiKeyAuth: []
-      summary: Patch a log type config
+      summary: Set server logs
       tags:
       - Server Logs
   /v2/server/{server_id}/panel:
@@ -11309,78 +10632,23 @@ paths:
       summary: Update a reminder
       tags:
       - Server Reminders
-  /v2/server/{server_id}/role-settings:
+  /v2/server/{server_id}/server-roles:
     get:
-      description: Returns the role evaluation settings for a server.
+      description: Returns configured roles for a server. Use type and clan_tag to
+        filter the list.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.RoleSettingsResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get role settings
-      tags:
-      - Server Roles
-    patch:
-      consumes:
-      - application/json
-      description: Partially updates the role evaluation settings for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.RoleResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update role settings
-      tags:
-      - Server Roles
-  /v2/server/{server_id}/roles/{role_type}:
-    get:
-      description: Returns all roles of a given type configured for the server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Role type (clan, league, townhall, status...)
-        in: path
-        name: role_type
-        required: true
+      - description: Role type
+        in: query
+        name: type
+        type: string
+      - description: Clan tag
+        in: query
+        name: clan_tag
         type: string
       produces:
       - application/json
@@ -11388,70 +10656,44 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.RolesListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
+            $ref: '#/definitions/modelsv2.ServerRolesResponse'
       security:
       - ApiKeyAuth: []
-      summary: List roles by type
+      summary: List server roles
       tags:
       - Server Roles
     post:
       consumes:
       - application/json
-      description: Creates a new role of a given type for the server.
+      description: Creates one server-level or clan-level role configuration.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
-      - description: Role type
-        in: path
-        name: role_type
-        required: true
-        type: string
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
-            $ref: '#/definitions/modelsv2.RoleResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
+            $ref: '#/definitions/modelsv2.ServerRoleResponse'
       security:
       - ApiKeyAuth: []
-      summary: Create a role
+      summary: Create a server role
       tags:
       - Server Roles
-  /v2/server/{server_id}/roles/{role_type}/{role_id}:
+  /v2/server/{server_id}/server-roles/{role_id}:
     delete:
-      description: Deletes a role by type and ID.
+      description: Deletes one server role configuration.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
-      - description: Role type
-        in: path
-        name: role_type
-        required: true
-        type: string
-      - description: Role ID
+      - description: Server role ID
         in: path
         name: role_id
         required: true
@@ -11462,22 +10704,37 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.RoleResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
+            $ref: '#/definitions/modelsv2.ServerRoleResponse'
       security:
       - ApiKeyAuth: []
-      summary: Delete a role
+      summary: Delete a server role
+      tags:
+      - Server Roles
+    patch:
+      consumes:
+      - application/json
+      description: Updates one server role configuration.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Server role ID
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ServerRoleResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a server role
       tags:
       - Server Roles
   /v2/server/{server_id}/settings:
@@ -12060,6 +11317,85 @@ paths:
       summary: Update open ticket status
       tags:
       - Server Tickets
+  /v2/static/{category}/{item_id_or_name}/max-level:
+    get:
+      description: Returns the highest level defined for a static item.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Item ID or name
+        in: path
+        name: item_id_or_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get item max level
+  /v2/static/{category}/names:
+    get:
+      description: Returns the names of static items for a category, with optional
+        filters applied.
+      parameters:
+      - description: Category name
+        in: path
+        name: category
+        required: true
+        type: string
+      - description: Locale code
+        in: query
+        name: locale
+        type: string
+      - description: Substring to filter item names
+        in: query
+        name: name
+        type: string
+      - description: Village filter
+        in: query
+        name: village
+        type: string
+      - description: Type filter
+        in: query
+        name: type
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get category names
   /v2/tracking/players/add:
     post:
       consumes:

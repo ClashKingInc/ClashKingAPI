@@ -96,13 +96,15 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/static/app-bundle",
 		"/v2/static/app-translations",
 		"/v2/:category/names",
-		"/v2/static/:category/names",
 		"/v2/:category/:item_id_or_name/maxlevel",
 		"/v2/static/:category/:item_id_or_name/maxlevel",
 		"/v2/:category/:item_id_or_name",
 		"/v2/static/:category/:item_id_or_name",
 		"/v2/:category",
 		"/v2/static/:category",
+		"/v2/server/:server_id/logs/:log_type",
+		"/v2/server/:server_id/clan-logs",
+		"/v2/server/:server_id/clan/:clan_tag/logs",
 		"/war/:clan_tag/previous",
 		"/war/:clan_tag/previous/:end_time",
 	} {
@@ -137,6 +139,16 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/server/:server_id/dashboard-capabilities",
 		"/v2/server/:server_id/dashboard-access",
 		"/v2/server/:server_id/bot-profile",
+		"/v2/enums",
+		"/v2/enums/role-types",
+		"/v2/enums/role-modes",
+		"/v2/enums/log-types",
+		"/v2/enums/countdown-types",
+		"/v2/static/:category/names",
+		"/v2/static/:category/:item_id_or_name/max-level",
+		"/v2/server/:server_id/server-roles",
+		"/v2/server/:server_id/server-roles/:role_id",
+		"/v2/server/:server_id/logs",
 	} {
 		if !paths[path] {
 			t.Fatalf("expected %s to be registered", path)
@@ -156,6 +168,17 @@ func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *t
 		}
 		if serverIndex >= personalIndex {
 			t.Fatalf("expected static server %s route before generic personal route", method)
+		}
+	}
+}
+
+func TestServerLogMethodsAreRegistered(t *testing.T) {
+	app := fiber.New()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	for _, method := range []string{fiber.MethodGet, fiber.MethodPut, fiber.MethodPatch, fiber.MethodDelete} {
+		if registeredRouteIndex(app, method, "/v2/server/:server_id/logs") < 0 {
+			t.Fatalf("expected %s /v2/server/:server_id/logs to be registered", method)
 		}
 	}
 }

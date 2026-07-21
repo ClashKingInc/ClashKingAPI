@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	serverroutes "github.com/ClashKingInc/ClashKingAPI/internal/routes/server"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -484,54 +485,11 @@ func sanitizeAny(value any) any {
 }
 
 func v1ServerSettings(c *fiber.Ctx, a apptypes.Deps, serverID string) (map[string]any, error) {
-	var name, embedColor pgtype.Text
-	var logsRaw, statusRaw, countdownsRaw, dataRaw []byte
-	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT name, embed_color, logs_config, status_roles, countdowns, data
-		FROM servers
-		WHERE id = $1
-	`, serverID).Scan(&name, &embedColor, &logsRaw, &statusRaw, &countdownsRaw, &dataRaw)
+	id, err := strconv.Atoi(serverID)
 	if err != nil {
 		return nil, err
 	}
-	doc := jsonObject(dataRaw)
-	doc["server"] = serverID
-	if name.Valid {
-		doc["name"] = name.String
-	}
-	if embedColor.Valid {
-		doc["embed_color"] = embedColor.String
-	}
-	doc["logs"] = jsonObject(logsRaw)
-	doc["status_roles"] = jsonObject(statusRaw)
-	doc["countdowns"] = jsonObject(countdownsRaw)
-	doc["eval"] = map[string]any{}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT tag, name, abbreviation, clan_channel_id, logs_config, countdowns, data FROM server_clans WHERE server_id = $1`, serverID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	clans := []map[string]any{}
-	for rows.Next() {
-		var tag, clanName, abbrev string
-		var channel pgtype.Text
-		var clanLogs, clanCountdowns, clanData []byte
-		if err := rows.Scan(&tag, &clanName, &abbrev, &channel, &clanLogs, &clanCountdowns, &clanData); err != nil {
-			return nil, err
-		}
-		item := jsonObject(clanData)
-		item["tag"] = tag
-		item["name"] = clanName
-		item["abbreviation"] = abbrev
-		if channel.Valid {
-			item["clanChannel"] = channel.String
-		}
-		item["logs"] = jsonObject(clanLogs)
-		item["countdowns"] = jsonObject(clanCountdowns)
-		clans = append(clans, item)
-	}
-	doc["clans"] = clans
-	return doc, nil
+	return serverroutes.LoadServerSettingsDocument(c, a, id, true)
 }
 
 func legacyFirstNonEmpty(values ...string) string {

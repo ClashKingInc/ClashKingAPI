@@ -69,3 +69,48 @@ func TestHydrateBotGuildProfileUsesApplicationDescriptionForEmptyGuildBio(t *tes
 		t.Fatalf("hydrateBotGuildProfile() = %#v", profile)
 	}
 }
+
+func TestFindOrCreateLogWebhookReusesBotWebhookInSelectedChannel(t *testing.T) {
+	const botUserID = "123456789012345678"
+	const guildID = int64(987654321098765432)
+	const channelID = int64(456789012345678901)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v10/guilds/987654321098765432/members/@me":
+			_, _ = writer.Write([]byte(`{"nick":"ClashKing Beta","user":{"id":"` + botUserID + `"}}`))
+		case "/api/v10/oauth2/applications/@me":
+			_, _ = writer.Write([]byte(`{"id":"` + botUserID + `","name":"ClashKing","bot":{"id":"` + botUserID + `","username":"ClashKing"}}`))
+		case "/api/v10/guilds/987654321098765432/webhooks":
+			if request.Method != http.MethodGet {
+				t.Fatalf("webhook method = %q, want GET", request.Method)
+			}
+			_, _ = writer.Write([]byte(`[{"type":1,"id":"111111111111111111","name":"ClashKing Beta","channel_id":"456789012345678901","guild_id":"987654321098765432","token":"secret","user":{"id":"` + botUserID + `"}}]`))
+		default:
+			t.Fatalf("unexpected webhook path %q", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	adapter := &DiscordAdapter{
+		client:       disgo.New(disgo.NewClient("token", disgo.WithURL(server.URL+"/api/v10"))),
+		http:         server.Client(),
+		profileCache: make(map[int64]cachedBotGuildProfile),
+	}
+
+	webhook, err := adapter.FindOrCreateLogWebhook(context.Background(), guildID, channelID)
+	if err != nil {
+		t.Fatalf("FindOrCreateLogWebhook() error = %v", err)
+	}
+	if webhook.ID().String() != "111111111111111111" {
+		t.Fatalf("webhook ID = %s", webhook.ID())
+	}
+}
+
+func TestBotProfileAvatarURLUsesGuildAvatar(t *testing.T) {
+	avatar := "guild-avatar"
+	profile := &DiscordBotGuildProfile{UserID: "123", Avatar: &avatar, AvatarGuildProfile: true}
+	got := botProfileAvatarURL(456, profile)
+	want := "https://cdn.discordapp.com/guilds/456/users/123/avatars/guild-avatar.png?size=256"
+	if got != want {
+		t.Fatalf("botProfileAvatarURL() = %q, want %q", got, want)
+	}
+}

@@ -22,23 +22,6 @@ type SearchPlayerReferenceResponse struct {
 	Items []SearchPlayerReference `json:"items"`
 }
 
-type SearchGroup struct {
-	GroupID string   `json:"group_id"`
-	UserID  string   `json:"user_id"`
-	Type    string   `json:"type" enums:"player,clan"`
-	Name    string   `json:"name"`
-	Tags    []string `json:"tags"`
-}
-
-type SearchGroupCreateResponse struct {
-	Success bool   `json:"success"`
-	GroupID string `json:"group_id"`
-}
-
 type SuccessResponse struct {
 	Success bool `json:"success"`
-}
-
-type SearchGroupListResponse struct {
-	Items []SearchGroup `json:"items"`
 }

@@ -97,6 +97,7 @@ func categoryItems(a apptypes.Deps) fiber.Handler {
 // @Success 200 {array} string
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
+// @Router /v2/static/{category}/names [get]
 func categoryNames(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		items, err := filteredItems(a, c)
@@ -142,6 +143,7 @@ func categoryItem(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
+// @Router /v2/static/{category}/{item_id_or_name}/max-level [get]
 func maxLevel(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		category := c.Params("category")

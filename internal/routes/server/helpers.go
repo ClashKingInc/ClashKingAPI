@@ -11,95 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-var (
-	serverRoleCollections = map[string]string{
-		"townhall":        "townhallroles",
-		"league":          "legendleagueroles",
-		"builderhall":     "builderhallroles",
-		"builder_league":  "builderleagueroles",
-		"achievement":     "achievementroles",
-		"family_position": "family_roles",
-	}
-	serverSettingsEvalCollections = map[string]string{
-		"league_roles":          "legendleagueroles",
-		"ignored_roles":         "evalignore",
-		"family_roles":          "generalrole",
-		"not_family_roles":      "linkrole",
-		"only_family_roles":     "familyexclusiveroles",
-		"family_position_roles": "family_roles",
-		"townhall_roles":        "townhallroles",
-		"builderhall_roles":     "builderhallroles",
-		"achievement_roles":     "achievementroles",
-		"status_roles":          "statusroles",
-		"builder_league_roles":  "builderleagueroles",
-	}
-	familyRoleCollections = map[string]string{
-		"general":          "generalrole",
-		"not_family":       "linkrole",
-		"family_exclusive": "familyexclusiveroles",
-		"family_position":  "family_roles",
-		"ignored":          "evalignore",
-	}
-	countdownDBFields = map[string]string{
-		"cwl":          "cwlCountdown",
-		"clan_games":   "gamesCountdown",
-		"raid_weekend": "raidCountdown",
-		"eos":          "eosCountdown",
-		"member_count": "memberCountWarning",
-		"season_day":   "seasonCountdown",
-		"war_score":    "warCountdown",
-		"war_timer":    "warTimerCountdown",
-	}
-	serverCountdownTypes = []string{"cwl", "clan_games", "raid_weekend", "eos", "member_count", "season_day"}
-	clanCountdownTypes   = []string{"war_score", "war_timer"}
-	logMapping           = map[string]string{
-		"join_log":               "join_leave_log",
-		"leave_log":              "join_leave_log",
-		"donation_log":           "donation_log",
-		"clan_achievement_log":   "clan_achievement_log",
-		"clan_requirements_log":  "clan_requirements_log",
-		"clan_description_log":   "clan_description_log",
-		"war_log":                "war_log",
-		"war_panel":              "war_panel",
-		"cwl_lineup_change_log":  "cwl_lineup_change_log",
-		"capital_donations":      "capital_donation_log",
-		"capital_attacks":        "capital_raid_log",
-		"raid_panel":             "raid_panel",
-		"capital_weekly_summary": "capital_weekly_summary",
-		"role_change":            "player_upgrade_log",
-		"th_upgrade":             "player_upgrade_log",
-		"troop_upgrade":          "player_upgrade_log",
-		"hero_upgrade":           "player_upgrade_log",
-		"spell_upgrade":          "player_upgrade_log",
-		"hero_equipment_upgrade": "player_upgrade_log",
-		"super_troop_boost":      "player_upgrade_log",
-		"league_change":          "player_upgrade_log",
-		"name_change":            "player_upgrade_log",
-		"legend_log_attacks":     "legend_log",
-		"legend_log_defenses":    "legend_log",
-	}
-	apiToDBLogMapping = map[string][]string{
-		"join_leave_log":         {"join_log", "leave_log"},
-		"donation_log":           {"donation_log"},
-		"clan_achievement_log":   {"clan_achievement_log"},
-		"clan_requirements_log":  {"clan_requirements_log"},
-		"clan_description_log":   {"clan_description_log"},
-		"war_log":                {"war_log"},
-		"war_panel":              {"war_panel"},
-		"cwl_lineup_change_log":  {"cwl_lineup_change_log"},
-		"capital_donation_log":   {"capital_donations"},
-		"capital_raid_log":       {"capital_attacks"},
-		"raid_panel":             {"raid_panel"},
-		"capital_weekly_summary": {"capital_weekly_summary"},
-		"player_upgrade_log": {
-			"th_upgrade", "troop_upgrade", "hero_upgrade", "spell_upgrade",
-			"hero_equipment_upgrade", "super_troop_boost", "role_change",
-			"league_change", "name_change",
-		},
-		"legend_log": {"legend_log_attacks", "legend_log_defenses"},
-	}
-)
-
 func pathInt(c *fiber.Ctx, key string) (int, error) {
 	value := c.Params(key)
 	out, err := strconv.Atoi(value)
@@ -137,6 +48,24 @@ func sanitize(value any) any {
 	}
 }
 
+func mapMaybe(value any) map[string]any {
+	if sanitized, ok := sanitize(value).(map[string]any); ok {
+		return sanitized
+	}
+	return map[string]any{}
+}
+
+func anyMapSlice(value any) []map[string]any {
+	raw := anySlice(value)
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if cast := mapMaybe(item); len(cast) > 0 {
+			out = append(out, cast)
+		}
+	}
+	return out
+}
+
 func serverNormalizeTag(tag string) string {
 	if decoded, err := url.PathUnescape(tag); err == nil {
 		tag = decoded
@@ -172,6 +101,14 @@ func asIntWithDefault(value any, fallback int) int {
 	default:
 		return fallback
 	}
+}
+
+func boolPtrMaybe(value any) *bool {
+	typed, ok := value.(bool)
+	if !ok {
+		return nil
+	}
+	return &typed
 }
 
 func intPtrMaybe(value any) *int {

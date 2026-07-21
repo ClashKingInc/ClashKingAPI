@@ -66,23 +66,31 @@ func updateServerPanel(a apptypes.Deps) fiber.Handler {
 		if buttonColor == "" {
 			buttonColor = "Grey"
 		}
-		payload := map[string]any{
-			"welcome_link": map[string]any{
-				"embed_name":      body.EmbedName,
-				"buttons":         buttons,
-				"button_color":    buttonColor,
-				"welcome_channel": body.WelcomeChannel,
-			},
-		}
-		_, err = a.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO servers (id, name, logs_config, data, updated_at)
-			VALUES ($1, '', $2::jsonb, jsonb_build_object('logs', $2::jsonb), now())
-			ON CONFLICT (id) DO UPDATE SET
-				logs_config = servers.logs_config || EXCLUDED.logs_config,
-				data = servers.data || jsonb_build_object('logs', servers.logs_config || EXCLUDED.logs_config),
-				updated_at = now()
-		`, strconv.Itoa(serverID), apptypes.Marshal(payload))
+		tx, err := a.Store.SQL.Begin(c.UserContext())
 		if err != nil {
+			return err
+		}
+		defer tx.Rollback(c.UserContext())
+		if _, err = tx.Exec(c.UserContext(), `
+			INSERT INTO server_welcome_panels (server_id, embed_name, button_color, welcome_channel_id, updated_at)
+			VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), now())
+			ON CONFLICT (server_id) DO UPDATE SET
+				embed_name = EXCLUDED.embed_name,
+				button_color = EXCLUDED.button_color,
+				welcome_channel_id = EXCLUDED.welcome_channel_id,
+				updated_at = now()
+		`, strconv.Itoa(serverID), body.EmbedName, buttonColor, body.WelcomeChannel); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(c.UserContext(), `DELETE FROM server_welcome_panel_buttons WHERE server_id = $1`, strconv.Itoa(serverID)); err != nil {
+			return err
+		}
+		for position, button := range buttons {
+			if _, err = tx.Exec(c.UserContext(), `INSERT INTO server_welcome_panel_buttons (server_id, button_name, position) VALUES ($1, $2, $3)`, strconv.Itoa(serverID), button, position); err != nil {
+				return err
+			}
+		}
+		if err = tx.Commit(c.UserContext()); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{
@@ -95,26 +103,35 @@ func updateServerPanel(a apptypes.Deps) fiber.Handler {
 }
 
 func serverPanelResponse(doc map[string]any) map[string]any {
-	welcomeLink := mapMaybe(mapMaybe(doc["logs"])["welcome_link"])
 	return map[string]any{
-		"embed_name":      welcomeLink["embed_name"],
-		"buttons":         serverPanelButtonsSlice(welcomeLink["buttons"]),
-		"button_color":    serverPanelString(welcomeLink["button_color"], "Grey"),
-		"welcome_channel": welcomeLink["welcome_channel"],
+		"embed_name":      doc["embed_name"],
+		"buttons":         serverPanelButtonsSlice(doc["buttons"]),
+		"button_color":    serverPanelString(doc["button_color"], "Grey"),
+		"welcome_channel": doc["welcome_channel"],
 	}
 }
 
 func sqlServerPanelDoc(c *fiber.Ctx, a apptypes.Deps, serverID int) (map[string]any, error) {
-	var raw []byte
-	err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT logs_config FROM servers WHERE id = $1`, strconv.Itoa(serverID)).Scan(&raw)
+	var embedName, welcomeChannel *string
+	var buttonColor string
+	err := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT embed_name, button_color, welcome_channel_id
+		FROM server_welcome_panels WHERE server_id = $1
+	`, strconv.Itoa(serverID)).Scan(&embedName, &buttonColor, &welcomeChannel)
 	if err != nil {
 		return map[string]any{}, err
 	}
-	logs := jsonObject(raw)
-	return map[string]any{"logs": logs}, nil
+	buttons := queryStringColumn(c, a, `SELECT button_name FROM server_welcome_panel_buttons WHERE server_id = $1 ORDER BY position, button_name`, strconv.Itoa(serverID))
+	doc := map[string]any{"button_color": buttonColor, "buttons": buttons}
+	optionalDocString(doc, "embed_name", embedName)
+	optionalDocString(doc, "welcome_channel", welcomeChannel)
+	return doc, nil
 }
 
 func serverPanelButtonsSlice(v any) []string {
+	if items, ok := v.([]string); ok {
+		return items
+	}
 	items := anySlice(v)
 	out := make([]string, 0, len(items))
 	for _, item := range items {

@@ -627,7 +627,6 @@ func deleteRosterGroup(a apptypes.Deps) fiber.Handler {
 		cmd, err := a.Store.SQL.Exec(c.UserContext(), `
 			UPDATE rosters
 			SET group_id = NULL,
-			    data = data - 'group_id',
 			    updated_at = now()
 			WHERE group_id = $1 AND server_id = $2
 		`, groupID, rosterServerIDText(serverID))
@@ -1231,6 +1230,229 @@ func rosterMembersAny(members []map[string]any) []any {
 	return out
 }
 
+func rosterStringDefault(value any, fallback string) string {
+	if out := serverAsString(value); out != "" {
+		return out
+	}
+	return fallback
+}
+
+func rosterNullableInt(value any) *int {
+	if value == nil || serverAsString(value) == "" {
+		return nil
+	}
+	out := activityAsInt(value)
+	return &out
+}
+
+func rosterNullableInt64(value any) *int64 {
+	if value == nil || serverAsString(value) == "" {
+		return nil
+	}
+	var out int64
+	switch typed := value.(type) {
+	case int64:
+		out = typed
+	case int:
+		out = int64(typed)
+	case float64:
+		out = int64(typed)
+	default:
+		parsed, err := strconv.ParseInt(serverAsString(value), 10, 64)
+		if err != nil {
+			return nil
+		}
+		out = parsed
+	}
+	return &out
+}
+
+func rosterNullableFloat(value any) *float64 {
+	if value == nil || serverAsString(value) == "" {
+		return nil
+	}
+	var out float64
+	switch typed := value.(type) {
+	case float64:
+		out = typed
+	case int:
+		out = float64(typed)
+	case int64:
+		out = float64(typed)
+	default:
+		parsed, err := strconv.ParseFloat(serverAsString(value), 64)
+		if err != nil {
+			return nil
+		}
+		out = parsed
+	}
+	return &out
+}
+
+func rosterReplaceOrderedValues(c *fiber.Ctx, tx pgx.Tx, table, column string, rosterID uuid.UUID, value any) error {
+	for position, raw := range rosterAnySlice(value) {
+		item := serverAsString(raw)
+		if item == "" {
+			continue
+		}
+		if _, err := tx.Exec(c.UserContext(), `INSERT INTO `+table+` (roster_id, `+column+`, position) VALUES ($1, $2, $3)`, rosterID, item, position); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rosterAnySlice(value any) []any {
+	switch typed := value.(type) {
+	case []any:
+		return typed
+	case []string:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, item)
+		}
+		return out
+	default:
+		return []any{}
+	}
+}
+
+func rosterBoolPtrMaybe(value any) *bool {
+	if value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case bool:
+		return &typed
+	case string:
+		parsed, err := strconv.ParseBool(typed)
+		if err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func rosterBoolDefault(value any, fallback bool) bool {
+	if parsed := rosterBoolPtrMaybe(value); parsed != nil {
+		return *parsed
+	}
+	return fallback
+}
+
+func rosterLoadOrderedValues(c *fiber.Ctx, a apptypes.Deps, table, column string, rosterID uuid.UUID) []any {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT `+column+` FROM `+table+` WHERE roster_id = $1 ORDER BY position, `+column, rosterID)
+	if err != nil {
+		return []any{}
+	}
+	defer rows.Close()
+	out := []any{}
+	for rows.Next() {
+		var value string
+		if rows.Scan(&value) == nil {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func rosterLoadGroupCategories(c *fiber.Ctx, a apptypes.Deps, groupID string) []any {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT category_id FROM roster_group_allowed_signup_categories
+		WHERE group_id = $1 ORDER BY position, category_id
+	`, groupID)
+	if err != nil {
+		return []any{}
+	}
+	defer rows.Close()
+	out := []any{}
+	for rows.Next() {
+		var value string
+		if rows.Scan(&value) == nil {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func rosterLoadMembers(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID) []any {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT tag, name, townhall, hero_levels, discord_user_id, discord_username,
+		       discord_avatar_url, current_clan_name, current_clan_tag,
+		       war_preference, trophies, substitute, signup_group, hitrate,
+		       last_online, current_league, added_at, last_updated, is_in_family,
+		       member_status, error_details
+		FROM roster_members WHERE roster_id = $1 ORDER BY position, tag
+	`, rosterID)
+	if err != nil {
+		return []any{}
+	}
+	defer rows.Close()
+	out := []any{}
+	for rows.Next() {
+		var tag, name string
+		var townhall int
+		var heroLevels, trophies *int
+		var discordUserID, discordUsername, discordAvatarURL, currentClanName, currentClanTag *string
+		var signupGroup, currentLeague, memberStatus, errorDetails *string
+		var warPreference, substitute, isInFamily *bool
+		var hitrate *float64
+		var lastOnline, addedAt, lastUpdated *int64
+		if rows.Scan(&tag, &name, &townhall, &heroLevels, &discordUserID, &discordUsername,
+			&discordAvatarURL, &currentClanName, &currentClanTag, &warPreference, &trophies,
+			&substitute, &signupGroup, &hitrate, &lastOnline, &currentLeague, &addedAt,
+			&lastUpdated, &isInFamily, &memberStatus, &errorDetails) != nil {
+			continue
+		}
+		item := map[string]any{"tag": tag, "name": name, "townhall": townhall}
+		rosterPutOptional(item, "hero_lvs", heroLevels)
+		rosterPutOptional(item, "discord", discordUserID)
+		rosterPutOptional(item, "discord_username", discordUsername)
+		rosterPutOptional(item, "discord_avatar_url", discordAvatarURL)
+		rosterPutOptional(item, "current_clan", currentClanName)
+		rosterPutOptional(item, "current_clan_tag", currentClanTag)
+		rosterPutOptional(item, "war_pref", warPreference)
+		rosterPutOptional(item, "trophies", trophies)
+		rosterPutOptional(item, "sub", substitute)
+		rosterPutOptional(item, "signup_group", signupGroup)
+		rosterPutOptional(item, "hitrate", hitrate)
+		rosterPutOptional(item, "last_online", lastOnline)
+		rosterPutOptional(item, "current_league", currentLeague)
+		rosterPutOptional(item, "added_at", addedAt)
+		rosterPutOptional(item, "last_updated", lastUpdated)
+		rosterPutOptional(item, "is_in_family", isInFamily)
+		rosterPutOptional(item, "member_status", memberStatus)
+		rosterPutOptional(item, "error_details", errorDetails)
+		out = append(out, item)
+	}
+	return out
+}
+
+func rosterPutOptional(target map[string]any, key string, value any) {
+	switch typed := value.(type) {
+	case *string:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *int:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *int64:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *float64:
+		if typed != nil {
+			target[key] = *typed
+		}
+	case *bool:
+		if typed != nil {
+			target[key] = *typed
+		}
+	}
+}
+
 func rosterHydrateMember(c *fiber.Ctx, a apptypes.Deps, member map[string]any) {
 	tag := rosterNormalizeTag(serverAsString(member["tag"]))
 	if tag == "" {
@@ -1268,23 +1490,98 @@ func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	groupID := rosterOptionalString(doc["group_id"])
 	clanTag := rosterOptionalString(doc["clan_tag"])
 	alias := rosterOptionalString(doc["alias"])
-	members := doc["members"]
-	if members == nil {
-		members = []any{}
+	tx, err := a.Store.SQL.Begin(c.UserContext())
+	if err != nil {
+		return err
 	}
-	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO rosters (custom_id, server_id, group_id, clan_tag, alias, members, data, created_at, updated_at)
-		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6::jsonb, $7::jsonb, COALESCE($8, now()), COALESCE($9, now()))
+	defer tx.Rollback(c.UserContext())
+	var rosterID uuid.UUID
+	err = tx.QueryRow(c.UserContext(), `
+		INSERT INTO rosters (
+			custom_id, server_id, group_id, clan_tag, alias, description,
+			roster_type, signup_scope, min_townhall, max_townhall, roster_size,
+			min_signups, max_accounts_per_user, townhall_restriction,
+			default_signup_category, image_url, event_start_time,
+			recurrence_days, recurrence_day_of_month, created_at, updated_at
+		)
+		VALUES (
+			$1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, NULLIF($6, ''),
+			$7, $8, $9, $10, $11, $12, $13, NULLIF($14, ''),
+			NULLIF($15, ''), NULLIF($16, ''), $17, $18, $19,
+			COALESCE($20, now()), COALESCE($21, now())
+		)
 		ON CONFLICT (custom_id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			group_id = EXCLUDED.group_id,
 			clan_tag = EXCLUDED.clan_tag,
 			alias = EXCLUDED.alias,
-			members = EXCLUDED.members,
-			data = EXCLUDED.data,
+			description = EXCLUDED.description,
+			roster_type = EXCLUDED.roster_type,
+			signup_scope = EXCLUDED.signup_scope,
+			min_townhall = EXCLUDED.min_townhall,
+			max_townhall = EXCLUDED.max_townhall,
+			roster_size = EXCLUDED.roster_size,
+			min_signups = EXCLUDED.min_signups,
+			max_accounts_per_user = EXCLUDED.max_accounts_per_user,
+			townhall_restriction = EXCLUDED.townhall_restriction,
+			default_signup_category = EXCLUDED.default_signup_category,
+			image_url = EXCLUDED.image_url,
+			event_start_time = EXCLUDED.event_start_time,
+			recurrence_days = EXCLUDED.recurrence_days,
+			recurrence_day_of_month = EXCLUDED.recurrence_day_of_month,
 			updated_at = EXCLUDED.updated_at
-	`, customID, serverID, groupID, clanTag, alias, apptypes.Marshal(members), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
-	return err
+		RETURNING id
+	`, customID, serverID, groupID, clanTag, alias, rosterOptionalString(doc["description"]),
+		rosterStringDefault(doc["roster_type"], "clan"), rosterStringDefault(doc["signup_scope"], "clan-only"),
+		rosterNullableInt(doc["min_th"]), rosterNullableInt(doc["max_th"]), rosterNullableInt(doc["roster_size"]),
+		rosterNullableInt(doc["min_signups"]), rosterNullableInt(doc["max_accounts_per_user"]), rosterOptionalString(doc["th_restriction"]),
+		rosterOptionalString(doc["default_signup_category"]), rosterOptionalString(doc["image"]), rosterNullableInt64(doc["event_start_time"]),
+		rosterNullableInt(doc["recurrence_days"]), rosterNullableInt(doc["recurrence_day_of_month"]), doc["created_at"], doc["updated_at"]).Scan(&rosterID)
+	if err != nil {
+		return err
+	}
+	for _, table := range []string{"roster_members", "roster_allowed_signup_categories", "roster_display_columns", "roster_sort_fields"} {
+		if _, err := tx.Exec(c.UserContext(), `DELETE FROM `+table+` WHERE roster_id = $1`, rosterID); err != nil {
+			return err
+		}
+	}
+	for position, member := range rosterMemberList(doc["members"]) {
+		tag := rosterNormalizeTag(serverAsString(member["tag"]))
+		if tag == "" {
+			continue
+		}
+		if _, err := tx.Exec(c.UserContext(), `
+			INSERT INTO roster_members (
+				roster_id, tag, name, townhall, hero_levels, discord_user_id,
+				discord_username, discord_avatar_url, current_clan_name,
+				current_clan_tag, war_preference, trophies, substitute,
+				signup_group, hitrate, last_online, current_league, added_at,
+				last_updated, is_in_family, member_status, error_details, position
+			) VALUES (
+				$1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''),
+				NULLIF($9, ''), NULLIF($10, ''), $11, $12, $13, NULLIF($14, ''),
+				$15, $16, NULLIF($17, ''), $18, $19, $20, NULLIF($21, ''), NULLIF($22, ''), $23
+			)
+		`, rosterID, tag, rosterOptionalString(member["name"]), activityAsInt(member["townhall"]),
+			rosterNullableInt(member["hero_lvs"]), rosterOptionalString(member["discord"]), rosterOptionalString(member["discord_username"]),
+			rosterOptionalString(member["discord_avatar_url"]), rosterOptionalString(member["current_clan"]), rosterOptionalString(member["current_clan_tag"]),
+			rosterBoolPtrMaybe(member["war_pref"]), rosterNullableInt(member["trophies"]), rosterBoolPtrMaybe(member["sub"]), rosterOptionalString(member["signup_group"]),
+			rosterNullableFloat(member["hitrate"]), rosterNullableInt64(member["last_online"]), rosterOptionalString(member["current_league"]),
+			rosterNullableInt64(member["added_at"]), rosterNullableInt64(member["last_updated"]), rosterBoolPtrMaybe(member["is_in_family"]),
+			rosterOptionalString(member["member_status"]), rosterOptionalString(member["error_details"]), position); err != nil {
+			return err
+		}
+	}
+	if err := rosterReplaceOrderedValues(c, tx, "roster_allowed_signup_categories", "category_id", rosterID, doc["allowed_signup_categories"]); err != nil {
+		return err
+	}
+	if err := rosterReplaceOrderedValues(c, tx, "roster_display_columns", "column_name", rosterID, doc["columns"]); err != nil {
+		return err
+	}
+	if err := rosterReplaceOrderedValues(c, tx, "roster_sort_fields", "field_name", rosterID, doc["sort"]); err != nil {
+		return err
+	}
+	return tx.Commit(c.UserContext())
 }
 
 func rosterGet(c *fiber.Ctx, a apptypes.Deps, customID string, serverID *int64) (map[string]any, error) {
@@ -1319,7 +1616,11 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 		where = append(where, "clan_tag = $"+strconv.Itoa(len(args)))
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT custom_id, server_id, group_id, clan_tag, alias, members, data, created_at, updated_at
+		SELECT id, custom_id, server_id, group_id, clan_tag, alias, description,
+		       roster_type, signup_scope, min_townhall, max_townhall, roster_size,
+		       min_signups, max_accounts_per_user, townhall_restriction,
+		       default_signup_category, image_url, event_start_time,
+		       recurrence_days, recurrence_day_of_month, created_at, updated_at
 		FROM rosters
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY updated_at DESC
@@ -1330,26 +1631,46 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var customID, serverID, alias string
-		var groupID, clanTag *string
-		var membersRaw, dataRaw []byte
+		var rosterID uuid.UUID
+		var customID, serverID, alias, rosterType, signupScope string
+		var groupID, clanTag, description, townhallRestriction, defaultSignupCategory, imageURL *string
+		var minTownhall, maxTownhall, rosterSize, minSignups, maxAccountsPerUser *int
+		var recurrenceDays, recurrenceDayOfMonth *int
+		var eventStartTime *int64
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&customID, &serverID, &groupID, &clanTag, &alias, &membersRaw, &dataRaw, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&rosterID, &customID, &serverID, &groupID, &clanTag, &alias, &description,
+			&rosterType, &signupScope, &minTownhall, &maxTownhall, &rosterSize, &minSignups,
+			&maxAccountsPerUser, &townhallRestriction, &defaultSignupCategory, &imageURL,
+			&eventStartTime, &recurrenceDays, &recurrenceDayOfMonth, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
-		item := playerDecodeJSONObject(dataRaw)
-		item["custom_id"] = customID
-		item["server_id"] = serverID
+		item := map[string]any{
+			"custom_id": customID, "server_id": serverID, "alias": alias,
+			"roster_type": rosterType, "signup_scope": signupScope,
+			"members":                   rosterLoadMembers(c, a, rosterID),
+			"allowed_signup_categories": rosterLoadOrderedValues(c, a, "roster_allowed_signup_categories", "category_id", rosterID),
+			"columns":                   rosterLoadOrderedValues(c, a, "roster_display_columns", "column_name", rosterID),
+			"sort":                      rosterLoadOrderedValues(c, a, "roster_sort_fields", "field_name", rosterID),
+			"created_at":                createdAt, "updated_at": updatedAt,
+		}
 		if groupID != nil {
 			item["group_id"] = *groupID
 		}
 		if clanTag != nil {
 			item["clan_tag"] = *clanTag
 		}
-		item["alias"] = alias
-		item["members"] = playerDecodeJSONValue(membersRaw, []any{})
-		item["created_at"] = createdAt
-		item["updated_at"] = updatedAt
+		rosterPutOptional(item, "description", description)
+		rosterPutOptional(item, "min_th", minTownhall)
+		rosterPutOptional(item, "max_th", maxTownhall)
+		rosterPutOptional(item, "roster_size", rosterSize)
+		rosterPutOptional(item, "min_signups", minSignups)
+		rosterPutOptional(item, "max_accounts_per_user", maxAccountsPerUser)
+		rosterPutOptional(item, "th_restriction", townhallRestriction)
+		rosterPutOptional(item, "default_signup_category", defaultSignupCategory)
+		rosterPutOptional(item, "image", imageURL)
+		rosterPutOptional(item, "event_start_time", eventStartTime)
+		rosterPutOptional(item, "recurrence_days", recurrenceDays)
+		rosterPutOptional(item, "recurrence_day_of_month", recurrenceDayOfMonth)
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -1387,17 +1708,43 @@ func rosterGroupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	serverID := serverAsString(doc["server_id"])
 	name := rosterOptionalString(doc["name"])
 	description := rosterOptionalString(doc["description"])
-	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO roster_groups (group_id, server_id, name, description, data, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5::jsonb, COALESCE($6, now()), COALESCE($7, now()))
+	tx, err := a.Store.SQL.Begin(c.UserContext())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(c.UserContext())
+	_, err = tx.Exec(c.UserContext(), `
+		INSERT INTO roster_groups (
+			group_id, server_id, name, alias, description, max_accounts_per_user,
+			roster_size, min_signups, default_signup_category, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, NULLIF($9, ''), COALESCE($10, now()), COALESCE($11, now()))
 		ON CONFLICT (group_id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			name = EXCLUDED.name,
+			alias = EXCLUDED.alias,
 			description = EXCLUDED.description,
-			data = EXCLUDED.data,
+			max_accounts_per_user = EXCLUDED.max_accounts_per_user,
+			roster_size = EXCLUDED.roster_size,
+			min_signups = EXCLUDED.min_signups,
+			default_signup_category = EXCLUDED.default_signup_category,
 			updated_at = EXCLUDED.updated_at
-	`, groupID, serverID, name, description, apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
-	return err
+	`, groupID, serverID, name, rosterOptionalString(doc["alias"]), description,
+		rosterNullableInt(doc["max_accounts_per_user"]), rosterNullableInt(doc["roster_size"]),
+		rosterNullableInt(doc["min_signups"]), rosterOptionalString(doc["default_signup_category"]),
+		doc["created_at"], doc["updated_at"])
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(c.UserContext(), `DELETE FROM roster_group_allowed_signup_categories WHERE group_id = $1`, groupID); err != nil {
+		return err
+	}
+	for position, value := range stringSlice(doc["allowed_signup_categories"]) {
+		if _, err := tx.Exec(c.UserContext(), `INSERT INTO roster_group_allowed_signup_categories (group_id, category_id, position) VALUES ($1, $2, $3)`, groupID, value, position); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(c.UserContext())
 }
 
 func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string) ([]map[string]any, error) {
@@ -1412,7 +1759,8 @@ func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string
 		where = append(where, "group_id = $"+strconv.Itoa(len(args)))
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT group_id, server_id, name, description, data, created_at, updated_at
+		SELECT group_id, server_id, name, alias, description, max_accounts_per_user,
+		       roster_size, min_signups, default_signup_category, created_at, updated_at
 		FROM roster_groups
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY created_at DESC
@@ -1424,18 +1772,23 @@ func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string
 	items := []map[string]any{}
 	for rows.Next() {
 		var gid, sid, name, description string
-		var dataRaw []byte
+		var alias, defaultSignupCategory *string
+		var maxAccountsPerUser, rosterSize, minSignups *int
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&gid, &sid, &name, &description, &dataRaw, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&gid, &sid, &name, &alias, &description, &maxAccountsPerUser,
+			&rosterSize, &minSignups, &defaultSignupCategory, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
-		item := playerDecodeJSONObject(dataRaw)
-		item["group_id"] = gid
-		item["server_id"] = sid
-		item["name"] = name
-		item["description"] = description
-		item["created_at"] = createdAt
-		item["updated_at"] = updatedAt
+		item := map[string]any{
+			"group_id": gid, "server_id": sid, "name": name, "description": description,
+			"allowed_signup_categories": rosterLoadGroupCategories(c, a, gid),
+			"created_at":                createdAt, "updated_at": updatedAt,
+		}
+		rosterPutOptional(item, "alias", alias)
+		rosterPutOptional(item, "max_accounts_per_user", maxAccountsPerUser)
+		rosterPutOptional(item, "roster_size", rosterSize)
+		rosterPutOptional(item, "min_signups", minSignups)
+		rosterPutOptional(item, "default_signup_category", defaultSignupCategory)
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -1454,16 +1807,17 @@ func rosterGroupGet(c *fiber.Ctx, a apptypes.Deps, groupID string, serverID *int
 
 func rosterSignupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO roster_signup_categories (custom_id, server_id, name, description, sort_order, data, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, COALESCE($7, now()), COALESCE($8, now()))
+		INSERT INTO roster_signup_categories (custom_id, server_id, name, alias, description, sort_order, created_at, updated_at)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, COALESCE($7, now()), COALESCE($8, now()))
 		ON CONFLICT (custom_id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			name = EXCLUDED.name,
+			alias = EXCLUDED.alias,
 			description = EXCLUDED.description,
 			sort_order = EXCLUDED.sort_order,
-			data = EXCLUDED.data,
 			updated_at = EXCLUDED.updated_at
-	`, serverAsString(doc["custom_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["name"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	`, serverAsString(doc["custom_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["name"]),
+		rosterOptionalString(doc["alias"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), doc["created_at"], doc["updated_at"])
 	return err
 }
 
@@ -1475,7 +1829,7 @@ func rosterSignupList(c *fiber.Ctx, a apptypes.Deps, serverID int64, customID st
 		where = append(where, "custom_id = $2")
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT custom_id, server_id, name, description, sort_order, data, created_at, updated_at
+		SELECT custom_id, server_id, name, alias, description, sort_order, created_at, updated_at
 		FROM roster_signup_categories
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY sort_order, created_at
@@ -1487,37 +1841,55 @@ func rosterSignupList(c *fiber.Ctx, a apptypes.Deps, serverID int64, customID st
 	items := []map[string]any{}
 	for rows.Next() {
 		var cid, sid, name, description string
+		var alias *string
 		var sortOrder int
-		var dataRaw []byte
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&cid, &sid, &name, &description, &sortOrder, &dataRaw, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&cid, &sid, &name, &alias, &description, &sortOrder, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
-		item := playerDecodeJSONObject(dataRaw)
-		item["custom_id"] = cid
-		item["server_id"] = sid
-		item["name"] = name
-		item["description"] = description
-		item["sort_order"] = sortOrder
-		item["created_at"] = createdAt
-		item["updated_at"] = updatedAt
+		item := map[string]any{"custom_id": cid, "server_id": sid, "name": name, "description": description, "sort_order": sortOrder, "created_at": createdAt, "updated_at": updatedAt}
+		rosterPutOptional(item, "alias", alias)
 		items = append(items, item)
 	}
 	return items, rows.Err()
 }
 
 func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
+	options, _ := doc["options"].(map[string]any)
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO roster_automation_rules (automation_id, server_id, group_id, enabled, trigger_type, data, created_at, updated_at)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6::jsonb, COALESCE($7, now()), COALESCE($8, now()))
+		INSERT INTO roster_automation_rules (
+			automation_id, server_id, roster_id, group_id, enabled, trigger_type,
+			action_type, offset_seconds, discord_channel_id, ping_type, executed,
+			executed_at, last_triggered_at, execution_status, last_missed_at,
+			created_at, updated_at
+		)
+		VALUES (
+			$1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8,
+			NULLIF($9, ''), NULLIF($10, ''), $11, $12, $13, NULLIF($14, ''), $15,
+			COALESCE($16, now()), COALESCE($17, now())
+		)
 		ON CONFLICT (automation_id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
+			roster_id = EXCLUDED.roster_id,
 			group_id = EXCLUDED.group_id,
 			enabled = EXCLUDED.enabled,
 			trigger_type = EXCLUDED.trigger_type,
-			data = EXCLUDED.data,
+			action_type = EXCLUDED.action_type,
+			offset_seconds = EXCLUDED.offset_seconds,
+			discord_channel_id = EXCLUDED.discord_channel_id,
+			ping_type = EXCLUDED.ping_type,
+			executed = EXCLUDED.executed,
+			executed_at = EXCLUDED.executed_at,
+			last_triggered_at = EXCLUDED.last_triggered_at,
+			execution_status = EXCLUDED.execution_status,
+			last_missed_at = EXCLUDED.last_missed_at,
 			updated_at = EXCLUDED.updated_at
-	`, serverAsString(doc["automation_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"), rosterOptionalString(doc["trigger_type"]), apptypes.Marshal(doc), doc["created_at"], doc["updated_at"])
+	`, serverAsString(doc["automation_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["roster_id"]),
+		rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"),
+		rosterOptionalString(doc["trigger_type"]), rosterOptionalString(doc["action_type"]), activityAsInt(doc["offset_seconds"]),
+		rosterOptionalString(doc["discord_channel_id"]), rosterOptionalString(options["ping_type"]),
+		rosterBoolDefault(doc["executed"], false), rosterNullableInt64(doc["executed_at"]), rosterNullableInt64(doc["last_triggered_at"]),
+		rosterOptionalString(doc["execution_status"]), rosterNullableInt64(doc["last_missed_at"]), doc["created_at"], doc["updated_at"])
 	return err
 }
 
@@ -1526,7 +1898,7 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 	where := []string{"server_id = $1"}
 	if rosterID != "" {
 		args = append(args, rosterID)
-		where = append(where, "data->>'roster_id' = $"+strconv.Itoa(len(args)))
+		where = append(where, "roster_id = $"+strconv.Itoa(len(args)))
 	}
 	if groupID != "" {
 		args = append(args, groupID)
@@ -1536,7 +1908,10 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 		where = append(where, "enabled = true")
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT automation_id, server_id, group_id, enabled, trigger_type, data, created_at, updated_at
+		SELECT automation_id, server_id, roster_id, group_id, enabled, trigger_type,
+		       action_type, offset_seconds, discord_channel_id, ping_type, executed,
+		       executed_at, last_triggered_at, execution_status, last_missed_at,
+		       created_at, updated_at
 		FROM roster_automation_rules
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY created_at DESC
@@ -1547,24 +1922,36 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var automationID, sid, triggerType string
-		var group *string
+		var automationID, sid, triggerType, actionType string
+		var roster, group, discordChannel, pingType, executionStatus *string
 		var enabled bool
-		var dataRaw []byte
+		var offsetSeconds int
+		var executed bool
+		var executedAt, lastTriggeredAt, lastMissedAt *int64
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&automationID, &sid, &group, &enabled, &triggerType, &dataRaw, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&automationID, &sid, &roster, &group, &enabled, &triggerType,
+			&actionType, &offsetSeconds, &discordChannel, &pingType, &executed,
+			&executedAt, &lastTriggeredAt, &executionStatus, &lastMissedAt,
+			&createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
-		item := playerDecodeJSONObject(dataRaw)
-		item["automation_id"] = automationID
-		item["server_id"] = sid
+		item := map[string]any{
+			"automation_id": automationID, "server_id": sid, "active": enabled,
+			"trigger_type": triggerType, "action_type": actionType, "offset_seconds": offsetSeconds,
+			"executed": executed, "created_at": createdAt, "updated_at": updatedAt,
+		}
+		rosterPutOptional(item, "roster_id", roster)
 		if group != nil {
 			item["group_id"] = *group
 		}
-		item["active"] = enabled
-		item["trigger_type"] = triggerType
-		item["created_at"] = createdAt
-		item["updated_at"] = updatedAt
+		rosterPutOptional(item, "discord_channel_id", discordChannel)
+		if pingType != nil {
+			item["options"] = map[string]any{"ping_type": *pingType}
+		}
+		rosterPutOptional(item, "executed_at", executedAt)
+		rosterPutOptional(item, "last_triggered_at", lastTriggeredAt)
+		rosterPutOptional(item, "execution_status", executionStatus)
+		rosterPutOptional(item, "last_missed_at", lastMissedAt)
 		items = append(items, item)
 	}
 	return items, rows.Err()

@@ -141,7 +141,7 @@ func getServerThreads(a apptypes.Deps) apptypes.HandlerFunc {
 
 // getDiscordRoles godoc
 // @Summary Get Discord roles
-// @Description Returns all roles for the Discord server sorted by position.
+// @Description Returns assignable roles for the Discord server sorted by position. Excludes @everyone and Discord-managed roles, including bot roles.
 // @Tags Server Discord
 // @Produce json
 // @Security ApiKeyAuth
@@ -161,6 +161,7 @@ func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return apptypes.Error(http.StatusBadGateway, "Failed to fetch Discord roles")
 		}
+		roles = selectableDiscordRoles(roles, serverID)
 
 		sort.SliceStable(roles, func(i, j int) bool {
 			return roles[i].Position > roles[j].Position
@@ -184,6 +185,17 @@ func getDiscordRoles(a apptypes.Deps) apptypes.HandlerFunc {
 			"count":     len(items),
 		})
 	}
+}
+
+func selectableDiscordRoles(roles []discord.Role, serverID int) []discord.Role {
+	available := make([]discord.Role, 0, len(roles))
+	for _, role := range roles {
+		if role.Managed || role.ID.String() == strconv.Itoa(serverID) {
+			continue
+		}
+		available = append(available, role)
+	}
+	return available
 }
 
 // getServerDiscordChannels godoc

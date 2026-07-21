@@ -5,7 +5,7 @@ This API is the shared backend surface used by the mobile app, dashboard, bot, a
 ## Controls added
 
 - `GET /v2/auth/export` and `GET /v2/privacy/export` return the authenticated user's account profile and linked personal-data records without token ciphertext, token hashes, password hashes, or internal secrets.
-- `DELETE /v2/auth/me` and `POST /v2/privacy/delete-request` remove the authenticated account and linked personal data from known SQL tables, including auth tokens, Discord tokens, player links, bookmarks, recent searches, search groups, notification preferences, push devices, war subscriptions, and live activities.
+- `DELETE /v2/auth/me` and `POST /v2/privacy/delete-request` remove the authenticated account and linked personal data from known SQL tables, including auth tokens, Discord tokens, player links, bookmarks, recent searches, notification preferences, push devices, war subscriptions, and live activities.
 - `DELETE /v2/notifications/devices` removes the authenticated user's push-device record for the current device and environment. It verifies any request device ID against the authenticated session and never accepts or returns a raw push token.
 - Deletion is tolerant of partially deployed schemas so older environments do not fail when newer mobile-notification tables are not present yet.
 

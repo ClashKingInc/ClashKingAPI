@@ -295,9 +295,9 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/static/app-bundle",
 		"/v2/static/app-translations",
 		"/v2/{category}/names",
-		"/v2/static/{category}/names",
 		"/v2/{category}/{item_id_or_name}/maxlevel",
 		"/v2/static/{category}/{item_id_or_name}/maxlevel",
+		"/v2/internal/bot/info",
 		"/v2/{category}/{item_id_or_name}",
 		"/v2/static/{category}/{item_id_or_name}",
 		"/v2/{category}",
@@ -339,7 +339,15 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/exports/war/player-stats",
 		"/v2/guild/{server_id}",
 		"/v2/guilds",
-		"/v2/internal/bot/info",
+		"/v2/enums",
+		"/v2/enums/role-types",
+		"/v2/enums/role-modes",
+		"/v2/enums/log-types",
+		"/v2/enums/countdown-types",
+		"/v2/static/{category}/names",
+		"/v2/static/{category}/{item_id_or_name}/max-level",
+		"/v2/server/{server_id}/server-roles",
+		"/v2/server/{server_id}/server-roles/{role_id}",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected %s to remain in swagger", path)
@@ -365,7 +373,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		operation := paths[path].(map[string]any)["get"].(map[string]any)
 		assertTags(t, operation, []string{"Rankings"})
 	}
-	for _, path := range []string{"/v2/cdn/upload", "/v2/exports/war/cwl-summary", "/v2/exports/war/player-stats", "/v2/guild/{server_id}", "/v2/guilds", "/v2/internal/bot/info"} {
+	for _, path := range []string{"/v2/cdn/upload", "/v2/exports/war/cwl-summary", "/v2/exports/war/player-stats", "/v2/guild/{server_id}", "/v2/guilds"} {
 		method := "get"
 		if path == "/v2/cdn/upload" || path == "/v2/exports/war/player-stats" {
 			method = "post"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -233,6 +234,98 @@ func (a *DiscordAdapter) GetWebhook(_ context.Context, webhookID int64) (discord
 func (a *DiscordAdapter) CreateWebhook(_ context.Context, channelID int64, name string) (*discord.IncomingWebhook, error) {
 	a.wait()
 	return a.client.CreateWebhook(snowflake.ID(channelID), discord.WebhookCreate{Name: name})
+}
+
+// FindOrCreateLogWebhook reuses an incoming webhook owned by this bot in the
+// selected channel. If none exists, it creates one with the bot's server
+// profile name and avatar, with the global bot profile as the fallback.
+func (a *DiscordAdapter) FindOrCreateLogWebhook(ctx context.Context, guildID, channelID int64) (*discord.IncomingWebhook, error) {
+	profile, profileErr := a.GetBotGuildProfile(ctx, guildID)
+	webhooks, listErr := a.GetGuildWebhooks(ctx, guildID)
+	botUserID := strings.TrimSpace(a.cfg.DiscordClientID)
+	if profile != nil && profile.UserID != "" {
+		botUserID = profile.UserID
+	}
+	if listErr == nil {
+		for _, raw := range webhooks {
+			incoming := asIncomingWebhook(raw)
+			if incoming != nil && int64(incoming.ChannelID) == channelID && webhookOwnedByBot(incoming, botUserID) {
+				return incoming, nil
+			}
+		}
+	}
+
+	name := "ClashKing"
+	var avatar *discord.Icon
+	if profileErr == nil && profile != nil {
+		if strings.TrimSpace(profile.Name) != "" {
+			name = profile.Name
+		}
+		avatar = a.botProfileWebhookAvatar(ctx, guildID, profile)
+	}
+
+	a.wait()
+	return a.client.CreateWebhook(snowflake.ID(channelID), discord.WebhookCreate{Name: name, Avatar: avatar})
+}
+
+func asIncomingWebhook(raw discord.Webhook) *discord.IncomingWebhook {
+	switch typed := raw.(type) {
+	case discord.IncomingWebhook:
+		return &typed
+	case *discord.IncomingWebhook:
+		return typed
+	default:
+		return nil
+	}
+}
+
+func webhookOwnedByBot(webhook *discord.IncomingWebhook, botUserID string) bool {
+	if webhook == nil || botUserID == "" {
+		return false
+	}
+	if webhook.User.ID.String() == botUserID {
+		return true
+	}
+	return webhook.ApplicationID != nil && webhook.ApplicationID.String() == botUserID
+}
+
+func botProfileAvatarURL(guildID int64, profile *DiscordBotGuildProfile) string {
+	if profile == nil || profile.Avatar == nil || profile.UserID == "" {
+		return ""
+	}
+	if profile.AvatarGuildProfile {
+		return fmt.Sprintf("https://cdn.discordapp.com/guilds/%d/users/%s/avatars/%s.png?size=256", guildID, profile.UserID, *profile.Avatar)
+	}
+	return fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png?size=256", profile.UserID, *profile.Avatar)
+}
+
+func (a *DiscordAdapter) botProfileWebhookAvatar(ctx context.Context, guildID int64, profile *DiscordBotGuildProfile) *discord.Icon {
+	avatarURL := botProfileAvatarURL(guildID, profile)
+	if avatarURL == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, avatarURL, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := a.http.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil
+	}
+	const maxAvatarBytes = 8 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxAvatarBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxAvatarBytes {
+		return nil
+	}
+	icon, err := discord.ParseIconRaw(data)
+	if err != nil {
+		return nil
+	}
+	return icon
 }
 
 // DeleteWebhook removes a webhook using the bot token.

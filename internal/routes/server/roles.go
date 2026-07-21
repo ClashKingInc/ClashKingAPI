@@ -1,198 +1,158 @@
 package server
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// listRoles godoc
-// @Summary List roles by type
-// @Description Returns all roles of a given type configured for the server.
+// listServerRoles godoc
+// @Summary List server roles
+// @Description Returns configured roles for a server. Use type and clan_tag to filter the list.
 // @Tags Server Roles
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Param role_type path string true "Role type (clan, league, townhall, status...)"
-// @Success 200 {object} modelsv2.RolesListResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/roles/{role_type} [get]
-func listRoles(rt apptypes.Deps) apptypes.HandlerFunc {
+// @Param type query string false "Role type"
+// @Param clan_tag query string false "Clan tag"
+// @Success 200 {object} modelsv2.ServerRolesResponse
+// @Router /v2/server/{server_id}/server-roles [get]
+func listServerRoles(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		roleType := c.Params("role_type")
-		var items []map[string]any
-		if roleType == "status" {
-			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-			if err != nil {
-				return notFoundErr(err, "Server not found")
-			}
-			if sanitizedDoc, ok := sanitize(serverDoc).(map[string]any); ok {
-				serverDoc = sanitizedDoc
-			}
-			statusRoles, _ := serverDoc["status_roles"].(map[string]any)
-			discordRoles, _ := statusRoles["discord"].([]any)
-			for _, role := range discordRoles {
-				if cast, ok := role.(map[string]any); ok {
-					items = append(items, cast)
-				}
-			}
-		} else {
-			if serverRoleCollections[roleType] == "" {
-				return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
-			}
-			items, err = sqlRoleBindings(c, rt, serverID, roleType)
-			if err != nil {
-				return err
-			}
+		roles, err := queryServerRoles(c, rt, serverID, strings.TrimSpace(c.Query("type")), serverNormalizeTag(c.Query("clan_tag")))
+		if err != nil {
+			return err
 		}
-		sanitized := sanitizeRoleList(items)
-		return apptypes.JSON(c, http.StatusOK, modelsv2.RolesListResponse{
-			ServerID: serverID,
-			RoleType: roleType,
-			Roles:    sanitized,
-			Count:    len(sanitized),
-		})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerRolesResponse{ServerID: serverID, Roles: roles, Count: len(roles)})
 	}
 }
 
-// createRole godoc
-// @Summary Create a role
-// @Description Creates a new role of a given type for the server.
+// createServerRole godoc
+// @Summary Create a server role
+// @Description Creates one server-level or clan-level role configuration.
 // @Tags Server Roles
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Param role_type path string true "Role type"
-// @Success 200 {object} modelsv2.RoleResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/roles/{role_type} [post]
-func createRole(rt apptypes.Deps) apptypes.HandlerFunc {
+// @Success 201 {object} modelsv2.ServerRoleResponse
+// @Router /v2/server/{server_id}/server-roles [post]
+func createServerRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		roleType := c.Params("role_type")
-		var body map[string]any
+		var body modelsv2.ServerRoleCreate
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
-			return notFoundErr(err, "Server not found")
-		}
-		body["server"] = serverID
-		if roleType == "status" {
-			roleID := serverAsString(body["id"])
-			err := sqlAddStatusRole(c, rt, serverID, body)
-			if err != nil {
-				return err
-			}
-			return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
-				Message:  "Role created successfully",
-				ServerID: serverID,
-				RoleType: roleType,
-				RoleID:   roleID,
-			})
-		}
-		if serverRoleCollections[roleType] == "" {
-			return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
-		}
-		roleID := serverAsString(firstNonNil(body["role_id"], body["role"], body["id"]))
-		if roleID == "" {
-			return apptypes.Error(http.StatusBadRequest, "role is required")
-		}
-		_, err = rt.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO role_bindings (server_id, role_type, role_key, role_id, data, created_at, updated_at)
-			VALUES ($1, $2, '', $3, $4::jsonb, now(), now())
-			ON CONFLICT (server_id, role_type, role_key, role_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
-		`, strconv.Itoa(serverID), roleType, roleID, apptypes.Marshal(body))
+		role, err := normalizedServerRoleInput(serverID, body)
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
-			Message:  "Role created successfully",
-			ServerID: serverID,
-			RoleType: roleType,
-			RoleID:   roleID,
-		})
+		created, err := insertServerRole(c, rt, role)
+		if err != nil {
+			return serverRoleWriteError(err)
+		}
+		return apptypes.JSON(c, http.StatusCreated, modelsv2.ServerRoleResponse{Message: "Server role created.", Role: created})
 	}
 }
 
-// deleteRole godoc
-// @Summary Delete a role
-// @Description Deletes a role by type and ID.
+// patchServerRole godoc
+// @Summary Update a server role
+// @Description Updates one server role configuration.
 // @Tags Server Roles
+// @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Param role_type path string true "Role type"
-// @Param role_id path string true "Role ID"
-// @Success 200 {object} modelsv2.RoleResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/roles/{role_type}/{role_id} [delete]
-func deleteRole(rt apptypes.Deps) apptypes.HandlerFunc {
+// @Param role_id path string true "Server role ID"
+// @Success 200 {object} modelsv2.ServerRoleResponse
+// @Router /v2/server/{server_id}/server-roles/{role_id} [patch]
+func patchServerRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
 		if err != nil {
 			return err
 		}
-		roleType := c.Params("role_type")
-		roleID := c.Params("role_id")
-		if roleType == "status" {
-			err := sqlDeleteStatusRole(c, rt, serverID, roleID)
-			if err != nil {
-				return err
-			}
-			return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
-				Message:  "Role deleted successfully",
-				ServerID: serverID,
-				RoleType: roleType,
-				RoleID:   roleID,
-			})
-		}
-		if serverRoleCollections[roleType] == "" {
-			return apptypes.Error(http.StatusBadRequest, "Unsupported role type")
-		}
-		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM role_bindings WHERE server_id = $1 AND role_type = $2 AND role_id = $3`, strconv.Itoa(serverID), roleType, roleID)
+		current, err := getServerRole(c, rt, serverID, c.Params("role_id"))
 		if err != nil {
+			return serverRoleLookupError(err)
+		}
+		var body modelsv2.ServerRoleUpdate
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		if result.RowsAffected() == 0 {
-			return apptypes.Error(http.StatusNotFound, "Role not found")
+		if body.Type != nil {
+			current.Type = strings.TrimSpace(*body.Type)
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
-			Message:  "Role deleted successfully",
-			ServerID: serverID,
-			RoleType: roleType,
-			RoleID:   roleID,
-		})
+		if body.Option != nil {
+			current.Option = strings.TrimSpace(*body.Option)
+		}
+		if body.RoleID != nil {
+			current.RoleID = strings.TrimSpace(*body.RoleID)
+		}
+		if body.Mode != nil {
+			current.Mode = strings.TrimSpace(*body.Mode)
+		}
+		if body.ClanTag != nil {
+			if tag := serverNormalizeTag(*body.ClanTag); tag != "" {
+				current.ClanTag = &tag
+			} else {
+				current.ClanTag = nil
+			}
+		}
+		if err := validateServerRole(current); err != nil {
+			return err
+		}
+		updated, err := updateServerRole(c, rt, current)
+		if err != nil {
+			return serverRoleWriteError(err)
+		}
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerRoleResponse{Message: "Server role updated.", Role: updated})
 	}
 }
 
-// getRoleSettings godoc
-// @Summary Get role settings
-// @Description Returns the role evaluation settings for a server.
+// deleteServerRole godoc
+// @Summary Delete a server role
+// @Description Deletes one server role configuration.
 // @Tags Server Roles
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
-// @Success 200 {object} modelsv2.RoleSettingsResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/role-settings [get]
+// @Param role_id path string true "Server role ID"
+// @Success 200 {object} modelsv2.ServerRoleResponse
+// @Router /v2/server/{server_id}/server-roles/{role_id} [delete]
+func deleteServerRole(rt apptypes.Deps) apptypes.HandlerFunc {
+	return func(c *fiber.Ctx) error {
+		serverID, err := pathInt(c, "server_id")
+		if err != nil {
+			return err
+		}
+		role, err := scanServerRole(rt.Store.SQL.QueryRow(c.UserContext(), `
+			DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid
+			RETURNING id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at
+		`, strconv.Itoa(serverID), c.Params("role_id")))
+		if err != nil {
+			return serverRoleLookupError(err)
+		}
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerRoleResponse{Message: "Server role deleted.", Role: role})
+	}
+}
+
 func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -210,24 +170,10 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			AutoevalTriggers: stringSlice(serverDoc["autoeval_triggers"]),
 			AutoevalLog:      stringPtrMaybe(serverDoc["autoeval_log"]),
 			BlacklistedRoles: stringSlice(serverDoc["blacklisted_roles"]),
-			RoleTreatment:    stringSlice(serverDoc["role_treatment"]),
-			CategoryRoles:    categoryRolesStrings(serverDoc["category_roles"]),
 		})
 	}
 }
 
-// patchRoleSettings godoc
-// @Summary Update role settings
-// @Description Partially updates the role evaluation settings for a server.
-// @Tags Server Roles
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Success 200 {object} modelsv2.RoleResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/role-settings [patch]
 func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -238,275 +184,165 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		setDoc := map[string]any{}
-		if body.AutoEvalStatus != nil {
-			setDoc["autoeval"] = *body.AutoEvalStatus
-		} else if body.Autoeval != nil {
-			setDoc["autoeval"] = *body.Autoeval
+		settingsUpdate := modelsv2.ServerSettingsUpdate{
+			Autoeval:         body.AutoEvalStatus,
+			AutoEvalNickname: body.AutoEvalNickname,
+			AutoevalTriggers: body.AutoevalTriggers,
+			AutoevalLog:      body.AutoevalLog,
+			BlacklistedRoles: body.BlacklistedRoles,
 		}
-		if body.AutoEvalNickname != nil {
-			setDoc["auto_eval_nickname"] = *body.AutoEvalNickname
-		}
-		if body.AutoevalTriggers != nil {
-			setDoc["autoeval_triggers"] = body.AutoevalTriggers
-		}
-		if body.AutoevalLog != nil {
-			setDoc["autoeval_log"] = body.AutoevalLog
-		}
-		if body.BlacklistedRoles != nil {
-			setDoc["blacklisted_roles"] = body.BlacklistedRoles
-		}
-		if body.RoleTreatment != nil {
-			setDoc["role_treatment"] = body.RoleTreatment
-		}
-		if body.CategoryRoles != nil {
-			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-			if err != nil {
-				return notFoundErr(err, "Server not found")
-			}
-			categoryRoles := categoryRolesStrings(serverDoc["category_roles"])
-			if categoryRoles == nil {
-				categoryRoles = map[string]string{}
-			}
-			for category, roleStr := range body.CategoryRoles {
-				if roleStr == "" {
-					delete(categoryRoles, category)
-				} else {
-					categoryRoles[category] = roleStr
-				}
-			}
-			setDoc["category_roles"] = categoryRoles
-		}
-		if len(setDoc) == 0 {
+		if body.AutoEvalStatus == nil && body.AutoEvalNickname == nil && body.AutoevalLog == nil && body.AutoevalTriggers == nil && body.BlacklistedRoles == nil {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		result, err := rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET data = data || $2::jsonb, updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(setDoc))
-		if err != nil {
+		if err := updateNormalizedServerSettings(c, rt, serverID, settingsUpdate); err != nil {
 			return err
 		}
-		if result.RowsAffected() == 0 {
-			return apptypes.Error(http.StatusNotFound, "Server not found")
-		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.RoleResponse{
-			Message:  "Role settings updated successfully",
-			ServerID: serverID,
-			RoleType: "settings",
-			RoleID:   "",
-		})
+		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Role settings updated.", "server_id": serverID})
 	}
 }
 
-// getAllRoles godoc
-// @Summary Get all roles
-// @Description Returns all roles of every type configured for the server.
-// @Tags Server Roles
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Success 200 {object} modelsv2.AllRolesResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/all-roles [get]
-func getAllRoles(rt apptypes.Deps) apptypes.HandlerFunc {
-	return func(c *fiber.Ctx) error {
-		serverID, err := pathInt(c, "server_id")
-		if err != nil {
-			return err
-		}
-		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
-			return notFoundErr(err, "Server not found")
-		}
-		out := map[string][]modelsv2.RoleBinding{}
-		totalCount := 0
-		for roleType := range serverRoleCollections {
-			items, _ := sqlRoleBindings(c, rt, serverID, roleType)
-			sanitized := sanitizeRoleList(items)
-			out[roleType] = sanitized
-			totalCount += len(sanitized)
-		}
-		serverDoc, _ := sqlServerSettingsDoc(c, rt, serverID)
-		statusRoles, _ := serverDoc["status_roles"].(map[string]any)
-		status := sanitizeRoleList(anyMapSlice(statusRoles["discord"]))
-		out["status"] = status
-		totalCount += len(status)
-		return apptypes.JSON(c, http.StatusOK, modelsv2.AllRolesResponse{
-			ServerID:      serverID,
-			Roles:         out,
-			CategoryRoles: categoryRolesStrings(serverDoc["category_roles"]),
-			TotalCount:    totalCount,
-		})
+func normalizedServerRoleInput(serverID int, body modelsv2.ServerRoleCreate) (modelsv2.ServerRole, error) {
+	role := modelsv2.ServerRole{
+		ServerID: serverID,
+		Type:     strings.TrimSpace(body.Type),
+		Option:   strings.TrimSpace(body.Option),
+		RoleID:   strings.TrimSpace(body.RoleID),
+		Mode:     strings.TrimSpace(body.Mode),
 	}
+	if role.Mode == "" {
+		role.Mode = "both"
+	}
+	if body.ClanTag != nil {
+		if tag := serverNormalizeTag(*body.ClanTag); tag != "" {
+			role.ClanTag = &tag
+		}
+	}
+	return role, validateServerRole(role)
 }
 
-// getFamilyRoles godoc
-// @Summary Get family roles
-// @Description Returns all family-related role configurations for the server.
-// @Tags Server Roles
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Success 200 {object} modelsv2.FamilyRolesResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/family-roles [get]
-func getFamilyRoles(rt apptypes.Deps) apptypes.HandlerFunc {
-	return func(c *fiber.Ctx) error {
-		serverID, err := pathInt(c, "server_id")
-		if err != nil {
-			return err
-		}
-		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
-			return notFoundErr(err, "Server not found")
-		}
-		familyRoles, _ := sqlRoleBindings(c, rt, serverID, "family")
-		notFamilyRoles, _ := sqlRoleBindings(c, rt, serverID, "not_family")
-		onlyFamilyRoles, _ := sqlRoleBindings(c, rt, serverID, "only_family")
-		ignoredRoles, _ := sqlRoleBindings(c, rt, serverID, "ignored")
-		positionRoles, _ := sqlRoleBindings(c, rt, serverID, "family_position")
-
-		resp := modelsv2.FamilyRolesResponse{
-			ServerID:            serverID,
-			FamilyRoles:         roleIDsAsStrings(familyRoles),
-			NotFamilyRoles:      roleIDsAsStrings(notFamilyRoles),
-			OnlyFamilyRoles:     roleIDsAsStrings(onlyFamilyRoles),
-			IgnoredRoles:        roleIDsAsStrings(ignoredRoles),
-			FamilyMemberRoles:   positionRoleIDsAsStrings(positionRoles, "family_member_roles"),
-			FamilyElderRoles:    positionRoleIDsAsStrings(positionRoles, "family_elder_roles"),
-			FamilyColeaderRoles: positionRoleIDsAsStrings(positionRoles, "family_co-leader_roles"),
-			FamilyLeaderRoles:   positionRoleIDsAsStrings(positionRoles, "family_leader_roles"),
-		}
-		return apptypes.JSON(c, http.StatusOK, resp)
+func validateServerRole(role modelsv2.ServerRole) error {
+	if !modelsv2.HasEnumValue(modelsv2.RoleTypeEnums, role.Type) {
+		return apptypes.Error(http.StatusBadRequest, "Unknown role type")
 	}
+	if !modelsv2.HasEnumValue(modelsv2.RoleModeEnums, role.Mode) {
+		return apptypes.Error(http.StatusBadRequest, "Unknown role mode")
+	}
+	if role.Option == "" {
+		return apptypes.Error(http.StatusBadRequest, "option is required")
+	}
+	if role.RoleID == "" {
+		return apptypes.Error(http.StatusBadRequest, "role_id is required")
+	}
+	if role.ClanTag != nil && role.Type != "clan_role" {
+		return apptypes.Error(http.StatusBadRequest, "Only clan_role can use clan_tag")
+	}
+	if role.Type == "family" && role.Option != "family" && role.Option != "not_family" {
+		return apptypes.Error(http.StatusBadRequest, "Family roles only support family and not_family options")
+	}
+	if role.Type == "clan_role" {
+		supported := role.Option == "member" || role.Option == "elder" || role.Option == "co_leader" || role.Option == "leader"
+		if !supported {
+			return apptypes.Error(http.StatusBadRequest, "Unknown clan role option")
+		}
+		if role.ClanTag == nil && role.Option == "member" {
+			return apptypes.Error(http.StatusBadRequest, "Server-level Member is the same as Family; use the family role type")
+		}
+	}
+	return nil
 }
 
-// addFamilyRole godoc
-// @Summary Add a family role
-// @Description Adds a Discord role to a family role category.
-// @Tags Server Roles
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Success 200 {object} modelsv2.FamilyRoleOperationResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/family-roles [post]
-func addFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
-	return func(c *fiber.Ctx) error {
-		serverID, err := pathInt(c, "server_id")
-		if err != nil {
-			return err
-		}
-		if _, err := sqlServerSettingsDoc(c, rt, serverID); err != nil {
-			return notFoundErr(err, "Server not found")
-		}
-		var body modelsv2.FamilyRoleRequest
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		collectionName, internalType := familyRoleTarget(body.Type)
-		if collectionName == "" {
-			return apptypes.Error(http.StatusBadRequest, "Unsupported family role type")
-		}
-		doc := map[string]any{"server": serverID, "role": numericMaybe(serverAsString(body.Role))}
-		if internalType != "" {
-			doc["type"] = internalType
-		}
-		_ = collectionName
-		storedRoleType := body.Type
-		roleKey := internalType
-		if roleKey != "" {
-			storedRoleType = "family_position"
-		}
-		_, err = rt.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO role_bindings (server_id, role_type, role_key, role_id, data, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5::jsonb, now(), now())
-			ON CONFLICT (server_id, role_type, role_key, role_id) DO NOTHING
-		`, strconv.Itoa(serverID), storedRoleType, roleKey, serverAsString(body.Role), apptypes.Marshal(doc))
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.FamilyRoleOperationResponse{
-			Message:  "Family role added successfully",
-			ServerID: serverID,
-			RoleType: body.Type,
-			RoleID:   serverAsString(body.Role),
-		})
+func queryServerRoles(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleType, clanTag string) ([]modelsv2.ServerRole, error) {
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at
+		FROM server_roles
+		WHERE server_id = $1
+		  AND ($2 = '' OR type = $2)
+		  AND ($3 = '' OR clan_tag = $3)
+		ORDER BY type, option, clan_tag NULLS FIRST, role_id
+	`, strconv.Itoa(serverID), roleType, clanTag)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
+	roles := []modelsv2.ServerRole{}
+	for rows.Next() {
+		role, err := scanServerRole(rows)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, rows.Err()
 }
 
-// removeFamilyRole godoc
-// @Summary Remove a family role
-// @Description Removes a Discord role from a family role category.
-// @Tags Server Roles
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Param role_type path string true "Family role type"
-// @Param role_id path string true "Discord Role ID"
-// @Success 200 {object} modelsv2.FamilyRoleOperationResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/family-roles/{role_type}/{role_id} [delete]
-func removeFamilyRole(rt apptypes.Deps) apptypes.HandlerFunc {
-	return func(c *fiber.Ctx) error {
-		serverID, err := pathInt(c, "server_id")
-		if err != nil {
-			return err
-		}
-		roleType := c.Params("role_type")
-		collectionName, internalType := familyRoleTarget(roleType)
-		if collectionName == "" {
-			return apptypes.Error(http.StatusBadRequest, "Unsupported family role type")
-		}
-		roleID := c.Params("role_id")
-		_ = collectionName
-		storedRoleType := roleType
-		roleKey := internalType
-		if roleKey != "" {
-			storedRoleType = "family_position"
-		}
-		result, err := rt.Store.SQL.Exec(c.UserContext(), `
-			DELETE FROM role_bindings
-			WHERE server_id = $1 AND role_type = $2 AND role_key = $3 AND role_id = $4
-		`, strconv.Itoa(serverID), storedRoleType, roleKey, roleID)
-		if err != nil {
-			return err
-		}
-		if result.RowsAffected() == 0 {
-			return apptypes.Error(http.StatusNotFound, "Family role not found")
-		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.FamilyRoleOperationResponse{
-			Message:  "Family role removed successfully",
-			ServerID: serverID,
-			RoleType: roleType,
-			RoleID:   roleID,
-		})
-	}
+func getServerRole(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleID string) (modelsv2.ServerRole, error) {
+	return scanServerRole(rt.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at
+		FROM server_roles WHERE server_id = $1 AND id = $2::uuid
+	`, strconv.Itoa(serverID), roleID))
 }
 
-func sanitizeRoleList(items []map[string]any) []modelsv2.RoleBinding {
-	sanitized := make([]modelsv2.RoleBinding, 0, len(items))
-	for _, item := range items {
-		role := sanitize(item).(map[string]any)
-		sanitized = append(sanitized, modelsv2.RoleBinding{
-			ID:     stringPtrMaybe(role["id"]),
-			Role:   serverAsString(role["role"]),
-			Type:   stringPtrMaybe(role["type"]),
-			Number: intPtrMaybe(role["number"]),
-			Key:    stringPtrMaybe(role["key"]),
-		})
-	}
-	return sanitized
+func insertServerRole(c *fiber.Ctx, rt apptypes.Deps, role modelsv2.ServerRole) (modelsv2.ServerRole, error) {
+	return scanServerRole(rt.Store.SQL.QueryRow(c.UserContext(), `
+		INSERT INTO server_roles (server_id, clan_tag, type, option, role_id, mode)
+		SELECT id, $2, $3, $4, $5, $6 FROM servers WHERE id = $1
+		RETURNING id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at
+	`, strconv.Itoa(role.ServerID), role.ClanTag, role.Type, role.Option, role.RoleID, role.Mode))
 }
 
-func boolPtrMaybe(value any) *bool {
-	typed, ok := value.(bool)
-	if !ok {
-		return nil
+func updateServerRole(c *fiber.Ctx, rt apptypes.Deps, role modelsv2.ServerRole) (modelsv2.ServerRole, error) {
+	return scanServerRole(rt.Store.SQL.QueryRow(c.UserContext(), `
+		UPDATE server_roles SET clan_tag = $3, type = $4, option = $5, role_id = $6, mode = $7, updated_at = now()
+		WHERE server_id = $1 AND id = $2::uuid
+		RETURNING id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at
+	`, strconv.Itoa(role.ServerID), role.ID, role.ClanTag, role.Type, role.Option, role.RoleID, role.Mode))
+}
+
+type serverRoleScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanServerRole(row serverRoleScanner) (modelsv2.ServerRole, error) {
+	var role modelsv2.ServerRole
+	var serverID string
+	var createdAt, updatedAt time.Time
+	err := row.Scan(&role.ID, &serverID, &role.ClanTag, &role.Type, &role.Option, &role.RoleID, &role.Mode, &createdAt, &updatedAt)
+	if err != nil {
+		return role, err
 	}
-	return &typed
+	role.ServerID, _ = strconv.Atoi(serverID)
+	role.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	role.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+	return role, nil
+}
+
+func serverRoleWriteError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apptypes.Error(http.StatusNotFound, "Server or clan not found")
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505":
+			return apptypes.Error(http.StatusConflict, "Server role already exists")
+		case "23503":
+			return apptypes.Error(http.StatusNotFound, "Server or clan not found")
+		case "23514":
+			return apptypes.Error(http.StatusBadRequest, "Server role is invalid")
+		}
+	}
+	return err
+}
+
+func serverRoleLookupError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apptypes.Error(http.StatusNotFound, "Server role not found")
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "22P02" {
+		return apptypes.Error(http.StatusBadRequest, "role_id must be a UUID")
+	}
+	return err
 }
 
 func stringSlice(value any) []string {
@@ -523,155 +359,4 @@ func anySlice(value any) []any {
 		return sanitized
 	}
 	return []any{}
-}
-
-func mapMaybe(value any) map[string]any {
-	if sanitized, ok := sanitize(value).(map[string]any); ok {
-		return sanitized
-	}
-	return map[string]any{}
-}
-
-func categoryRolesStrings(value any) map[string]string {
-	raw := mapMaybe(value)
-	out := make(map[string]string, len(raw))
-	for k, v := range raw {
-		out[k] = serverAsString(v)
-	}
-	return out
-}
-
-func anyMapSlice(value any) []map[string]any {
-	raw := anySlice(value)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		if cast := mapMaybe(item); len(cast) > 0 {
-			out = append(out, cast)
-		}
-	}
-	return out
-}
-
-func roleIDsAsStrings(items []map[string]any) []string {
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if role := item["role"]; role != nil {
-			out = append(out, serverAsString(role))
-		}
-	}
-	return out
-}
-
-func positionRoleIDsAsStrings(items []map[string]any, roleType string) []string {
-	out := make([]string, 0)
-	for _, item := range items {
-		if serverAsString(item["type"]) == roleType {
-			out = append(out, serverAsString(item["role"]))
-		}
-	}
-	return out
-}
-
-func familyRoleTarget(roleType string) (collection string, internalType string) {
-	switch roleType {
-	case "family":
-		return "generalrole", ""
-	case "not_family":
-		return "linkrole", ""
-	case "only_family":
-		return "familyexclusiveroles", ""
-	case "ignored":
-		return "evalignore", ""
-	case "family_member":
-		return "family_roles", "family_member_roles"
-	case "family_elder":
-		return "family_roles", "family_elder_roles"
-	case "family_coleader":
-		return "family_roles", "family_co-leader_roles"
-	case "family_leader":
-		return "family_roles", "family_leader_roles"
-	default:
-		return "", ""
-	}
-}
-
-func sqlRoleBindings(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleType string) ([]map[string]any, error) {
-	query := `
-		SELECT role_key, role_id, data
-		FROM role_bindings
-		WHERE server_id = $1 AND role_type = $2
-	`
-	args := []any{strconv.Itoa(serverID), roleType}
-	if roleType == "family_position" {
-		query = `
-			SELECT role_key, role_id, data
-			FROM role_bindings
-			WHERE server_id = $1 AND role_type = $2
-		`
-	}
-	rows, err := rt.Store.SQL.Query(c.UserContext(), query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []map[string]any{}
-	for rows.Next() {
-		var roleKey, roleID string
-		var raw []byte
-		if err := rows.Scan(&roleKey, &roleID, &raw); err != nil {
-			return nil, err
-		}
-		doc := map[string]any{}
-		_ = json.Unmarshal(raw, &doc)
-		doc["server"] = serverID
-		doc["role"] = roleID
-		doc["id"] = roleID
-		if roleKey != "" {
-			doc["type"] = roleKey
-		}
-		items = append(items, doc)
-	}
-	return items, rows.Err()
-}
-
-func sqlAddStatusRole(c *fiber.Ctx, rt apptypes.Deps, serverID int, body map[string]any) error {
-	serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-	if err != nil {
-		return err
-	}
-	statusRoles := mapMaybe(serverDoc["status_roles"])
-	discordRoles := anyMapSlice(statusRoles["discord"])
-	roleID := serverAsString(body["id"])
-	replaced := false
-	for i, role := range discordRoles {
-		if serverAsString(role["id"]) == roleID {
-			discordRoles[i] = body
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		discordRoles = append(discordRoles, body)
-	}
-	statusRoles["discord"] = discordRoles
-	_, err = rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET status_roles = $2::jsonb, data = data || jsonb_build_object('status_roles', $2::jsonb), updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(statusRoles))
-	return err
-}
-
-func sqlDeleteStatusRole(c *fiber.Ctx, rt apptypes.Deps, serverID int, roleID string) error {
-	serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-	if err != nil {
-		return err
-	}
-	statusRoles := mapMaybe(serverDoc["status_roles"])
-	discordRoles := anyMapSlice(statusRoles["discord"])
-	filtered := discordRoles[:0]
-	for _, role := range discordRoles {
-		if serverAsString(role["id"]) != roleID {
-			filtered = append(filtered, role)
-		}
-	}
-	statusRoles["discord"] = filtered
-	_, err = rt.Store.SQL.Exec(c.UserContext(), `UPDATE servers SET status_roles = $2::jsonb, data = data || jsonb_build_object('status_roles', $2::jsonb), updated_at = now() WHERE id = $1`, strconv.Itoa(serverID), apptypes.Marshal(statusRoles))
-	return err
 }

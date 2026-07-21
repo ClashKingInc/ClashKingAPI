@@ -382,7 +382,7 @@ func dashboardSectionForPath(path string) (string, bool) {
 		return "links", false
 	case strings.Contains(path, "/roster"):
 		return "rosters", false
-	case strings.Contains(path, "/logs"), strings.Contains(path, "/clan-logs"):
+	case strings.Contains(path, "/logs"):
 		return "logs", false
 	case strings.Contains(path, "/reminders"):
 		return "reminders", false

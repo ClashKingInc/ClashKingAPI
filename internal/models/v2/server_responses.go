@@ -5,96 +5,33 @@ type ClanReference struct {
 	Name string `json:"name"`
 }
 
-type ServerSettingsEval struct {
-	LeagueRoles         []RoleBinding `json:"league_roles"`
-	IgnoredRoles        []RoleBinding `json:"ignored_roles"`
-	FamilyRoles         []RoleBinding `json:"family_roles"`
-	NotFamilyRoles      []RoleBinding `json:"not_family_roles"`
-	OnlyFamilyRoles     []RoleBinding `json:"only_family_roles"`
-	FamilyPositionRoles []RoleBinding `json:"family_position_roles"`
-	TownhallRoles       []RoleBinding `json:"townhall_roles"`
-	BuilderhallRoles    []RoleBinding `json:"builderhall_roles"`
-	AchievementRoles    []RoleBinding `json:"achievement_roles"`
-	StatusRoles         []RoleBinding `json:"status_roles"`
-	BuilderLeagueRoles  []RoleBinding `json:"builder_league_roles"`
-}
-
 type ServerSettingsDocument struct {
-	ServerID          string                  `json:"server_id"`
-	Server            int                     `json:"server"`
-	Name              string                  `json:"name"`
-	EmbedColor        *string                 `json:"embed_color,omitempty"`
-	NicknameRule      *string                 `json:"nickname_rule,omitempty"`
-	NonFamilyNickname *string                 `json:"non_family_nickname_rule,omitempty"`
-	ChangeNickname    *bool                   `json:"change_nickname,omitempty"`
-	FlairNonFamily    *bool                   `json:"flair_non_family,omitempty"`
-	AutoEvalNickname  *bool                   `json:"auto_eval_nickname,omitempty"`
-	AutoevalTriggers  []string                `json:"autoeval_triggers,omitempty"`
-	AutoevalLog       *string                 `json:"autoeval_log,omitempty"`
-	Autoeval          *bool                   `json:"autoeval,omitempty"`
-	BlacklistedRoles  []string                `json:"blacklisted_roles,omitempty"`
-	RoleTreatment     []string                `json:"role_treatment,omitempty"`
-	FullWhitelistRole *string                 `json:"full_whitelist_role,omitempty"`
-	LeadershipEval    *bool                   `json:"leadership_eval,omitempty"`
-	AutoboardLimit    *int                    `json:"autoboard_limit,omitempty"`
-	APIToken          *bool                   `json:"api_token,omitempty"`
-	Tied              *bool                   `json:"tied,omitempty"`
-	Banlist           *string                 `json:"banlist,omitempty"`
-	StrikeLog         *string                 `json:"strike_log,omitempty"`
-	RedditFeed        *string                 `json:"reddit_feed,omitempty"`
-	FamilyLabel       *string                 `json:"family_label,omitempty"`
-	Greeting          *string                 `json:"greeting,omitempty"`
-	LinkParse         *LinkParseSettings      `json:"link_parse,omitempty"`
-	LogsConfig        ServerLogsResponse      `json:"logs_config"`
-	Logs              ServerLogsResponse      `json:"logs"`
-	StatusRoles       StatusRolesDocument     `json:"status_roles"`
-	Countdowns        ServerCountdownDocument `json:"countdowns"`
-	Eval              ServerSettingsEval      `json:"eval"`
-	Clans             []ClanSettingsDetail    `json:"clans,omitempty"`
-}
-
-type ServerCountdownDocument struct {
-	CWL         *string `json:"cwlCountdown,omitempty"`
-	ClanGames   *string `json:"gamesCountdown,omitempty"`
-	RaidWeekend *string `json:"raidCountdown,omitempty"`
-	EndOfSeason *string `json:"eosCountdown,omitempty"`
-	MemberCount *string `json:"memberCountWarning,omitempty"`
-	SeasonDay   *string `json:"seasonCountdown,omitempty"`
-}
-
-type StatusRolesDocument struct {
-	Discord []RoleBinding `json:"discord"`
-}
-
-type RoleBinding struct {
-	ID     *string `json:"id,omitempty"`
-	Role   string  `json:"role"`
-	Type   *string `json:"type,omitempty"`
-	Number *int    `json:"number,omitempty"`
-	Key    *string `json:"key,omitempty"`
-}
-
-type ServerLogsResponse struct {
-	JoinLeaveLog         *LogConfig `json:"join_leave_log,omitempty"`
-	DonationLog          *LogConfig `json:"donation_log,omitempty"`
-	ClanAchievementLog   *LogConfig `json:"clan_achievement_log,omitempty"`
-	ClanRequirementsLog  *LogConfig `json:"clan_requirements_log,omitempty"`
-	ClanDescriptionLog   *LogConfig `json:"clan_description_log,omitempty"`
-	WarLog               *LogConfig `json:"war_log,omitempty"`
-	WarPanel             *LogConfig `json:"war_panel,omitempty"`
-	CWLLineupChangeLog   *LogConfig `json:"cwl_lineup_change_log,omitempty"`
-	CapitalDonationLog   *LogConfig `json:"capital_donation_log,omitempty"`
-	CapitalRaidLog       *LogConfig `json:"capital_raid_log,omitempty"`
-	RaidPanel            *LogConfig `json:"raid_panel,omitempty"`
-	CapitalWeeklySummary *LogConfig `json:"capital_weekly_summary,omitempty"`
-	PlayerUpgradeLog     *LogConfig `json:"player_upgrade_log,omitempty"`
-	LegendLog            *LogConfig `json:"legend_log,omitempty"`
-}
-
-type ServerLogOperationResponse struct {
-	Message  string  `json:"message"`
-	ServerID int     `json:"server_id"`
-	LogType  *string `json:"log_type,omitempty"`
+	ServerID          string               `json:"server_id"`
+	Server            int                  `json:"server"`
+	Name              string               `json:"name"`
+	EmbedColor        *string              `json:"embed_color,omitempty"`
+	NicknameRule      *string              `json:"nickname_rule,omitempty"`
+	NonFamilyNickname *string              `json:"non_family_nickname_rule,omitempty"`
+	ChangeNickname    *bool                `json:"change_nickname,omitempty"`
+	FlairNonFamily    *bool                `json:"flair_non_family,omitempty"`
+	AutoEvalNickname  *bool                `json:"auto_eval_nickname,omitempty"`
+	AutoevalTriggers  []string             `json:"autoeval_triggers,omitempty"`
+	AutoevalLog       *string              `json:"autoeval_log,omitempty"`
+	Autoeval          *bool                `json:"autoeval,omitempty"`
+	BlacklistedRoles  []string             `json:"blacklisted_roles,omitempty"`
+	FullWhitelistRole *string              `json:"full_whitelist_role,omitempty"`
+	AutoboardLimit    *int                 `json:"autoboard_limit,omitempty"`
+	APIToken          *bool                `json:"api_token,omitempty"`
+	Tied              *bool                `json:"tied,omitempty"`
+	Banlist           *string              `json:"banlist,omitempty"`
+	StrikeLog         *string              `json:"strike_log,omitempty"`
+	RedditFeed        *string              `json:"reddit_feed,omitempty"`
+	FamilyLabel       *string              `json:"family_label,omitempty"`
+	Greeting          *string              `json:"greeting,omitempty"`
+	LinkParse         *LinkParseSettings   `json:"link_parse,omitempty"`
+	Countdowns        map[string]string    `json:"countdowns"`
+	ServerRoles       []ServerRole         `json:"server_roles"`
+	Clans             []ClanSettingsDetail `json:"clans,omitempty"`
 }
 
 type ServerPanelResponse struct {

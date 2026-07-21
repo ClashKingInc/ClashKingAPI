@@ -4,18 +4,18 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	disgorest "github.com/disgoorg/disgo/rest"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 )
 
 // getServerCountdowns godoc
 // @Summary Get server countdowns
-// @Description Returns all server-level countdown types with enabled status and channel.
+// @Description Returns all server countdown types and their channel state.
 // @Tags Server Countdowns
 // @Produce json
 // @Security ApiKeyAuth
@@ -30,28 +30,23 @@ func getServerCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
+		items, found, err := queryCountdowns(c, rt, serverID, nil, "server")
 		if err != nil {
-			return notFoundErr(err, "Server not found")
+			return err
 		}
-		countdowns := mapMaybe(serverDoc["countdowns"])
-		items := make([]modelsv2.CountdownStatus, 0, len(serverCountdownTypes))
-		for _, countdownType := range serverCountdownTypes {
-			field := countdownDBFields[countdownType]
-			items = append(items, modelsv2.CountdownStatus{
-				Type:      countdownType,
-				Name:      countdownType,
-				Enabled:   countdowns[field] != nil,
-				ChannelID: stringPtrMaybe(countdowns[field]),
-			})
+		if !found {
+			return apptypes.Error(http.StatusNotFound, "Server not found")
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerCountdownsResponse{ServerID: strconv.Itoa(serverID), Countdowns: items})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerCountdownsResponse{
+			ServerID:   strconv.Itoa(serverID),
+			Countdowns: items,
+		})
 	}
 }
 
 // getClanCountdowns godoc
 // @Summary Get clan countdowns
-// @Description Returns all clan-level countdown types with enabled status and channel.
+// @Description Returns all clan countdown types and their channel state.
 // @Tags Server Countdowns
 // @Produce json
 // @Security ApiKeyAuth
@@ -68,33 +63,85 @@ func getClanCountdowns(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		tag := serverNormalizeTag(c.Params("clan_tag"))
-		clanDoc, err := sqlServerClanDoc(c, rt, serverID, tag)
+		items, found, err := queryCountdowns(c, rt, serverID, &tag, "clan")
 		if err != nil {
-			return notFoundErr(err, "Clan not found on this server")
+			return err
 		}
-		countdowns := mapMaybe(clanDoc["countdowns"])
-		items := make([]modelsv2.CountdownStatus, 0, len(clanCountdownTypes))
-		for _, countdownType := range clanCountdownTypes {
-			field := countdownDBFields[countdownType]
-			items = append(items, modelsv2.CountdownStatus{
-				Type:      countdownType,
-				Name:      countdownType,
-				Enabled:   countdowns[field] != nil,
-				ChannelID: stringPtrMaybe(countdowns[field]),
-			})
+		if !found {
+			return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanCountdownsResponse{ServerID: strconv.Itoa(serverID), ClanTag: tag, Countdowns: items})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanCountdownsResponse{
+			ServerID:   strconv.Itoa(serverID),
+			ClanTag:    tag,
+			Countdowns: items,
+		})
 	}
+}
+
+func queryCountdowns(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag *string, scope string) ([]modelsv2.CountdownStatus, bool, error) {
+	serverIDText := strconv.Itoa(serverID)
+	var found bool
+	var err error
+	if clanTag == nil {
+		err = rt.Store.SQL.QueryRow(c.UserContext(), `SELECT EXISTS (SELECT 1 FROM servers WHERE id = $1)`, serverIDText).Scan(&found)
+	} else {
+		err = rt.Store.SQL.QueryRow(c.UserContext(), `SELECT EXISTS (SELECT 1 FROM server_clans WHERE server_id = $1 AND tag = $2)`, serverIDText, *clanTag).Scan(&found)
+	}
+	if err != nil || !found {
+		return nil, found, err
+	}
+
+	channels := map[string]string{}
+	rows, err := rt.Store.SQL.Query(c.UserContext(), `
+		SELECT type, channel_id
+		FROM countdowns
+		WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2
+	`, serverIDText, clanTag)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var countdownType string
+		var channelID string
+		if err := rows.Scan(&countdownType, &channelID); err != nil {
+			return nil, false, err
+		}
+		channels[countdownType] = channelID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	items := make([]modelsv2.CountdownStatus, 0)
+	for _, value := range modelsv2.CountdownTypeEnums {
+		if value.Scope != scope {
+			continue
+		}
+		channelID, enabled := channels[value.Value]
+		var channelIDPointer *string
+		if enabled {
+			channelIDPointer = &channelID
+		}
+		items = append(items, modelsv2.CountdownStatus{
+			Type:      value.Value,
+			Name:      value.Description,
+			Enabled:   enabled,
+			ChannelID: channelIDPointer,
+		})
+	}
+	return items, true, nil
 }
 
 // enableCountdown godoc
 // @Summary Enable a countdown
-// @Description Enables a countdown type for a server or clan.
+// @Description Creates a Discord channel and stores one countdown rule.
 // @Tags Server Countdowns
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
+// @Param body body modelsv2.EnableCountdownRequest true "Countdown"
 // @Success 200 {object} modelsv2.EnableCountdownResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
@@ -110,94 +157,71 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		field := countdownDBFields[body.CountdownType]
-		if field == "" {
+		scope := modelsv2.EnumScope(modelsv2.CountdownTypeEnums, body.CountdownType)
+		if scope == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unknown countdown type")
+		}
+
+		serverIDText := strconv.Itoa(serverID)
+		var clanTag *string
+		clanName := ""
+		if scope == "clan" {
+			tag := serverNormalizeTag(body.ClanTag)
+			if tag == "" {
+				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s", body.CountdownType))
+			}
+			if err := rt.Store.SQL.QueryRow(c.UserContext(), `SELECT name FROM server_clans WHERE server_id = $1 AND tag = $2`, serverIDText, tag).Scan(&clanName); err != nil {
+				return notFoundErr(err, "Clan not found on this server")
+			}
+			clanTag = &tag
+		} else {
+			var found bool
+			if err := rt.Store.SQL.QueryRow(c.UserContext(), `SELECT EXISTS (SELECT 1 FROM servers WHERE id = $1)`, serverIDText).Scan(&found); err != nil {
+				return err
+			}
+			if !found {
+				return apptypes.Error(http.StatusNotFound, "Server not found")
+			}
+		}
+
+		var existing string
+		err = rt.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT channel_id FROM countdowns
+			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
+		`, serverIDText, clanTag, body.CountdownType).Scan(&existing)
+		if err == nil {
+			return apptypes.JSON(c, http.StatusOK, modelsv2.EnableCountdownResponse{
+				Message:       body.CountdownType + " already enabled",
+				CountdownType: body.CountdownType,
+				ChannelID:     existing,
+				ChannelName:   countdownChannelName(body.CountdownType, clanName),
+			})
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
 		}
 		if rt.Discord == nil {
 			return apptypes.Error(http.StatusServiceUnavailable, "Discord client is unavailable")
 		}
 
-		channelName := countdownChannelName(body.CountdownType, "")
-		var clanTag string
-		if slices.Contains(clanCountdownTypes, body.CountdownType) {
-			clanTag = serverNormalizeTag(body.ClanTag)
-			if clanTag == "" {
-				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s countdown", body.CountdownType))
-			}
-			clanDoc, err := sqlServerClanDoc(c, rt, serverID, clanTag)
-			if err != nil {
-				return notFoundErr(err, "Clan not found on this server")
-			}
-			if existing := serverAsString(mapMaybe(clanDoc["countdowns"])[field]); existing != "" {
-				return apptypes.JSON(c, http.StatusOK, modelsv2.EnableCountdownResponse{
-					Message:       body.CountdownType + " countdown already enabled",
-					CountdownType: body.CountdownType,
-					ChannelID:     existing,
-					ChannelName:   countdownChannelName(body.CountdownType, serverAsString(clanDoc["name"])),
-				})
-			}
-			channelName = countdownChannelName(body.CountdownType, serverAsString(clanDoc["name"]))
-		} else {
-			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-			if err != nil {
-				return notFoundErr(err, "Server not found")
-			}
-			if existing := serverAsString(mapMaybe(serverDoc["countdowns"])[field]); existing != "" {
-				return apptypes.JSON(c, http.StatusOK, modelsv2.EnableCountdownResponse{
-					Message:       body.CountdownType + " countdown already enabled",
-					CountdownType: body.CountdownType,
-					ChannelID:     existing,
-					ChannelName:   channelName,
-				})
-			}
-		}
-
+		channelName := countdownChannelName(body.CountdownType, clanName)
 		channel, err := rt.Discord.CreateCountdownChannel(c.UserContext(), int64(serverID), channelName)
 		if err != nil {
 			return fmt.Errorf("create Discord countdown channel: %w", err)
 		}
 		channelID := channel.ID()
 		channelIDString := channelID.String()
-		cleanupChannel := func() {
+		_, err = rt.Store.SQL.Exec(c.UserContext(), `
+			INSERT INTO countdowns (server_id, clan_tag, type, channel_id)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_at = now()
+		`, serverIDText, clanTag, body.CountdownType, channelIDString)
+		if err != nil {
 			_ = rt.Discord.DeleteChannel(c.UserContext(), int64(channelID))
-		}
-
-		if slices.Contains(clanCountdownTypes, body.CountdownType) {
-			result, err := rt.Store.SQL.Exec(c.UserContext(), `
-				UPDATE server_clans
-				SET countdowns = jsonb_set(countdowns, ARRAY[$3], to_jsonb($4::text), true),
-					data = data || $5::jsonb,
-					updated_at = now()
-				WHERE server_id = $1 AND tag = $2
-			`, strconv.Itoa(serverID), clanTag, field, channelIDString, apptypes.Marshal(map[string]any{field: channelIDString}))
-			if err != nil {
-				cleanupChannel()
-				return err
-			}
-			if result.RowsAffected() == 0 {
-				cleanupChannel()
-				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
-			}
-		} else {
-			result, err := rt.Store.SQL.Exec(c.UserContext(), `
-				UPDATE servers
-				SET countdowns = jsonb_set(countdowns, ARRAY[$2], to_jsonb($3::text), true),
-					data = data || $4::jsonb,
-					updated_at = now()
-				WHERE id = $1
-			`, strconv.Itoa(serverID), field, channelIDString, apptypes.Marshal(map[string]any{field: channelIDString}))
-			if err != nil {
-				cleanupChannel()
-				return err
-			}
-			if result.RowsAffected() == 0 {
-				cleanupChannel()
-				return apptypes.Error(http.StatusNotFound, "Server not found")
-			}
+			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.EnableCountdownResponse{
-			Message:       body.CountdownType + " countdown enabled successfully",
+			Message:       body.CountdownType + " enabled",
 			CountdownType: body.CountdownType,
 			ChannelID:     channelIDString,
 			ChannelName:   channelName,
@@ -207,12 +231,13 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // disableCountdown godoc
 // @Summary Disable a countdown
-// @Description Disables a countdown type for a server or clan.
+// @Description Deletes the Discord channel and its countdown rule.
 // @Tags Server Countdowns
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
+// @Param body body modelsv2.DisableCountdownRequest true "Countdown"
 // @Success 200 {object} modelsv2.DisableCountdownResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
@@ -228,78 +253,55 @@ func disableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
-		field := countdownDBFields[body.CountdownType]
-		if field == "" {
+		scope := modelsv2.EnumScope(modelsv2.CountdownTypeEnums, body.CountdownType)
+		if scope == "" {
 			return apptypes.Error(http.StatusBadRequest, "Unknown countdown type")
 		}
-		var channelIDString string
-		if slices.Contains(clanCountdownTypes, body.CountdownType) {
+		var clanTag *string
+		if scope == "clan" {
 			tag := serverNormalizeTag(body.ClanTag)
 			if tag == "" {
-				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s countdown", body.CountdownType))
+				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s", body.CountdownType))
 			}
-			clanDoc, err := sqlServerClanDoc(c, rt, serverID, tag)
-			if err != nil {
-				return notFoundErr(err, "Clan not found on this server")
-			}
-			channelIDString = serverAsString(mapMaybe(clanDoc["countdowns"])[field])
-			if err := deleteCountdownChannel(c, rt, channelIDString); err != nil {
-				return err
-			}
-			result, err := rt.Store.SQL.Exec(c.UserContext(), `
-				UPDATE server_clans
-				SET countdowns = countdowns - $3,
-					data = data - $3,
-					updated_at = now()
-				WHERE server_id = $1 AND tag = $2
-			`, strconv.Itoa(serverID), tag, field)
-			if err != nil {
-				return err
-			}
-			if result.RowsAffected() == 0 {
-				return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
-			}
-		} else {
-			serverDoc, err := sqlServerSettingsDoc(c, rt, serverID)
-			if err != nil {
-				return notFoundErr(err, "Server not found")
-			}
-			channelIDString = serverAsString(mapMaybe(serverDoc["countdowns"])[field])
-			if err := deleteCountdownChannel(c, rt, channelIDString); err != nil {
-				return err
-			}
-			result, err := rt.Store.SQL.Exec(c.UserContext(), `
-				UPDATE servers
-				SET countdowns = countdowns - $2,
-					data = data - $2,
-					updated_at = now()
-				WHERE id = $1
-			`, strconv.Itoa(serverID), field)
-			if err != nil {
-				return err
-			}
-			if result.RowsAffected() == 0 {
-				return apptypes.Error(http.StatusNotFound, "Server not found")
-			}
+			clanTag = &tag
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.DisableCountdownResponse{Message: body.CountdownType + " countdown disabled successfully", CountdownType: body.CountdownType})
+		var channelID string
+		err = rt.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT channel_id FROM countdowns
+			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
+		`, strconv.Itoa(serverID), clanTag, body.CountdownType).Scan(&channelID)
+		if err != nil {
+			return notFoundErr(err, "Countdown not found")
+		}
+		if err := deleteCountdownChannel(c, rt, channelID); err != nil {
+			return err
+		}
+		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
+			DELETE FROM countdowns
+			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
+		`, strconv.Itoa(serverID), clanTag, body.CountdownType); err != nil {
+			return err
+		}
+		return apptypes.JSON(c, http.StatusOK, modelsv2.DisableCountdownResponse{
+			Message:       body.CountdownType + " disabled",
+			CountdownType: body.CountdownType,
+		})
 	}
 }
 
 func countdownChannelName(countdownType, clanName string) string {
-	if slices.Contains(clanCountdownTypes, countdownType) {
+	if modelsv2.EnumScope(modelsv2.CountdownTypeEnums, countdownType) == "clan" {
 		if clanName == "" {
 			clanName = "Clan"
 		}
 		return clanName + ": Loading..."
 	}
 	names := map[string]string{
-		"cwl":          "CWL Loading...",
-		"clan_games":   "CG Loading...",
-		"raid_weekend": "Raids Loading...",
-		"eos":          "EOS Loading...",
-		"member_count": "0 Clan Members",
-		"season_day":   "Day 0",
+		"cwl_timer":          "CWL Loading...",
+		"clan_games_timer":   "CG Loading...",
+		"raid_weekend_timer": "Raids Loading...",
+		"season_end_timer":   "EOS Loading...",
+		"season_day_timer":   "Day 0",
 	}
 	return names[countdownType]
 }
@@ -326,7 +328,5 @@ func isMissingCountdownChannel(err error) bool {
 		return true
 	}
 	var discordErr *disgorest.Error
-	return errors.As(err, &discordErr) &&
-		discordErr.Response != nil &&
-		discordErr.Response.StatusCode == http.StatusNotFound
+	return errors.As(err, &discordErr) && discordErr.Response != nil && discordErr.Response.StatusCode == http.StatusNotFound
 }

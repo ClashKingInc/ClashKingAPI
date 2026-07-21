@@ -1,11 +1,12 @@
 package modelsv2
 
 type LinkParseSettings struct {
-	Clan   *bool `json:"clan,omitempty"`
-	Army   *bool `json:"army,omitempty"`
-	Player *bool `json:"player,omitempty"`
-	Base   *bool `json:"base,omitempty"`
-	Show   *bool `json:"show,omitempty"`
+	Clan     *bool    `json:"clan,omitempty"`
+	Army     *bool    `json:"army,omitempty"`
+	Player   *bool    `json:"player,omitempty"`
+	Base     *bool    `json:"base,omitempty"`
+	Show     *bool    `json:"show,omitempty"`
+	Channels []string `json:"channels,omitempty"`
 }
 
 type ServerSettingsUpdate struct {
@@ -19,9 +20,7 @@ type ServerSettingsUpdate struct {
 	AutoevalLog       *string            `json:"autoeval_log,omitempty"`
 	Autoeval          *bool              `json:"autoeval,omitempty"`
 	BlacklistedRoles  []string           `json:"blacklisted_roles,omitempty"`
-	RoleTreatment     []string           `json:"role_treatment,omitempty"`
 	FullWhitelistRole *string            `json:"full_whitelist_role,omitempty"`
-	LeadershipEval    *bool              `json:"leadership_eval,omitempty"`
 	AutoboardLimit    *int               `json:"autoboard_limit,omitempty"`
 	APIToken          *bool              `json:"api_token,omitempty"`
 	Tied              *bool              `json:"tied,omitempty"`

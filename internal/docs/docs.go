@@ -2245,6 +2245,102 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/enums": {
+            "get": {
+                "description": "Returns stable IDs, values, scopes, and descriptions for settings enums.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Enums"
+                ],
+                "summary": "Get all API enums",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnumCatalogResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/enums/countdown-types": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Enums"
+                ],
+                "summary": "Get countdown types",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnumValuesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/enums/log-types": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Enums"
+                ],
+                "summary": "Get log types",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnumValuesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/enums/role-modes": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Enums"
+                ],
+                "summary": "Get role modes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnumValuesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/enums/role-types": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Enums"
+                ],
+                "summary": "Get role types",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnumValuesResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/exports/war/cwl-summary": {
             "get": {
                 "produces": [
@@ -2781,37 +2877,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/internal/bot/info": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns internal bot cluster stats, system info, and database document counts.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Other"
-                ],
-                "summary": "Get bot info",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BotInfoResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -6480,308 +6545,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/search/groups/create/{user_id}/{name}/{search_type}": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Creates a new group for organising clans or players for a user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Create a player or clan group",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord user ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Group name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Type (0=player, 1=clan)",
-                        "name": "search_type",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchGroupCreateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns the group document for the given group ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Get a specific group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group ID",
-                        "name": "group_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchGroup"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Deletes the group with the given group ID.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Delete a group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group ID",
-                        "name": "group_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SuccessResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}/add/{tag}": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Adds a clan or player tag to the specified group.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Add a tag to a group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group ID",
-                        "name": "group_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Tag to add",
-                        "name": "tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SuccessResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/search/groups/{group_id}/remove/{tag}": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Removes a clan or player tag from the specified group.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Remove a tag from a group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group ID",
-                        "name": "group_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Tag to remove",
-                        "name": "tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SuccessResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/search/groups/{user_id}/list": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns all groups belonging to the given user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "List groups for a user",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord user ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchGroupListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/search/{guild_id}/banned-players": {
             "get": {
                 "security": [
@@ -6827,52 +6590,6 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/all-roles": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns all roles of every type configured for the server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "Get all roles",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AllRolesResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -7384,49 +7101,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/server/{server_id}/clan-logs": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns the full log configuration for every clan tracked on the server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Logs"
-                ],
-                "summary": "Get all clan logs",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/modelsv2.ClanLogsConfig"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/server/{server_id}/clan/{clan_tag}": {
             "delete": {
                 "security": [
@@ -7487,7 +7161,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns all clan-level countdown types with enabled status and channel.",
+                "description": "Returns all clan countdown types and their channel state.",
                 "produces": [
                     "application/json"
                 ],
@@ -7516,132 +7190,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanCountdownsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/clan/{clan_tag}/logs": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Creates a Discord webhook and assigns it to the specified log types on a clan.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Logs"
-                ],
-                "summary": "Set clan log webhooks",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Clan Tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanLogsOperationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Removes the webhook config for specified log types on a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Logs"
-                ],
-                "summary": "Delete clan log webhooks",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Clan Tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated list of log types to delete",
-                        "name": "log_types",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanLogsOperationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "401": {
@@ -7779,7 +7327,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns the full clan list for a server with live CoC API data.",
+                "description": "Returns the full clan list for a server from Timescale basic_clan data.",
                 "produces": [
                     "application/json"
                 ],
@@ -7971,7 +7519,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns all server-level countdown types with enabled status and channel.",
+                "description": "Returns all server countdown types and their channel state.",
                 "produces": [
                     "application/json"
                 ],
@@ -8015,7 +7563,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Enables a countdown type for a server or clan.",
+                "description": "Creates a Discord channel and stores one countdown rule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -8033,6 +7581,15 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Countdown",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.EnableCountdownRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -8068,7 +7625,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Disables a countdown type for a server or clan.",
+                "description": "Deletes the Discord channel and its countdown rule.",
                 "consumes": [
                     "application/json"
                 ],
@@ -8086,6 +7643,15 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Countdown",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.DisableCountdownRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -8326,7 +7892,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns all roles for the Discord server sorted by position.",
+                "description": "Returns assignable roles for the Discord server sorted by position. Excludes @everyone and Discord-managed roles, including bot roles.",
                 "produces": [
                     "application/json"
                 ],
@@ -8616,165 +8182,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.MessageResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/family-roles": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns all family-related role configurations for the server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "Get family roles",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.FamilyRolesResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Adds a Discord role to a family role category.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "Add a family role",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.FamilyRoleOperationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/family-roles/{role_type}/{role_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Removes a Discord role from a family role category.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "Remove a family role",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Family role type",
-                        "name": "role_type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Discord Role ID",
-                        "name": "role_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.FamilyRoleOperationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
@@ -9606,14 +9013,14 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns the aggregated log configuration across all clans for a server.",
+                "description": "Returns each log configuration as an independent server, clan, and type row. Channel IDs are resolved from Discord and are not stored.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Server Logs"
                 ],
-                "summary": "Get server logs config",
+                "summary": "Get server logs",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9644,7 +9051,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Bulk-updates log webhook/thread settings for multiple log types across clans.",
+                "description": "Assigns a Discord channel to independent log types in one optional clan scope. The API reuses a bot-owned webhook in the channel or creates one with the bot profile.",
                 "consumes": [
                     "application/json"
                 ],
@@ -9654,7 +9061,7 @@ const docTemplate = `{
                 "tags": [
                     "Server Logs"
                 ],
-                "summary": "Update server logs config",
+                "summary": "Set server logs",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9662,13 +9069,91 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Log settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.UpdateServerLogsRequest"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerLogOperationResponse"
+                            "$ref": "#/definitions/modelsv2.ServerLogsOperationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Removes independent log configurations from one server or clan scope. A webhook is deleted only when no remaining log uses it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Logs"
+                ],
+                "summary": "Delete server logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated log types",
+                        "name": "log_types",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ServerLogsOperationResponse"
                         }
                     },
                     "400": {
@@ -9684,16 +9169,14 @@ const docTemplate = `{
                         }
                     }
                 }
-            }
-        },
-        "/v2/server/{server_id}/logs/{log_type}": {
+            },
             "patch": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Updates the configuration for a single log type on a server.",
+                "description": "Changes the disabled state without deleting the saved webhook or thread setup.",
                 "consumes": [
                     "application/json"
                 ],
@@ -9703,7 +9186,7 @@ const docTemplate = `{
                 "tags": [
                     "Server Logs"
                 ],
-                "summary": "Patch a log type config",
+                "summary": "Enable or disable server logs",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9713,18 +9196,20 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "Log type identifier",
-                        "name": "log_type",
-                        "in": "path",
-                        "required": true
+                        "description": "Disabled state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.UpdateServerLogsDisabledRequest"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerLogOperationResponse"
+                            "$ref": "#/definitions/modelsv2.ServerLogsOperationResponse"
                         }
                     },
                     "400": {
@@ -9735,6 +9220,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -10050,114 +9541,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/server/{server_id}/role-settings": {
+        "/v2/server/{server_id}/server-roles": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns the role evaluation settings for a server.",
+                "description": "Returns configured roles for a server. Use type and clan_tag to filter the list.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Server Roles"
                 ],
-                "summary": "Get role settings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.RoleSettingsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Partially updates the role evaluation settings for a server.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "Update role settings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.RoleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/roles/{role_type}": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns all roles of a given type configured for the server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Roles"
-                ],
-                "summary": "List roles by type",
+                "summary": "List server roles",
                 "parameters": [
                     {
                         "type": "integer",
@@ -10168,29 +9566,22 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Role type (clan, league, townhall, status...)",
-                        "name": "role_type",
-                        "in": "path",
-                        "required": true
+                        "description": "Role type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RolesListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                            "$ref": "#/definitions/modelsv2.ServerRolesResponse"
                         }
                     }
                 }
@@ -10201,7 +9592,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Creates a new role of a given type for the server.",
+                "description": "Creates one server-level or clan-level role configuration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10211,7 +9602,7 @@ const docTemplate = `{
                 "tags": [
                     "Server Roles"
                 ],
-                "summary": "Create a role",
+                "summary": "Create a server role",
                 "parameters": [
                     {
                         "type": "integer",
@@ -10219,52 +9610,33 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Role type",
-                        "name": "role_type",
-                        "in": "path",
-                        "required": true
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RoleResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                            "$ref": "#/definitions/modelsv2.ServerRoleResponse"
                         }
                     }
                 }
             }
         },
-        "/v2/server/{server_id}/roles/{role_type}/{role_id}": {
+        "/v2/server/{server_id}/server-roles/{role_id}": {
             "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Deletes a role by type and ID.",
+                "description": "Deletes one server role configuration.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Server Roles"
                 ],
-                "summary": "Delete a role",
+                "summary": "Delete a server role",
                 "parameters": [
                     {
                         "type": "integer",
@@ -10275,14 +9647,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Role type",
-                        "name": "role_type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Role ID",
+                        "description": "Server role ID",
                         "name": "role_id",
                         "in": "path",
                         "required": true
@@ -10292,25 +9657,49 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RoleResponse"
+                            "$ref": "#/definitions/modelsv2.ServerRoleResponse"
                         }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates one server role configuration.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Roles"
+                ],
+                "summary": "Update a server role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    {
+                        "type": "string",
+                        "description": "Server role ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                            "$ref": "#/definitions/modelsv2.ServerRoleResponse"
                         }
                     }
                 }
@@ -11229,6 +10618,123 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/static/{category}/names": {
+            "get": {
+                "description": "Returns the names of static items for a category, with optional filters applied.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get category names",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Category name",
+                        "name": "category",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Locale code",
+                        "name": "locale",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Substring to filter item names",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Village filter",
+                        "name": "village",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Type filter",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category filter",
+                        "name": "category",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/static/{category}/{item_id_or_name}/max-level": {
+            "get": {
+                "description": "Returns the highest level defined for a static item.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get item max level",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Category name",
+                        "name": "category",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ID or name",
+                        "name": "item_id_or_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/tracking/players/add": {
             "post": {
                 "security": [
@@ -11982,32 +11488,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.AllRolesResponse": {
-            "type": "object",
-            "properties": {
-                "category_roles": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "roles": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/modelsv2.RoleBinding"
-                        }
-                    }
-                },
-                "server_id": {
-                    "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
-                }
-            }
-        },
         "modelsv2.Announcement": {
             "type": "object",
             "properties": {
@@ -12739,41 +12219,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.BotClusterInfo": {
-            "type": "object",
-            "properties": {
-                "clan_count": {
-                    "type": "integer"
-                },
-                "cluster_id": {
-                    "type": "integer"
-                },
-                "member_count": {
-                    "type": "integer"
-                },
-                "server_count": {
-                    "type": "integer"
-                },
-                "servers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "shard_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "shards": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
         "modelsv2.BotGuildProfile": {
             "type": "object",
             "properties": {
@@ -12829,43 +12274,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.BotInfoResponse": {
-            "type": "object",
-            "properties": {
-                "bot": {
-                    "$ref": "#/definitions/modelsv2.BotRuntimeInfo"
-                },
-                "database": {
-                    "$ref": "#/definitions/modelsv2.DatabaseRuntimeInfo"
-                },
-                "system": {
-                    "$ref": "#/definitions/modelsv2.SystemRuntimeInfo"
-                }
-            }
-        },
-        "modelsv2.BotRuntimeInfo": {
-            "type": "object",
-            "properties": {
-                "clusters": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.BotClusterInfo"
-                    }
-                },
-                "total_clans": {
-                    "type": "integer"
-                },
-                "total_members": {
-                    "type": "integer"
-                },
-                "total_servers": {
-                    "type": "integer"
-                },
-                "total_shards": {
-                    "type": "integer"
                 }
             }
         },
@@ -13265,143 +12673,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.ClanLogSettings": {
-            "type": "object",
-            "properties": {
-                "join_log": {
-                    "$ref": "#/definitions/modelsv2.LogButtonSettings"
-                },
-                "leave_log": {
-                    "$ref": "#/definitions/modelsv2.LogButtonSettings"
-                }
-            }
-        },
-        "modelsv2.ClanLogTypeConfig": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string"
-                },
-                "thread": {
-                    "type": "string"
-                },
-                "webhook": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.ClanLogsConfig": {
-            "type": "object",
-            "properties": {
-                "capital_attacks": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "capital_donations": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "capital_weekly_summary": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "clan_achievement_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "clan_description_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "clan_requirements_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "cwl_lineup_change_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "donation_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "hero_equipment_upgrade": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "hero_upgrade": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "join_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "league_change": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "leave_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "legend_log_attacks": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "legend_log_defenses": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "name_change": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "raid_panel": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "role_change": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "spell_upgrade": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "super_troop_boost_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "tag": {
-                    "type": "string"
-                },
-                "th_upgrade": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "troop_upgrade": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "war_log": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                },
-                "war_panel": {
-                    "$ref": "#/definitions/modelsv2.ClanLogTypeConfig"
-                }
-            }
-        },
-        "modelsv2.ClanLogsOperationResponse": {
-            "type": "object",
-            "properties": {
-                "clan_tag": {
-                    "type": "string"
-                },
-                "deleted_log_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "message": {
-                    "type": "string"
-                },
-                "thread_id": {
-                    "type": "string"
-                },
-                "updated_log_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "webhook_id": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.ClanPlayerTagsBody": {
             "type": "object",
             "properties": {
@@ -13546,31 +12817,10 @@ const docTemplate = `{
                 "category": {
                     "type": "string"
                 },
-                "clanChannel": {
-                    "type": "string"
-                },
-                "generalRole": {
+                "clan_channel": {
                     "type": "string"
                 },
                 "greeting": {
-                    "type": "string"
-                },
-                "leaderRole": {
-                    "type": "string"
-                },
-                "leadership_eval": {
-                    "type": "boolean"
-                },
-                "logs": {
-                    "$ref": "#/definitions/modelsv2.ClanLogSettings"
-                },
-                "member_count_warning": {
-                    "$ref": "#/definitions/modelsv2.MemberCountWarning"
-                },
-                "warCountdown": {
-                    "type": "string"
-                },
-                "warTimerCountdown": {
                     "type": "string"
                 }
             }
@@ -13590,40 +12840,19 @@ const docTemplate = `{
                 "category": {
                     "type": "string"
                 },
-                "clanChannel": {
-                    "type": "string"
-                },
-                "generalRole": {
+                "clan_channel": {
                     "type": "string"
                 },
                 "greeting": {
                     "type": "string"
                 },
-                "leaderRole": {
-                    "type": "string"
-                },
-                "leadership_eval": {
-                    "type": "boolean"
-                },
-                "logs": {
-                    "$ref": "#/definitions/modelsv2.ClanLogSettings"
-                },
-                "member_count_warning": {
-                    "$ref": "#/definitions/modelsv2.MemberCountWarning"
-                },
                 "name": {
                     "type": "string"
                 },
-                "server": {
+                "server_id": {
                     "type": "integer"
                 },
                 "tag": {
-                    "type": "string"
-                },
-                "warCountdown": {
-                    "type": "string"
-                },
-                "warTimerCountdown": {
                     "type": "string"
                 }
             }
@@ -13862,26 +13091,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.DatabaseRuntimeInfo": {
-            "type": "object",
-            "properties": {
-                "capital_raids": {
-                    "type": "integer"
-                },
-                "clans_tracked": {
-                    "type": "integer"
-                },
-                "players_tracked": {
-                    "type": "integer"
-                },
-                "tickets_open": {
-                    "type": "integer"
-                },
-                "wars_stored": {
-                    "type": "integer"
-                }
-            }
-        },
         "modelsv2.DateItemsResponse": {
             "type": "object",
             "properties": {
@@ -13890,6 +13099,17 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.DisableCountdownRequest": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "countdown_type": {
+                    "type": "string"
                 }
             }
         },
@@ -14117,6 +13337,17 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.EnableCountdownRequest": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "countdown_type": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.EnableCountdownResponse": {
             "type": "object",
             "properties": {
@@ -14131,6 +13362,66 @@ const docTemplate = `{
                 },
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.EnumCatalogResponse": {
+            "type": "object",
+            "properties": {
+                "countdown_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.EnumValue"
+                    }
+                },
+                "log_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.EnumValue"
+                    }
+                },
+                "role_modes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.EnumValue"
+                    }
+                },
+                "role_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.EnumValue"
+                    }
+                }
+            }
+        },
+        "modelsv2.EnumValue": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.EnumValuesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.EnumValue"
+                    }
                 }
             }
         },
@@ -14176,79 +13467,6 @@ const docTemplate = `{
                 },
                 "request_id": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.FamilyRoleOperationResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "role_id": {
-                    "type": "string"
-                },
-                "role_type": {
-                    "type": "string"
-                },
-                "server_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.FamilyRolesResponse": {
-            "type": "object",
-            "properties": {
-                "family_coleader_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "family_elder_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "family_leader_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "family_member_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "family_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "ignored_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "not_family_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "only_family_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "server_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -14968,6 +14186,12 @@ const docTemplate = `{
                 "base": {
                     "type": "boolean"
                 },
+                "channels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "clan": {
                     "type": "boolean"
                 },
@@ -14990,66 +14214,6 @@ const docTemplate = `{
                 },
                 "town_hall": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.LogButtonSettings": {
-            "type": "object",
-            "properties": {
-                "ban_button": {
-                    "type": "boolean"
-                },
-                "profile_button": {
-                    "type": "boolean"
-                },
-                "strike_button": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "modelsv2.LogConfig": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string"
-                },
-                "clans": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "include_buttons": {
-                    "type": "boolean"
-                },
-                "ping_role": {
-                    "type": "string"
-                },
-                "thread": {
-                    "type": "string"
-                },
-                "webhook": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.MemberCountWarning": {
-            "type": "object",
-            "properties": {
-                "above": {
-                    "type": "integer"
-                },
-                "below": {
-                    "type": "integer"
-                },
-                "channel": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
                 }
             }
         },
@@ -16095,104 +15259,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.RoleBinding": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "number": {
-                    "type": "integer"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.RoleResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "role_id": {
-                    "type": "string"
-                },
-                "role_type": {
-                    "type": "string"
-                },
-                "server_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.RoleSettingsResponse": {
-            "type": "object",
-            "properties": {
-                "auto_eval_nickname": {
-                    "type": "boolean"
-                },
-                "auto_eval_status": {
-                    "type": "boolean"
-                },
-                "autoeval_log": {
-                    "type": "string"
-                },
-                "autoeval_triggers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "blacklisted_roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "category_roles": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "role_treatment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "server_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.RolesListResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "role_type": {
-                    "type": "string"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "server_id": {
-                    "type": "integer"
-                }
-            }
-        },
         "modelsv2.Roster": {
             "type": "object",
             "properties": {
@@ -16976,55 +16042,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.SearchGroup": {
-            "type": "object",
-            "properties": {
-                "group_id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "player",
-                        "clan"
-                    ]
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.SearchGroupCreateResponse": {
-            "type": "object",
-            "properties": {
-                "group_id": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "modelsv2.SearchGroupListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.SearchGroup"
-                    }
-                }
-            }
-        },
         "modelsv2.SearchPlayerReference": {
             "type": "object",
             "properties": {
@@ -17297,29 +16314,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.ServerCountdownDocument": {
-            "type": "object",
-            "properties": {
-                "cwlCountdown": {
-                    "type": "string"
-                },
-                "eosCountdown": {
-                    "type": "string"
-                },
-                "gamesCountdown": {
-                    "type": "string"
-                },
-                "memberCountWarning": {
-                    "type": "string"
-                },
-                "raidCountdown": {
-                    "type": "string"
-                },
-                "seasonCountdown": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.ServerCountdownsResponse": {
             "type": "object",
             "properties": {
@@ -17574,64 +16568,72 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.ServerLogOperationResponse": {
+        "modelsv2.ServerLog": {
             "type": "object",
             "properties": {
-                "log_type": {
+                "channel_id": {
                     "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "disabled": {
+                    "type": "boolean"
+                },
+                "thread_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "webhook_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ServerLogsOperationResponse": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "deleted_log_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerLog"
+                    }
                 },
                 "message": {
                     "type": "string"
                 },
                 "server_id": {
                     "type": "integer"
+                },
+                "updated_log_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
         "modelsv2.ServerLogsResponse": {
             "type": "object",
             "properties": {
-                "capital_donation_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
+                "count": {
+                    "type": "integer"
                 },
-                "capital_raid_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "capital_weekly_summary": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "clan_achievement_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "clan_description_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "clan_requirements_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "cwl_lineup_change_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "donation_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "join_leave_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "legend_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "player_upgrade_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "raid_panel": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "war_log": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
-                },
-                "war_panel": {
-                    "$ref": "#/definitions/modelsv2.LogConfig"
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerLog"
+                    }
                 }
             }
         },
@@ -17748,6 +16750,66 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ServerRole": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "option": {
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "server_id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ServerRoleResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/modelsv2.ServerRole"
+                }
+            }
+        },
+        "modelsv2.ServerRolesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerRole"
+                    }
+                },
+                "server_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.ServerSeasonLeaderboardItem": {
             "type": "object",
             "properties": {
@@ -17849,13 +16911,13 @@ const docTemplate = `{
                     }
                 },
                 "countdowns": {
-                    "$ref": "#/definitions/modelsv2.ServerCountdownDocument"
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "embed_color": {
                     "type": "string"
-                },
-                "eval": {
-                    "$ref": "#/definitions/modelsv2.ServerSettingsEval"
                 },
                 "family_label": {
                     "type": "string"
@@ -17869,17 +16931,8 @@ const docTemplate = `{
                 "greeting": {
                     "type": "string"
                 },
-                "leadership_eval": {
-                    "type": "boolean"
-                },
                 "link_parse": {
                     "$ref": "#/definitions/modelsv2.LinkParseSettings"
-                },
-                "logs": {
-                    "$ref": "#/definitions/modelsv2.ServerLogsResponse"
-                },
-                "logs_config": {
-                    "$ref": "#/definitions/modelsv2.ServerLogsResponse"
                 },
                 "name": {
                     "type": "string"
@@ -17893,97 +16946,23 @@ const docTemplate = `{
                 "reddit_feed": {
                     "type": "string"
                 },
-                "role_treatment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "server": {
                     "type": "integer"
                 },
                 "server_id": {
                     "type": "string"
                 },
-                "status_roles": {
-                    "$ref": "#/definitions/modelsv2.StatusRolesDocument"
+                "server_roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerRole"
+                    }
                 },
                 "strike_log": {
                     "type": "string"
                 },
                 "tied": {
                     "type": "boolean"
-                }
-            }
-        },
-        "modelsv2.ServerSettingsEval": {
-            "type": "object",
-            "properties": {
-                "achievement_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "builder_league_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "builderhall_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "family_position_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "family_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "ignored_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "league_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "not_family_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "only_family_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "status_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
-                },
-                "townhall_roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
                 }
             }
         },
@@ -18059,17 +17038,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.StatusRolesDocument": {
-            "type": "object",
-            "properties": {
-                "discord": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RoleBinding"
-                    }
                 }
             }
         },
@@ -18189,43 +17157,6 @@ const docTemplate = `{
                 },
                 "total_weight": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.SuccessResponse": {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "modelsv2.SystemRuntimeInfo": {
-            "type": "object",
-            "properties": {
-                "cpu_percent": {
-                    "type": "number"
-                },
-                "disk_usage_percent": {
-                    "type": "number"
-                },
-                "go_version": {
-                    "type": "string"
-                },
-                "memory_percent": {
-                    "type": "number"
-                },
-                "memory_total_gb": {
-                    "type": "number"
-                },
-                "memory_used_mb": {
-                    "type": "number"
-                },
-                "platform": {
-                    "type": "string"
-                },
-                "python_version": {
-                    "type": "string"
                 }
             }
         },
@@ -18565,6 +17496,43 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.UpdateServerLogsDisabledRequest": {
+            "type": "object",
+            "properties": {
+                "clan_tag": {
+                    "type": "string"
+                },
+                "disabled": {
+                    "type": "boolean"
+                },
+                "log_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "modelsv2.UpdateServerLogsRequest": {
+            "type": "object",
+            "properties": {
+                "channel_id": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "log_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "thread_id": {
+                    "type": "string"
                 }
             }
         },

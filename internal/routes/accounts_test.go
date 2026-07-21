@@ -124,6 +124,69 @@ func TestLinkSubjectAllowsBotArbitraryID(t *testing.T) {
 	}
 }
 
+func TestLastLoginRejectsMismatchedAppUserBeforeSQL(t *testing.T) {
+	cfg := apptypes.Config{Local: true, DevUserID: "auth-user"}
+	deps := apptypes.Deps{Config: cfg}
+	auth := apptypes.NewAuthenticator(cfg, &apptypes.Store{})
+
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Patch("/v2/links/:id/last-login", authUserOrBot(deps, auth.Wrap, updateLastLogin(deps)))
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodPatch, "/v2/links/other-user/last-login", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("expected %d, got %d", fiber.StatusForbidden, resp.StatusCode)
+	}
+}
+
+func TestAccountDeletionStateProtectsFinalVerifiedLinkOnlyWhileLinksRemain(t *testing.T) {
+	tests := []struct {
+		name      string
+		links     []accountDeletionLink
+		target    string
+		found     bool
+		protected bool
+	}{
+		{
+			name:      "verified target with unverified link remaining",
+			links:     []accountDeletionLink{{Tag: "#A", Verified: true}, {Tag: "#B", Verified: false}},
+			target:    "#A",
+			found:     true,
+			protected: true,
+		},
+		{
+			name:   "only verified target and no links remaining",
+			links:  []accountDeletionLink{{Tag: "#A", Verified: true}},
+			target: "#A",
+			found:  true,
+		},
+		{
+			name:   "another verified link remains",
+			links:  []accountDeletionLink{{Tag: "#A", Verified: true}, {Tag: "#B", Verified: true}},
+			target: "#A",
+			found:  true,
+		},
+		{
+			name:   "unverified target",
+			links:  []accountDeletionLink{{Tag: "#A", Verified: true}, {Tag: "#B", Verified: false}},
+			target: "#B",
+			found:  true,
+		},
+		{name: "missing target", links: []accountDeletionLink{{Tag: "#A", Verified: true}}, target: "#B"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			found, protected := accountDeletionState(test.links, test.target)
+			if found != test.found || protected != test.protected {
+				t.Fatalf("got found=%v protected=%v, want found=%v protected=%v", found, protected, test.found, test.protected)
+			}
+		})
+	}
+}
+
 func testClashAdapter(t *testing.T, client *clashy.Client) *apptypes.ClashAdapter {
 	t.Helper()
 

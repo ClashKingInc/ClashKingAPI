@@ -40,11 +40,17 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/links/server/:server_id", serverWrite(serverroutes.CreateLink(a)))
 	app.Delete("/v2/links/server/:server_id", serverWrite(serverroutes.DeleteLink(a)))
 
+	// Register static personal-link mutations before the generic :playerTag route.
+	app.Patch("/v2/links/:id/last-login", userOrBot(updateLastLogin(a)))
 	app.Get("/v2/links/:id", userOrBot(listAccounts(a)))
 	app.Post("/v2/links/:id", userOrBot(addAccount(a)))
 	app.Delete("/v2/links/:id/:playerTag", userOrBot(removeAccount(a)))
 	app.Patch("/v2/links/:id/:playerTag", userOrBot(setAccountVisibility(a)))
 	app.Put("/v2/links/:id/order", userOrBot(reorderAccounts(a)))
+	app.Get("/v2/links/:id/:playerTag/upgrades", userOrBot(getPlayerUpgrades(a)))
+	app.Put("/v2/links/:id/:playerTag/upgrades", userOrBot(replacePlayerUpgrades(a)))
+	app.Get("/v2/links/:id/:playerTag/upgrade-preferences", userOrBot(getPlayerUpgradePreferences(a)))
+	app.Patch("/v2/links/:id/:playerTag/upgrade-preferences", userOrBot(patchPlayerUpgradePreferences(a)))
 	app.Get("/v2/links/:id/bookmarks", userOrBot(listBookmarks(a)))
 	app.Post("/v2/links/:id/bookmarks", userOrBot(addBookmark(a)))
 	app.Delete("/v2/links/:id/bookmarks/:type/:tag", userOrBot(deleteBookmark(a)))
@@ -53,6 +59,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	app.Get("/v2/guild-summary", guildSummary(a))
 	app.Get("/v2/activity/guild-summary", guildSummary(a))
+	app.Add(apptypes.MethodQuery, "/v2/home/activity", userOrBot(homeActivity(a)))
 
 	app.Get("/v2/player/:player_tag/rankings", playerRankings(a))
 	app.Get("/v2/player/:player_tag/battlelog/history", playerBattlelogHistory(a))

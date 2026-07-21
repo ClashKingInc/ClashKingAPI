@@ -62,6 +62,13 @@ definitions:
       player_tag:
         type: string
     type: object
+  modelsv2.AccountsLastLoginResponse:
+    properties:
+      timestamp:
+        type: string
+      updated_count:
+        type: integer
+    type: object
   modelsv2.AccountsLinkResponse:
     properties:
       account:
@@ -1906,6 +1913,67 @@ definitions:
       total_members:
         type: integer
     type: object
+  modelsv2.HomeActivityItem:
+    properties:
+      clan_name:
+        type: string
+      clan_tag:
+        type: string
+        x-nullable: true
+      data:
+        additionalProperties: {}
+        type: object
+      event_type:
+        type: string
+      player_name:
+        type: string
+      player_tag:
+        type: string
+      season:
+        type: string
+      timestamp:
+        type: string
+      townhall_level:
+        type: integer
+      type:
+        enum:
+        - join_leave
+        - player_history
+        type: string
+      value:
+        type: integer
+    type: object
+  modelsv2.HomeActivityPlayerMapping:
+    properties:
+      clan_tag:
+        type: string
+        x-nullable: true
+      player_tag:
+        type: string
+    required:
+    - player_tag
+    type: object
+  modelsv2.HomeActivityRequest:
+    properties:
+      account_id:
+        type: string
+      limit:
+        type: integer
+      mappings:
+        items:
+          $ref: '#/definitions/modelsv2.HomeActivityPlayerMapping'
+        type: array
+    required:
+    - account_id
+    - mappings
+    type: object
+  modelsv2.HomeActivityResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.HomeActivityItem'
+        type: array
+    type: object
   modelsv2.JoinLeaveClan:
     properties:
       badge:
@@ -2498,6 +2566,44 @@ definitions:
         type: integer
       tag:
         type: string
+    type: object
+  modelsv2.PlayerUpgradePreferencesPatchRequest:
+    properties:
+      preferences:
+        additionalProperties: {}
+        type: object
+    required:
+    - preferences
+    type: object
+  modelsv2.PlayerUpgradePreferencesResponse:
+    properties:
+      player_tag:
+        type: string
+      preferences:
+        additionalProperties: {}
+        type: object
+      updated_at:
+        type: string
+        x-nullable: true
+    type: object
+  modelsv2.PlayerUpgradesReplaceRequest:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+    required:
+    - data
+    type: object
+  modelsv2.PlayerUpgradesResponse:
+    properties:
+      data:
+        additionalProperties: {}
+        type: object
+      player_tag:
+        type: string
+      updated_at:
+        type: string
+        x-nullable: true
     type: object
   modelsv2.PlayerWarAttackItem:
     properties:
@@ -6579,6 +6685,44 @@ paths:
       summary: Get user guilds with bot status
       tags:
       - Other
+  /v2/home/activity:
+    post:
+      consumes:
+      - application/json
+      description: Uses RFC QUERY with a JSON body to return the newest merged clan
+        membership and player history activity.
+      parameters:
+      - description: Home activity selection
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.HomeActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.HomeActivityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get Home activity
+      tags:
+      - Activity & Inactivity
+      x-rfc-method: QUERY
   /v2/internal/bot/info:
     get:
       description: Returns internal bot cluster stats, system info, and database document
@@ -7025,6 +7169,168 @@ paths:
       summary: Set linked account visibility
       tags:
       - Links
+  /v2/links/{id}/{playerTag}/upgrade-preferences:
+    get:
+      description: Returns the preference object for a verified player linked to the
+        account.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: playerTag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PlayerUpgradePreferencesResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get player upgrade preferences
+      tags:
+      - Links
+    patch:
+      consumes:
+      - application/json
+      description: Shallow-merges preference keys for a verified player linked to
+        the account and timestamps the change on the server.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: playerTag
+        required: true
+        type: string
+      - description: Preference keys to merge
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.PlayerUpgradePreferencesPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PlayerUpgradePreferencesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Patch player upgrade preferences
+      tags:
+      - Links
+  /v2/links/{id}/{playerTag}/upgrades:
+    get:
+      description: Returns the whole upgrade-data object for a verified player linked
+        to the account.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: playerTag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PlayerUpgradesResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get player upgrades
+      tags:
+      - Links
+    put:
+      consumes:
+      - application/json
+      description: Replaces the whole upgrade-data object for a verified player linked
+        to the account and timestamps it on the server.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Player tag
+        in: path
+        name: playerTag
+        required: true
+        type: string
+      - description: Whole upgrade-data object
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.PlayerUpgradesReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PlayerUpgradesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Replace player upgrades
+      tags:
+      - Links
   /v2/links/{id}/bookmarks:
     get:
       description: Returns saved search items.
@@ -7195,6 +7501,36 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Reorder bookmarks
+      tags:
+      - Links
+  /v2/links/{id}/last-login:
+    patch:
+      description: Records one server-generated login timestamp for every verified
+        player linked to the account.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AccountsLastLoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Record a Home login
       tags:
       - Links
   /v2/links/{id}/order:

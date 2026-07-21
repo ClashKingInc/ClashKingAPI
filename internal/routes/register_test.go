@@ -9,7 +9,7 @@ import (
 )
 
 func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	paths := registeredRoutePaths(app)
@@ -123,6 +123,10 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/links/:id/bookmarks/:type/:tag",
 		"/v2/links/:id/bookmarks/order",
 		"/v2/links/:id/searches",
+		"/v2/links/:id/last-login",
+		"/v2/links/:id/:playerTag/upgrades",
+		"/v2/links/:id/:playerTag/upgrade-preferences",
+		"/v2/home/activity",
 		"/war/:clanTag/previous",
 		"/war/:clanTag/basic",
 		"/cwl/:clanTag/group",
@@ -145,7 +149,7 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 }
 
 func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *testing.T) {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	for _, method := range []string{fiber.MethodDelete} {
@@ -161,7 +165,7 @@ func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *t
 }
 
 func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
-	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler, RequestMethods: apptypes.APIRequestMethods()})
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/war/%232PP/previous", nil))
@@ -171,6 +175,18 @@ func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("expected missing endTime to return 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
+	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	if index := registeredRouteIndex(app, apptypes.MethodQuery, "/v2/home/activity"); index < 0 {
+		t.Fatal("expected /v2/home/activity to be registered with QUERY")
+	}
+	if index := registeredRouteIndex(app, fiber.MethodPost, "/v2/home/activity"); index >= 0 {
+		t.Fatal("did not expect a POST compatibility route for /v2/home/activity")
 	}
 }
 

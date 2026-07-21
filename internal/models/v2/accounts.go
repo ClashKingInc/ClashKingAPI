@@ -45,3 +45,8 @@ type AccountsListResponse struct {
 type AccountsMessageResponse struct {
 	Message string `json:"message"`
 }
+
+type AccountsLastLoginResponse struct {
+	Timestamp    time.Time `json:"timestamp"`
+	UpdatedCount int64     `json:"updated_count"`
+}

@@ -207,6 +207,55 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 	}
 }
 
+// updateLastLogin records one server timestamp for every verified link owned by a subject.
+//
+// @Summary Record a Home login
+// @Description Records one server-generated login timestamp for every verified player linked to the account.
+// @Tags Links
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "user id"
+// @Success 200 {object} modelsv2.AccountsLastLoginResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Router /v2/links/{id}/last-login [patch]
+func updateLastLogin(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID, err := resolveLinkSubject(c.UserContext(), a, c, c.Params("id"))
+		if err != nil {
+			return err
+		}
+		if a.Store == nil || a.Store.SQL == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+		}
+		var timestamp time.Time
+		var updatedCount int64
+		err = a.Store.SQL.QueryRow(c.UserContext(), `
+			WITH server_time AS (
+				SELECT now() AS value
+			), updated AS (
+				UPDATE player_links AS links
+				SET last_login = server_time.value,
+					updated_at = server_time.value
+				FROM server_time
+				WHERE links.user_id = $1 AND links.is_verified = true
+				RETURNING server_time.value
+			)
+			SELECT server_time.value, count(updated.value)
+			FROM server_time
+			LEFT JOIN updated ON true
+			GROUP BY server_time.value
+		`, userID).Scan(&timestamp, &updatedCount)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsLastLoginResponse{
+			Timestamp:    timestamp,
+			UpdatedCount: updatedCount,
+		})
+	}
+}
+
 // removeAccount unlinks a Clash of Clans account from the requested link subject.
 //
 // @Summary Remove a linked Clash of Clans account
@@ -233,13 +282,37 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		defer tx.Rollback(c.UserContext())
-		var tag string
-		err = tx.QueryRow(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2 RETURNING tag`, userID, playerTag).Scan(&tag)
-		if err != nil && err != pgx.ErrNoRows {
+		rows, err := tx.Query(c.UserContext(), `
+			SELECT tag, is_verified
+			FROM player_links
+			WHERE user_id = $1
+			FOR UPDATE
+		`, userID)
+		if err != nil {
 			return err
 		}
-		if tag == "" {
+		links := make([]accountDeletionLink, 0)
+		for rows.Next() {
+			var link accountDeletionLink
+			if err := rows.Scan(&link.Tag, &link.Verified); err != nil {
+				rows.Close()
+				return err
+			}
+			links = append(links, link)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		targetFound, removesFinalVerified := accountDeletionState(links, playerTag)
+		if !targetFound {
 			return apptypes.Error(fiber.StatusNotFound, "Clash of Clans account not found or not linked to your profile")
+		}
+		if removesFinalVerified {
+			return apptypes.Error(fiber.StatusConflict, "Cannot remove the final verified link while other links remain")
+		}
+		if _, err := tx.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2`, userID, playerTag); err != nil {
+			return err
 		}
 		if err := reorderUserAccountsTx(c.UserContext(), tx, userID); err != nil {
 			return err
@@ -249,6 +322,27 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsMessageResponse{Message: "Clash of Clans account unlinked successfully"})
 	}
+}
+
+type accountDeletionLink struct {
+	Tag      string
+	Verified bool
+}
+
+func accountDeletionState(links []accountDeletionLink, targetTag string) (targetFound, removesFinalVerified bool) {
+	verifiedCount := 0
+	targetVerified := false
+	for _, link := range links {
+		if link.Verified {
+			verifiedCount++
+		}
+		if link.Tag == targetTag {
+			targetFound = true
+			targetVerified = link.Verified
+		}
+	}
+	remainingLinks := len(links) - 1
+	return targetFound, targetFound && targetVerified && verifiedCount == 1 && remainingLinks > 0
 }
 
 // setAccountVisibility updates the hidden status of a verified linked account.

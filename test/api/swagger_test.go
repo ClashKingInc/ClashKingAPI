@@ -135,6 +135,43 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	}
 }
 
+func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	homePath, ok := paths["/v2/home/activity"].(map[string]any)
+	if !ok {
+		t.Fatal("expected /v2/home/activity path")
+	}
+	if _, exists := homePath["post"]; exists {
+		t.Fatal("did not expect POST documentation for the RFC QUERY route")
+	}
+	query, ok := homePath["query"].(map[string]any)
+	if !ok {
+		t.Fatal("expected QUERY operation for /v2/home/activity")
+	}
+	assertTags(t, query, []string{"Activity & Inactivity"})
+
+	for _, route := range []string{
+		"/v2/links/{id}/last-login",
+		"/v2/links/{id}/{playerTag}/upgrades",
+		"/v2/links/{id}/{playerTag}/upgrade-preferences",
+	} {
+		if _, exists := paths[route]; !exists {
+			t.Fatalf("expected %s in OpenAPI", route)
+		}
+	}
+
+	definitions := swaggerDefinitions(t, doc)
+	itemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.HomeActivityItem")
+	assertEnum(t, itemProps["type"], []any{"join_leave", "player_history"})
+	for _, field := range []string{"timestamp", "event_type", "player_tag", "clan_tag", "data"} {
+		if _, exists := itemProps[field]; !exists {
+			t.Fatalf("expected HomeActivityItem.%s", field)
+		}
+	}
+}
+
 func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)

@@ -39,6 +39,7 @@ func BuildDoc() (string, error) {
 		return "", err
 	}
 
+	PromoteRFCQueryOperations(doc)
 	setSwaggerMetadata(doc)
 	EnsureSecurityDefinition(doc)
 
@@ -47,6 +48,21 @@ func BuildDoc() (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// PromoteRFCQueryOperations converts the generator-only POST placeholder into the
+// RFC QUERY method served by the router. Swagger 2 predates QUERY and swag rejects
+// it in @Router annotations, while Scalar accepts the method extension in the
+// emitted path item.
+func PromoteRFCQueryOperations(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	path, _ := paths["/v2/home/activity"].(map[string]any)
+	operation, exists := path["post"]
+	if !exists {
+		return
+	}
+	delete(path, "post")
+	path["query"] = operation
 }
 
 func NoStore(next fiber.Handler) fiber.Handler {
@@ -396,7 +412,7 @@ func operationTagNames(doc map[string]any) []string {
 	seen := map[string]bool{}
 	for _, rawPath := range paths {
 		path, _ := rawPath.(map[string]any)
-		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head"} {
+		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head", "query"} {
 			operation, _ := path[method].(map[string]any)
 			rawTags, _ := operation["tags"].([]any)
 			for _, rawTag := range rawTags {

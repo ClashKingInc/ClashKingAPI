@@ -2781,6 +2781,64 @@
                 }
             }
         },
+        "/v2/home/activity": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Uses RFC QUERY with a JSON body to return the newest merged clan membership and player history activity.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity \u0026 Inactivity"
+                ],
+                "summary": "Get Home activity",
+                "parameters": [
+                    {
+                        "description": "Home activity selection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.HomeActivityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.HomeActivityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-rfc-method": "QUERY"
+            }
+        },
         "/v2/internal/bot/info": {
             "get": {
                 "security": [
@@ -3809,6 +3867,52 @@
                 }
             }
         },
+        "/v2/links/{id}/last-login": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Records one server-generated login timestamp for every verified player linked to the account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Record a Home login",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AccountsLastLoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/links/{id}/order": {
             "put": {
                 "security": [
@@ -4030,6 +4134,250 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.AccountsLinkedAccount"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/links/{id}/{playerTag}/upgrade-preferences": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the preference object for a verified player linked to the account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Get player upgrade preferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "playerTag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradePreferencesResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Shallow-merges preference keys for a verified player linked to the account and timestamps the change on the server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Patch player upgrade preferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "playerTag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Preference keys to merge",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradePreferencesPatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradePreferencesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/links/{id}/{playerTag}/upgrades": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the whole upgrade-data object for a verified player linked to the account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Get player upgrades",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "playerTag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradesResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Replaces the whole upgrade-data object for a verified player linked to the account and timestamps it on the server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Links"
+                ],
+                "summary": "Replace player upgrades",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "playerTag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Whole upgrade-data object",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradesReplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerUpgradesResponse"
                         }
                     },
                     "400": {
@@ -11855,6 +12203,17 @@
                 }
             }
         },
+        "modelsv2.AccountsLastLoginResponse": {
+            "type": "object",
+            "properties": {
+                "timestamp": {
+                    "type": "string"
+                },
+                "updated_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.AccountsLinkResponse": {
             "type": "object",
             "properties": {
@@ -14670,6 +15029,97 @@
                 }
             }
         },
+        "modelsv2.HomeActivityItem": {
+            "type": "object",
+            "properties": {
+                "clan_name": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "player_name": {
+                    "type": "string"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "townhall_level": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "join_leave",
+                        "player_history"
+                    ]
+                },
+                "value": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.HomeActivityPlayerMapping": {
+            "type": "object",
+            "required": [
+                "player_tag"
+            ],
+            "properties": {
+                "clan_tag": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "player_tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.HomeActivityRequest": {
+            "type": "object",
+            "required": [
+                "account_id",
+                "mappings"
+            ],
+            "properties": {
+                "account_id": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "mappings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.HomeActivityPlayerMapping"
+                    }
+                }
+            }
+        },
+        "modelsv2.HomeActivityResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.HomeActivityItem"
+                    }
+                }
+            }
+        },
         "modelsv2.JoinLeaveClan": {
             "type": "object",
             "properties": {
@@ -15575,6 +16025,62 @@
                 },
                 "tag": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.PlayerUpgradePreferencesPatchRequest": {
+            "type": "object",
+            "required": [
+                "preferences"
+            ],
+            "properties": {
+                "preferences": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "modelsv2.PlayerUpgradePreferencesResponse": {
+            "type": "object",
+            "properties": {
+                "player_tag": {
+                    "type": "string"
+                },
+                "preferences": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "updated_at": {
+                    "type": "string",
+                    "x-nullable": true
+                }
+            }
+        },
+        "modelsv2.PlayerUpgradesReplaceRequest": {
+            "type": "object",
+            "required": [
+                "data"
+            ],
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "modelsv2.PlayerUpgradesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },

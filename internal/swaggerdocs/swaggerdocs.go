@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 
 	docs "github.com/ClashKingInc/ClashKingAPI/internal/docs"
@@ -41,6 +42,7 @@ func BuildDoc() (string, error) {
 
 	setSwaggerMetadata(doc)
 	EnsureSecurityDefinition(doc)
+	promoteQueryOperations(doc)
 
 	data, err := json.Marshal(doc)
 	if err != nil {
@@ -334,6 +336,8 @@ func setSwaggerMetadata(doc map[string]any) {
 
 func primaryTagOrder() []string {
 	return []string{
+		"Counts",
+		"Stats",
 		"Player",
 		"Clan",
 		"War",
@@ -346,6 +350,26 @@ func primaryTagOrder() []string {
 		"Tracking",
 		"Dates",
 		"Lists",
+	}
+}
+
+// promoteQueryOperations preserves QUERY semantics in Swagger 2.0 through a
+// vendor-extension operation. Swag only accepts the standard Swagger verbs,
+// so source annotations use POST as a generation placeholder with
+// x-http-method=QUERY; the served document never advertises those operations
+// as POST.
+func promoteQueryOperations(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	for _, rawPath := range paths {
+		path, _ := rawPath.(map[string]any)
+		post, _ := path["post"].(map[string]any)
+		method, _ := post["x-http-method"].(string)
+		if !strings.EqualFold(method, "QUERY") {
+			continue
+		}
+		post["x-http-method"] = "QUERY"
+		path["x-query"] = post
+		delete(path, "post")
 	}
 }
 

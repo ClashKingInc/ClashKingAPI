@@ -102,6 +102,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 		DisableStartupMessage: true,
 		ErrorHandler:          utils.ErrorHandler,
 		BodyLimit:             30 * 1024 * 1024,
+		RequestMethods:        append(append([]string{}, fiber.DefaultMethods...), "QUERY"),
 	})
 	app.Use(requestid.New())
 	app.Use(utils.HTTPLoggerMiddleware(a.Config))
@@ -110,7 +111,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	app.Use(fiberrecover.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
-		AllowMethods: "*",
+		AllowMethods: "GET,HEAD,POST,PUT,DELETE,CONNECT,OPTIONS,TRACE,PATCH,QUERY",
 		AllowHeaders: "*",
 	}))
 	app.Use(compress.New())

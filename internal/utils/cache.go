@@ -71,10 +71,19 @@ func (c *CacheAdapter) GetDiscordMember(ctx context.Context, guildID int64, user
 // GetTownhallLeaderboard returns the current leaderboard snapshot produced by
 // clashking_tracking. Key format: leaderboards:townhall:{townhall_level}.
 func (c *CacheAdapter) GetTownhallLeaderboard(ctx context.Context, townhall int) ([]byte, bool) {
+	return c.getLeaderboard(ctx, fmt.Sprintf("leaderboards:townhall:%d", townhall))
+}
+
+// GetLeagueLeaderboard returns the current ranked-league snapshot produced by
+// clashking_tracking. Key format: leaderboards:league:{league_tier_id}.
+func (c *CacheAdapter) GetLeagueLeaderboard(ctx context.Context, leagueID int) ([]byte, bool) {
+	return c.getLeaderboard(ctx, fmt.Sprintf("leaderboards:league:%d", leagueID))
+}
+
+func (c *CacheAdapter) getLeaderboard(ctx context.Context, key string) ([]byte, bool) {
 	if c == nil || c.client == nil {
 		return nil, false
 	}
-	key := fmt.Sprintf("leaderboards:townhall:%d", townhall)
 	result := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
 	if result.Error() != nil {
 		return nil, false

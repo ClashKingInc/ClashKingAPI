@@ -371,14 +371,14 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 
 // leaderboardLeague godoc
 // @Summary Get league leaderboard
-// @Description Returns top players for a league.
+// @Description Returns the current top tracked players for a ranked league tier from the Valkey leaderboard snapshot.
 // @Tags Leaderboard
 // @Produce json
 // @Param league_tier_id path int true "League tier ID"
 // @Param limit query int false "Result limit, max 500"
 // @Success 200 {object} modelsv2.PlayerLeaderboardResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 503 {object} modelsv2.ErrorResponse
 // @Router /v2/leaderboard/league/{league_tier_id} [get]
 func leaderboardLeague(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -386,36 +386,22 @@ func leaderboardLeague(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid league_tier_id")
 		}
+		if leagueID < 1 {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid league_tier_id")
+		}
 		limit := clamp(queryInt(c, "limit", 500), 1, 500)
-		if leagueID == legendLeagueID {
-			rows, err := a.Store.SQL.Query(c.UserContext(), `
-				SELECT player_tag, rank, trophies, player_name, clan_tag, clan_name, data
-				FROM legend_rankings_current
-				ORDER BY rank
-				LIMIT $1
-			`, limit)
-			if err != nil {
-				return err
-			}
-			defer rows.Close()
-			return apptypes.JSON(c, fiber.StatusOK, map[string]any{"league_tier_id": leagueID, "items": scanLegendCurrent(rows)})
+		if a.Cache == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "ranked league leaderboard is unavailable")
 		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT tag, name, league_id, clan_tag, townhall_level, trophies
-			FROM basic_player
-			WHERE league_id = $1
-			ORDER BY trophies DESC, tag
-			LIMIT $2
-		`, leagueID, limit)
+		raw, ok := a.Cache.GetLeagueLeaderboard(c.UserContext(), leagueID)
+		if !ok {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "ranked league leaderboard is unavailable")
+		}
+		response, err := decodeLeagueLeaderboard(raw, leagueID, limit)
 		if err != nil {
-			return err
+			return apptypes.Error(fiber.StatusInternalServerError, "invalid ranked league leaderboard payload")
 		}
-		defer rows.Close()
-		items, err := scanBasicPlayerLeaderboard(rows)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"league_tier_id": leagueID, "items": items, "count": len(items)})
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
 }
 
@@ -468,6 +454,24 @@ func leaderboardTownhalls(a apptypes.Deps) fiber.Handler {
 }
 
 func decodeTownhallLeaderboard(raw []byte, townhall, limit int) (modelsv2.PlayerLeaderboardResponse, error) {
+	response, err := decodeCachedPlayerLeaderboard(raw, limit)
+	if err != nil {
+		return modelsv2.PlayerLeaderboardResponse{}, err
+	}
+	response.Townhall = &townhall
+	return response, nil
+}
+
+func decodeLeagueLeaderboard(raw []byte, leagueID, limit int) (modelsv2.PlayerLeaderboardResponse, error) {
+	response, err := decodeCachedPlayerLeaderboard(raw, limit)
+	if err != nil {
+		return modelsv2.PlayerLeaderboardResponse{}, err
+	}
+	response.LeagueTierID = &leagueID
+	return response, nil
+}
+
+func decodeCachedPlayerLeaderboard(raw []byte, limit int) (modelsv2.PlayerLeaderboardResponse, error) {
 	var cached struct {
 		Items       []modelsv2.PlayerLeaderboardItem `json:"items"`
 		GeneratedAt *time.Time                       `json:"generated_at,omitempty"`
@@ -479,7 +483,6 @@ func decodeTownhallLeaderboard(raw []byte, townhall, limit int) (modelsv2.Player
 		cached.Items = cached.Items[:limit]
 	}
 	return modelsv2.PlayerLeaderboardResponse{
-		Townhall:    &townhall,
 		Items:       cached.Items,
 		Count:       len(cached.Items),
 		GeneratedAt: cached.GeneratedAt,

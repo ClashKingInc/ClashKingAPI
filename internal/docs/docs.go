@@ -2316,7 +2316,7 @@ const docTemplate = `{
         },
         "/v2/leaderboard/league/{league_tier_id}": {
             "get": {
-                "description": "Returns top players for a league.",
+                "description": "Returns the current top tracked players for a ranked league tier from the Valkey leaderboard snapshot.",
                 "produces": [
                     "application/json"
                 ],
@@ -2352,8 +2352,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }

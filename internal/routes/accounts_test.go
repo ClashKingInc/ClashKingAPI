@@ -2,12 +2,14 @@ package routes
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
@@ -29,6 +31,73 @@ func TestAccountsListResponseUsesItemsJSON(t *testing.T) {
 	if strings.Contains(string(body), "coc_accounts") {
 		t.Fatalf("did not expect legacy coc_accounts field in response JSON: %s", body)
 	}
+}
+
+func TestScanLinkedAccountOutputsNullableLastLogin(t *testing.T) {
+	lastLogin := time.Date(2026, 7, 20, 22, 15, 30, 0, time.UTC)
+	for _, test := range []struct {
+		name      string
+		lastLogin *time.Time
+		want      any
+	}{
+		{name: "null", want: nil},
+		{name: "timestamp", lastLogin: &lastLogin, want: "2026-07-20T22:15:30Z"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			account, err := scanLinkedAccount(linkedAccountTestRow{lastLogin: test.lastLogin})
+			if err != nil {
+				t.Fatalf("scan linked account: %v", err)
+			}
+			if account.LastLogin != test.lastLogin {
+				t.Fatalf("last_login = %v, want %v", account.LastLogin, test.lastLogin)
+			}
+			body, err := json.Marshal(modelsv2.AccountsListResponse{Items: []modelsv2.AccountsLinkedAccount{account}})
+			if err != nil {
+				t.Fatalf("marshal linked accounts: %v", err)
+			}
+			var decoded struct {
+				Items []map[string]any `json:"items"`
+			}
+			if err := json.Unmarshal(body, &decoded); err != nil {
+				t.Fatalf("decode linked accounts: %v", err)
+			}
+			if len(decoded.Items) != 1 {
+				t.Fatalf("items length = %d, want 1", len(decoded.Items))
+			}
+			item := decoded.Items[0]
+			got, exists := item["last_login"]
+			if !exists {
+				t.Fatalf("last_login missing from response: %s", body)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("last_login = %#v, want %#v", got, test.want)
+			}
+			if hidden, exists := item["hidden"]; !exists || hidden != true {
+				t.Fatalf("required hidden field changed: %s", body)
+			}
+		})
+	}
+}
+
+type linkedAccountTestRow struct {
+	lastLogin *time.Time
+}
+
+func (row linkedAccountTestRow) Scan(dest ...any) error {
+	if len(dest) != 8 {
+		return fmt.Errorf("scan destination count = %d, want 8", len(dest))
+	}
+	addedAt := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	verifiedAt := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	*dest[0].(*string) = "user-1"
+	*dest[1].(*string) = "#ABC123"
+	*dest[2].(*int) = 0
+	*dest[3].(*bool) = true
+	*dest[4].(*bool) = true
+	*dest[5].(*time.Time) = addedAt
+	*dest[6].(**time.Time) = &verifiedAt
+	*dest[7].(**time.Time) = row.lastLogin
+	return nil
 }
 
 func TestAccountsRequestDoesNotExposePlayerTokenJSON(t *testing.T) {

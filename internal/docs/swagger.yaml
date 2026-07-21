@@ -89,6 +89,10 @@ definitions:
         type: boolean
       is_verified:
         type: boolean
+      last_login:
+        format: date-time
+        type: string
+        x-nullable: true
       order_index:
         type: integer
       player_tag:
@@ -6898,7 +6902,9 @@ paths:
       - Server Clans
   /v2/links/{id}:
     get:
-      description: Returns linked Clash of Clans accounts in order.
+      description: Returns linked Clash of Clans accounts in order. last_login is
+        the previous server timestamp recorded before the client updates it after
+        Home loads.
       parameters:
       - description: user id
         in: path

@@ -148,7 +148,7 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 // listAccounts returns the requested link subject's linked Clash of Clans accounts.
 //
 // @Summary Get all Clash of Clans accounts linked to a user
-// @Description Returns linked Clash of Clans accounts in order.
+// @Description Returns linked Clash of Clans accounts in order. last_login is the previous server timestamp recorded before the client updates it after Home loads.
 // @Tags Links
 // @Produce json
 // @Security ApiKeyAuth
@@ -168,7 +168,7 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 		}
 		accounts := make([]modelsv2.AccountsLinkedAccount, 0)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT user_id, tag, order_index, is_verified, hidden, added_at, verified_at
+			SELECT user_id, tag, order_index, is_verified, hidden, added_at, verified_at, last_login
 			FROM player_links
 			WHERE user_id = $1
 			ORDER BY order_index ASC, added_at ASC
@@ -178,25 +178,9 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var userID, tag string
-			var orderIndex int
-			var isVerified bool
-			var hidden bool
-			var addedAt time.Time
-			var verifiedAt *time.Time
-			if err := rows.Scan(&userID, &tag, &orderIndex, &isVerified, &hidden, &addedAt, &verifiedAt); err != nil {
+			account, err := scanLinkedAccount(rows)
+			if err != nil {
 				return err
-			}
-			account := modelsv2.AccountsLinkedAccount{
-				UserID:     userID,
-				PlayerTag:  tag,
-				OrderIndex: orderIndex,
-				IsVerified: isVerified,
-				Hidden:     hidden,
-				AddedAt:    addedAt,
-			}
-			if verifiedAt != nil {
-				account.VerifiedAt = verifiedAt
 			}
 			accounts = append(accounts, account)
 		}
@@ -205,6 +189,21 @@ func listAccounts(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsListResponse{Items: accounts})
 	}
+}
+
+func scanLinkedAccount(row pgx.Row) (modelsv2.AccountsLinkedAccount, error) {
+	var account modelsv2.AccountsLinkedAccount
+	err := row.Scan(
+		&account.UserID,
+		&account.PlayerTag,
+		&account.OrderIndex,
+		&account.IsVerified,
+		&account.Hidden,
+		&account.AddedAt,
+		&account.VerifiedAt,
+		&account.LastLogin,
+	)
+	return account, err
 }
 
 // updateLastLogin records one server timestamp for every verified link owned by a subject.
@@ -380,7 +379,7 @@ func setAccountVisibility(a apptypes.Deps) fiber.Handler {
 			UPDATE player_links
 			SET hidden = $1, updated_at = now()
 			WHERE user_id = $2 AND tag = $3 AND is_verified = true
-			RETURNING user_id, tag, order_index, is_verified, hidden, added_at, verified_at
+			RETURNING user_id, tag, order_index, is_verified, hidden, added_at, verified_at, last_login
 		`, body.Hidden, userID, playerTag).Scan(
 			&account.UserID,
 			&account.PlayerTag,
@@ -389,6 +388,7 @@ func setAccountVisibility(a apptypes.Deps) fiber.Handler {
 			&account.Hidden,
 			&account.AddedAt,
 			&account.VerifiedAt,
+			&account.LastLogin,
 		)
 		if err == nil {
 			return apptypes.JSON(c, fiber.StatusOK, account)

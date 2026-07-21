@@ -2840,7 +2840,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns linked Clash of Clans accounts in order.",
+                "description": "Returns linked Clash of Clans accounts in order. last_login is the previous server timestamp recorded before the client updates it after Home loads.",
                 "produces": [
                     "application/json"
                 ],
@@ -11870,6 +11870,11 @@ const docTemplate = `{
                 },
                 "is_verified": {
                     "type": "boolean"
+                },
+                "last_login": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-nullable": true
                 },
                 "order_index": {
                     "type": "integer"

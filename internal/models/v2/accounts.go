@@ -36,6 +36,7 @@ type AccountsLinkedAccount struct {
 	Hidden     bool       `json:"hidden"`
 	AddedAt    time.Time  `json:"added_at"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+	LastLogin  *time.Time `json:"last_login" format:"date-time" extensions:"x-nullable"`
 }
 
 type AccountsListResponse struct {

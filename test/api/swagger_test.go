@@ -163,6 +163,14 @@ func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 	}
 
 	definitions := swaggerDefinitions(t, doc)
+	accountProps := swaggerDefinitionProperties(t, definitions, "modelsv2.AccountsLinkedAccount")
+	lastLogin, exists := accountProps["last_login"].(map[string]any)
+	if !exists || lastLogin["type"] != "string" || lastLogin["format"] != "date-time" || lastLogin["x-nullable"] != true {
+		t.Fatalf("expected nullable date-time AccountsLinkedAccount.last_login, got %v", accountProps["last_login"])
+	}
+	if hidden, exists := accountProps["hidden"].(map[string]any); !exists || hidden["type"] != "boolean" {
+		t.Fatalf("expected AccountsLinkedAccount.hidden to remain boolean, got %v", accountProps["hidden"])
+	}
 	itemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.HomeActivityItem")
 	assertEnum(t, itemProps["type"], []any{"join_leave", "player_history"})
 	for _, field := range []string{"timestamp", "event_type", "player_tag", "clan_tag", "data"} {

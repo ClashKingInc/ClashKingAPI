@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 
 	docs "github.com/ClashKingInc/ClashKingAPI/internal/docs"
@@ -39,30 +40,15 @@ func BuildDoc() (string, error) {
 		return "", err
 	}
 
-	PromoteRFCQueryOperations(doc)
 	setSwaggerMetadata(doc)
 	EnsureSecurityDefinition(doc)
+	promoteQueryOperations(doc)
 
 	data, err := json.Marshal(doc)
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
-}
-
-// PromoteRFCQueryOperations converts the generator-only POST placeholder into the
-// RFC QUERY method served by the router. Swagger 2 predates QUERY and swag rejects
-// it in @Router annotations, while Scalar accepts the method extension in the
-// emitted path item.
-func PromoteRFCQueryOperations(doc map[string]any) {
-	paths, _ := doc["paths"].(map[string]any)
-	path, _ := paths["/v2/home/activity"].(map[string]any)
-	operation, exists := path["post"]
-	if !exists {
-		return
-	}
-	delete(path, "post")
-	path["query"] = operation
 }
 
 func NoStore(next fiber.Handler) fiber.Handler {
@@ -350,6 +336,8 @@ func setSwaggerMetadata(doc map[string]any) {
 
 func primaryTagOrder() []string {
 	return []string{
+		"Counts",
+		"Stats",
 		"Player",
 		"Clan",
 		"War",
@@ -362,6 +350,26 @@ func primaryTagOrder() []string {
 		"Tracking",
 		"Dates",
 		"Lists",
+	}
+}
+
+// promoteQueryOperations preserves QUERY semantics in Swagger 2.0 through a
+// vendor-extension operation. Swag only accepts the standard Swagger verbs,
+// so source annotations use POST as a generation placeholder with
+// x-http-method=QUERY; the served document never advertises those operations
+// as POST.
+func promoteQueryOperations(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	for _, rawPath := range paths {
+		path, _ := rawPath.(map[string]any)
+		post, _ := path["post"].(map[string]any)
+		method, _ := post["x-http-method"].(string)
+		if !strings.EqualFold(method, "QUERY") {
+			continue
+		}
+		post["x-http-method"] = "QUERY"
+		path["x-query"] = post
+		delete(path, "post")
 	}
 }
 
@@ -412,7 +420,7 @@ func operationTagNames(doc map[string]any) []string {
 	seen := map[string]bool{}
 	for _, rawPath := range paths {
 		path, _ := rawPath.(map[string]any)
-		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head", "query"} {
+		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head", "x-query"} {
 			operation, _ := path[method].(map[string]any)
 			rawTags, _ := operation["tags"].([]any)
 			for _, rawTag := range rawTags {

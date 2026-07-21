@@ -4225,6 +4225,346 @@ definitions:
       total:
         type: integer
     type: object
+  modelsv2.StatsArmiesQuery:
+    properties:
+      dates:
+        $ref: '#/definitions/modelsv2.StatsDateFilter'
+      equal_townhalls:
+        type: boolean
+      exclude_items:
+        items:
+          type: string
+        type: array
+      include_items:
+        items:
+          $ref: '#/definitions/modelsv2.StatsItemQuantityFilter'
+        type: array
+      limit:
+        default: 25
+        maximum: 100
+        minimum: 1
+        type: integer
+      minimum_sample_size:
+        default: 100
+        minimum: 1
+        type: integer
+      opponent_townhall_level:
+        minimum: 1
+        type: integer
+      ranked_league_tier_id:
+        minimum: 1
+        type: integer
+      sort_by:
+        default: usage_rate
+        enum:
+        - usage_rate
+        - three_star_rate
+        - average_stars
+        - average_destruction
+        type: string
+      townhall_level:
+        minimum: 1
+        type: integer
+    type: object
+  modelsv2.StatsArmiesResponse:
+    properties:
+      count:
+        type: integer
+      date_range:
+        $ref: '#/definitions/modelsv2.StatsDateRange'
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.StatsArmyItem'
+        type: array
+    type: object
+  modelsv2.StatsArmyItem:
+    properties:
+      army_counts:
+        additionalProperties:
+          type: integer
+        type: object
+      army_items:
+        items:
+          type: string
+        type: array
+      army_share_code:
+        type: string
+      available:
+        type: boolean
+      average_destruction:
+        type: number
+      average_stars:
+        type: number
+      daily:
+        items:
+          $ref: '#/definitions/modelsv2.StatsDailyPoint'
+        type: array
+      one_star_rate:
+        type: number
+      sample_size:
+        type: integer
+      three_star_rate:
+        type: number
+      two_star_rate:
+        type: number
+      usage_rate:
+        type: number
+      zero_star_rate:
+        type: number
+    type: object
+  modelsv2.StatsBreakdown:
+    properties:
+      key:
+        type: string
+      metrics:
+        $ref: '#/definitions/modelsv2.StatsMetrics'
+    type: object
+  modelsv2.StatsCWLQuery:
+    properties:
+      cwl_league_id:
+        type: integer
+      dates:
+        $ref: '#/definitions/modelsv2.StatsDateFilter'
+      equal_townhalls:
+        default: true
+        type: boolean
+      opponent_townhall_level:
+        minimum: 1
+        type: integer
+      seasons:
+        example:
+        - 2026-07
+        items:
+          type: string
+        type: array
+      townhall_level:
+        minimum: 1
+        type: integer
+    type: object
+  modelsv2.StatsDailyPoint:
+    properties:
+      average_destruction:
+        type: number
+      average_stars:
+        type: number
+      date:
+        type: string
+      one_star_rate:
+        type: number
+      sample_size:
+        type: integer
+      three_star_rate:
+        type: number
+      two_star_rate:
+        type: number
+      usage_rate:
+        type: number
+      use_count:
+        type: integer
+      zero_star_rate:
+        type: number
+    type: object
+  modelsv2.StatsDateFilter:
+    properties:
+      end_date:
+        example: "2026-07-20"
+        type: string
+      start_date:
+        example: "2026-07-01"
+        type: string
+    type: object
+  modelsv2.StatsDateRange:
+    properties:
+      end:
+        type: string
+      start:
+        type: string
+    type: object
+  modelsv2.StatsItemQuantityFilter:
+    properties:
+      item:
+        example: u_1
+        type: string
+      max_quantity:
+        minimum: 1
+        type: integer
+      min_quantity:
+        minimum: 1
+        type: integer
+    type: object
+  modelsv2.StatsItemResult:
+    properties:
+      available:
+        type: boolean
+      average_destruction:
+        type: number
+      average_stars:
+        type: number
+      composition_share:
+        type: number
+      daily:
+        items:
+          $ref: '#/definitions/modelsv2.StatsDailyPoint'
+        type: array
+      hero:
+        type: string
+      hit_rate:
+        type: number
+      item:
+        type: string
+      one_star_rate:
+        type: number
+      sample_size:
+        type: integer
+      three_star_rate:
+        type: number
+      two_star_rate:
+        type: number
+      type:
+        type: string
+      usage_rate:
+        type: number
+      use_count:
+        type: integer
+      zero_star_rate:
+        type: number
+    type: object
+  modelsv2.StatsItemSelector:
+    properties:
+      hero:
+        example: Archer Queen
+        type: string
+      item:
+        example: u_1
+        type: string
+      type:
+        enum:
+        - troop
+        - spell
+        - hero
+        - pet
+        - equipment
+        example: troop
+        type: string
+    type: object
+  modelsv2.StatsItemsQuery:
+    properties:
+      dates:
+        $ref: '#/definitions/modelsv2.StatsDateFilter'
+      equal_townhalls:
+        type: boolean
+      exclude_items:
+        items:
+          type: string
+        type: array
+      include_items:
+        items:
+          $ref: '#/definitions/modelsv2.StatsItemQuantityFilter'
+        type: array
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.StatsItemSelector'
+        type: array
+      minimum_sample_size:
+        default: 100
+        minimum: 1
+        type: integer
+      opponent_townhall_level:
+        minimum: 1
+        type: integer
+      ranked_league_tier_id:
+        minimum: 1
+        type: integer
+      townhall_level:
+        minimum: 1
+        type: integer
+    type: object
+  modelsv2.StatsItemsResponse:
+    properties:
+      count:
+        type: integer
+      date_range:
+        $ref: '#/definitions/modelsv2.StatsDateRange'
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.StatsItemResult'
+        type: array
+    type: object
+  modelsv2.StatsMetrics:
+    properties:
+      available:
+        type: boolean
+      average_destruction:
+        type: number
+      average_stars:
+        type: number
+      daily:
+        items:
+          $ref: '#/definitions/modelsv2.StatsDailyPoint'
+        type: array
+      one_star_rate:
+        type: number
+      sample_size:
+        type: integer
+      three_star_rate:
+        type: number
+      two_star_rate:
+        type: number
+      usage_rate:
+        type: number
+      zero_star_rate:
+        type: number
+    type: object
+  modelsv2.StatsOverviewResponse:
+    properties:
+      counts:
+        $ref: '#/definitions/modelsv2.GlobalCountsResponse'
+      cwl:
+        $ref: '#/definitions/modelsv2.StatsMetrics'
+      date_range:
+        $ref: '#/definitions/modelsv2.StatsDateRange'
+      ranked:
+        $ref: '#/definitions/modelsv2.StatsMetrics'
+      war:
+        $ref: '#/definitions/modelsv2.StatsMetrics'
+    type: object
+  modelsv2.StatsPerformanceResponse:
+    properties:
+      breakdowns:
+        items:
+          $ref: '#/definitions/modelsv2.StatsBreakdown'
+        type: array
+      date_range:
+        $ref: '#/definitions/modelsv2.StatsDateRange'
+      metrics:
+        $ref: '#/definitions/modelsv2.StatsMetrics'
+    type: object
+  modelsv2.StatsRankedQuery:
+    properties:
+      dates:
+        $ref: '#/definitions/modelsv2.StatsDateFilter'
+      ranked_league_tier_id:
+        example: 1
+        minimum: 1
+        type: integer
+      townhall_level:
+        minimum: 1
+        type: integer
+    type: object
+  modelsv2.StatsWarQuery:
+    properties:
+      dates:
+        $ref: '#/definitions/modelsv2.StatsDateFilter'
+      equal_townhalls:
+        default: true
+        type: boolean
+      opponent_townhall_level:
+        minimum: 1
+        type: integer
+      townhall_level:
+        minimum: 1
+        type: integer
+    type: object
   modelsv2.StatusRolesDocument:
     properties:
       discord:
@@ -4920,90 +5260,6 @@ paths:
       summary: Get global ClashKing counts
       tags:
       - Global
-  /global/war/completed/daily:
-    get:
-      description: Returns completed war counts per day and war type.
-      parameters:
-      - description: Start Unix timestamp. Defaults to 90 days ago.
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: 'War type filter. Repeatable. Values: random, friendly, cwl,
-          all.'
-        in: query
-        name: war_type
-        type: string
-      - description: 'Comma-separated war type filter. Values: random,friendly,cwl.'
-        in: query
-        name: war_types
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.WarCompletedDailyResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get daily completed war counts
-      tags:
-      - War
-  /global/war/townhall/{townhall_level}/hitrate/weekly:
-    get:
-      description: Returns weekly hitrate and average attack quality for a town hall
-        level.
-      parameters:
-      - description: Town hall level
-        in: path
-        name: townhall_level
-        required: true
-        type: integer
-      - description: Start Unix timestamp. Defaults to 90 days ago.
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: 'War type filter. Repeatable. Values: random, friendly, all.
-          CWL is not included for this endpoint.'
-        in: query
-        name: war_type
-        type: string
-      - description: 'Comma-separated war type filter. Values: random,friendly.'
-        in: query
-        name: war_types
-        type: string
-      - description: Only include same town hall attacks
-        in: query
-        name: same_townhall
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.WarWeeklyHitrateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get weekly town hall war hitrate
-      tags:
-      - War
   /list/seasons:
     get:
       description: Returns recent season identifiers in YYYY-MM format.
@@ -5538,306 +5794,6 @@ paths:
       summary: Verify email address with 6-digit code
       tags:
       - App Authentication
-  /v2/battlelogs/farming/armies:
-    get:
-      description: Returns top farming armies by usage rate. Supports townhall, item
-        includes/excludes, and max 100 result filters.
-      parameters:
-      - description: Townhall level
-        in: query
-        name: townhall_level
-        type: integer
-      - collectionFormat: csv
-        description: Required troop, spell, pet, or equipment IDs/names
-        in: query
-        items:
-          type: string
-        name: contains
-        type: array
-      - collectionFormat: csv
-        description: Excluded troop, spell, pet, or equipment IDs/names
-        in: query
-        items:
-          type: string
-        name: excludes
-        type: array
-      - description: Timeframe such as 7d or 24h
-        in: query
-        name: timeframe
-        type: string
-      - description: Result limit, max 100
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogArmiesResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get farming battlelog armies
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/league/{league_id}/hitrate:
-    get:
-      description: Returns 90 daily hitrate points for same-townhall ranked and legend
-        attacks containing an item for players stored in ranked league groups.
-      parameters:
-      - description: Ranked league tier ID
-        in: path
-        name: league_id
-        required: true
-        type: integer
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item hitrate by ranked league
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/league/{league_id}/usage:
-    get:
-      description: Returns 90 daily usage points for an item in ranked and legend
-        battlelogs for players stored in ranked league groups.
-      parameters:
-      - description: Ranked league tier ID
-        in: path
-        name: league_id
-        required: true
-        type: integer
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item usage by ranked league
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/top200/hitrate:
-    get:
-      description: Returns 90 daily hitrate points for same-townhall ranked and legend
-        attacks containing an item for players in the previous day's stored legend
-        top 200.
-      parameters:
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item hitrate for legend top 200
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/top200/usage:
-    get:
-      description: Returns 90 daily usage points for an item in ranked and legend
-        battlelogs for players in the previous day's stored legend top 200.
-      parameters:
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item usage for legend top 200
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/townhall/{townhall_level}/hitrate:
-    get:
-      description: Returns 90 daily hitrate points for same-townhall ranked and legend
-        attacks containing an item for a townhall level.
-      parameters:
-      - description: Townhall level
-        in: path
-        name: townhall_level
-        required: true
-        type: integer
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemHitrateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item hitrate by townhall
-      tags:
-      - Battlelogs
-  /v2/battlelogs/items/townhall/{townhall_level}/usage:
-    get:
-      description: Returns 90 daily usage points for an item in ranked and legend
-        battlelogs for a townhall level.
-      parameters:
-      - description: Townhall level
-        in: path
-        name: townhall_level
-        required: true
-        type: integer
-      - description: Troop, spell, hero, pet, or equipment item ID/name
-        in: query
-        name: item
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogItemUsageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get item usage by townhall
-      tags:
-      - Battlelogs
-  /v2/battlelogs/ranked/armies:
-    get:
-      description: Returns top ranked armies by hitrate or usage rate. Supports townhall,
-        item includes/excludes, minimum usage count, timeframe, and max 100 result
-        filters.
-      parameters:
-      - description: League ID, matched against the attacker's current league
-        in: query
-        name: league_id
-        type: integer
-      - description: Townhall level
-        in: query
-        name: townhall_level
-        type: integer
-      - collectionFormat: csv
-        description: Required troop, spell, pet, or equipment IDs/names
-        in: query
-        items:
-          type: string
-        name: contains
-        type: array
-      - collectionFormat: csv
-        description: Excluded troop, spell, pet, or equipment IDs/names
-        in: query
-        items:
-          type: string
-        name: excludes
-        type: array
-      - description: Minimum usage count
-        in: query
-        name: min_usage_count
-        type: integer
-      - description: Timeframe such as 7d or 24h
-        in: query
-        name: timeframe
-        type: string
-      - description: hitrate or usage_rate
-        in: query
-        name: sort_by
-        type: string
-      - description: Result limit, max 100
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.BattlelogArmiesResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get ranked battlelog armies
-      tags:
-      - Battlelogs
   /v2/cdn/upload:
     post:
       consumes:
@@ -6115,6 +6071,120 @@ paths:
       summary: Get public configuration
       tags:
       - Configuration
+  /v2/counts:
+    get:
+      description: Returns the current materialized global count summary. The legacy
+        /global/counts caller remains supported separately.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GlobalCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get global ClashKing counts
+      tags:
+      - Counts
+  /v2/counts/clans/capital-leagues:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get clan capital league counts
+      tags:
+      - Counts
+  /v2/counts/clans/cwl-leagues:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get clan CWL league counts
+      tags:
+      - Counts
+  /v2/counts/clans/locations:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get clan location counts
+      tags:
+      - Counts
+  /v2/counts/players/builder-halls:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get player builder hall counts
+      tags:
+      - Counts
+  /v2/counts/players/league-tiers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get player league tier counts
+      tags:
+      - Counts
+  /v2/counts/players/town-halls:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get player town hall counts
+      tags:
+      - Counts
   /v2/cwl/{clan_tag}/ranking-history:
     get:
       description: Returns CWL ranking history rows for a clan tag.
@@ -6403,192 +6473,6 @@ paths:
       summary: Request password reset
       tags:
       - App Authentication
-  /v2/global/builderhalls:
-    get:
-      description: Returns counts of players at each builder hall level.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global builderhall counts
-      tags:
-      - Global
-  /v2/global/capital-leagues:
-    get:
-      description: Returns counts of clans at different capital leagues.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global capital league counts
-      tags:
-      - Global
-  /v2/global/clan/locations:
-    get:
-      description: Returns counts of clans in different locations.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global clan location counts
-      tags:
-      - Global
-  /v2/global/cwl-leagues:
-    get:
-      description: Returns counts of clans at different CWL leagues.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global CWL league counts
-      tags:
-      - Global
-  /v2/global/leaguetiers:
-    get:
-      description: Returns counts of players at different league tiers.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global league tier counts
-      tags:
-      - Global
-  /v2/global/townhalls:
-    get:
-      description: Returns counts of players at each townhall level.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get global townhall counts
-      tags:
-      - Global
-  /v2/global/war/completed/daily:
-    get:
-      description: Returns completed war counts per day and war type.
-      parameters:
-      - description: Start Unix timestamp. Defaults to 90 days ago.
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: 'War type filter. Repeatable. Values: random, friendly, cwl,
-          all.'
-        in: query
-        name: war_type
-        type: string
-      - description: 'Comma-separated war type filter. Values: random,friendly,cwl.'
-        in: query
-        name: war_types
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.WarCompletedDailyResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get daily completed war counts
-      tags:
-      - War
-  /v2/global/war/townhall/{townhall_level}/hitrate/weekly:
-    get:
-      description: Returns weekly hitrate and average attack quality for a town hall
-        level.
-      parameters:
-      - description: Town hall level
-        in: path
-        name: townhall_level
-        required: true
-        type: integer
-      - description: Start Unix timestamp. Defaults to 90 days ago.
-        in: query
-        name: timestamp_start
-        type: integer
-      - description: End Unix timestamp
-        in: query
-        name: timestamp_end
-        type: integer
-      - description: 'War type filter. Repeatable. Values: random, friendly, all.
-          CWL is not included for this endpoint.'
-        in: query
-        name: war_type
-        type: string
-      - description: 'Comma-separated war type filter. Values: random,friendly.'
-        in: query
-        name: war_types
-        type: string
-      - description: Only include same town hall attacks
-        in: query
-        name: same_townhall
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.WarWeeklyHitrateResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get weekly town hall war hitrate
-      tags:
-      - War
   /v2/guild-summary:
     get:
       description: Returns clan and member activity totals for a Discord guild.
@@ -6686,7 +6570,7 @@ paths:
       tags:
       - Other
   /v2/home/activity:
-    post:
+    x-query:
       consumes:
       - application/json
       description: Uses RFC QUERY with a JSON body to return the newest merged clan
@@ -6722,7 +6606,7 @@ paths:
       summary: Get Home activity
       tags:
       - Activity & Inactivity
-      x-rfc-method: QUERY
+      x-http-method: QUERY
   /v2/internal/bot/info:
     get:
       description: Returns internal bot cluster stats, system info, and database document
@@ -12396,6 +12280,201 @@ paths:
       summary: Update open ticket status
       tags:
       - Server Tickets
+  /v2/stats/armies:
+    x-query:
+      consumes:
+      - application/json
+      description: Uses exact army_share_code + army_items + army_counts identity.
+        QUERY is represented through x-http-method because Swagger 2.0 has no QUERY
+        operation key.
+      parameters:
+      - description: Army filters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StatsArmiesQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsArmiesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Query ranked army intelligence
+      tags:
+      - Stats
+      x-http-method: QUERY
+  /v2/stats/cwl:
+    x-query:
+      consumes:
+      - application/json
+      description: CWL is separate from regular war, defaults to equal-town-hall attacks,
+        and returns season aggregation. League attribution uses the CWL group containing
+        either war clan for the matching YYYY-MM season.
+      parameters:
+      - description: CWL filters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StatsCWLQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsPerformanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Query CWL performance
+      tags:
+      - Stats
+      x-http-method: QUERY
+  /v2/stats/items:
+    x-query:
+      consumes:
+      - application/json
+      description: Item analysis is available for ranked battlelogs. War/CWL attack
+        rows do not store army items, so those dimensions are intentionally absent.
+      parameters:
+      - description: Item filters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StatsItemsQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsItemsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Query ranked item intelligence
+      tags:
+      - Stats
+      x-http-method: QUERY
+  /v2/stats/overview:
+    get:
+      description: Returns global counts plus ranked, regular-war, and CWL KPIs. A
+        source with no rows has available=false, sample_size=0, zero rates, and an
+        empty daily series.
+      parameters:
+      - description: Inclusive start date YYYY-MM-DD
+        in: query
+        name: start_date
+        type: string
+      - description: Inclusive end date YYYY-MM-DD
+        in: query
+        name: end_date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsOverviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get battle intelligence overview
+      tags:
+      - Stats
+  /v2/stats/ranked:
+    x-query:
+      consumes:
+      - application/json
+      description: Requires one town hall and exactly one ranked tier. Each battle
+        date is joined to the same YYYYMM season_id in ranked_league_group_members;
+        basic_player.league_id is never used.
+      parameters:
+      - description: Ranked filters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StatsRankedQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsPerformanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Query ranked performance
+      tags:
+      - Stats
+      x-http-method: QUERY
+  /v2/stats/war:
+    x-query:
+      consumes:
+      - application/json
+      description: Includes random wars only, excluding friendly and CWL wars. Equal-town-hall
+        attacks are the default.
+      parameters:
+      - description: War filters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StatsWarQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.StatsPerformanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Query regular-war performance
+      tags:
+      - Stats
+      x-http-method: QUERY
   /v2/tracking/players/add:
     post:
       consumes:

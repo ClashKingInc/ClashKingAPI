@@ -32,8 +32,6 @@ import (
 // @Success 200 {object} modelsv2.WarWeeklyHitrateResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/war/townhall/{townhall_level}/hitrate/weekly [get]
-// @Router /global/war/townhall/{townhall_level}/hitrate/weekly [get]
 func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		townhall := warParseIntDefault(c.Params("townhall_level"), 0)
@@ -104,8 +102,6 @@ func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
 // @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
 // @Success 200 {object} modelsv2.WarCompletedDailyResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/global/war/completed/daily [get]
-// @Router /global/war/completed/daily [get]
 func warCompletedDaily(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Unix(queryInt64(c, "timestamp_start", time.Now().UTC().AddDate(0, 0, -90).Unix()), 0).UTC()

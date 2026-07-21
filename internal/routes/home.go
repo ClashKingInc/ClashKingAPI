@@ -40,7 +40,7 @@ type normalizedHomeActivityMapping struct {
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 403 {object} modelsv2.ErrorResponse
-// @x-rfc-method "QUERY"
+// @x-http-method "QUERY"
 // @Router /v2/home/activity [post]
 func homeActivity(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {

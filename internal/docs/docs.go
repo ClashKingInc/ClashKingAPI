@@ -138,129 +138,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/global/war/completed/daily": {
-            "get": {
-                "description": "Returns completed war counts per day and war type.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get daily completed war counts",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
-                        "name": "war_types",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarCompletedDailyResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/global/war/townhall/{townhall_level}/hitrate/weekly": {
-            "get": {
-                "description": "Returns weekly hitrate and average attack quality for a town hall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get weekly town hall war hitrate",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Town hall level",
-                        "name": "townhall_level",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly.",
-                        "name": "war_types",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Only include same town hall attacks",
-                        "name": "same_townhall",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarWeeklyHitrateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/list/seasons": {
             "get": {
                 "description": "Returns recent season identifiers in YYYY-MM format.",
@@ -1077,442 +954,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/battlelogs/farming/armies": {
-            "get": {
-                "description": "Returns top farming armies by usage rate. Supports townhall, item includes/excludes, and max 100 result filters.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get farming battlelog armies",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Townhall level",
-                        "name": "townhall_level",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Required troop, spell, pet, or equipment IDs/names",
-                        "name": "contains",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Excluded troop, spell, pet, or equipment IDs/names",
-                        "name": "excludes",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Timeframe such as 7d or 24h",
-                        "name": "timeframe",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Result limit, max 100",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogArmiesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/league/{league_id}/hitrate": {
-            "get": {
-                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for players stored in ranked league groups.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item hitrate by ranked league",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Ranked league tier ID",
-                        "name": "league_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/league/{league_id}/usage": {
-            "get": {
-                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for players stored in ranked league groups.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item usage by ranked league",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Ranked league tier ID",
-                        "name": "league_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/top200/hitrate": {
-            "get": {
-                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for players in the previous day's stored legend top 200.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item hitrate for legend top 200",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/top200/usage": {
-            "get": {
-                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for players in the previous day's stored legend top 200.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item usage for legend top 200",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/townhall/{townhall_level}/hitrate": {
-            "get": {
-                "description": "Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for a townhall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item hitrate by townhall",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Townhall level",
-                        "name": "townhall_level",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemHitrateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/items/townhall/{townhall_level}/usage": {
-            "get": {
-                "description": "Returns 90 daily usage points for an item in ranked and legend battlelogs for a townhall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get item usage by townhall",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Townhall level",
-                        "name": "townhall_level",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Troop, spell, hero, pet, or equipment item ID/name",
-                        "name": "item",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogItemUsageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/battlelogs/ranked/armies": {
-            "get": {
-                "description": "Returns top ranked armies by hitrate or usage rate. Supports townhall, item includes/excludes, minimum usage count, timeframe, and max 100 result filters.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Battlelogs"
-                ],
-                "summary": "Get ranked battlelog armies",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "League ID, matched against the attacker's current league",
-                        "name": "league_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Townhall level",
-                        "name": "townhall_level",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Required troop, spell, pet, or equipment IDs/names",
-                        "name": "contains",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Excluded troop, spell, pet, or equipment IDs/names",
-                        "name": "excludes",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Minimum usage count",
-                        "name": "min_usage_count",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Timeframe such as 7d or 24h",
-                        "name": "timeframe",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "hitrate or usage_rate",
-                        "name": "sort_by",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Result limit, max 100",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.BattlelogArmiesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/cdn/upload": {
             "post": {
                 "security": [
@@ -1919,6 +1360,182 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.PublicConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts": {
+            "get": {
+                "description": "Returns the current materialized global count summary. The legacy /global/counts caller remains supported separately.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get global ClashKing counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GlobalCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/clans/capital-leagues": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get clan capital league counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/clans/cwl-leagues": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get clan CWL league counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/clans/locations": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get clan location counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/players/builder-halls": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get player builder hall counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/players/league-tiers": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get player league tier counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/counts/players/town-halls": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Counts"
+                ],
+                "summary": "Get player town hall counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
@@ -2364,285 +1981,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/global/builderhalls": {
-            "get": {
-                "description": "Returns counts of players at each builder hall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global builderhall counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/capital-leagues": {
-            "get": {
-                "description": "Returns counts of clans at different capital leagues.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global capital league counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/clan/locations": {
-            "get": {
-                "description": "Returns counts of clans in different locations.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global clan location counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/cwl-leagues": {
-            "get": {
-                "description": "Returns counts of clans at different CWL leagues.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global CWL league counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/leaguetiers": {
-            "get": {
-                "description": "Returns counts of players at different league tiers.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global league tier counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/townhalls": {
-            "get": {
-                "description": "Returns counts of players at each townhall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Global"
-                ],
-                "summary": "Get global townhall counts",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/war/completed/daily": {
-            "get": {
-                "description": "Returns completed war counts per day and war type.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get daily completed war counts",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
-                        "name": "war_types",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarCompletedDailyResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/global/war/townhall/{townhall_level}/hitrate/weekly": {
-            "get": {
-                "description": "Returns weekly hitrate and average attack quality for a town hall level.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get weekly town hall war hitrate",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Town hall level",
-                        "name": "townhall_level",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, all. CWL is not included for this endpoint.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly.",
-                        "name": "war_types",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Only include same town hall attacks",
-                        "name": "same_townhall",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarWeeklyHitrateResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/guild-summary": {
             "get": {
                 "description": "Returns clan and member activity totals for a Discord guild.",
@@ -2789,7 +2127,7 @@ const docTemplate = `{
             }
         },
         "/v2/home/activity": {
-            "post": {
+            "x-query": {
                 "security": [
                     {
                         "ApiKeyAuth": []
@@ -2843,7 +2181,7 @@ const docTemplate = `{
                         }
                     }
                 },
-                "x-rfc-method": "QUERY"
+                "x-http-method": "QUERY"
             }
         },
         "/v2/internal/bot/info": {
@@ -11577,6 +10915,287 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/stats/armies": {
+            "x-query": {
+                "description": "Uses exact army_share_code + army_items + army_counts identity. QUERY is represented through x-http-method because Swagger 2.0 has no QUERY operation key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Query ranked army intelligence",
+                "parameters": [
+                    {
+                        "description": "Army filters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsArmiesQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsArmiesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
+        "/v2/stats/cwl": {
+            "x-query": {
+                "description": "CWL is separate from regular war, defaults to equal-town-hall attacks, and returns season aggregation. League attribution uses the CWL group containing either war clan for the matching YYYY-MM season.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Query CWL performance",
+                "parameters": [
+                    {
+                        "description": "CWL filters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsCWLQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsPerformanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
+        "/v2/stats/items": {
+            "x-query": {
+                "description": "Item analysis is available for ranked battlelogs. War/CWL attack rows do not store army items, so those dimensions are intentionally absent.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Query ranked item intelligence",
+                "parameters": [
+                    {
+                        "description": "Item filters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsItemsQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsItemsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
+        "/v2/stats/overview": {
+            "get": {
+                "description": "Returns global counts plus ranked, regular-war, and CWL KPIs. A source with no rows has available=false, sample_size=0, zero rates, and an empty daily series.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Get battle intelligence overview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Inclusive start date YYYY-MM-DD",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive end date YYYY-MM-DD",
+                        "name": "end_date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsOverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/stats/ranked": {
+            "x-query": {
+                "description": "Requires one town hall and exactly one ranked tier. Each battle date is joined to the same YYYYMM season_id in ranked_league_group_members; basic_player.league_id is never used.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Query ranked performance",
+                "parameters": [
+                    {
+                        "description": "Ranked filters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsRankedQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsPerformanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
+        "/v2/stats/war": {
+            "x-query": {
+                "description": "Includes random wars only, excluding friendly and CWL wars. Equal-town-hall attacks are the default.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Stats"
+                ],
+                "summary": "Query regular-war performance",
+                "parameters": [
+                    {
+                        "description": "War filters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsWarQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StatsPerformanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
         "/v2/tracking/players/add": {
             "post": {
                 "security": [
@@ -18565,6 +18184,506 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.StatsArmiesQuery": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "$ref": "#/definitions/modelsv2.StatsDateFilter"
+                },
+                "equal_townhalls": {
+                    "type": "boolean"
+                },
+                "exclude_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "include_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsItemQuantityFilter"
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 25,
+                    "maximum": 100,
+                    "minimum": 1
+                },
+                "minimum_sample_size": {
+                    "type": "integer",
+                    "default": 100,
+                    "minimum": 1
+                },
+                "opponent_townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "ranked_league_tier_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "sort_by": {
+                    "type": "string",
+                    "default": "usage_rate",
+                    "enum": [
+                        "usage_rate",
+                        "three_star_rate",
+                        "average_stars",
+                        "average_destruction"
+                    ]
+                },
+                "townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "modelsv2.StatsArmiesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date_range": {
+                    "$ref": "#/definitions/modelsv2.StatsDateRange"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsArmyItem"
+                    }
+                }
+            }
+        },
+        "modelsv2.StatsArmyItem": {
+            "type": "object",
+            "properties": {
+                "army_counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "army_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "army_share_code": {
+                    "type": "string"
+                },
+                "available": {
+                    "type": "boolean"
+                },
+                "average_destruction": {
+                    "type": "number"
+                },
+                "average_stars": {
+                    "type": "number"
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsDailyPoint"
+                    }
+                },
+                "one_star_rate": {
+                    "type": "number"
+                },
+                "sample_size": {
+                    "type": "integer"
+                },
+                "three_star_rate": {
+                    "type": "number"
+                },
+                "two_star_rate": {
+                    "type": "number"
+                },
+                "usage_rate": {
+                    "type": "number"
+                },
+                "zero_star_rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.StatsBreakdown": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "metrics": {
+                    "$ref": "#/definitions/modelsv2.StatsMetrics"
+                }
+            }
+        },
+        "modelsv2.StatsCWLQuery": {
+            "type": "object",
+            "properties": {
+                "cwl_league_id": {
+                    "type": "integer"
+                },
+                "dates": {
+                    "$ref": "#/definitions/modelsv2.StatsDateFilter"
+                },
+                "equal_townhalls": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "opponent_townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "seasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "2026-07"
+                    ]
+                },
+                "townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "modelsv2.StatsDailyPoint": {
+            "type": "object",
+            "properties": {
+                "average_destruction": {
+                    "type": "number"
+                },
+                "average_stars": {
+                    "type": "number"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "one_star_rate": {
+                    "type": "number"
+                },
+                "sample_size": {
+                    "type": "integer"
+                },
+                "three_star_rate": {
+                    "type": "number"
+                },
+                "two_star_rate": {
+                    "type": "number"
+                },
+                "usage_rate": {
+                    "type": "number"
+                },
+                "use_count": {
+                    "type": "integer"
+                },
+                "zero_star_rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.StatsDateFilter": {
+            "type": "object",
+            "properties": {
+                "end_date": {
+                    "type": "string",
+                    "example": "2026-07-20"
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2026-07-01"
+                }
+            }
+        },
+        "modelsv2.StatsDateRange": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.StatsItemQuantityFilter": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "type": "string",
+                    "example": "u_1"
+                },
+                "max_quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "min_quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "modelsv2.StatsItemResult": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "average_destruction": {
+                    "type": "number"
+                },
+                "average_stars": {
+                    "type": "number"
+                },
+                "composition_share": {
+                    "type": "number"
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsDailyPoint"
+                    }
+                },
+                "hero": {
+                    "type": "string"
+                },
+                "hit_rate": {
+                    "type": "number"
+                },
+                "item": {
+                    "type": "string"
+                },
+                "one_star_rate": {
+                    "type": "number"
+                },
+                "sample_size": {
+                    "type": "integer"
+                },
+                "three_star_rate": {
+                    "type": "number"
+                },
+                "two_star_rate": {
+                    "type": "number"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "usage_rate": {
+                    "type": "number"
+                },
+                "use_count": {
+                    "type": "integer"
+                },
+                "zero_star_rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.StatsItemSelector": {
+            "type": "object",
+            "properties": {
+                "hero": {
+                    "type": "string",
+                    "example": "Archer Queen"
+                },
+                "item": {
+                    "type": "string",
+                    "example": "u_1"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "troop",
+                        "spell",
+                        "hero",
+                        "pet",
+                        "equipment"
+                    ],
+                    "example": "troop"
+                }
+            }
+        },
+        "modelsv2.StatsItemsQuery": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "$ref": "#/definitions/modelsv2.StatsDateFilter"
+                },
+                "equal_townhalls": {
+                    "type": "boolean"
+                },
+                "exclude_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "include_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsItemQuantityFilter"
+                    }
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsItemSelector"
+                    }
+                },
+                "minimum_sample_size": {
+                    "type": "integer",
+                    "default": 100,
+                    "minimum": 1
+                },
+                "opponent_townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "ranked_league_tier_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "modelsv2.StatsItemsResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date_range": {
+                    "$ref": "#/definitions/modelsv2.StatsDateRange"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsItemResult"
+                    }
+                }
+            }
+        },
+        "modelsv2.StatsMetrics": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "average_destruction": {
+                    "type": "number"
+                },
+                "average_stars": {
+                    "type": "number"
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsDailyPoint"
+                    }
+                },
+                "one_star_rate": {
+                    "type": "number"
+                },
+                "sample_size": {
+                    "type": "integer"
+                },
+                "three_star_rate": {
+                    "type": "number"
+                },
+                "two_star_rate": {
+                    "type": "number"
+                },
+                "usage_rate": {
+                    "type": "number"
+                },
+                "zero_star_rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.StatsOverviewResponse": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "$ref": "#/definitions/modelsv2.GlobalCountsResponse"
+                },
+                "cwl": {
+                    "$ref": "#/definitions/modelsv2.StatsMetrics"
+                },
+                "date_range": {
+                    "$ref": "#/definitions/modelsv2.StatsDateRange"
+                },
+                "ranked": {
+                    "$ref": "#/definitions/modelsv2.StatsMetrics"
+                },
+                "war": {
+                    "$ref": "#/definitions/modelsv2.StatsMetrics"
+                }
+            }
+        },
+        "modelsv2.StatsPerformanceResponse": {
+            "type": "object",
+            "properties": {
+                "breakdowns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.StatsBreakdown"
+                    }
+                },
+                "date_range": {
+                    "$ref": "#/definitions/modelsv2.StatsDateRange"
+                },
+                "metrics": {
+                    "$ref": "#/definitions/modelsv2.StatsMetrics"
+                }
+            }
+        },
+        "modelsv2.StatsRankedQuery": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "$ref": "#/definitions/modelsv2.StatsDateFilter"
+                },
+                "ranked_league_tier_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 1
+                },
+                "townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "modelsv2.StatsWarQuery": {
+            "type": "object",
+            "properties": {
+                "dates": {
+                    "$ref": "#/definitions/modelsv2.StatsDateFilter"
+                },
+                "equal_townhalls": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "opponent_townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "townhall_level": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },

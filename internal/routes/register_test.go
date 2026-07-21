@@ -9,7 +9,7 @@ import (
 )
 
 func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
-	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
+	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	paths := registeredRoutePaths(app)
@@ -103,6 +103,24 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/static/:category/:item_id_or_name",
 		"/v2/:category",
 		"/v2/static/:category",
+		"/v2/global/cwl-leagues",
+		"/v2/global/clan/locations",
+		"/v2/global/townhalls",
+		"/v2/global/builderhalls",
+		"/v2/global/capital-leagues",
+		"/v2/global/leaguetiers",
+		"/v2/global/war/townhall/:townhall_level/hitrate/weekly",
+		"/v2/global/war/completed/daily",
+		"/v2/battlelogs/ranked/armies",
+		"/v2/battlelogs/farming/armies",
+		"/v2/battlelogs/items/townhall/:townhall_level/usage",
+		"/v2/battlelogs/items/townhall/:townhall_level/hitrate",
+		"/v2/battlelogs/items/league/:league_id/usage",
+		"/v2/battlelogs/items/league/:league_id/hitrate",
+		"/v2/battlelogs/items/top200/usage",
+		"/v2/battlelogs/items/top200/hitrate",
+		"/global/war/townhall/:townhall_level/hitrate/weekly",
+		"/global/war/completed/daily",
 		"/war/:clan_tag/previous",
 		"/war/:clan_tag/previous/:end_time",
 	} {
@@ -141,6 +159,20 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/server/:server_id/dashboard-capabilities",
 		"/v2/server/:server_id/dashboard-access",
 		"/v2/server/:server_id/bot-profile",
+		"/v2/counts",
+		"/v2/counts/players/town-halls",
+		"/v2/counts/players/builder-halls",
+		"/v2/counts/players/league-tiers",
+		"/v2/counts/clans/locations",
+		"/v2/counts/clans/cwl-leagues",
+		"/v2/counts/clans/capital-leagues",
+		"/v2/stats/overview",
+		"/v2/stats/armies",
+		"/v2/stats/items",
+		"/v2/stats/ranked",
+		"/v2/stats/war",
+		"/v2/stats/cwl",
+		"/global/counts",
 	} {
 		if !paths[path] {
 			t.Fatalf("expected %s to be registered", path)
@@ -149,7 +181,7 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 }
 
 func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *testing.T) {
-	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
+	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	for _, method := range []string{fiber.MethodDelete} {
@@ -165,7 +197,7 @@ func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *t
 }
 
 func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
-	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler, RequestMethods: apptypes.APIRequestMethods()})
+	app := newRegisteredRoutesTestAppWithErrorHandler()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/war/%232PP/previous", nil))
@@ -179,7 +211,7 @@ func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
 }
 
 func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
-	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
+	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
 	if index := registeredRouteIndex(app, apptypes.MethodQuery, "/v2/home/activity"); index < 0 {
@@ -188,6 +220,17 @@ func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
 	if index := registeredRouteIndex(app, fiber.MethodPost, "/v2/home/activity"); index >= 0 {
 		t.Fatal("did not expect a POST compatibility route for /v2/home/activity")
 	}
+}
+
+func newRegisteredRoutesTestApp() *fiber.App {
+	return fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods()})
+}
+
+func newRegisteredRoutesTestAppWithErrorHandler() *fiber.App {
+	return fiber.New(fiber.Config{
+		ErrorHandler:   apptypes.ErrorHandler,
+		RequestMethods: apptypes.APIRequestMethods(),
+	})
 }
 
 func registeredRoutePaths(app *fiber.App) map[string]bool {

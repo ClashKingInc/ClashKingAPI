@@ -146,9 +146,9 @@ func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 	if _, exists := homePath["post"]; exists {
 		t.Fatal("did not expect POST documentation for the RFC QUERY route")
 	}
-	query, ok := homePath["query"].(map[string]any)
-	if !ok {
-		t.Fatal("expected QUERY operation for /v2/home/activity")
+	query, ok := homePath["x-query"].(map[string]any)
+	if !ok || query["x-http-method"] != "QUERY" {
+		t.Fatal("expected x-query QUERY operation for /v2/home/activity")
 	}
 	assertTags(t, query, []string{"Activity & Inactivity"})
 
@@ -684,24 +684,23 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/leaderboard/{location_id}/clan/war-wins",
 		"/v2/leaderboard/clan/win-streak",
 		"/v2/leaderboard/{league_tier_id}/trophy-buckets",
-		"/v2/global/cwl-leagues",
-		"/v2/global/clan/locations",
-		"/v2/global/townhalls",
-		"/v2/global/builderhalls",
-		"/v2/global/capital-leagues",
-		"/v2/global/leaguetiers",
+		"/v2/counts",
+		"/v2/counts/players/town-halls",
+		"/v2/counts/players/builder-halls",
+		"/v2/counts/players/league-tiers",
+		"/v2/counts/clans/locations",
+		"/v2/counts/clans/cwl-leagues",
+		"/v2/counts/clans/capital-leagues",
+		"/v2/stats/overview",
+		"/v2/stats/armies",
+		"/v2/stats/items",
+		"/v2/stats/ranked",
+		"/v2/stats/war",
+		"/v2/stats/cwl",
 		"/v2/clan/{clan_tag}/changes",
 		"/v2/clan/{clan_tag}/rankings",
 		"/v2/clan/{clan_tag}/basic",
 		"/v2/clan/{clan_tag}/badge",
-		"/v2/battlelogs/ranked/armies",
-		"/v2/battlelogs/farming/armies",
-		"/v2/battlelogs/items/townhall/{townhall_level}/usage",
-		"/v2/battlelogs/items/townhall/{townhall_level}/hitrate",
-		"/v2/battlelogs/items/league/{league_id}/usage",
-		"/v2/battlelogs/items/league/{league_id}/hitrate",
-		"/v2/battlelogs/items/top200/usage",
-		"/v2/battlelogs/items/top200/hitrate",
 		"/v2/ranking/player-trophies/{location}/{date}",
 		"/v2/ranking/player-builder/{location}/{date}",
 		"/v2/ranking/clan-trophies/{location}/{date}",
@@ -712,12 +711,28 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 			t.Fatalf("expected public stats path %s in swagger", path)
 		}
 	}
+	for _, path := range []string{
+		"/v2/global/cwl-leagues",
+		"/v2/global/clan/locations",
+		"/v2/global/townhalls",
+		"/v2/global/builderhalls",
+		"/v2/global/capital-leagues",
+		"/v2/global/leaguetiers",
+		"/v2/global/war/completed/daily",
+		"/v2/global/war/townhall/{townhall_level}/hitrate/weekly",
+		"/v2/battlelogs/ranked/armies",
+		"/v2/battlelogs/farming/armies",
+	} {
+		if _, exists := paths[path]; exists {
+			t.Fatalf("expected replaced public stats path %s to be absent", path)
+		}
+	}
 
 	tags, ok := doc["tags"].([]any)
 	if !ok {
 		t.Fatal("expected swagger tags list")
 	}
-	want := []string{"Player", "Clan", "War", "Battlelogs", "Leaderboard", "Rankings", "Global", "Search", "Links", "Tracking", "Dates", "Lists"}
+	want := []string{"Counts", "Stats", "Player", "Clan", "War", "Battlelogs", "Leaderboard", "Rankings", "Global", "Search", "Links", "Tracking", "Dates", "Lists"}
 	if len(tags) < len(want) {
 		t.Fatalf("expected at least %d tags, got %d", len(want), len(tags))
 	}
@@ -746,6 +761,27 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	for _, marker := range []string{"Public Stats", "PlannedEndpoint", `"501"`, "planned public stats"} {
 		if strings.Contains(raw, marker) {
 			t.Fatalf("expected generated swagger not to contain %q", marker)
+		}
+	}
+}
+
+func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
+	paths := swaggerPaths(t, buildSwaggerDoc(t))
+	for _, path := range []string{"/v2/home/activity", "/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"} {
+		operation, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("expected path object for %s", path)
+		}
+		if _, exists := operation["post"]; exists {
+			t.Fatalf("expected %s not to advertise POST", path)
+		}
+		query, ok := operation["x-query"].(map[string]any)
+		if !ok || query["x-http-method"] != "QUERY" {
+			t.Fatalf("expected %s to contain x-query QUERY operation, got %v", path, operation)
+		}
+		consumes, _ := query["consumes"].([]any)
+		if len(consumes) == 0 || consumes[0] != "application/json" {
+			t.Fatalf("expected %s QUERY operation to consume application/json, got %v", path, consumes)
 		}
 	}
 }

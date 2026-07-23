@@ -165,9 +165,9 @@ func firstNonEmpty(values ...string) string {
 func buildTimescaleURL(getenv func(string) string) string {
 	host := strings.TrimSpace(getenv("TIMESCALE_HOST"))
 	port := firstNonEmpty(getenv("TIMESCALE_PORT"), "5432")
-	user := strings.TrimSpace(getenv("POSTGRES_USER"))
-	password := getenv("POSTGRES_PASSWORD")
-	database := strings.TrimSpace(getenv("POSTGRES_DB"))
+	user := strings.TrimSpace(getenv("TIMESCALE_USER"))
+	password := getenv("TIMESCALE_PASSWORD")
+	database := strings.TrimSpace(getenv("TIMESCALE_DB"))
 
 	connection := &url.URL{
 		Scheme: "postgres",
@@ -184,9 +184,9 @@ func buildTimescaleURL(getenv func(string) string) string {
 func validateTimescaleEnvironment(getenv func(string) string) error {
 	required := []string{
 		"TIMESCALE_HOST",
-		"POSTGRES_USER",
-		"POSTGRES_PASSWORD",
-		"POSTGRES_DB",
+		"TIMESCALE_USER",
+		"TIMESCALE_PASSWORD",
+		"TIMESCALE_DB",
 	}
 	var missing []string
 	for _, key := range required {

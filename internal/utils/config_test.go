@@ -7,12 +7,12 @@ import (
 
 func TestBuildTimescaleURLFromCoolifyVariables(t *testing.T) {
 	values := map[string]string{
-		"TIMESCALE_HOST":    "timescale",
-		"TIMESCALE_PORT":    "5432",
-		"POSTGRES_USER":     "tracking",
-		"POSTGRES_PASSWORD": "p@ss/word",
-		"POSTGRES_DB":       "tracking data",
-		"TIMESCALE_SSLMODE": "require",
+		"TIMESCALE_HOST":     "timescale",
+		"TIMESCALE_PORT":     "5432",
+		"TIMESCALE_USER":     "tracking",
+		"TIMESCALE_PASSWORD": "p@ss/word",
+		"TIMESCALE_DB":       "tracking data",
+		"TIMESCALE_SSLMODE":  "require",
 	}
 
 	got := buildTimescaleURL(func(key string) string { return values[key] })
@@ -25,12 +25,12 @@ func TestBuildTimescaleURLFromCoolifyVariables(t *testing.T) {
 func TestBuildTimescaleURLRequiresConnectionParts(t *testing.T) {
 	values := map[string]string{
 		"TIMESCALE_HOST": "timescale",
-		"POSTGRES_USER":  "tracking",
-		"POSTGRES_DB":    "tracking",
+		"TIMESCALE_USER": "tracking",
+		"TIMESCALE_DB":   "tracking",
 	}
 
 	err := validateTimescaleEnvironment(func(key string) string { return values[key] })
-	if err == nil || !strings.Contains(err.Error(), "POSTGRES_PASSWORD") {
+	if err == nil || !strings.Contains(err.Error(), "TIMESCALE_PASSWORD") {
 		t.Fatalf("validateTimescaleEnvironment() error = %v", err)
 	}
 }

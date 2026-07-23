@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -51,10 +52,14 @@ type Config struct {
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
+	if err := validateTimescaleEnvironment(os.Getenv); err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		COCEmail:            os.Getenv("COC_EMAIL"),
 		COCPassword:         os.Getenv("COC_PASSWORD"),
-		TimescaleURL:        firstNonEmpty(os.Getenv("TIMESCALE_URL"), os.Getenv("DATABASE_URL")),
+		TimescaleURL:        buildTimescaleURL(os.Getenv),
 		RedisIP:             os.Getenv("REDIS_IP"),
 		RedisPassword:       os.Getenv("REDIS_PW"),
 		BunnyAccessKey:      os.Getenv("BUNNY_ACCESS_KEY"),
@@ -105,7 +110,6 @@ func (c Config) Addr() string {
 
 func (c Config) validate() error {
 	required := map[string]string{
-		"TIMESCALE_URL":         c.TimescaleURL,
 		"ENCRYPTION_KEY":        c.EncryptionKey,
 		"SECRET_KEY":            c.SecretKey,
 		"REFRESH_SECRET":        c.RefreshSecret,
@@ -156,6 +160,44 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func buildTimescaleURL(getenv func(string) string) string {
+	host := strings.TrimSpace(getenv("TIMESCALE_HOST"))
+	port := firstNonEmpty(getenv("TIMESCALE_PORT"), "5432")
+	user := strings.TrimSpace(getenv("POSTGRES_USER"))
+	password := getenv("POSTGRES_PASSWORD")
+	database := strings.TrimSpace(getenv("POSTGRES_DB"))
+
+	connection := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   net.JoinHostPort(host, port),
+		Path:   database,
+	}
+	query := connection.Query()
+	query.Set("sslmode", firstNonEmpty(getenv("TIMESCALE_SSLMODE"), "disable"))
+	connection.RawQuery = query.Encode()
+	return connection.String()
+}
+
+func validateTimescaleEnvironment(getenv func(string) string) error {
+	required := []string{
+		"TIMESCALE_HOST",
+		"POSTGRES_USER",
+		"POSTGRES_PASSWORD",
+		"POSTGRES_DB",
+	}
+	var missing []string
+	for _, key := range required {
+		if strings.TrimSpace(getenv(key)) == "" {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func envInt(key string, fallback int) int {

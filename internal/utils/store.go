@@ -23,7 +23,7 @@ func (s *Store) AuthUserExists(ctx context.Context, userID string) (bool, error)
 
 func NewStore(ctx context.Context, cfg Config) (*Store, error) {
 	if cfg.TimescaleURL == "" {
-		return nil, errors.New("TIMESCALE_URL or DATABASE_URL is required")
+		return nil, errors.New("Timescale connection is not configured")
 	}
 	sqlPool, err := pgxpool.New(ctx, cfg.TimescaleURL)
 	if err != nil {

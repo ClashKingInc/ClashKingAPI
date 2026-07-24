@@ -48,6 +48,29 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 		if !strings.Contains(body, `id="api-reference"`) || !strings.Contains(body, `@scalar/api-reference`) {
 			t.Fatalf("expected %s to serve Scalar html", path)
 		}
+		for _, marker := range []string{
+			`class="ck-docs-header"`,
+			`theme: "none"`,
+			`https://assets.clashk.ing/fonts/clashking.woff2`,
+			`https://assets.clashk.ing/logos/clashking-wordmark-dark.svg`,
+			`https://assets.clashk.ing/logos/clashking-wordmark-light.svg`,
+			`href="/openapi.json"`,
+			`href="/swagger"`,
+			`href="/swagger">Swagger</a>`,
+			`:where(input, textarea, select):focus-visible`,
+			`.open-api-client-button:focus-visible`,
+			`aria-label="Swagger" href="/swagger">Swagger</a>`,
+		} {
+			if !strings.Contains(body, marker) {
+				t.Fatalf("expected %s to serve branded Scalar html containing %q", path, marker)
+			}
+		}
+		if strings.Contains(body, "ZgotmplZ") {
+			t.Fatalf("expected %s CDN brand assets to render as safe URLs", path)
+		}
+		if strings.Contains(body, "Swagger fallback") || strings.Contains(body, "ck-product-label") {
+			t.Fatalf("expected %s to use the simplified documentation header", path)
+		}
 	}
 
 	resp, _ := testDocsRequest(t, app, "/swagger")

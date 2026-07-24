@@ -55,12 +55,35 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 			`id="api-reference"`,
 			`data-url="/openapi.json"`,
 			`https://cdn.jsdelivr.net/npm/@scalar/api-reference`,
-			`theme: "deepSpace"`,
+			`theme: "none"`,
 			`layout: "modern"`,
+			`customCss: document.getElementById("ck-scalar-theme").textContent`,
+			`class="ck-docs-header"`,
+			`class="ck-brand-logo ck-brand-logo--dark"`,
+			`class="ck-brand-logo ck-brand-logo--light"`,
+			`https://assets.clashk.ing/fonts/clashking.woff2`,
+			`https://assets.clashk.ing/logos/clashking-wordmark-dark.svg`,
+			`https://assets.clashk.ing/logos/clashking-wordmark-light.svg`,
+			`--ck-primary: #d90709`,
+			`--ck-radius-panel: 28px`,
+			`@media (prefers-reduced-motion: reduce)`,
+			`:focus-visible`,
+			`href="/swagger"`,
+			`href="/swagger">Swagger</a>`,
+			`href="/openapi.json"`,
+			`:where(input, textarea, select):focus-visible`,
+			`.open-api-client-button:focus-visible`,
+			`aria-label="Swagger" href="/swagger">Swagger</a>`,
 		} {
 			if !strings.Contains(html, marker) {
 				t.Fatalf("expected Scalar html for %s to contain %q", path, marker)
 			}
+		}
+		if strings.Contains(html, "ZgotmplZ") {
+			t.Fatalf("expected Scalar CDN assets for %s to render as safe URLs", path)
+		}
+		if strings.Contains(html, "Swagger fallback") || strings.Contains(html, "ck-product-label") {
+			t.Fatalf("expected Scalar html for %s to use the simplified documentation header", path)
 		}
 	}
 }

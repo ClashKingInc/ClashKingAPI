@@ -13,6 +13,8 @@ func AddStrike(a apptypes.Deps) fiber.Handler { return addStrike(a) }
 
 func CreateAutoboard(a apptypes.Deps) fiber.Handler { return createAutoboard(a) }
 
+func CreateClanCategory(a apptypes.Deps) fiber.Handler { return createClanCategory(a) }
+
 func CreateReminder(a apptypes.Deps) fiber.Handler { return createReminder(a) }
 
 func CreateServerRole(a apptypes.Deps) fiber.Handler { return createServerRole(a) }
@@ -26,6 +28,8 @@ func CreateTicketButton(a apptypes.Deps) fiber.Handler { return createTicketButt
 func CreateTicketPanel(a apptypes.Deps) fiber.Handler { return createTicketPanel(a) }
 
 func DeleteAutoboard(a apptypes.Deps) fiber.Handler { return deleteAutoboard(a) }
+
+func DeleteClanCategory(a apptypes.Deps) fiber.Handler { return deleteClanCategory(a) }
 
 func DeleteServerLogs(a apptypes.Deps) fiber.Handler { return deleteServerLogs(a) }
 
@@ -60,6 +64,8 @@ func GetAutoboards(a apptypes.Deps) fiber.Handler { return getAutoboards(a) }
 func GetBans(a apptypes.Deps) fiber.Handler { return getBans(a) }
 
 func GetClanCountdowns(a apptypes.Deps) fiber.Handler { return getClanCountdowns(a) }
+
+func ListClanCategories(a apptypes.Deps) fiber.Handler { return listClanCategories(a) }
 
 func GetDiscordChannels(a apptypes.Deps) fiber.Handler { return getServerDiscordChannels(a) }
 
@@ -127,6 +133,12 @@ func GetStrikes(a apptypes.Deps) fiber.Handler { return getStrikes(a) }
 func GetTicketPanels(a apptypes.Deps) fiber.Handler { return getTicketPanels(a) }
 
 func PatchClanSettings(a apptypes.Deps) fiber.Handler { return patchClanSettings(a) }
+
+func PreviewClanCategoryDelete(a apptypes.Deps) fiber.Handler {
+	return previewClanCategoryDelete(a)
+}
+
+func RenameClanCategory(a apptypes.Deps) fiber.Handler { return renameClanCategory(a) }
 
 func PatchServerLogs(a apptypes.Deps) fiber.Handler { return patchServerLogs(a) }
 

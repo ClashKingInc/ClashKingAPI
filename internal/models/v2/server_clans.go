@@ -10,10 +10,11 @@ type ClanSettingsUpdate struct {
 }
 
 type ClanSettingsResponse struct {
-	Message       string `json:"message"`
-	ServerID      int    `json:"server_id"`
-	ClanTag       string `json:"clan_tag"`
-	UpdatedFields int    `json:"updated_fields"`
+	Message       string        `json:"message"`
+	ServerID      int           `json:"server_id"`
+	ClanTag       string        `json:"clan_tag"`
+	UpdatedFields int           `json:"updated_fields"`
+	Category      *ClanCategory `json:"category"`
 }
 
 type AddClanRequest struct {

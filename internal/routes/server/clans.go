@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 )
 
 // getServerClanSettings godoc
@@ -135,10 +137,17 @@ func patchClanSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 		if len(update) == 0 {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
-		if err := updateNormalizedClanSettings(c, rt, serverID, tag, body); err != nil {
+		category, err := updateNormalizedClanSettings(c, rt, serverID, tag, body)
+		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanSettingsResponse{Message: "Clan settings updated successfully", ServerID: serverID, ClanTag: tag, UpdatedFields: len(update)})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanSettingsResponse{
+			Message:       "Clan settings updated successfully",
+			ServerID:      serverID,
+			ClanTag:       tag,
+			UpdatedFields: len(update),
+			Category:      category,
+		})
 	}
 }
 
@@ -277,25 +286,34 @@ func validClanTag(tag string) bool {
 	return true
 }
 
-func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag string, body modelsv2.ClanSettingsUpdate) error {
+func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag string, body modelsv2.ClanSettingsUpdate) (*modelsv2.ClanCategory, error) {
+	var normalizedCategory *string
+	if body.Category != nil {
+		value, err := normalizeClanCategoryAssignment(*body.Category)
+		if err != nil {
+			return nil, err
+		}
+		normalizedCategory = &value
+	}
+
 	tx, err := rt.Store.SQL.Begin(c.UserContext())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback(c.UserContext())
 	serverIDText := strconv.Itoa(serverID)
 	result, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET updated_at = now() WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if result.RowsAffected() == 0 {
-		return apptypes.Error(http.StatusNotFound, "Server or clan not found")
+		return nil, apptypes.Error(http.StatusNotFound, "Server or clan not found")
 	}
 	if _, err := tx.Exec(c.UserContext(), `
 		INSERT INTO server_clan_settings (server_id, clan_tag)
 		VALUES ($1, $2) ON CONFLICT DO NOTHING
 	`, serverIDText, clanTag); err != nil {
-		return err
+		return nil, err
 	}
 	set := func(column string, value any) error {
 		_, err := tx.Exec(c.UserContext(), fmt.Sprintf(`UPDATE server_clan_settings SET %s = $3, updated_at = now() WHERE server_id = $1 AND clan_tag = $2`, column), serverIDText, clanTag, value)
@@ -303,38 +321,82 @@ func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, 
 	}
 	if body.Abbreviation != nil {
 		if _, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET abbreviation = $3 WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag, *body.Abbreviation); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if body.ClanChannel != nil {
 		if _, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET clan_channel_id = NULLIF($3, '') WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag, *body.ClanChannel); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	if body.Category != nil {
-		category := strings.TrimSpace(*body.Category)
-		if category == "" {
-			if _, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET category_id = NULL WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag); err != nil {
-				return err
-			}
-		} else if _, err := tx.Exec(c.UserContext(), `
-			WITH selected AS (
-				INSERT INTO clan_categories (server_id, name) VALUES ($1, $3)
-				ON CONFLICT (server_id, name) DO UPDATE SET name = EXCLUDED.name
-				RETURNING id
-			)
-			UPDATE server_clans SET category_id = (SELECT id FROM selected)
-			WHERE server_id = $1 AND tag = $2
-		`, serverIDText, clanTag, category); err != nil {
-			return err
+	var assignedCategory *modelsv2.ClanCategory
+	if normalizedCategory != nil {
+		assignedCategory, err = assignClanCategory(
+			c.UserContext(), tx, serverIDText, clanTag, *normalizedCategory,
+		)
+		if err != nil {
+			return nil, err
 		}
 	}
 	for _, item := range normalizedClanSettingUpdates(body) {
 		if err := set(item.column, item.value); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return tx.Commit(c.UserContext())
+	if err := tx.Commit(c.UserContext()); err != nil {
+		return nil, err
+	}
+	return assignedCategory, nil
+}
+
+func assignClanCategory(ctx context.Context, tx pgx.Tx, serverID, clanTag, name string) (*modelsv2.ClanCategory, error) {
+	if name == "" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE server_clans
+			SET category_id = NULL
+			WHERE server_id = $1 AND tag = $2
+		`, serverID, clanTag); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	var categoryID string
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO clan_categories (server_id, name)
+		VALUES ($1, $2)
+		ON CONFLICT (server_id, name) DO UPDATE
+		SET name = EXCLUDED.name
+		RETURNING id::text
+	`, serverID, name).Scan(&categoryID); err != nil {
+		return nil, err
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE server_clans
+		SET category_id = $3::uuid
+		WHERE server_id = $1 AND tag = $2
+	`, serverID, clanTag, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() != 1 {
+		return nil, pgx.ErrNoRows
+	}
+
+	category, err := scanClanCategory(tx.QueryRow(ctx, `
+		SELECT category.id::text, category.server_id, category.name,
+		       count(clan.tag)::int AS clan_count
+		FROM clan_categories category
+		LEFT JOIN server_clans clan
+		       ON clan.server_id = category.server_id
+		      AND clan.category_id = category.id
+		WHERE category.server_id = $1 AND category.id = $2::uuid
+		GROUP BY category.id, category.server_id, category.name
+	`, serverID, categoryID))
+	if err != nil {
+		return nil, err
+	}
+	return &category, nil
 }
 
 type normalizedClanSettingUpdate struct {

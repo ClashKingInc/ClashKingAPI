@@ -23,6 +23,12 @@ const (
 	botGlobalProfileCacheTTL = 15 * time.Minute
 )
 
+var (
+	ErrDiscordChannelOutsideGuild = errors.New("Discord channel is outside the requested guild")
+	ErrDiscordChannelNotWritable  = errors.New("Discord channel is not a writable message channel")
+	ErrDiscordCreatedMessageNoID  = errors.New("Discord created a message without returning its ID")
+)
+
 type DiscordAdapter struct {
 	cfg     Config
 	client  disgo.Rest
@@ -366,6 +372,53 @@ func (a *DiscordAdapter) GetMemberDirect(_ context.Context, guildID, userID int6
 		return nil
 	}
 	return m
+}
+
+// DeleteMessage deletes one Discord message using the configured bot token.
+func (a *DiscordAdapter) DeleteMessage(_ context.Context, channelID, messageID int64) error {
+	a.wait()
+	return a.client.DeleteMessage(snowflake.ID(channelID), snowflake.ID(messageID))
+}
+
+// CreateBaseMessage validates the selected server channel and posts a base layout message.
+func (a *DiscordAdapter) CreateBaseMessage(_ context.Context, guildID, channelID int64, baseLink, description string, images []string) (string, error) {
+	a.wait()
+	channel, err := a.client.GetChannel(snowflake.ID(channelID))
+	if err != nil {
+		return "", err
+	}
+	guildChannel, ok := channel.(discord.GuildChannel)
+	if !ok || guildChannel.GuildID() != snowflake.ID(guildID) {
+		return "", ErrDiscordChannelOutsideGuild
+	}
+	if _, ok := channel.(discord.GuildMessageChannel); !ok {
+		return "", ErrDiscordChannelNotWritable
+	}
+
+	primary := discord.NewEmbed().
+		WithTitle("ClashKing Base Layout").
+		WithURL(baseLink).
+		WithDescription(description).
+		WithFields(discord.EmbedField{
+			Name:  "Layout Link",
+			Value: fmt.Sprintf("[Open in Clash of Clans](%s)", baseLink),
+		})
+	embeds := []discord.Embed{primary}
+	if len(images) > 0 {
+		embeds[0] = embeds[0].WithImage(images[0])
+		for _, image := range images[1:] {
+			embeds = append(embeds, discord.NewEmbed().WithURL(baseLink).WithImage(image))
+		}
+	}
+
+	message, err := a.client.CreateMessage(snowflake.ID(channelID), discord.MessageCreate{Embeds: embeds})
+	if err != nil {
+		return "", err
+	}
+	if message == nil || message.ID == 0 {
+		return "", ErrDiscordCreatedMessageNoID
+	}
+	return message.ID.String(), nil
 }
 
 func (a *DiscordAdapter) GetBotGuildProfile(ctx context.Context, guildID int64) (*DiscordBotGuildProfile, error) {

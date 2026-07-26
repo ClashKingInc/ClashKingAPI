@@ -94,7 +94,7 @@ func queryCountdowns(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag *stri
 	channels := map[string]string{}
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
 		SELECT type, channel_id
-		FROM countdowns
+		FROM server_countdowns
 		WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2
 	`, serverIDText, clanTag)
 	if err != nil {
@@ -186,7 +186,7 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 
 		var existing string
 		err = rt.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT channel_id FROM countdowns
+			SELECT channel_id FROM server_countdowns
 			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
 		`, serverIDText, clanTag, body.CountdownType).Scan(&existing)
 		if err == nil {
@@ -212,7 +212,7 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 		channelID := channel.ID()
 		channelIDString := channelID.String()
 		_, err = rt.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO countdowns (server_id, clan_tag, type, channel_id)
+			INSERT INTO server_countdowns (server_id, clan_tag, type, channel_id)
 			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_at = now()
 		`, serverIDText, clanTag, body.CountdownType, channelIDString)
@@ -267,7 +267,7 @@ func disableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		var channelID string
 		err = rt.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT channel_id FROM countdowns
+			SELECT channel_id FROM server_countdowns
 			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
 		`, strconv.Itoa(serverID), clanTag, body.CountdownType).Scan(&channelID)
 		if err != nil {
@@ -277,7 +277,7 @@ func disableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
-			DELETE FROM countdowns
+			DELETE FROM server_countdowns
 			WHERE server_id = $1 AND clan_tag IS NOT DISTINCT FROM $2 AND type = $3
 		`, strconv.Itoa(serverID), clanTag, body.CountdownType); err != nil {
 			return err

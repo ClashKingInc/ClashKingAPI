@@ -492,26 +492,39 @@ func v1PlayerCurrent(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any,
 	return item, nil
 }
 
+const currentWarTimerQuery = `
+	SELECT war_id, clan_tag, opponent_tag, end_time
+	FROM current_war_timers
+	WHERE player_tag = $1
+	  AND end_time > now()
+`
+
+type currentWarTimerScanner interface {
+	Scan(dest ...any) error
+}
+
 func v1CurrentWarTimer(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
+	return currentWarTimerResponse(a.Store.SQL.QueryRow(
+		c.UserContext(),
+		currentWarTimerQuery,
+		tag,
+	), tag)
+}
+
+func currentWarTimerResponse(row currentWarTimerScanner, tag string) (map[string]any, error) {
 	var warID, clanTag, opponentTag string
 	var endTime time.Time
-	var raw []byte
-	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT war_id, clan_tag, opponent_tag, end_time, data
-		FROM current_war_timers
-		WHERE player_tag = $1
-	`, tag).Scan(&warID, &clanTag, &opponentTag, &endTime, &raw)
-	if err != nil {
+	if err := row.Scan(&warID, &clanTag, &opponentTag, &endTime); err != nil {
 		return nil, err
 	}
-	result := jsonObject(raw)
-	result["tag"] = tag
-	result["war_id"] = warID
-	result["clan"] = clanTag
-	result["opponent"] = opponentTag
-	result["unix_time"] = endTime.Unix()
-	result["time"] = endTime.UTC().Format(time.RFC3339)
-	return result, nil
+	return map[string]any{
+		"tag":       tag,
+		"war_id":    warID,
+		"clan":      clanTag,
+		"opponent":  opponentTag,
+		"unix_time": endTime.Unix(),
+		"time":      endTime.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func scanWarAttackRow(row interface{ Scan(dest ...any) error }, playerTag string) (map[string]any, error) {

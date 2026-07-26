@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -46,7 +47,7 @@ func clanWars(a apptypes.Deps) fiber.Handler {
 
 // clanRanking godoc
 // @Summary Get rankings of a clan
-// @Description Returns current clan ranking placements across supported ranking metrics.
+// @Description Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -56,123 +57,98 @@ func clanWars(a apptypes.Deps) fiber.Handler {
 func clanRanking(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
-		var row clanRankingRow
-		err := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT
-				COALESCE(b.tag, r.clan_tag) AS tag,
-				b.name,
-				b.badge_token,
-				b.location_id,
-				b.clan_points,
-				b.war_wins,
-				b.war_win_streak,
-				b.troops_donated,
-				b.troops_received,
-				r.rank,
-				r.global_rank,
-				r.local_rank,
-				l.donated_rank,
-				l.received_rank,
-				l.war_wins_rank,
-				l.war_win_streak_rank,
-				l.location_donated_rank,
-				l.location_received_rank,
-				l.location_war_wins_rank
-			FROM clan_rankings_current r
-			FULL JOIN basic_clan b ON b.tag = r.clan_tag
-			LEFT JOIN clan_leaderboards l ON l.tag = COALESCE(b.tag, r.clan_tag)
-			WHERE COALESCE(b.tag, r.clan_tag) = $1
-		`, tag).Scan(
-			&row.tag,
-			&row.name,
-			&row.badgeURL,
-			&row.locationID,
-			&row.clanPoints,
-			&row.warWins,
-			&row.warWinStreak,
-			&row.troopsDonated,
-			&row.troopsReceived,
-			&row.currentRank,
-			&row.globalRank,
-			&row.localRank,
-			&row.donatedRank,
-			&row.receivedRank,
-			&row.warWinsRank,
-			&row.warWinStreakRank,
-			&row.locationDonatedRank,
-			&row.locationReceivedRank,
-			&row.locationWarWinsRank,
-		)
+		response, err := queryClanRankings(c.UserContext(), a.Store.SQL, tag)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return apptypes.JSON(c, fiber.StatusOK, clanRankingsResponse(tag, clanRankingRow{}))
-			}
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, clanRankingsResponse(tag, row))
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
 }
 
-type clanRankingRow struct {
-	tag                  *string
-	name                 *string
-	badgeURL             *string
-	locationID           *int32
-	clanPoints           *int
-	warWins              *int
-	warWinStreak         *int
-	troopsDonated        *int
-	troopsReceived       *int
-	currentRank          *int
-	globalRank           *int
-	localRank            *int
-	donatedRank          *int64
-	receivedRank         *int64
-	warWinsRank          *int64
-	warWinStreakRank     *int64
-	locationDonatedRank  *int64
-	locationReceivedRank *int64
-	locationWarWinsRank  *int64
+const clanRankingProfileQuery = `
+	SELECT name, badge_token, clan_points, builder_base_points, capital_points
+	FROM basic_clan
+	WHERE tag = $1
+`
+
+const clanRankingPlacementsQuery = `
+	SELECT ranking_type, location_id, rank, points, updated_at
+	FROM clan_rankings_current
+	WHERE clan_tag = $1
+	ORDER BY
+		CASE ranking_type
+			WHEN 'home' THEN 1
+			WHEN 'builder_base' THEN 2
+			WHEN 'capital' THEN 3
+		END,
+		CASE WHEN location_id = 'global' THEN 0 ELSE 1 END,
+		location_id
+`
+
+type clanRankingsDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-func clanRankingsResponse(tag string, row clanRankingRow) modelsv2.ClanRankingsResponse {
-	if row.tag != nil && *row.tag != "" {
-		tag = *row.tag
+func queryClanRankings(ctx context.Context, db clanRankingsDB, tag string) (modelsv2.ClanRankingsResponse, error) {
+	response := modelsv2.ClanRankingsResponse{
+		Tag:         tag,
+		HomeVillage: emptyClanRankingCategory(),
+		BuilderBase: emptyClanRankingCategory(),
+		ClanCapital: emptyClanRankingCategory(),
 	}
-	resp := modelsv2.ClanRankingsResponse{
-		Name:              row.name,
-		Tag:               tag,
-		Badge:             badgeURLPtr(row.badgeURL, 512),
-		ClanPoints:        clanRankingMetric(row.clanPoints, intToInt64(row.globalRank), nullableLocalRank(intToInt64(row.localRank))),
-		WarWins:           clanRankingMetric(row.warWins, row.warWinsRank, nullableLocalRank(row.locationWarWinsRank)),
-		WarWinStreak:      clanRankingMetric(row.warWinStreak, row.warWinStreakRank, nil),
-		Donations:         clanRankingMetric(row.troopsDonated, row.donatedRank, nullableLocalRank(row.locationDonatedRank)),
-		DonationsReceived: clanRankingMetric(row.troopsReceived, row.receivedRank, nullableLocalRank(row.locationReceivedRank)),
+
+	var name, badgeToken *string
+	err := db.QueryRow(ctx, clanRankingProfileQuery, tag).Scan(
+		&name,
+		&badgeToken,
+		&response.HomeVillage.Points,
+		&response.BuilderBase.Points,
+		&response.ClanCapital.Points,
+	)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return modelsv2.ClanRankingsResponse{}, err
 	}
-	if row.locationID != nil {
-		resp.Location = &modelsv2.ClanLeagueRef{ID: *row.locationID}
+	response.Name = name
+	response.Badge = badgeURLPtr(badgeToken, 512)
+
+	rows, err := db.Query(ctx, clanRankingPlacementsQuery, tag)
+	if err != nil {
+		return modelsv2.ClanRankingsResponse{}, err
 	}
-	return resp
+	defer rows.Close()
+
+	for rows.Next() {
+		var rankingType string
+		var placement modelsv2.ClanRankingPlacement
+		if err := rows.Scan(
+			&rankingType,
+			&placement.LocationID,
+			&placement.Rank,
+			&placement.Points,
+			&placement.UpdatedAt,
+		); err != nil {
+			return modelsv2.ClanRankingsResponse{}, err
+		}
+		switch rankingType {
+		case "home":
+			response.HomeVillage.Placements = append(response.HomeVillage.Placements, placement)
+		case "builder_base":
+			response.BuilderBase.Placements = append(response.BuilderBase.Placements, placement)
+		case "capital":
+			response.ClanCapital.Placements = append(response.ClanCapital.Placements, placement)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return modelsv2.ClanRankingsResponse{}, err
+	}
+	return response, nil
 }
 
-func clanRankingMetric(value *int, global *int64, local any) modelsv2.ClanRankingMetric {
-	return modelsv2.ClanRankingMetric{Value: value, GlobalRank: global, LocalRank: local}
-}
-
-func intToInt64(value *int) *int64 {
-	if value == nil {
-		return nil
+func emptyClanRankingCategory() modelsv2.ClanRankingCategory {
+	return modelsv2.ClanRankingCategory{
+		Placements: make([]modelsv2.ClanRankingPlacement, 0),
 	}
-	out := int64(*value)
-	return &out
-}
-
-func nullableLocalRank(value *int64) any {
-	if value == nil {
-		var empty *int64
-		return empty
-	}
-	return value
 }
 
 // boardTotals godoc
@@ -207,40 +183,6 @@ func boardTotals(a apptypes.Deps) fiber.Handler {
 			TrackedPlayerCount: count,
 			Activity:           count,
 		})
-	}
-}
-
-// clanDonationsSingle godoc
-// @Summary Get clan donations
-// @Description Returns donation totals for a single clan and season.
-// @Tags Clan
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param season path string true "Season"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func clanDonationsSingle(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		clanTag := clanFixTag(c.Params("clan_tag"))
-		season := c.Params("season")
-		var rawDonations []byte
-		if err := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT donations
-			FROM clan_season_stats
-			WHERE clan_tag = $1 AND season = $2
-		`, clanTag, season).Scan(&rawDonations); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []modelsv2.DonationEntry{}})
-			}
-			return err
-		}
-		seasonData := clanDecodeJSONObject(rawDonations)
-		items := make([]modelsv2.DonationEntry, 0, len(seasonData))
-		for tag, raw := range seasonData {
-			doc, _ := raw.(map[string]any)
-			items = append(items, modelsv2.DonationEntry{Tag: tag, Donated: doc["donated"], Received: doc["received"]})
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
 }
 

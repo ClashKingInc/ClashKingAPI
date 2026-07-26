@@ -406,10 +406,11 @@ const statsCWLSourceSQL = `(
 	FROM war_attacks a
 	LEFT JOIN LATERAL (
 		SELECT g.cwl_league_id
-		FROM cwl_groups g
+		FROM cwl_groups AS g
+		JOIN cwl_group_clans AS gc ON gc.cwl_id = g.cwl_id
 		WHERE g.season = to_char(a.war_end_time AT TIME ZONE 'UTC', 'YYYY-MM')
-			AND (a.attacking_clan_tag = ANY(g.clan_tags) OR a.defending_clan_tag = ANY(g.clan_tags))
-		ORDER BY g.updated_at DESC
+			AND gc.clan_tag IN (a.attacking_clan_tag, a.defending_clan_tag)
+		ORDER BY g.cwl_id DESC
 		LIMIT 1
 	) league ON true
 	WHERE a.war_type = 'cwl'

@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-	"sort"
 	"time"
 
 	modelsv1 "github.com/ClashKingInc/ClashKingAPI/internal/models/v1"
@@ -99,6 +98,7 @@ func cwlGroup(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.JSON(c, http.StatusOK, nil)
 		}
+		delete(group, "_cwl_id")
 		return apptypes.JSON(c, http.StatusOK, group)
 	}
 }
@@ -120,56 +120,35 @@ func cwlSeason(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusNotFound, "No CWL Data Found")
 		}
-		data["clan_rankings"] = cwlRankingsFromSQL(c, a, data)
+		data["clan_rankings"] = cwlRankingsFromSQL(c, a, stringValue(data["_cwl_id"]))
+		delete(data, "_cwl_id")
 		return apptypes.JSON(c, http.StatusOK, data)
 	}
 }
 
-func cwlRankingsFromSQL(c *fiber.Ctx, a apptypes.Deps, data map[string]any) []modelsv1.CWLRankingEntry {
-	rounds := asAnySlice(data["rounds"])
-	warIDs := []string{}
-	for _, rawRound := range rounds {
-		round := nestedMap(rawRound)
-		for _, rawTag := range asAnySlice(round["warTags"]) {
-			if tag := stringValue(rawTag); tag != "" {
-				warIDs = append(warIDs, tag)
-			}
-		}
-	}
-	if len(warIDs) == 0 {
-		return nil
+func cwlRankingsFromSQL(c *fiber.Ctx, a apptypes.Deps, cwlID string) []modelsv1.CWLRankingEntry {
+	if cwlID == "" {
+		return []modelsv1.CWLRankingEntry{}
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT attacking_clan_tag, defending_clan_tag, stars, destruction_percentage
-		FROM war_attacks
-		WHERE war_id = ANY($1)
-	`, warIDs)
+		SELECT gc.name, s.clan_tag, s.stars, s.destruction::float8, s.wins, s.ties, s.losses
+		FROM cwl_standings AS s
+		JOIN cwl_group_clans AS gc ON gc.cwl_id = s.cwl_id AND gc.clan_tag = s.clan_tag
+		WHERE s.cwl_id = $1
+		ORDER BY s.group_rank NULLS LAST, s.clan_tag
+	`, cwlID)
 	if err != nil {
-		return nil
+		return []modelsv1.CWLRankingEntry{}
 	}
 	defer rows.Close()
-	stars := map[string]int64{}
-	destruction := map[string]float64{}
+	entries := []modelsv1.CWLRankingEntry{}
 	for rows.Next() {
-		var attacker, defender string
-		var star, dest int16
-		if rows.Scan(&attacker, &defender, &star, &dest) != nil {
+		var entry modelsv1.CWLRankingEntry
+		if rows.Scan(&entry.Name, &entry.Tag, &entry.Stars, &entry.Destruction, &entry.Rounds.Won, &entry.Rounds.Tied, &entry.Rounds.Lost) != nil {
 			continue
 		}
-		_ = defender
-		stars[attacker] += int64(star)
-		destruction[attacker] += float64(dest)
+		entries = append(entries, entry)
 	}
-	entries := make([]modelsv1.CWLRankingEntry, 0, len(stars))
-	for tag, starCount := range stars {
-		entries = append(entries, modelsv1.CWLRankingEntry{Tag: tag, Stars: starCount, Destruction: destruction[tag]})
-	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		if entries[i].Stars != entries[j].Stars {
-			return entries[i].Stars > entries[j].Stars
-		}
-		return entries[i].Destruction > entries[j].Destruction
-	})
 	return entries
 }
 
@@ -210,23 +189,58 @@ func scanWarIndexRow(row warIndexScanner) (map[string]any, error) {
 }
 
 func v1CWLGroup(c *fiber.Ctx, a apptypes.Deps, clanTag string, season string) (map[string]any, error) {
-	var leagueID int
-	var roundsRaw, dataRaw []byte
+	var cwlID, state string
+	var leagueID pgtype.Int4
+	var warSize pgtype.Int2
+	var roundsRaw []byte
 	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT cwl_league_id, rounds, data
-		FROM cwl_groups
-		WHERE $1 = ANY(clan_tags) AND season = $2
-		ORDER BY updated_at DESC
+		SELECT g.cwl_id, g.cwl_league_id, g.state, g.war_size, g.rounds
+		FROM cwl_groups AS g
+		JOIN cwl_group_clans AS gc ON gc.cwl_id = g.cwl_id
+		WHERE gc.clan_tag = $1 AND g.season = $2
+		ORDER BY g.cwl_id DESC
 		LIMIT 1
-	`, clanTag, season).Scan(&leagueID, &roundsRaw, &dataRaw)
+	`, clanTag, season).Scan(&cwlID, &leagueID, &state, &warSize, &roundsRaw)
 	if err != nil {
 		return nil, err
 	}
-	data := jsonObject(dataRaw)
-	data["season"] = season
-	data["cwl_league_id"] = leagueID
-	data["rounds"] = jsonValue(roundsRaw, []any{})
-	return data, nil
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT gc.clan_tag, gc.name, gc.clan_level, gc.badge_token,
+		       COALESCE((
+		           SELECT jsonb_agg(jsonb_build_object(
+		               'tag', member.tag,
+		               'name', member.name,
+		               'townHallLevel', member.town_hall
+		           ) ORDER BY member.tag)
+		           FROM cwl_group_members AS member
+		           WHERE member.cwl_id = gc.cwl_id AND member.clan_tag = gc.clan_tag
+		       ), '[]'::jsonb) AS members
+		FROM cwl_group_clans AS gc
+		WHERE gc.cwl_id = $1
+		ORDER BY gc.clan_tag
+	`, cwlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	clans := []any{}
+	for rows.Next() {
+		var tag, name, badgeToken string
+		var clanLevel int
+		var membersRaw []byte
+		if err := rows.Scan(&tag, &name, &clanLevel, &badgeToken, &membersRaw); err != nil {
+			return nil, err
+		}
+		clans = append(clans, map[string]any{"tag": tag, "name": name, "clanLevel": clanLevel, "badgeToken": badgeToken, "members": jsonValue(membersRaw, []any{})})
+	}
+	data := map[string]any{"_cwl_id": cwlID, "season": season, "state": state, "rounds": jsonValue(roundsRaw, []any{}), "clans": clans}
+	if leagueID.Valid {
+		data["cwl_league_id"] = leagueID.Int32
+	}
+	if warSize.Valid {
+		data["war_size"] = warSize.Int16
+	}
+	return data, rows.Err()
 }
 
 func totalWarStars(sideData map[string]any) int64 {

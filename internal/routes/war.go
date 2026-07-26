@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // warTownhallWeeklyHitrate godoc
@@ -167,37 +170,77 @@ func previousWars(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// cwlRankingHistory godoc
-// @Summary CWL ranking history for a clan
-// @Description Returns CWL ranking history rows for a clan tag.
+// cwlClanHistory godoc
+// @Summary CWL group history for a clan
+// @Description Returns typed CWL group snapshots for a clan. A group without persisted standings returns its roster and lifecycle data with no synthetic ranking.
 // @Tags War
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} modelsv2.CWLRankingHistoryResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
+// @Success 200 {object} modelsv2.CWLClanHistoryResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/cwl/{clan_tag}/ranking-history [get]
-func cwlRankingHistory(a apptypes.Deps) fiber.Handler {
+func cwlClanHistory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
-		rows, err := sqlCWLGroups(c, a, clanTag)
+		items, err := cwlHistoryForClan(c, a, clanTag)
 		if err != nil {
 			return err
 		}
-		if len(rows) == 0 {
-			return apptypes.Error(fiber.StatusNotFound, "No CWL Data Found")
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.CWLClanHistoryResponse{ClanTag: clanTag, Items: items})
+	}
+}
+
+// cwlPlayerHistory godoc
+// @Summary CWL group history for a player
+// @Description Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.
+// @Tags War
+// @Produce json
+// @Param player_tag path string true "Player tag"
+// @Success 200 {object} modelsv2.CWLPlayerHistoryResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Router /v2/player/{player_tag}/cwl/history [get]
+func cwlPlayerHistory(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		playerTag := warFixTag(c.Params("player_tag"))
+		items, err := cwlHistoryForPlayer(c, a, playerTag)
+		if err != nil {
+			return err
 		}
-		items := make([]modelsv2.CWLRankingHistoryItem, 0, len(rows))
-		for _, row := range rows {
-			data := warMap(row["data"])
-			season, _ := row["season"].(string)
-			items = append(items, modelsv2.CWLRankingHistoryItem{
-				Season: season,
-				League: nestedString(data, "clans", "0", "warLeague", "name"),
-				Rounds: len(asArray(data["rounds"])),
-			})
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.CWLPlayerHistoryResponse{Items: items})
+	}
+}
+
+// cwlLeagueRankings godoc
+// @Summary Persisted CWL league rankings
+// @Description Returns only persisted standings for one season, league, and war size. Empty standings are a successful empty result until Tracking has computed them.
+// @Tags War
+// @Produce json
+// @Param league_id path int true "CWL league ID"
+// @Param season query string true "CWL season (YYYY-MM)"
+// @Param war_size query int true "CWL war size"
+// @Success 200 {object} modelsv2.CWLLeagueRankingsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Router /v2/cwl/leagues/{league_id}/rankings [get]
+func cwlLeagueRankings(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		leagueID, err := strconv.Atoi(c.Params("league_id"))
+		if err != nil || leagueID <= 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "league_id must be a positive integer")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
+		season := strings.TrimSpace(c.Query("season"))
+		if season == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "season is required")
+		}
+		warSize, err := strconv.Atoi(c.Query("war_size"))
+		if err != nil || warSize <= 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "war_size must be a positive integer")
+		}
+		items, err := cwlStandingsForLeague(c, a, season, leagueID, warSize)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.CWLLeagueRankingsResponse{Season: season, CWLLeagueID: leagueID, WarSize: warSize, Items: items})
 	}
 }
 
@@ -362,33 +405,450 @@ func clanWarhits(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func sqlCWLGroups(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]map[string]any, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT season, cwl_league_id, rounds, data
-		FROM cwl_groups
-		WHERE $1 = ANY(clan_tags)
-		ORDER BY season DESC
+const cwlHistorySelect = `
+	SELECT g.season, g.cwl_league_id, g.state, g.war_size, g.rounds,
+	       gc.clan_tag, gc.name, gc.clan_level, gc.badge_token,
+	       COALESCE((
+	           SELECT jsonb_agg(jsonb_build_object(
+	               'tag', member.tag,
+	               'name', member.name,
+	               'townHallLevel', member.town_hall
+	           ) ORDER BY member.tag)
+	           FROM cwl_group_members AS member
+	           WHERE member.cwl_id = gc.cwl_id AND member.clan_tag = gc.clan_tag
+	       ), '[]'::jsonb) AS members,
+	       s.season, s.cwl_league_id, s.war_size, s.stars, s.destruction::float8,
+	       s.wins, s.losses, s.ties, s.wars_finished, s.total_clans_in_group,
+	       s.group_rank, s.global_rank, s.updated_at
+	FROM cwl_groups AS g
+	JOIN cwl_group_clans AS gc ON gc.cwl_id = g.cwl_id
+	LEFT JOIN cwl_standings AS s ON s.cwl_id = gc.cwl_id AND s.clan_tag = gc.clan_tag
+`
+
+func cwlHistoryForClan(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]modelsv2.CWLHistoryItem, error) {
+	return cwlHistoryQuery(c, a, cwlHistorySelect+`
+		WHERE gc.clan_tag = $1
+		ORDER BY g.season DESC, g.cwl_id DESC
 	`, clanTag)
+}
+
+func cwlHistoryQuery(c *fiber.Ctx, a apptypes.Deps, query, tag string) ([]modelsv2.CWLHistoryItem, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), query, tag)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []map[string]any{}
+	items := make([]modelsv2.CWLHistoryItem, 0)
 	for rows.Next() {
-		var season string
-		var leagueID int
-		var roundsRaw, dataRaw []byte
-		if err := rows.Scan(&season, &leagueID, &roundsRaw, &dataRaw); err != nil {
+		item, err := scanCWLHistoryRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		data := map[string]any{}
-		_ = json.Unmarshal(dataRaw, &data)
-		var rounds any
-		_ = json.Unmarshal(roundsRaw, &rounds)
-		data["rounds"] = rounds
-		out = append(out, map[string]any{"season": season, "cwl_league_id": leagueID, "data": data})
+		items = append(items, item)
 	}
-	return out, rows.Err()
+	return items, rows.Err()
+}
+
+const cwlPlayerHistorySelect = `
+	SELECT g.cwl_id, g.season, player_member.town_hall, g.cwl_league_id,
+	       COALESCE(g.war_size, s.war_size),
+	       gc.clan_tag, gc.name, gc.badge_token,
+	       s.stars, s.wins, s.losses, s.ties, s.group_rank, s.global_rank
+	FROM cwl_group_members AS player_member
+	JOIN cwl_groups AS g ON g.cwl_id = player_member.cwl_id
+	JOIN cwl_group_clans AS gc
+	  ON gc.cwl_id = player_member.cwl_id
+	 AND gc.clan_tag = player_member.clan_tag
+	LEFT JOIN cwl_standings AS s
+	  ON s.cwl_id = player_member.cwl_id
+	 AND s.clan_tag = player_member.clan_tag
+	WHERE player_member.tag = $1
+	ORDER BY g.season DESC, g.cwl_id DESC, gc.clan_tag
+`
+
+type cwlPlayerHistorySeed struct {
+	CWLID string
+	Item  modelsv2.CWLPlayerHistoryItem
+}
+
+func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string) ([]modelsv2.CWLPlayerHistoryItem, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerHistorySelect, playerTag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seeds := make([]cwlPlayerHistorySeed, 0)
+	for rows.Next() {
+		seed, err := scanCWLPlayerHistorySeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		seeds = append(seeds, seed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	items := make([]modelsv2.CWLPlayerHistoryItem, 0, len(seeds))
+	for _, seed := range seeds {
+		attacks, missedAttacks, actualWarSize, err := cwlPlayerWarFacts(c, a, seed.CWLID, playerTag, seed.Item.Clan.Tag)
+		if err != nil {
+			return nil, err
+		}
+		seed.Item.Attacks = attacks
+		seed.Item.MissedAttacks = missedAttacks
+		if seed.Item.WarSize == nil {
+			seed.Item.WarSize = actualWarSize
+		}
+		placement, err := cwlPlayerEarnedStarsPlacement(c, a, seed.CWLID, playerTag, seed.Item.Clan.Tag)
+		if err != nil {
+			return nil, err
+		}
+		seed.Item.Placement = placement
+		items = append(items, seed.Item)
+	}
+	return items, nil
+}
+
+func scanCWLPlayerHistorySeed(row cwlHistoryScanner) (cwlPlayerHistorySeed, error) {
+	var seed cwlPlayerHistorySeed
+	var leagueID, totalStars, wins, losses, ties, groupRank, globalRank pgtype.Int4
+	var warSize pgtype.Int2
+	var badgeToken string
+	if err := row.Scan(
+		&seed.CWLID, &seed.Item.Season, &seed.Item.TownHallLevel, &leagueID, &warSize,
+		&seed.Item.Clan.Tag, &seed.Item.Clan.Name, &badgeToken,
+		&totalStars, &wins, &losses, &ties, &groupRank, &globalRank,
+	); err != nil {
+		return cwlPlayerHistorySeed{}, err
+	}
+	seed.Item.Attacks = []modelsv2.CWLPlayerHistoryAttack{}
+	seed.Item.Clan.BadgeURLs = modelsv2.WarBadgeURLs{
+		Small: badgeURL(badgeToken, 70), Medium: badgeURL(badgeToken, 200), Large: badgeURL(badgeToken, 512),
+	}
+	if leagueID.Valid {
+		value := int(leagueID.Int32)
+		seed.Item.CWLLeagueID = &value
+	}
+	if warSize.Valid {
+		value := int(warSize.Int16)
+		seed.Item.WarSize = &value
+	}
+	if totalStars.Valid && wins.Valid && losses.Valid && ties.Valid {
+		value := int(totalStars.Int32)
+		seed.Item.Clan.TotalStars = &value
+		seed.Item.Clan.Wars = &modelsv2.CWLPlayerHistoryWarRecord{
+			Won: int(wins.Int32), Lost: int(losses.Int32), Tied: int(ties.Int32),
+		}
+	}
+	if groupRank.Valid || globalRank.Valid {
+		seed.Item.Clan.Placement = &modelsv2.CWLPlayerClanPlacement{}
+		if groupRank.Valid {
+			value := int(groupRank.Int32)
+			seed.Item.Clan.Placement.Group = &value
+		}
+		if globalRank.Valid {
+			value := int(globalRank.Int32)
+			seed.Item.Clan.Placement.Global = &value
+		}
+	}
+	return seed, nil
+}
+
+const cwlPlayerWarFactsSelect = `
+	WITH round_tags AS (
+		SELECT round_data.round_number::integer AS round_number, war_tag.value AS war_tag
+		FROM cwl_groups AS g
+		CROSS JOIN LATERAL jsonb_array_elements(g.rounds)
+			WITH ORDINALITY AS round_data(value, round_number)
+		CROSS JOIN LATERAL jsonb_array_elements_text(
+			COALESCE(round_data.value -> 'warTags', '[]'::jsonb)
+		) AS war_tag(value)
+		WHERE g.cwl_id = $1
+		  AND war_tag.value <> ''
+		  AND war_tag.value <> '#0'
+	),
+	group_wars AS (
+		SELECT DISTINCT ON (w.war_id)
+		       round_tags.round_number, w.war_id, w.war_tag, w.end_time,
+		       w.clan_tag, w.opponent_tag, w.clan_name, w.opponent_name,
+		       w.size, w.attacks_per_member
+		FROM round_tags
+		JOIN wars AS w ON w.war_tag = round_tags.war_tag
+		WHERE w.war_type = 'cwl' AND w.state = 'warEnded'
+		ORDER BY w.war_id, round_tags.round_number
+	),
+	player_lineups AS (
+		SELECT group_wars.*
+		FROM group_wars
+		JOIN war_members AS member
+		  ON member.war_id = group_wars.war_id
+		 AND member.war_end_time = group_wars.end_time
+		 AND member.clan_tag = $3
+		 AND member.player_tag = $2
+	),
+	attack_counts AS (
+		SELECT lineup.war_id, COUNT(attack.attacker_tag)::integer AS attack_count
+		FROM player_lineups AS lineup
+		LEFT JOIN war_attacks AS attack
+		  ON attack.war_id = lineup.war_id
+		 AND attack.war_end_time = lineup.end_time
+		 AND attack.attacker_tag = $2
+		GROUP BY lineup.war_id
+	)
+	SELECT lineup.round_number, lineup.war_tag,
+	       CASE WHEN lineup.clan_tag = $3 THEN lineup.opponent_tag ELSE lineup.clan_tag END AS opponent_tag,
+	       CASE WHEN lineup.clan_tag = $3 THEN lineup.opponent_name ELSE lineup.clan_name END AS opponent_name,
+	       attack.defender_tag, attack.defender_name, attack.defender_townhall,
+	       attack.defender_map_position, attack.stars, attack.destruction_percentage,
+	       attack.attack_order, attack.duration, lineup.size,
+	       GREATEST(lineup.attacks_per_member - attack_counts.attack_count, 0) AS missed_attacks
+	FROM player_lineups AS lineup
+	JOIN attack_counts ON attack_counts.war_id = lineup.war_id
+	LEFT JOIN war_attacks AS attack
+	  ON attack.war_id = lineup.war_id
+	 AND attack.war_end_time = lineup.end_time
+	 AND attack.attacker_tag = $2
+	ORDER BY lineup.round_number, attack.attack_order NULLS LAST
+`
+
+func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) ([]modelsv2.CWLPlayerHistoryAttack, int, *int, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerWarFactsSelect, cwlID, playerTag, clanTag)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	defer rows.Close()
+	attacks := make([]modelsv2.CWLPlayerHistoryAttack, 0)
+	missedAttacks := 0
+	var actualWarSize *int
+	warSizeConflict := false
+	for rows.Next() {
+		var round, size, missed int
+		var warTag, opponentTag, opponentName string
+		var defenderTag, defenderName pgtype.Text
+		var defenderTownHall, defenderMapPosition, stars, destruction, order, duration pgtype.Int4
+		if err := rows.Scan(
+			&round, &warTag, &opponentTag, &opponentName,
+			&defenderTag, &defenderName, &defenderTownHall, &defenderMapPosition,
+			&stars, &destruction, &order, &duration, &size, &missed,
+		); err != nil {
+			return nil, 0, nil, err
+		}
+		if !warSizeConflict {
+			if actualWarSize == nil {
+				value := size
+				actualWarSize = &value
+			} else if *actualWarSize != size {
+				actualWarSize = nil
+				warSizeConflict = true
+			}
+		}
+		missedAttacks += missed
+		if !defenderTag.Valid {
+			continue
+		}
+		attacks = append(attacks, modelsv2.CWLPlayerHistoryAttack{
+			WarTag: warTag, Round: round,
+			Opponent: modelsv2.CWLPlayerHistoryAttackOpponent{Tag: opponentTag, Name: opponentName},
+			Defender: modelsv2.CWLPlayerHistoryAttackDefender{
+				Tag: defenderTag.String, Name: defenderName.String,
+				TownHallLevel: int(defenderTownHall.Int32), MapPosition: int(defenderMapPosition.Int32),
+			},
+			Stars: int(stars.Int32), DestructionPercentage: int(destruction.Int32),
+			Order: int(order.Int32), Duration: int(duration.Int32),
+		})
+	}
+	return attacks, missedAttacks, actualWarSize, rows.Err()
+}
+
+const cwlPlayerPlacementSelect = `
+	WITH group_state AS (
+		SELECT state, rounds
+		FROM cwl_groups
+		WHERE cwl_id = $1
+	),
+	round_tags AS (
+		SELECT war_tag.value AS war_tag
+		FROM group_state
+		CROSS JOIN LATERAL jsonb_array_elements(group_state.rounds) AS round_data(value)
+		CROSS JOIN LATERAL jsonb_array_elements_text(
+			COALESCE(round_data.value -> 'warTags', '[]'::jsonb)
+		) AS war_tag(value)
+		WHERE war_tag.value <> '' AND war_tag.value <> '#0'
+	),
+	group_wars AS (
+		SELECT DISTINCT ON (w.war_id)
+		       w.war_id, w.end_time, w.clan_attacks + w.opponent_attacks AS expected_attack_rows
+		FROM round_tags
+		JOIN wars AS w ON w.war_tag = round_tags.war_tag
+		WHERE w.war_type = 'cwl' AND w.state = 'warEnded'
+		ORDER BY w.war_id
+	),
+	completeness AS (
+		SELECT group_state.state = 'ended'
+		       AND (SELECT COUNT(DISTINCT war_tag) FROM round_tags)
+		           = (SELECT COUNT(*) FROM group_wars)
+		       AND (SELECT COALESCE(SUM(expected_attack_rows), 0) FROM group_wars)
+		           = (
+		               SELECT COUNT(*)
+		               FROM group_wars
+		               JOIN war_attacks AS stored_attack
+		                 ON stored_attack.war_id = group_wars.war_id
+		                AND stored_attack.war_end_time = group_wars.end_time
+		           ) AS complete
+		FROM group_state
+	),
+	lineups AS (
+		SELECT DISTINCT member.war_id, member.war_end_time, member.clan_tag, member.player_tag
+		FROM group_wars
+		JOIN war_members AS member
+		  ON member.war_id = group_wars.war_id
+		 AND member.war_end_time = group_wars.end_time
+		JOIN cwl_group_members AS roster
+		  ON roster.cwl_id = $1
+		 AND roster.clan_tag = member.clan_tag
+		 AND roster.tag = member.player_tag
+	),
+	player_stars AS (
+		SELECT lineups.clan_tag, lineups.player_tag,
+		       COALESCE(SUM(attack.stars), 0)::integer AS stars
+		FROM lineups
+		LEFT JOIN war_attacks AS attack
+		  ON attack.war_id = lineups.war_id
+		 AND attack.war_end_time = lineups.war_end_time
+		 AND attack.attacker_tag = lineups.player_tag
+		GROUP BY lineups.clan_tag, lineups.player_tag
+	),
+	ranked AS (
+		SELECT clan_tag, player_tag,
+		       RANK() OVER (PARTITION BY clan_tag ORDER BY stars DESC)::integer AS clan_rank,
+		       RANK() OVER (ORDER BY stars DESC)::integer AS group_rank
+		FROM player_stars
+	)
+	SELECT ranked.clan_rank, ranked.group_rank
+	FROM ranked
+	CROSS JOIN completeness
+	WHERE completeness.complete
+	  AND ranked.player_tag = $2
+	  AND ranked.clan_tag = $3
+`
+
+func cwlPlayerEarnedStarsPlacement(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) (*modelsv2.CWLPlayerAttackPlacement, error) {
+	var placement modelsv2.CWLPlayerAttackPlacement
+	err := a.Store.SQL.QueryRow(c.UserContext(), cwlPlayerPlacementSelect, cwlID, playerTag, clanTag).Scan(&placement.Clan, &placement.Group)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &placement, nil
+}
+
+type cwlHistoryScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanCWLHistoryRow(row cwlHistoryScanner) (modelsv2.CWLHistoryItem, error) {
+	var season, state, clanTag, name, badgeToken string
+	var leagueID, standingLeagueID, stars, wins, losses, ties, warsFinished, totalClans, groupRank, globalRank pgtype.Int4
+	var warSize, standingWarSize pgtype.Int2
+	var standingUpdatedAt pgtype.Timestamptz
+	var clanLevel int
+	var roundsRaw, membersRaw []byte
+	var standingSeason pgtype.Text
+	var destruction pgtype.Float8
+	if err := row.Scan(
+		&season, &leagueID, &state, &warSize, &roundsRaw,
+		&clanTag, &name, &clanLevel, &badgeToken, &membersRaw,
+		&standingSeason, &standingLeagueID, &standingWarSize, &stars, &destruction,
+		&wins, &losses, &ties, &warsFinished, &totalClans, &groupRank, &globalRank, &standingUpdatedAt,
+	); err != nil {
+		return modelsv2.CWLHistoryItem{}, err
+	}
+	item := modelsv2.CWLHistoryItem{
+		Season: season, State: state, Rounds: cwlRounds(roundsRaw),
+		Clan: modelsv2.CWLGroupClan{ClanTag: clanTag, Name: name, ClanLevel: clanLevel, BadgeToken: badgeToken, Members: cwlRosterMembers(membersRaw)},
+	}
+	if leagueID.Valid {
+		value := int(leagueID.Int32)
+		item.CWLLeagueID = &value
+	}
+	if warSize.Valid {
+		value := int(warSize.Int16)
+		item.WarSize = &value
+	}
+	if standingSeason.Valid {
+		item.Standing = cwlStandingFromValues(clanTag, standingSeason.String, standingLeagueID, standingWarSize, stars, destruction, wins, losses, ties, warsFinished, totalClans, groupRank, globalRank, standingUpdatedAt)
+	}
+	return item, nil
+}
+
+func cwlStandingFromValues(clanTag, season string, leagueID pgtype.Int4, warSize pgtype.Int2, stars pgtype.Int4, destruction pgtype.Float8, wins, losses, ties, warsFinished, totalClans, groupRank, globalRank pgtype.Int4, updatedAt pgtype.Timestamptz) *modelsv2.CWLStanding {
+	if !leagueID.Valid || !warSize.Valid || !stars.Valid || !destruction.Valid || !wins.Valid || !losses.Valid || !ties.Valid || !warsFinished.Valid || !totalClans.Valid || !updatedAt.Valid {
+		return nil
+	}
+	standing := &modelsv2.CWLStanding{ClanTag: clanTag, Season: season, CWLLeagueID: int(leagueID.Int32), WarSize: int(warSize.Int16), Stars: int(stars.Int32), Destruction: destruction.Float64, Wins: int(wins.Int32), Losses: int(losses.Int32), Ties: int(ties.Int32), WarsFinished: int(warsFinished.Int32), TotalClansInGroup: int(totalClans.Int32), UpdatedAt: updatedAt.Time.UTC().Format(time.RFC3339)}
+	if groupRank.Valid {
+		value := int(groupRank.Int32)
+		standing.GroupRank = &value
+	}
+	if globalRank.Valid {
+		value := int(globalRank.Int32)
+		standing.GlobalRank = &value
+	}
+	return standing
+}
+
+func cwlRounds(raw []byte) []modelsv2.CWLRound {
+	var source []struct {
+		WarTags []string `json:"warTags"`
+	}
+	_ = json.Unmarshal(raw, &source)
+	items := make([]modelsv2.CWLRound, 0, len(source))
+	for _, round := range source {
+		items = append(items, modelsv2.CWLRound{WarTags: round.WarTags})
+	}
+	return items
+}
+
+func cwlRosterMembers(raw []byte) []modelsv2.CWLMember {
+	var members []modelsv2.CWLMember
+	_ = json.Unmarshal(raw, &members)
+	if members == nil {
+		return []modelsv2.CWLMember{}
+	}
+	return members
+}
+
+func cwlStandingsForLeague(c *fiber.Ctx, a apptypes.Deps, season string, leagueID, warSize int) ([]modelsv2.CWLStanding, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT clan_tag, season, cwl_league_id, war_size, stars, destruction::float8,
+		       wins, losses, ties, wars_finished, total_clans_in_group, group_rank, global_rank, updated_at
+		FROM cwl_standings
+		WHERE season = $1 AND cwl_league_id = $2 AND war_size = $3
+		ORDER BY global_rank NULLS LAST, group_rank NULLS LAST, clan_tag
+	`, season, leagueID, warSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]modelsv2.CWLStanding, 0)
+	for rows.Next() {
+		var clanTag, standingSeason string
+		var standingLeagueID, stars, wins, losses, ties, warsFinished, totalClans, groupRank, globalRank pgtype.Int4
+		var standingWarSize pgtype.Int2
+		var destruction pgtype.Float8
+		var updatedAt pgtype.Timestamptz
+		if err := rows.Scan(&clanTag, &standingSeason, &standingLeagueID, &standingWarSize, &stars, &destruction, &wins, &losses, &ties, &warsFinished, &totalClans, &groupRank, &globalRank, &updatedAt); err != nil {
+			return nil, err
+		}
+		if standing := cwlStandingFromValues(clanTag, standingSeason, standingLeagueID, standingWarSize, stars, destruction, wins, losses, ties, warsFinished, totalClans, groupRank, globalRank, updatedAt); standing != nil {
+			items = append(items, *standing)
+		}
+	}
+	return items, rows.Err()
 }
 
 func sqlWarCount(c *fiber.Ctx, a apptypes.Deps, clanTags []string) (int64, error) {

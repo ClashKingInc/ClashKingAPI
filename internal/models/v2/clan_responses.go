@@ -1,23 +1,30 @@
 package modelsv2
 
+import "time"
+
 // ClanRankingsResponse is returned by GET /v2/clan/:clan_tag/rankings.
 type ClanRankingsResponse struct {
-	Name              *string           `json:"name"`
-	Tag               string            `json:"tag"`
-	Badge             *string           `json:"badge"`
-	Location          *ClanLeagueRef    `json:"location"`
-	ClanPoints        ClanRankingMetric `json:"clanPoints"`
-	WarWins           ClanRankingMetric `json:"warWins"`
-	WarWinStreak      ClanRankingMetric `json:"warWinStreak"`
-	Donations         ClanRankingMetric `json:"donations"`
-	DonationsReceived ClanRankingMetric `json:"donationsReceived"`
+	Name        *string             `json:"name"`
+	Tag         string              `json:"tag"`
+	Badge       *string             `json:"badge"`
+	HomeVillage ClanRankingCategory `json:"homeVillage"`
+	BuilderBase ClanRankingCategory `json:"builderBase"`
+	ClanCapital ClanRankingCategory `json:"clanCapital"`
 }
 
-// ClanRankingMetric contains one rankable clan value and known global/local ranks.
-type ClanRankingMetric struct {
-	Value      *int   `json:"value"`
-	GlobalRank *int64 `json:"globalRank"`
-	LocalRank  any    `json:"localRank,omitempty"`
+// ClanRankingCategory contains one ranking category's current points and
+// every current global/location placement stored for the clan.
+type ClanRankingCategory struct {
+	Points     int                    `json:"points"`
+	Placements []ClanRankingPlacement `json:"placements"`
+}
+
+// ClanRankingPlacement is one row from clan_rankings_current.
+type ClanRankingPlacement struct {
+	LocationID string    `json:"locationId"`
+	Rank       int       `json:"rank"`
+	Points     int       `json:"points"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // BoardTotalsResponse is returned by GET /v2/clan/:clan_tag/board/totals.
@@ -29,13 +36,6 @@ type BoardTotalsResponse struct {
 	TroopsReceived     int    `json:"troops_received"`
 	ClanCapitalDonated int    `json:"clan_capital_donated"`
 	Activity           int    `json:"activity"`
-}
-
-// DonationEntry is a single player donation row returned by /v2/clan/:clan_tag/donations/:season.
-type DonationEntry struct {
-	Tag      string `json:"tag"`
-	Donated  any    `json:"donated"`
-	Received any    `json:"received"`
 }
 
 // ClanCompositionResponse is returned by GET /v2/clan/compo.

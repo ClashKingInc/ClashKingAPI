@@ -617,12 +617,38 @@ func lbPlayerRankMap(a apptypes.Deps, ctx context.Context, playerTags []string) 
 	return out, rows.Err()
 }
 
+const lbClanRankQuery = `
+	SELECT
+		clan.tag,
+		clan.clan_level,
+		clan.clan_points,
+		clan.member_count,
+		clan.capital_points,
+		max(ranking.rank) FILTER (
+			WHERE ranking.ranking_type = 'home'
+			  AND ranking.location_id = 'global'
+		) AS global_rank,
+		max(ranking.rank) FILTER (
+			WHERE ranking.ranking_type = 'home'
+			  AND clan.location_id IS NOT NULL
+			  AND ranking.location_id = clan.location_id::text
+		) AS local_rank
+	FROM basic_clan clan
+	LEFT JOIN clan_rankings_current ranking
+	       ON ranking.clan_tag = clan.tag
+	      AND ranking.ranking_type = 'home'
+	WHERE clan.tag = ANY($1)
+	GROUP BY
+		clan.tag,
+		clan.clan_level,
+		clan.clan_points,
+		clan.member_count,
+		clan.capital_points,
+		clan.location_id
+`
+
 func lbClanRankMap(a apptypes.Deps, ctx context.Context, clanTags []string) (map[string]map[string]any, error) {
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT clan_tag, country_code, country_name, rank, global_rank, local_rank, data
-		FROM clan_rankings_current
-		WHERE clan_tag = ANY($1)
-	`, clanTags)
+	rows, err := a.Store.SQL.Query(ctx, lbClanRankQuery, clanTags)
 	if err != nil {
 		return nil, err
 	}
@@ -630,21 +656,24 @@ func lbClanRankMap(a apptypes.Deps, ctx context.Context, clanTags []string) (map
 	out := map[string]map[string]any{}
 	for rows.Next() {
 		var tag string
-		var countryCode, countryName *string
-		var rank, globalRank, localRank *int
-		var dataRaw []byte
-		if err := rows.Scan(&tag, &countryCode, &countryName, &rank, &globalRank, &localRank, &dataRaw); err != nil {
+		var clanLevel, clanPoints, memberCount, capitalPoints int
+		var globalRank, localRank *int
+		if err := rows.Scan(
+			&tag,
+			&clanLevel,
+			&clanPoints,
+			&memberCount,
+			&capitalPoints,
+			&globalRank,
+			&localRank,
+		); err != nil {
 			return nil, err
 		}
-		item := mapMaybe(decodeJSONAny(dataRaw))
-		if countryCode != nil {
-			item["country_code"] = *countryCode
-		}
-		if countryName != nil {
-			item["country_name"] = *countryName
-		}
-		if rank != nil {
-			item["rank"] = *rank
+		item := map[string]any{
+			"clan_level":     clanLevel,
+			"clan_points":    clanPoints,
+			"member_count":   memberCount,
+			"capital_points": capitalPoints,
 		}
 		if globalRank != nil {
 			item["global_rank"] = *globalRank

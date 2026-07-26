@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -32,57 +31,6 @@ type ticketUserIdentity struct {
 	Username    *string
 	DisplayName *string
 	AvatarURL   *string
-}
-
-func ticketIdentityFromAuthUser(doc map[string]any) ticketUserIdentity {
-	discord := mapMaybe(mapMaybe(doc["linked_accounts"])["discord"])
-	username := stringPtrMaybe(discord["username"])
-	avatarURL := stringPtrMaybe(discord["avatar_url"])
-	return ticketUserIdentity{
-		Username:    username,
-		DisplayName: username,
-		AvatarURL:   avatarURL,
-	}
-}
-
-func sqlAuthUserIdentities(c *fiber.Ctx, a apptypes.Deps, discordIDs []string) (map[string]ticketUserIdentity, int, error) {
-	out := map[string]ticketUserIdentity{}
-	if len(discordIDs) == 0 || a.Store.SQL == nil {
-		return out, 0, nil
-	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT discord_user_id, username, data
-		FROM auth_users
-		WHERE discord_user_id = ANY($1)
-	`, discordIDs)
-	if err != nil {
-		return out, 0, err
-	}
-	defer rows.Close()
-	count := 0
-	for rows.Next() {
-		var discordID, username string
-		var raw []byte
-		if err := rows.Scan(&discordID, &username, &raw); err != nil {
-			return out, count, err
-		}
-		count++
-		doc := map[string]any{}
-		_ = json.Unmarshal(raw, &doc)
-		linked := mapMaybe(doc["linked_accounts"])
-		discordDoc := mapMaybe(linked["discord"])
-		discordDoc["discord_user_id"] = discordID
-		if discordDoc["username"] == nil && username != "" {
-			discordDoc["username"] = username
-		}
-		linked["discord"] = discordDoc
-		doc["linked_accounts"] = linked
-		out[discordID] = ticketIdentityFromAuthUser(doc)
-	}
-	if err := rows.Err(); err != nil {
-		return out, count, err
-	}
-	return out, count, nil
 }
 
 func sqlPlayerLinksForTickets(c *fiber.Ctx, a apptypes.Deps, userIDs []string) (map[string][]string, int, error) {
@@ -244,7 +192,7 @@ func ticketPanelDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, name strin
 func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT name, data, created_at, updated_at
-		FROM custom_embeds
+		FROM server_custom_embeds
 		WHERE server_id = $1
 		ORDER BY name
 	`, fmt.Sprint(serverID))
@@ -268,7 +216,7 @@ func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[strin
 
 func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data modelsv2.DiscordEmbed) error {
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO custom_embeds (server_id, name, data, created_at, updated_at)
+		INSERT INTO server_custom_embeds (server_id, name, data, created_at, updated_at)
 		VALUES ($1, $2, $3::jsonb, now(), now())
 		ON CONFLICT (server_id, name) DO UPDATE SET
 			data = EXCLUDED.data,
@@ -279,7 +227,7 @@ func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string,
 
 func ticketEmbedDelete(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string) (int64, error) {
 	cmd, err := a.Store.SQL.Exec(c.UserContext(), `
-		DELETE FROM custom_embeds
+		DELETE FROM server_custom_embeds
 		WHERE server_id = $1 AND name = $2
 	`, fmt.Sprint(serverID), name)
 	return cmd.RowsAffected(), err
@@ -637,7 +585,7 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		startedAt := time.Now()
 		var serverID int64
 		debugEnabled := apptypes.Logger().Enabled(c.UserContext(), slog.LevelDebug)
-		debugLog := func(duration time.Duration, ticketCount, uniqueUsers, missingIdentityUsers, linkDocCount, linkedUserCount, uniqueTags, playerDocCount, authUserDocCount, authIdentityHits, discordLookupsAttempted, discordLookupsSucceeded, resultCount int, statusFilter string, openTicketsMS, linksMS, playersMS, authUsersMS, discordMS, serializeMS int64) {
+		debugLog := func(duration time.Duration, ticketCount, uniqueUsers, missingIdentityUsers, linkDocCount, linkedUserCount, uniqueTags, playerDocCount, discordLookupsAttempted, discordLookupsSucceeded, resultCount int, statusFilter string, openTicketsMS, linksMS, playersMS, discordMS, serializeMS int64) {
 			if !debugEnabled {
 				return
 			}
@@ -652,15 +600,12 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 				"linked_users", linkedUserCount,
 				"unique_tags", uniqueTags,
 				"player_docs", playerDocCount,
-				"auth_user_docs", authUserDocCount,
-				"auth_identity_hits", authIdentityHits,
 				"discord_lookup_attempted", discordLookupsAttempted,
 				"discord_lookup_succeeded", discordLookupsSucceeded,
 				"result_count", resultCount,
 				"open_tickets_ms", openTicketsMS,
 				"links_ms", linksMS,
 				"players_ms", playersMS,
-				"auth_users_ms", authUsersMS,
 				"discord_ms", discordMS,
 				"serialize_ms", serializeMS,
 				"total_ms", duration.Milliseconds(),
@@ -816,32 +761,7 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 		for uid := range missingIdentityUserSet {
 			missingIdentityIDs = append(missingIdentityIDs, uid)
 		}
-		authUserDocCount := 0
-		authIdentityHits := 0
-		authUsersDuration := time.Duration(0)
-		if len(missingIdentityIDs) > 0 {
-			authUsersStartedAt := time.Now()
-			var uerr error
-			userIdentityMap, authUserDocCount, uerr = sqlAuthUserIdentities(c, a, missingIdentityIDs)
-			if uerr != nil {
-				return uerr
-			}
-			for _, identity := range userIdentityMap {
-				if identity.Username != nil || identity.DisplayName != nil || identity.AvatarURL != nil {
-					authIdentityHits++
-				}
-			}
-			authUsersDuration = time.Since(authUsersStartedAt)
-		}
-
-		remainingMissingIdentityUserIDs := make([]string, 0, len(missingIdentityUserSet))
-		for uid := range missingIdentityUserSet {
-			identity := userIdentityMap[uid]
-			if identity.Username != nil || identity.DisplayName != nil {
-				continue
-			}
-			remainingMissingIdentityUserIDs = append(remainingMissingIdentityUserIDs, uid)
-		}
+		remainingMissingIdentityUserIDs := missingIdentityIDs
 		sort.Strings(remainingMissingIdentityUserIDs)
 
 		// Step 1: resolve from Valkey cache before hitting Discord API.
@@ -1004,8 +924,6 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			len(userTagMap),
 			len(tagSet),
 			playerDocCount,
-			authUserDocCount,
-			authIdentityHits,
 			discordLookupsAttempted,
 			discordLookupsSucceeded,
 			len(items),
@@ -1013,7 +931,6 @@ func getOpenTickets(a apptypes.Deps) fiber.Handler {
 			openTicketsDuration.Milliseconds(),
 			linksDuration.Milliseconds(),
 			playersDuration.Milliseconds(),
-			authUsersDuration.Milliseconds(),
 			discordDuration.Milliseconds(),
 			serializeDuration.Milliseconds(),
 		)

@@ -390,7 +390,7 @@ func sqlServerSettingsDoc(c *fiber.Ctx, rt apptypes.Deps, serverID int) (map[str
 	optionalDocString(doc, "greeting", greeting)
 	doc["autoeval_triggers"] = queryStringColumn(c, rt, `SELECT trigger FROM server_autoeval_triggers WHERE server_id = $1 ORDER BY position, trigger`, id)
 	doc["blacklisted_roles"] = queryStringColumn(c, rt, `SELECT role_id FROM server_blacklisted_roles WHERE server_id = $1 ORDER BY role_id`, id)
-	doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM countdowns WHERE server_id = $1 AND clan_tag IS NULL ORDER BY type`, id)
+	doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM server_countdowns WHERE server_id = $1 AND clan_tag IS NULL ORDER BY type`, id)
 	return doc, nil
 }
 
@@ -415,7 +415,7 @@ func sqlServerClanDocs(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[stri
 		if err != nil {
 			return nil, err
 		}
-		doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM countdowns WHERE server_id = $1 AND clan_tag = $2 ORDER BY type`, strconv.Itoa(serverID), serverAsString(doc["tag"]))
+		doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM server_countdowns WHERE server_id = $1 AND clan_tag = $2 ORDER BY type`, strconv.Itoa(serverID), serverAsString(doc["tag"]))
 		out = append(out, doc)
 	}
 	return out, rows.Err()
@@ -446,7 +446,7 @@ func sqlServerClanDoc(c *fiber.Ctx, rt apptypes.Deps, serverID int, tag string) 
 	if err != nil {
 		return nil, err
 	}
-	doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM countdowns WHERE server_id = $1 AND clan_tag = $2 ORDER BY type`, strconv.Itoa(serverID), serverAsString(doc["tag"]))
+	doc["countdowns"] = queryKeyValueMap(c, rt, `SELECT type, channel_id FROM server_countdowns WHERE server_id = $1 AND clan_tag = $2 ORDER BY type`, strconv.Itoa(serverID), serverAsString(doc["tag"]))
 	return doc, nil
 }
 

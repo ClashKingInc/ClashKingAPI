@@ -299,7 +299,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	app.Get("/v2/war/:clan_tag/previous", previousWars(a))
 	app.Get("/v2/clan/:clan_tag/wars", clanWars(a))
-	app.Get("/v2/cwl/:clan_tag/ranking-history", cwlRankingHistory(a))
+	app.Get("/v2/cwl/:clan_tag/ranking-history", cwlClanHistory(a))
+	app.Get("/v2/cwl/leagues/:league_id/rankings", cwlLeagueRankings(a))
 	app.Get("/v2/cwl/league-thresholds", cwlThresholds)
 	app.Get("/v2/war/clan/stats", clanStats(a))
 	app.Get("/v2/war/stats", clanStats(a))
@@ -309,6 +310,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/war/clans/warhits", clanWarhits(a))
 	app.Get("/v2/player/:player_tag/war/attacks", playerWarAttacks(a))
 	app.Get("/v2/player/:player_tag/war/stats", playerWarStats(a))
+	app.Get("/v2/player/:player_tag/cwl/history", cwlPlayerHistory(a))
 
 	app.Get("/v2/exports/war/cwl-summary", wrap(exportCWLSummary(a)))
 	app.Post("/v2/exports/war/player-stats", wrap(exportPlayerWarStats(a)))

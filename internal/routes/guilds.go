@@ -33,7 +33,7 @@ func getUserGuilds(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusUnauthorized, "Authentication token missing")
 		}
 
-		accessToken, err := getDiscordAccessTokenForDevice(c, a, userID)
+		accessToken, err := getDiscordAccessTokenForDevice(c, a, userID, apptypes.DeviceID(c.UserContext()))
 		if err != nil {
 			return err
 		}
@@ -156,26 +156,18 @@ func getGuildDetails(a apptypes.Deps) fiber.Handler {
 
 // --- helpers ---
 
-// getDiscordAccessTokenForDevice mirrors the Python migration more closely by
-// looking up the Discord OAuth token with the current device ID when available,
-// then falling back to the user-wide token for older records.
-func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID string) (string, error) {
+// getDiscordAccessTokenForDevice loads exactly the current device's Discord
+// OAuth credential; credentials from another device are never substituted.
+func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID, deviceID string) (string, error) {
 	if a.Store.SQL == nil {
 		return "", apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-
-	deviceID := apptypes.DeviceID(c.UserContext())
-	tokenDeviceID := deviceID
-	accessCipher, refreshCipher, expiresAt, err := sqlDiscordToken(c, a, userID, tokenDeviceID)
+	if strings.TrimSpace(deviceID) == "" {
+		return "", apptypes.Error(http.StatusUnauthorized, "Missing device identity")
+	}
+	accessCipher, refreshCipher, expiresAt, err := sqlDiscordToken(c, a, userID, deviceID)
 	if err != nil {
-		if tokenDeviceID == "" {
-			return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token - please link your Discord account")
-		}
-		tokenDeviceID = ""
-		accessCipher, refreshCipher, expiresAt, err = sqlDiscordToken(c, a, userID, tokenDeviceID)
-		if err != nil {
-			return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token - please link your Discord account")
-		}
+		return "", apptypes.Error(http.StatusUnauthorized, "Missing Discord token - please link your Discord account")
 	}
 
 	if accessCipher == "" || refreshCipher == "" {
@@ -211,13 +203,9 @@ func getDiscordAccessTokenForDevice(c *fiber.Ctx, a apptypes.Deps, userID string
 		SET access_token_ciphertext = $1,
 			refresh_token_ciphertext = $2,
 			expires_at = $3,
-			data = jsonb_set(
-				jsonb_set(data, '{discord_access_token}', to_jsonb($1::text), true),
-				'{discord_refresh_token}', to_jsonb($2::text), true
-			),
 			updated_at = now()
 		WHERE user_id = $4 AND device_id = $5
-	`, newEncryptedAccess, newEncryptedRefresh, time.Now().UTC().Add(newAuth.ExpiresIn), userID, tokenDeviceID)
+	`, newEncryptedAccess, newEncryptedRefresh, time.Now().UTC().Add(newAuth.ExpiresIn), userID, deviceID)
 
 	return newAuth.AccessToken, nil
 }

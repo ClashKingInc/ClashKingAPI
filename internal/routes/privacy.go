@@ -35,7 +35,7 @@ func privacyExport(a apptypes.Deps) fiber.Handler {
 			{"bookmarks", `SELECT entity_type, tag, order_index, created_at FROM user_bookmarks WHERE user_id = $1 ORDER BY order_index ASC`, false},
 			{"recent_searches", `SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC`, false},
 			{"legacy_search_settings", `SELECT search, updated_at FROM user_settings WHERE user_id = $1`, false},
-			{"discord_sessions", `SELECT device_id, data ->> 'device_name' AS device_name, expires_at, scopes, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC`, false},
+			{"discord_sessions", `SELECT device_id, expires_at, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC`, false},
 			{"notification_settings", `SELECT device_id, environment, enabled, locale, timezone, enabled_types, war_attack_modes, event_types, reminder_timings, account_scope, selected_accounts, selected_town_halls, selected_clan_tags, created_at, updated_at FROM mobile_notification_preferences WHERE user_id = $1`, true},
 			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, build_number, os_version, device_model, locale, timezone, authorization_status, enabled, last_seen_at, disabled_at, created_at, updated_at FROM mobile_push_devices WHERE user_id = $1`, true},
 			{"notification_war_clans", `SELECT device_id, clan_tag, war_start_enabled, score_change_enabled, war_end_enabled, cwl_rank_enabled, live_activity_enabled, enabled, created_at, updated_at FROM mobile_war_subscriptions WHERE user_id = $1`, true},
@@ -95,19 +95,18 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-func privacySafeUser(user map[string]any) map[string]any {
+func privacySafeUser(user *authUser) map[string]any {
 	out := map[string]any{
-		"user_id":      authStringify(user["user_id"]),
-		"username":     fallbackUserName(user),
-		"avatar_url":   fallbackAvatar(user),
-		"auth_methods": toStringSlice(user["auth_methods"]),
-		"verified":     user["verified"],
+		"user_id":      user.UserID,
+		"auth_methods": user.AuthMethods(),
+		"created_at":   user.CreatedAt,
+		"updated_at":   user.UpdatedAt,
 	}
-	if email, err := apptypes.DecryptString(authStringify(user["email_encrypted"])); err == nil && email != "" {
-		out["email"] = email
+	if user.Username != nil {
+		out["username"] = *user.Username
 	}
-	if discordID := authStringify(user["discord_user_id"]); discordID != "" {
-		out["discord_user_id"] = discordID
+	if user.DiscordUserID != nil {
+		out["discord_user_id"] = *user.DiscordUserID
 	}
 	return out
 }

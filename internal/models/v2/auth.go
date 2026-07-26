@@ -5,7 +5,6 @@ type AuthUserInfo struct {
 	Username    string   `json:"username"`
 	AvatarURL   string   `json:"avatar_url"`
 	AuthMethods []string `json:"auth_methods"`
-	Email       *string  `json:"email,omitempty"`
 }
 
 type AuthResponse struct {
@@ -60,7 +59,6 @@ type AuthDiscordOAuthRequest struct {
 	Code         string `json:"code"`
 	CodeVerifier string `json:"code_verifier"`
 	DeviceID     string `json:"device_id"`
-	DeviceName   string `json:"device_name"`
 	RedirectURI  string `json:"redirect_uri"`
 }
 

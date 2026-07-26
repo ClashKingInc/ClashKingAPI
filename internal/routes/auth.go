@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -21,6 +21,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -58,44 +60,24 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 			_ = deleteExpiredEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid or expired verification code")
 		}
-		userData, _ := pending["user_data"].(map[string]any)
-		if userData == nil {
-			return apptypes.Error(fiber.StatusInternalServerError, "Invalid verification record")
-		}
 		existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
-		userID := authStringify(userData["user_id"])
-		if userID == "" {
-			if existing != nil {
-				userID = authStringify(existing["user_id"])
-			} else {
-				userID = generateUserID()
-			}
+		user := existing
+		if user == nil {
+			user = &authUser{UserID: generateUserID()}
 		}
-		if existing == nil && userID != "" {
-			existing, _ = findUserByID(c.UserContext(), a, userID)
-		}
-		update := map[string]any{}
-		for key, value := range existing {
-			update[key] = value
-		}
-		update["user_id"] = userID
-		update["email_encrypted"] = authStringify(userData["email_encrypted"])
-		update["email_hash"] = emailHash
-		update["username"] = authStringify(userData["username"])
-		update["password"] = authStringify(userData["password"])
-		update["created_at"] = time.Now().UTC()
-		update["auth_methods"] = uniqueStrings(append(toStringSlice(update["auth_methods"]), "email"))
-		if err := upsertAuthUser(c.UserContext(), a, update); err != nil {
-			pending["verification_code"] = body.Code
+		user.EmailHash = &emailHash
+		user.Username = &pending.Username
+		user.PasswordHash = &pending.PasswordHash
+		if err := upsertAuthUser(c.UserContext(), a, user); err != nil {
+			pending.VerificationCode = body.Code
 			_ = insertEmailVerification(c.UserContext(), a, pending)
 			return err
 		}
-		response, err := buildAuthResponse(a, userID, authStringify(update["username"]), authStringify(userData["device_id"]), defaultAvatarURL)
+		response, err := buildAuthResponse(a, emailAuthUserInfo(user), pending.DeviceID)
 		if err != nil {
 			return err
 		}
-		enrichAuthUserInfo(&response.User, update)
-		if err := storeRefreshToken(c.UserContext(), a, userID, response.RefreshToken); err != nil {
+		if err := storeRefreshToken(c.UserContext(), a, user.UserID, response.RefreshToken); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, response)
@@ -120,22 +102,27 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 		if err != nil || user == nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "User session is no longer valid")
 		}
-		username := authStringify(user["username"])
-		if username == "" {
-			if decrypted, err := apptypes.DecryptString(authStringify(user["email_encrypted"])); err == nil {
-				username = decrypted
-			}
+		if user.EmailHash != nil {
+			return apptypes.JSON(c, fiber.StatusOK, emailAuthUserInfo(user))
 		}
-		avatarURL := authStringify(user["avatar_url"])
-		if avatarURL == "" {
-			avatarURL = defaultAvatarURL
+		if user.DiscordUserID == nil {
+			return apptypes.Error(fiber.StatusUnauthorized, "User identity is not configured")
 		}
-		info := modelsv2.AuthUserInfo{
-			UserID:    authStringify(user["user_id"]),
-			Username:  username,
-			AvatarURL: avatarURL,
+		if a.Discord == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "Discord is not configured")
 		}
-		enrichAuthUserInfo(&info, user)
+		info, err := loadDiscordAuthUserInfo(
+			c.UserContext(),
+			user,
+			apptypes.DeviceID(c.UserContext()),
+			func(_ context.Context, userID, deviceID string) (string, error) {
+				return getDiscordAccessTokenForDevice(c, a, userID, deviceID)
+			},
+			a.Discord,
+		)
+		if err != nil {
+			return err
+		}
 		return apptypes.JSON(c, fiber.StatusOK, info)
 	}
 }
@@ -184,15 +171,14 @@ func discordAuth(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		if err := storeDiscordTokens(c.UserContext(), a, userID, body.DeviceID, body.DeviceName, token); err != nil {
+		if err := storeDiscordTokens(c.UserContext(), a, userID, body.DeviceID, token); err != nil {
 			return err
 		}
 
-		response, err := buildAuthResponse(a, userID, discordUser.EffectiveName(), body.DeviceID, discordUser.EffectiveAvatarURL())
+		response, err := buildAuthResponse(a, discordAuthUserInfo(userID, discordUser), body.DeviceID)
 		if err != nil {
 			return err
 		}
-		response.User.AuthMethods = []string{"discord"}
 		if err := storeRefreshToken(c.UserContext(), a, userID, response.RefreshToken); err != nil {
 			return err
 		}
@@ -227,10 +213,10 @@ func refreshToken(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token.")
 		}
-		if expiresAt := asTime(stored["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
+		if time.Now().UTC().After(stored.ExpiresAt) {
 			return apptypes.Error(fiber.StatusUnauthorized, "Expired refresh token. Please login again.")
 		}
-		if authStringify(stored["user_id"]) != claims.Sub {
+		if stored.UserID != claims.Sub {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token.")
 		}
 		deviceID := strings.TrimSpace(body.DeviceID)
@@ -280,12 +266,12 @@ func register(a apptypes.Deps) fiber.Handler {
 		}
 		emailHash := hashEmail(a, body.Email)
 		existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
-		if existing != nil && slicesContains(toStringSlice(existing["auth_methods"]), "email") {
+		if existing != nil {
 			return apptypes.Error(fiber.StatusBadRequest, "Email already registered. Please try logging in instead.")
 		}
 		pending, _ := findEmailVerification(c.UserContext(), a, emailHash, "")
 		if pending != nil {
-			if expiresAt := asTime(pending["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().Before(expiresAt) {
+			if expiresAt := pending.ExpiresAt; !expiresAt.IsZero() && time.Now().UTC().Before(expiresAt) {
 				return apptypes.Error(fiber.StatusConflict, "A verification email was already sent to this address. Please check your email or request a resend.")
 			}
 			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
@@ -298,18 +284,14 @@ func register(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		record := map[string]any{
-			"email_hash":        emailHash,
-			"verification_code": code,
-			"user_data": map[string]any{
-				"email_encrypted": apptypes.EncryptToString(strings.ToLower(strings.TrimSpace(body.Email))),
-				"email_hash":      emailHash,
-				"username":        body.Username,
-				"password":        string(passwordHash),
-				"device_id":       body.DeviceID,
-			},
-			"created_at": time.Now().UTC(),
-			"expires_at": time.Now().UTC().Add(15 * time.Minute),
+		record := &emailVerification{
+			EmailHash:        emailHash,
+			VerificationCode: code,
+			Username:         body.Username,
+			PasswordHash:     string(passwordHash),
+			DeviceID:         body.DeviceID,
+			CreatedAt:        time.Now().UTC(),
+			ExpiresAt:        time.Now().UTC().Add(15 * time.Minute),
 		}
 		if err := insertEmailVerification(c.UserContext(), a, record); err != nil {
 			return err
@@ -352,12 +334,12 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 		pending, err := findEmailVerification(c.UserContext(), a, emailHash, "")
 		if err != nil {
 			existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
-			if existing != nil && slicesContains(toStringSlice(existing["auth_methods"]), "email") {
+			if existing != nil {
 				return apptypes.Error(fiber.StatusBadRequest, "This email is already verified. Please try logging in instead.")
 			}
 			return apptypes.Error(fiber.StatusNotFound, "No pending verification found for this email. Please register first.")
 		}
-		if expiresAt := asTime(pending["expires_at"]); !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
+		if expiresAt := pending.ExpiresAt; !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
 			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusGone, "Verification expired. Please register again.")
 		}
@@ -365,17 +347,13 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		pending["verification_code"] = code
-		pending["created_at"] = time.Now().UTC()
-		pending["expires_at"] = time.Now().UTC().Add(15 * time.Minute)
+		pending.VerificationCode = code
+		pending.CreatedAt = time.Now().UTC()
+		pending.ExpiresAt = time.Now().UTC().Add(15 * time.Minute)
 		if err := insertEmailVerification(c.UserContext(), a, pending); err != nil {
 			return err
 		}
-		username := ""
-		if userData, ok := pending["user_data"].(map[string]any); ok {
-			username = authStringify(userData["username"])
-		}
-		if err := sendVerificationEmail(c.UserContext(), a, body.Email, username, code); err != nil {
+		if err := sendVerificationEmail(c.UserContext(), a, body.Email, pending.Username, code); err != nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Verification email could not be sent. Please try again.")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthVerificationResponse{
@@ -410,19 +388,18 @@ func emailLogin(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid email or password")
 		}
-		passwordHash := authStringify(user["password"])
+		passwordHash := ""
+		if user.PasswordHash != nil {
+			passwordHash = *user.PasswordHash
+		}
 		if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(body.Password)); err != nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid email or password")
 		}
-		if !slicesContains(toStringSlice(user["auth_methods"]), "email") {
-			return apptypes.Error(fiber.StatusConflict, "Email has not been verified for this account.")
-		}
-		response, err := buildAuthResponse(a, authStringify(user["user_id"]), fallbackUserName(user), body.DeviceID, fallbackAvatar(user))
+		response, err := buildAuthResponse(a, emailAuthUserInfo(user), body.DeviceID)
 		if err != nil {
 			return err
 		}
-		enrichAuthUserInfo(&response.User, user)
-		if err := storeRefreshToken(c.UserContext(), a, authStringify(user["user_id"]), response.RefreshToken); err != nil {
+		if err := storeRefreshToken(c.UserContext(), a, user.UserID, response.RefreshToken); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, response)
@@ -461,19 +438,19 @@ func forgotPassword(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		err = insertPasswordReset(c.UserContext(), a, map[string]any{
-			"user_id":    authStringify(user["user_id"]),
-			"email_hash": emailHash,
-			"reset_code": code,
-			"expires_at": time.Now().UTC().Add(time.Hour),
-			"created_at": time.Now().UTC(),
-			"used":       false,
-		})
+		err = insertPasswordReset(
+			c.UserContext(),
+			a,
+			user.UserID,
+			emailHash,
+			code,
+			time.Now().UTC().Add(time.Hour),
+		)
 		if err != nil {
 			apptypes.Logger().Error("password_reset_record_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
 		}
-		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, fallbackUserName(user), code); err != nil {
+		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, authUserName(user), code); err != nil {
 			_ = deletePasswordReset(c.UserContext(), a, emailHash, code)
 			apptypes.Logger().Error("password_reset_email_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
@@ -518,17 +495,19 @@ func resetPassword(a apptypes.Deps) fiber.Handler {
 		}
 		userID, err := resetPasswordAndRevokeSessions(c.UserContext(), a, emailHash, body.ResetCode, string(passwordHash))
 		if err != nil {
-			return apptypes.Error(fiber.StatusUnauthorized, "Invalid or expired password reset code.")
+			if errors.Is(err, pgx.ErrNoRows) {
+				return apptypes.Error(fiber.StatusUnauthorized, "Invalid or expired password reset code.")
+			}
+			return err
 		}
 		user, err := findUserByID(c.UserContext(), a, userID)
 		if err != nil {
 			return err
 		}
-		response, err := buildAuthResponse(a, userID, fallbackUserName(user), body.DeviceID, fallbackAvatar(user))
+		response, err := buildAuthResponse(a, emailAuthUserInfo(user), body.DeviceID)
 		if err != nil {
 			return err
 		}
-		enrichAuthUserInfo(&response.User, user)
 		if err := storeRefreshToken(c.UserContext(), a, userID, response.RefreshToken); err != nil {
 			return err
 		}
@@ -619,34 +598,20 @@ func sendPasswordResetEmail(ctx context.Context, a apptypes.Deps, email, usernam
 	return a.Mailer.SendPasswordReset(ctx, strings.TrimSpace(email), username, code)
 }
 
-func buildAuthResponse(a apptypes.Deps, userID, username, deviceID, avatarURL string) (modelsv2.AuthResponse, error) {
-	accessToken, err := apptypes.GenerateAccessToken(a.Config, userID, deviceID)
+func buildAuthResponse(a apptypes.Deps, user modelsv2.AuthUserInfo, deviceID string) (modelsv2.AuthResponse, error) {
+	accessToken, err := apptypes.GenerateAccessToken(a.Config, user.UserID, deviceID)
 	if err != nil {
 		return modelsv2.AuthResponse{}, err
 	}
-	refreshToken, err := apptypes.GenerateRefreshToken(a.Config, userID, deviceID)
+	refreshToken, err := apptypes.GenerateRefreshToken(a.Config, user.UserID, deviceID)
 	if err != nil {
 		return modelsv2.AuthResponse{}, err
 	}
 	return modelsv2.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		User: modelsv2.AuthUserInfo{
-			UserID:    userID,
-			Username:  username,
-			AvatarURL: avatarURL,
-		},
+		User:         user,
 	}, nil
-}
-
-func enrichAuthUserInfo(info *modelsv2.AuthUserInfo, user map[string]any) {
-	info.AuthMethods = uniqueStrings(toStringSlice(user["auth_methods"]))
-	if !slicesContains(info.AuthMethods, "email") {
-		return
-	}
-	if email, err := apptypes.DecryptString(authStringify(user["email_encrypted"])); err == nil && email != "" {
-		info.Email = &email
-	}
 }
 
 func storeRefreshToken(ctx context.Context, a apptypes.Deps, userID, refreshToken string) error {
@@ -657,32 +622,74 @@ func storeRefreshToken(ctx context.Context, a apptypes.Deps, userID, refreshToke
 	if err != nil {
 		return err
 	}
-	_, err = a.Store.SQL.Exec(ctx, `
-		INSERT INTO auth_refresh_tokens (token_hash, user_id, device_id, expires_at, data, created_at)
-		VALUES ($1, $2, $3, $4, $5::jsonb, now())
+	expiresAt, err := claims.GetExpirationTime()
+	if err != nil || expiresAt == nil {
+		return fmt.Errorf("refresh token expiration is missing")
+	}
+	return persistRefreshToken(
+		ctx,
+		a.Store.SQL,
+		tokenHash(refreshToken),
+		userID,
+		claims.Device,
+		expiresAt.Time,
+	)
+}
+
+type refreshTokenExecutor interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
+func persistRefreshToken(
+	ctx context.Context,
+	store refreshTokenExecutor,
+	refreshTokenHash, userID, deviceID string,
+	expiresAt time.Time,
+) error {
+	_, err := store.Exec(ctx, `
+		INSERT INTO auth_refresh_tokens (token_hash, user_id, device_id, expires_at)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (token_hash) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			device_id = EXCLUDED.device_id,
-			expires_at = EXCLUDED.expires_at,
-			revoked_at = NULL,
-			data = EXCLUDED.data
-	`, tokenHash(refreshToken), userID, claims.Device, time.Now().UTC().Add(90*24*time.Hour), apptypes.Marshal(map[string]any{"device_id": claims.Device}))
+			expires_at = EXCLUDED.expires_at
+	`, refreshTokenHash, userID, deviceID, expiresAt)
 	return err
+}
+
+type refreshTokenTransactionStore interface {
+	Begin(context.Context) (pgx.Tx, error)
 }
 
 func rotateRefreshToken(ctx context.Context, a apptypes.Deps, oldToken, newToken, userID, deviceID string) error {
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	tx, err := a.Store.SQL.Begin(ctx)
+	claims, err := parseRefreshToken(a, newToken)
+	if err != nil {
+		return err
+	}
+	expiresAt, err := claims.GetExpirationTime()
+	if err != nil || expiresAt == nil {
+		return fmt.Errorf("refresh token expiration is missing")
+	}
+	return rotateRefreshTokenInStore(ctx, a.Store.SQL, oldToken, newToken, userID, deviceID, expiresAt.Time)
+}
+
+func rotateRefreshTokenInStore(
+	ctx context.Context,
+	store refreshTokenTransactionStore,
+	oldToken, newToken, userID, deviceID string,
+	expiresAt time.Time,
+) error {
+	tx, err := store.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	cmd, err := tx.Exec(ctx, `
-		UPDATE auth_refresh_tokens
-		SET revoked_at = now()
-		WHERE token_hash = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > now()
+		DELETE FROM auth_refresh_tokens
+		WHERE token_hash = $1 AND user_id = $2 AND expires_at > now()
 	`, tokenHash(oldToken), userID)
 	if err != nil || cmd.RowsAffected() != 1 {
 		if err != nil {
@@ -691,103 +698,105 @@ func rotateRefreshToken(ctx context.Context, a apptypes.Deps, oldToken, newToken
 		return fmt.Errorf("refresh token was already consumed")
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO auth_refresh_tokens (token_hash, user_id, device_id, expires_at, data, created_at)
-		VALUES ($1, $2, $3, $4, $5::jsonb, now())
-	`, tokenHash(newToken), userID, deviceID, time.Now().UTC().Add(90*24*time.Hour), apptypes.Marshal(map[string]any{"device_id": deviceID}))
+		INSERT INTO auth_refresh_tokens (token_hash, user_id, device_id, expires_at)
+		VALUES ($1, $2, $3, $4)
+	`, tokenHash(newToken), userID, deviceID, expiresAt)
 	if err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func findUserByID(ctx context.Context, a apptypes.Deps, userID string) (map[string]any, error) {
+type authUser struct {
+	UserID        string
+	EmailHash     *string
+	DiscordUserID *string
+	Username      *string
+	PasswordHash  *string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (u *authUser) AuthMethods() []string {
+	if u == nil {
+		return nil
+	}
+	if u.EmailHash != nil {
+		return []string{"email"}
+	}
+	if u.DiscordUserID != nil {
+		return []string{"discord"}
+	}
+	return nil
+}
+
+func findUserByID(ctx context.Context, a apptypes.Deps, userID string) (*authUser, error) {
 	return scanAuthUser(ctx, a, `WHERE user_id = $1`, userID)
 }
 
-func fallbackUserName(user map[string]any) string {
-	if user == nil {
-		return "User"
-	}
-	if username := authStringify(user["username"]); username != "" {
-		return username
-	}
-	if email, err := apptypes.DecryptString(authStringify(user["email_encrypted"])); err == nil && email != "" {
-		return email
+func authUserName(user *authUser) string {
+	if user != nil && user.Username != nil && strings.TrimSpace(*user.Username) != "" {
+		return *user.Username
 	}
 	return "User"
 }
 
-func fallbackAvatar(user map[string]any) string {
+func emailAuthUserInfo(user *authUser) modelsv2.AuthUserInfo {
 	if user == nil {
-		return defaultAvatarURL
-	}
-	if avatar := authStringify(user["avatar_url"]); avatar != "" {
-		return avatar
-	}
-	return defaultAvatarURL
-}
-
-func authStringify(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return typed
-	case int64:
-		return strconv.FormatInt(typed, 10)
-	case int:
-		return strconv.Itoa(typed)
-	case float64:
-		return strconv.FormatInt(int64(typed), 10)
-	default:
-		return ""
-	}
-}
-
-func asTime(value any) time.Time {
-	switch typed := value.(type) {
-	case time.Time:
-		return typed
-	default:
-		return time.Time{}
-	}
-}
-
-func toStringSlice(value any) []string {
-	switch typed := value.(type) {
-	case []string:
-		return append([]string(nil), typed...)
-	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if text := authStringify(item); text != "" {
-				out = append(out, text)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func slicesContains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
+		return modelsv2.AuthUserInfo{
+			Username:    "User",
+			AvatarURL:   defaultAvatarURL,
+			AuthMethods: []string{"email"},
 		}
 	}
-	return false
+	return modelsv2.AuthUserInfo{
+		UserID:      user.UserID,
+		Username:    authUserName(user),
+		AvatarURL:   defaultAvatarURL,
+		AuthMethods: user.AuthMethods(),
+	}
+}
+
+func discordAuthUserInfo(userID string, user *discord.OAuth2User) modelsv2.AuthUserInfo {
+	return modelsv2.AuthUserInfo{
+		UserID:      userID,
+		Username:    user.EffectiveName(),
+		AvatarURL:   user.EffectiveAvatarURL(),
+		AuthMethods: []string{"discord"},
+	}
+}
+
+type discordProfileProvider interface {
+	GetCurrentUser(context.Context, string) (*discord.OAuth2User, error)
+}
+
+type discordAccessTokenLoader func(context.Context, string, string) (string, error)
+
+func loadDiscordAuthUserInfo(
+	ctx context.Context,
+	user *authUser,
+	deviceID string,
+	loadAccessToken discordAccessTokenLoader,
+	provider discordProfileProvider,
+) (modelsv2.AuthUserInfo, error) {
+	if user == nil || user.DiscordUserID == nil {
+		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusUnauthorized, "Discord identity is not configured")
+	}
+	if strings.TrimSpace(deviceID) == "" {
+		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusUnauthorized, "Missing device identity")
+	}
+	accessToken, err := loadAccessToken(ctx, user.UserID, deviceID)
+	if err != nil {
+		return modelsv2.AuthUserInfo{}, err
+	}
+	profile, err := provider.GetCurrentUser(ctx, accessToken)
+	if err != nil {
+		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusBadGateway, "Failed to fetch Discord user")
+	}
+	if profile.ID.String() != *user.DiscordUserID {
+		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusUnauthorized, "Discord session does not match the authenticated user")
+	}
+	return discordAuthUserInfo(user.UserID, profile), nil
 }
 
 func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) {
@@ -808,200 +817,137 @@ func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) 
 
 func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discord.OAuth2User) (string, error) {
 	existingUser, _ := findUserByDiscordID(ctx, a, discordUser.ID.String())
-
-	username := discordUser.EffectiveName()
-	if username == "" {
-		username = discordUser.Username
-	}
-	avatarURL := discordUser.EffectiveAvatarURL()
-
 	if existingUser != nil {
-		userID := authStringify(existingUser["user_id"])
-		if userID == "" {
-			userID = discordUser.ID.String()
-		}
-		authMethods := append(toStringSlice(existingUser["auth_methods"]), "discord")
-		update := map[string]any{
-			"auth_methods": uniqueStrings(authMethods),
-			"username":     username,
-			"avatar_url":   avatarURL,
-		}
-		for key, value := range discordIdentityData(discordUser) {
-			update[key] = value
-		}
-		for key, value := range update {
-			existingUser[key] = value
-		}
-		if err := upsertAuthUser(ctx, a, existingUser); err != nil {
-			return "", err
-		}
-		return userID, nil
+		return existingUser.UserID, nil
 	}
 
-	userID := discordUser.ID.String()
-	insert := map[string]any{
-		"user_id":      userID,
-		"auth_methods": []string{"discord"},
-		"username":     username,
-		"avatar_url":   avatarURL,
-		"created_at":   time.Now().UTC(),
+	discordUserID := discordUser.ID.String()
+	user := &authUser{
+		UserID:        generateUserID(),
+		DiscordUserID: &discordUserID,
 	}
-	for key, value := range discordIdentityData(discordUser) {
-		insert[key] = value
-	}
-	if err := upsertAuthUser(ctx, a, insert); err != nil {
+	if err := upsertAuthUser(ctx, a, user); err != nil {
 		return "", err
 	}
-	return userID, nil
+	return user.UserID, nil
 }
 
-func discordIdentityData(discordUser *discord.OAuth2User) map[string]any {
-	return map[string]any{
-		"discord_user_id": discordUser.ID.String(),
-		"linked_accounts": map[string]any{
-			"discord": map[string]any{
-				"linked_at":       time.Now().UTC(),
-				"discord_user_id": discordUser.ID.String(),
-				"username":        discordUser.Username,
-			},
-		},
-	}
-}
-
-func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID, deviceName string, token *discord.AccessTokenResponse) error {
+func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID string, token *discord.AccessTokenResponse) error {
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	payload := map[string]any{
-		"user_id":               userID,
-		"device_id":             deviceID,
-		"device_name":           deviceName,
-		"discord_access_token":  apptypes.EncryptToString(token.AccessToken),
-		"discord_refresh_token": apptypes.EncryptToString(token.RefreshToken),
-		"expires_at":            time.Now().UTC().Add(token.ExpiresIn),
-	}
+	accessTokenCiphertext := apptypes.EncryptToString(token.AccessToken)
+	refreshTokenCiphertext := apptypes.EncryptToString(token.RefreshToken)
+	expiresAt := time.Now().UTC().Add(token.ExpiresIn)
 	_, err := a.Store.SQL.Exec(ctx, `
 		INSERT INTO auth_discord_tokens (
-			user_id, device_id, access_token_ciphertext, refresh_token_ciphertext, expires_at, data, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6::jsonb, now(), now())
+			user_id, device_id, access_token_ciphertext, refresh_token_ciphertext, expires_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, now(), now())
 		ON CONFLICT (user_id, device_id) DO UPDATE SET
 			access_token_ciphertext = EXCLUDED.access_token_ciphertext,
 			refresh_token_ciphertext = EXCLUDED.refresh_token_ciphertext,
 			expires_at = EXCLUDED.expires_at,
-			data = EXCLUDED.data,
 			updated_at = now()
-	`, userID, deviceID, payload["discord_access_token"], payload["discord_refresh_token"], payload["expires_at"], apptypes.Marshal(payload))
+	`, userID, deviceID, accessTokenCiphertext, refreshTokenCiphertext, expiresAt)
 	return err
 }
 
-func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string) (map[string]any, error) {
+func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string) (*authUser, error) {
 	return scanAuthUser(ctx, a, `WHERE email_hash = $1`, emailHash)
 }
 
-func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (map[string]any, error) {
-	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1 OR data #>> '{linked_accounts,discord,discord_user_id}' = $1 OR user_id = $1`, discordUserID)
+func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (*authUser, error) {
+	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1`, discordUserID)
 }
 
-func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (map[string]any, error) {
+func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (*authUser, error) {
 	if a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	query := `
-		SELECT user_id, email_hash, discord_user_id, username, password_hash, verified, data
+		SELECT ` + authUserSelectColumns + `
 		FROM auth_users ` + where + ` LIMIT 1`
-	var userID, username string
-	var emailHash, discordUserID, passwordHash *string
-	var verified bool
-	var raw []byte
-	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&userID, &emailHash, &discordUserID, &username, &passwordHash, &verified, &raw); err != nil {
+	user := &authUser{}
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(
+		&user.UserID,
+		&user.EmailHash,
+		&user.DiscordUserID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
 		return nil, err
 	}
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	out["user_id"] = userID
-	out["username"] = username
-	out["verified"] = verified
-	if emailHash != nil {
-		out["email_hash"] = *emailHash
-	}
-	if discordUserID != nil {
-		out["discord_user_id"] = *discordUserID
-	}
-	if passwordHash != nil {
-		out["password"] = *passwordHash
-	}
-	return out, nil
+	return user, nil
 }
 
-func upsertAuthUser(ctx context.Context, a apptypes.Deps, user map[string]any) error {
-	expandDotted(user)
+const authUserSelectColumns = "user_id, email_hash, discord_user_id, username, password_hash, created_at, updated_at"
+
+func upsertAuthUser(ctx context.Context, a apptypes.Deps, user *authUser) error {
 	if err := validateAuthIdentity(user); err != nil {
 		return err
 	}
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	userID := authStringify(user["user_id"])
-	if userID == "" {
-		userID = generateUserID()
-		user["user_id"] = userID
+	if user.UserID == "" {
+		user.UserID = generateUserID()
 	}
-	username := fallbackUserName(user)
-	if username == "User" {
-		username = authStringify(user["username"])
-	}
-	emailHash := nullableString(authStringify(user["email_hash"]))
-	passwordHash := nullableString(authStringify(user["password"]))
-	discordID := nullableString(authStringify(user["discord_user_id"]))
-	if discordID == nil {
-		if linked, ok := user["linked_accounts"].(map[string]any); ok {
-			if discordAccount, ok := linked["discord"].(map[string]any); ok {
-				discordID = nullableString(authStringify(discordAccount["discord_user_id"]))
-			}
-		}
-	}
-	authMethods := uniqueStrings(toStringSlice(user["auth_methods"]))
-	verified := slicesContains(authMethods, "email") || slicesContains(authMethods, "discord")
-	data := apptypes.Marshal(user)
-	_, err := a.Store.SQL.Exec(ctx, `
+	return persistAuthUser(ctx, a.Store.SQL, user)
+}
+
+type authUserExecutor interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
+func persistAuthUser(ctx context.Context, store authUserExecutor, user *authUser) error {
+	_, err := store.Exec(ctx, `
 		INSERT INTO auth_users (
-			user_id, email_hash, discord_user_id, username, password_hash, verified, data, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, now(), now())
+			user_id, email_hash, discord_user_id, username, password_hash, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, now(), now())
 		ON CONFLICT (user_id) DO UPDATE SET
 			email_hash = EXCLUDED.email_hash,
 			discord_user_id = EXCLUDED.discord_user_id,
 			username = EXCLUDED.username,
 			password_hash = EXCLUDED.password_hash,
-			verified = EXCLUDED.verified,
-			data = EXCLUDED.data,
 			updated_at = now()
-	`, userID, emailHash, discordID, username, passwordHash, verified, data)
+	`, user.UserID, user.EmailHash, user.DiscordUserID, user.Username, user.PasswordHash)
 	return err
 }
 
-func validateAuthIdentity(user map[string]any) error {
-	authMethods := uniqueStrings(toStringSlice(user["auth_methods"]))
-	hasEmail := authStringify(user["email_hash"]) != ""
-	hasDiscord := authStringify(user["discord_user_id"]) != ""
-	if !hasDiscord {
-		if linked, ok := user["linked_accounts"].(map[string]any); ok {
-			if discordAccount, ok := linked["discord"].(map[string]any); ok {
-				hasDiscord = authStringify(discordAccount["discord_user_id"]) != ""
-			}
-		}
+func validateAuthIdentity(user *authUser) error {
+	if user == nil {
+		return fmt.Errorf("auth user is required")
 	}
-	if (slicesContains(authMethods, "email") && slicesContains(authMethods, "discord")) || (hasEmail && hasDiscord) {
+	if user.EmailHash != nil && user.DiscordUserID != nil {
 		return fmt.Errorf("auth user cannot combine email and Discord identities")
+	}
+	if user.EmailHash != nil && (user.Username == nil || user.PasswordHash == nil) {
+		return fmt.Errorf("email auth user requires username and password")
+	}
+	if user.DiscordUserID != nil && (user.Username != nil || user.PasswordHash != nil) {
+		return fmt.Errorf("Discord auth user cannot persist username or password")
 	}
 	return nil
 }
 
-func findEmailVerification(ctx context.Context, a apptypes.Deps, emailHash string, code string) (map[string]any, error) {
+type emailVerification struct {
+	EmailHash        string
+	VerificationCode string
+	Username         string
+	PasswordHash     string
+	DeviceID         string
+	ExpiresAt        time.Time
+	CreatedAt        time.Time
+}
+
+func findEmailVerification(ctx context.Context, a apptypes.Deps, emailHash string, code string) (*emailVerification, error) {
 	if a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	query := `
-		SELECT email_hash, verification_code_hash, user_id, expires_at, data, created_at
+		SELECT email_hash, username, password_hash, device_id, expires_at, created_at
 		FROM auth_email_verifications
 		WHERE email_hash = $1`
 	args := []any{emailHash}
@@ -1010,53 +956,41 @@ func findEmailVerification(ctx context.Context, a apptypes.Deps, emailHash strin
 		args = append(args, authCodeHash(a, emailHash, code))
 	}
 	query += ` LIMIT 1`
-	var rowEmail, verificationCode string
-	var userID *string
-	var expiresAt, createdAt time.Time
-	var raw []byte
-	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(&rowEmail, &verificationCode, &userID, &expiresAt, &raw, &createdAt); err != nil {
+	record := &emailVerification{}
+	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(
+		&record.EmailHash,
+		&record.Username,
+		&record.PasswordHash,
+		&record.DeviceID,
+		&record.ExpiresAt,
+		&record.CreatedAt,
+	); err != nil {
 		return nil, err
 	}
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	out["email_hash"] = rowEmail
-	out["verification_code"] = verificationCode
-	out["expires_at"] = expiresAt
-	out["created_at"] = createdAt
-	if userID != nil {
-		out["user_id"] = *userID
-	}
-	return out, nil
+	return record, nil
 }
 
-func insertEmailVerification(ctx context.Context, a apptypes.Deps, record map[string]any) error {
+func insertEmailVerification(ctx context.Context, a apptypes.Deps, record *emailVerification) error {
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	emailHash := authStringify(record["email_hash"])
-	code := authStringify(record["verification_code"])
-	codeHash := authCodeHash(a, emailHash, code)
-	expiresAt := asTime(record["expires_at"])
+	codeHash := authCodeHash(a, record.EmailHash, record.VerificationCode)
+	expiresAt := record.ExpiresAt
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().UTC().Add(15 * time.Minute)
 	}
-	data := make(map[string]any, len(record))
-	for key, value := range record {
-		if key != "verification_code" {
-			data[key] = value
-		}
-	}
 	_, err := a.Store.SQL.Exec(ctx, `
 		INSERT INTO auth_email_verifications (
-			email_hash, verification_code_hash, user_id, expires_at, data, created_at
-		) VALUES ($1, $2, NULLIF($3, ''), $4, $5::jsonb, now())
+			email_hash, verification_code_hash, username, password_hash, device_id, expires_at, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, now())
 		ON CONFLICT (email_hash) DO UPDATE SET
 			verification_code_hash = EXCLUDED.verification_code_hash,
-			user_id = EXCLUDED.user_id,
+			username = EXCLUDED.username,
+			password_hash = EXCLUDED.password_hash,
+			device_id = EXCLUDED.device_id,
 			expires_at = EXCLUDED.expires_at,
-			data = EXCLUDED.data,
 			created_at = now()
-	`, emailHash, codeHash, authStringify(record["user_id"]), expiresAt, apptypes.Marshal(data))
+	`, record.EmailHash, codeHash, record.Username, record.PasswordHash, record.DeviceID, expiresAt)
 	return err
 }
 
@@ -1079,107 +1013,62 @@ func deleteExpiredEmailVerification(ctx context.Context, a apptypes.Deps, emailH
 	return err
 }
 
-func consumeEmailVerification(ctx context.Context, a apptypes.Deps, emailHash, code string) (map[string]any, error) {
+func consumeEmailVerification(ctx context.Context, a apptypes.Deps, emailHash, code string) (*emailVerification, error) {
 	if a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	var userID *string
-	var expiresAt, createdAt time.Time
-	var raw []byte
+	record := &emailVerification{EmailHash: emailHash}
 	if err := a.Store.SQL.QueryRow(ctx, `
 		DELETE FROM auth_email_verifications
 		WHERE email_hash = $1 AND verification_code_hash = $2 AND expires_at > now()
-		RETURNING user_id, expires_at, data, created_at
-	`, emailHash, authCodeHash(a, emailHash, code)).Scan(&userID, &expiresAt, &raw, &createdAt); err != nil {
+		RETURNING username, password_hash, device_id, expires_at, created_at
+	`, emailHash, authCodeHash(a, emailHash, code)).Scan(
+		&record.Username,
+		&record.PasswordHash,
+		&record.DeviceID,
+		&record.ExpiresAt,
+		&record.CreatedAt,
+	); err != nil {
 		return nil, err
 	}
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	out["email_hash"] = emailHash
-	out["expires_at"] = expiresAt
-	out["created_at"] = createdAt
-	if userID != nil {
-		out["user_id"] = *userID
-	}
-	return out, nil
+	return record, nil
 }
 
-func findRefreshToken(ctx context.Context, a apptypes.Deps, refreshToken string) (map[string]any, error) {
+type refreshTokenRecord struct {
+	UserID    string
+	DeviceID  string
+	ExpiresAt time.Time
+}
+
+func findRefreshToken(ctx context.Context, a apptypes.Deps, refreshToken string) (*refreshTokenRecord, error) {
 	if a.Store.SQL == nil {
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	var userID string
-	var expiresAt time.Time
-	var raw []byte
+	record := &refreshTokenRecord{}
 	if err := a.Store.SQL.QueryRow(ctx, `
-		SELECT user_id, expires_at, data
+		SELECT user_id, device_id, expires_at
 		FROM auth_refresh_tokens
-		WHERE token_hash = $1 AND revoked_at IS NULL
-	`, tokenHash(refreshToken)).Scan(&userID, &expiresAt, &raw); err != nil {
+		WHERE token_hash = $1
+	`, tokenHash(refreshToken)).Scan(&record.UserID, &record.DeviceID, &record.ExpiresAt); err != nil {
 		return nil, err
 	}
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	out["user_id"] = userID
-	out["refresh_token"] = refreshToken
-	out["expires_at"] = expiresAt
-	return out, nil
+	return record, nil
 }
 
-func insertPasswordReset(ctx context.Context, a apptypes.Deps, record map[string]any) error {
+func insertPasswordReset(ctx context.Context, a apptypes.Deps, userID, emailHash, code string, expiresAt time.Time) error {
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
-	}
-	emailHash := authStringify(record["email_hash"])
-	codeHash := authCodeHash(a, emailHash, authStringify(record["reset_code"]))
-	data := make(map[string]any, len(record))
-	for key, value := range record {
-		if key != "reset_code" {
-			data[key] = value
-		}
 	}
 	_, err := a.Store.SQL.Exec(ctx, `
 		INSERT INTO auth_password_reset_tokens (
-			email_hash, reset_code_hash, user_id, used, expires_at, data, created_at
-		) VALUES ($1, $2, NULLIF($3, ''), false, $4, $5::jsonb, now())
-	`, emailHash, codeHash, authStringify(record["user_id"]), asTime(record["expires_at"]), apptypes.Marshal(data))
-	return err
-}
-
-func findPasswordReset(ctx context.Context, a apptypes.Deps, emailHash, code string) (map[string]any, error) {
-	if a.Store.SQL == nil {
-		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
-	}
-	var userID string
-	var expiresAt time.Time
-	var raw []byte
-	if err := a.Store.SQL.QueryRow(ctx, `
-		SELECT user_id, expires_at, data
-		FROM auth_password_reset_tokens
-		WHERE email_hash = $1 AND reset_code_hash = $2 AND used = false
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, emailHash, authCodeHash(a, emailHash, code)).Scan(&userID, &expiresAt, &raw); err != nil {
-		return nil, err
-	}
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	out["user_id"] = userID
-	out["email_hash"] = emailHash
-	out["reset_code"] = code
-	out["expires_at"] = expiresAt
-	return out, nil
-}
-
-func markPasswordResetUsed(ctx context.Context, a apptypes.Deps, emailHash, code string) error {
-	if a.Store.SQL == nil {
-		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
-	}
-	_, err := a.Store.SQL.Exec(ctx, `
-		UPDATE auth_password_reset_tokens
-		SET used = true, data = jsonb_set(data, '{used}', 'true'::jsonb, true)
-		WHERE email_hash = $1 AND reset_code_hash = $2 AND used = false
-	`, emailHash, authCodeHash(a, emailHash, code))
+			email_hash, reset_code_hash, user_id, expires_at, created_at
+		) VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (email_hash) DO UPDATE SET
+			reset_code_hash = EXCLUDED.reset_code_hash,
+			user_id = EXCLUDED.user_id,
+			expires_at = EXCLUDED.expires_at,
+			created_at = EXCLUDED.created_at
+	`, emailHash, authCodeHash(a, emailHash, code), userID, expiresAt)
 	return err
 }
 
@@ -1189,7 +1078,7 @@ func deletePasswordReset(ctx context.Context, a apptypes.Deps, emailHash, code s
 	}
 	_, err := a.Store.SQL.Exec(ctx, `
 		DELETE FROM auth_password_reset_tokens
-		WHERE email_hash = $1 AND reset_code_hash = $2 AND used = false
+		WHERE email_hash = $1 AND reset_code_hash = $2
 	`, emailHash, authCodeHash(a, emailHash, code))
 	return err
 }
@@ -1205,20 +1094,10 @@ func resetPasswordAndRevokeSessions(ctx context.Context, a apptypes.Deps, emailH
 	defer tx.Rollback(ctx)
 	var userID string
 	if err := tx.QueryRow(ctx, `
-		UPDATE auth_password_reset_tokens
-		SET used = true,
-		    data = jsonb_set(data, '{used}', 'true'::jsonb, true)
-		WHERE id = (
-			SELECT id
-			FROM auth_password_reset_tokens
-			WHERE email_hash = $1
-			  AND reset_code_hash = $2
-			  AND used = false
-			  AND expires_at > now()
-			ORDER BY created_at DESC
-			LIMIT 1
-			FOR UPDATE
-		)
+		DELETE FROM auth_password_reset_tokens
+		WHERE email_hash = $1
+		  AND reset_code_hash = $2
+		  AND expires_at > now()
 		RETURNING user_id
 	`, emailHash, authCodeHash(a, emailHash, code)).Scan(&userID); err != nil {
 		return "", err
@@ -1226,7 +1105,6 @@ func resetPasswordAndRevokeSessions(ctx context.Context, a apptypes.Deps, emailH
 	cmd, err := tx.Exec(ctx, `
 		UPDATE auth_users
 		SET password_hash = $2,
-		    data = jsonb_set(data, '{password}', to_jsonb($2::text), true),
 		    updated_at = now()
 		WHERE user_id = $1
 	`, userID, passwordHash)
@@ -1236,11 +1114,7 @@ func resetPasswordAndRevokeSessions(ctx context.Context, a apptypes.Deps, emailH
 	if cmd.RowsAffected() != 1 {
 		return "", fmt.Errorf("password reset user not found")
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE auth_refresh_tokens
-		SET revoked_at = now()
-		WHERE user_id = $1 AND revoked_at IS NULL
-	`, userID); err != nil {
+	if _, err := tx.Exec(ctx, deleteUserRefreshTokensQuery, userID); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -1249,37 +1123,14 @@ func resetPasswordAndRevokeSessions(ctx context.Context, a apptypes.Deps, emailH
 	return userID, nil
 }
 
+const deleteUserRefreshTokensQuery = `
+	DELETE FROM auth_refresh_tokens
+	WHERE user_id = $1
+`
+
 func tokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
-}
-
-func nullableString(value string) *string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func expandDotted(values map[string]any) {
-	for key, value := range values {
-		if !strings.Contains(key, ".") {
-			continue
-		}
-		delete(values, key)
-		parts := strings.Split(key, ".")
-		current := values
-		for _, part := range parts[:len(parts)-1] {
-			next, _ := current[part].(map[string]any)
-			if next == nil {
-				next = map[string]any{}
-				current[part] = next
-			}
-			current = next
-		}
-		current[parts[len(parts)-1]] = value
-	}
 }
 
 func anyToInt(value any) int {

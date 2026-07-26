@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -64,6 +65,34 @@ func TestAccessTokenSurvivesAuthenticatorRestart(t *testing.T) {
 	}
 	if claims.Sub != "user-1" || claims.Device != "device-1" {
 		t.Fatalf("unexpected claims after restart: sub=%q device=%q", claims.Sub, claims.Device)
+	}
+}
+
+func TestGenerateRefreshTokenUsesThirtyDayRollingExpiry(t *testing.T) {
+	cfg := Config{RefreshSecret: "refresh-secret"}
+	before := time.Now().UTC()
+	token, err := GenerateRefreshToken(cfg, "user-1", "device-1")
+	if err != nil {
+		t.Fatalf("generate refresh token: %v", err)
+	}
+	after := time.Now().UTC()
+
+	claims := &Claims{}
+	if _, err := jwt.ParseWithClaims(
+		token,
+		claims,
+		func(*jwt.Token) (any, error) { return []byte(cfg.RefreshSecret), nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	); err != nil {
+		t.Fatalf("parse refresh token: %v", err)
+	}
+	if claims.ExpiresAt == nil {
+		t.Fatal("refresh token expiration is missing")
+	}
+	minExpiry := before.Add(30 * 24 * time.Hour).Truncate(time.Second)
+	maxExpiry := after.Add(30 * 24 * time.Hour).Truncate(time.Second)
+	if claims.ExpiresAt.Time.Before(minExpiry) || claims.ExpiresAt.Time.After(maxExpiry) {
+		t.Fatalf("refresh token expires at %s, want between %s and %s", claims.ExpiresAt.Time, minExpiry, maxExpiry)
 	}
 }
 

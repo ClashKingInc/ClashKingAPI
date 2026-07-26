@@ -320,7 +320,7 @@ func delegatedDashboardGuilds(c *fiber.Ctx, a apptypes.Deps, userID string, guil
 }
 
 func checkDiscordServerAccess(c *fiber.Ctx, a apptypes.Deps, userID, serverID string) (bool, error) {
-	accessToken, err := getDiscordAccessTokenForDevice(c, a, userID)
+	accessToken, err := getDiscordAccessTokenForDevice(c, a, userID, apptypes.DeviceID(c.UserContext()))
 	if err != nil {
 		return false, err
 	}

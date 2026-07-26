@@ -69,6 +69,86 @@ func publicMobileConfig(a apptypes.Deps) fiber.Handler {
 	}
 }
 
+// mobileInitialization returns the initial mobile account payload.
+//
+// @Summary Initialize all account data for mobile app
+// @Tags Mobile App
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body modelsv2.MobilePlayerTagsRequest true "Initialization payload"
+// @Success 200 {object} map[string]interface{}
+// @Router /v2/initialization [post]
+func mobileInitialization(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body modelsv2.MobilePlayerTagsRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		playerTags := mobileNormalizeUniqueTags(body.PlayerTags)
+		if len(playerTags) == 0 {
+			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
+		}
+
+		ctx := c.UserContext()
+		playerFilter := mobileInitializationWarHitsFilter()
+		playerFilter.PlayerTags = playerTags
+		var (
+			playerWars       []map[string]any
+			playerWarsWG     sync.WaitGroup
+			playersPreloadCh = make(chan mobilePlayersExtendedPreload, 1)
+		)
+		playerWarsWG.Add(1)
+		go func() {
+			defer playerWarsWG.Done()
+			playerWars = mobileFindLimitedPlayerWarDocsForTargets(ctx, a, playerTags, playerFilter.TimestampStart, playerFilter.TimestampEnd, playerFilter.Limit)
+		}()
+		go func() {
+			playersPreloadCh <- mobileFetchPlayersExtendedPreload(ctx, a, playerTags)
+		}()
+		playersBasic := mobileFetchPlayersBasic(ctx, a, playerTags)
+
+		clanTags := mobileExtractClanTags(playersBasic)
+		clanFilter := mobileInitializationWarHitsFilter()
+		clanFilter.ClanTags = clanTags
+
+		var playersExtended []map[string]any
+		var clanBundle map[string]any
+		var playerWarStats []any
+		var clanWarStats []any
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, clanTags, playersBasic, <-playersPreloadCh)
+		}()
+		go func() {
+			defer wg.Done()
+			clanBundle = mobileFetchClanBundle(ctx, a, clanTags)
+		}()
+		go func() {
+			defer wg.Done()
+			clanWars := mobileFindLimitedClanWarDocsForTargets(ctx, a, clanTags, clanFilter.TimestampStart, clanFilter.TimestampEnd, clanFilter.Limit)
+			playerWarsWG.Wait()
+			playerWarStats, clanWarStats = mobileBuildInitializationWarStatsFromBatches(playerWars, clanWars, playerFilter, clanFilter)
+		}()
+		wg.Wait()
+		clanBundle = mobileClanBundleContract(clanBundle)
+		clanBundle["clan_war_stats"] = playerWarStatsOrEmpty(clanWarStats)
+
+		return apptypes.JSON(c, fiber.StatusOK, mobileInitializationResponse(
+			playerTags,
+			clanTags,
+			playersExtended,
+			playersBasic,
+			clanBundle,
+			playerWarStats,
+			apptypes.UserID(c.UserContext()),
+			time.Now().UTC(),
+		))
+	}
+}
+
 func mobileInitializationResponse(
 	playerTags []string,
 	clanTags []string,

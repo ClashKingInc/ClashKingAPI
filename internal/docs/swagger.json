@@ -947,6 +947,181 @@
                 }
             }
         },
+        "/v2/bases/{base_id}/downloaders/{user_id}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Adds one Discord user ID to unique download history. Repeated downloads by the same user are a no-op. This endpoint accepts only the configured bot credential.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases Bot Integration"
+                ],
+                "summary": "Record a trusted bot base download",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord user ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDownloadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/bases/{base_id}/votes/{voter_id}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Atomically records or changes one vote in the base voter arrays. This endpoint accepts only the configured bot credential.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases Bot Integration"
+                ],
+                "summary": "Record a trusted bot base vote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord voter ID",
+                        "name": "voter_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Vote direction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseVoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseVoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Atomically and idempotently removes one Discord voter from both base voter arrays. This endpoint accepts only the configured bot credential.",
+                "tags": [
+                    "Bases Bot Integration"
+                ],
+                "summary": "Remove a trusted bot base vote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord voter ID",
+                        "name": "voter_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/cdn/upload": {
             "post": {
                 "security": [
@@ -1240,7 +1415,7 @@
         },
         "/v2/clan/{clan_tag}/rankings": {
             "get": {
-                "description": "Returns current clan ranking placements across supported ranking metrics.",
+                "description": "Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.",
                 "produces": [
                     "application/json"
                 ],
@@ -1554,16 +1729,71 @@
                 }
             }
         },
-        "/v2/cwl/{clan_tag}/ranking-history": {
+        "/v2/cwl/leagues/{league_id}/rankings": {
             "get": {
-                "description": "Returns CWL ranking history rows for a clan tag.",
+                "description": "Returns only persisted standings for one season, league, and war size. Empty standings are a successful empty result until Tracking has computed them.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "CWL ranking history for a clan",
+                "summary": "Persisted CWL league rankings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "CWL league ID",
+                        "name": "league_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "CWL war size",
+                        "name": "war_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLLeagueRankingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/cwl/{clan_tag}/ranking-history": {
+            "get": {
+                "description": "Returns typed CWL group snapshots for a clan. A group without persisted standings returns its roster and lifecycle data with no synthetic ranking.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "CWL group history for a clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -1577,13 +1807,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLRankingHistoryResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                            "$ref": "#/definitions/modelsv2.CWLClanHistoryResponse"
                         }
                     },
                     "500": {
@@ -2216,7 +2440,7 @@
             }
         },
         "/v2/home/activity": {
-            "x-query": {
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
@@ -2271,6 +2495,45 @@
                     }
                 },
                 "x-http-method": "QUERY"
+            }
+        },
+        "/v2/initialization": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Mobile App"
+                ],
+                "summary": "Initialize all account data for mobile app",
+                "parameters": [
+                    {
+                        "description": "Initialization payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.MobilePlayerTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/v2/leaderboard/clan/win-streak": {
@@ -3835,6 +4098,152 @@
                 }
             }
         },
+        "/v2/notifications/devices": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Register notification device",
+                "parameters": [
+                    {
+                        "description": "Push device",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationDeviceResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Unregister notification device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device id when the access token has no device claim",
+                        "name": "device_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationMessageResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/notifications/preferences": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get notification preferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device id when the access token has no device claim",
+                        "name": "device_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "sandbox",
+                            "production"
+                        ],
+                        "type": "string",
+                        "description": "Push environment",
+                        "name": "environment",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationPreferencesResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Save notification preferences",
+                "parameters": [
+                    {
+                        "description": "Notification preferences",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationPreferencesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationPreferencesResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/player/legends/{season}/battlelog-stats": {
             "post": {
                 "description": "Returns season +/- and overview stats for a list of players.",
@@ -3995,6 +4404,41 @@
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/cwl/history": {
+            "get": {
+                "description": "Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War"
+                ],
+                "summary": "CWL group history for a player",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLPlayerHistoryResponse"
                         }
                     },
                     "500": {
@@ -6635,6 +7079,454 @@
                 }
             }
         },
+        "/v2/server/{server_id}/bases": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Lists only bases with explicit ownership for the authorized server. Downloader IDs are returned without eager Discord profile resolution.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "List a server's bases",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum results (default 50, maximum 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pagination offset",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BasesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates a Discord message in the selected server channel, then persists an immutable base using the returned message ID. If persistence fails, the API attempts to remove the new Discord message and reports the compensation result.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "Create an immutable server base",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Base",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CreateBaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.Base"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseCreateErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseCreateErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseCreateErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseCreateErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/bases/images": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Uploads one base image through the current Bunny CDN storage path for later use in immutable base creation.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "Upload a base image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Image (max 25 MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CDNUploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/bases/{base_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns one base only when it belongs to the authorized server and has explicit server/channel ownership.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "Get a server base",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.Base"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes the associated Discord message first, then deletes the server-owned database row. A missing Discord message is treated as already cleaned up; other Discord failures retain the database row for retry.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "Delete an immutable server base",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDeleteErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDeleteErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDeleteErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDeleteErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/bases/{base_id}/downloaders/{user_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Resolves a safe current Discord display name and avatar only after proving the user appears in this server-owned base's downloader history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bases"
+                ],
+                "summary": "Resolve one base downloader",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Base ID",
+                        "name": "base_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord user ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BaseDownloaderProfile"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/server/{server_id}/bot-profile": {
             "get": {
                 "security": [
@@ -6773,6 +7665,397 @@
                     },
                     "502": {
                         "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/clan-categories": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Lists the authorized server's clan categories with current assigned-clan counts.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "List clan categories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoriesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates one normalized, exact-name-unique category for the authorized server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "Create a clan category",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Category name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CreateClanCategoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoryCreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/clan-categories/{category_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Deletes one server-owned category. The database foreign key atomically clears categoryId on affected server clans.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "Delete a clan category",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category UUID",
+                        "name": "category_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoryDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Renames one category only when it belongs to the authorized server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "Rename a clan category",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category UUID",
+                        "name": "category_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Replacement category name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RenameClanCategoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoryRenameResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/clan-categories/{category_id}/delete-preview": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the current number of this server's clans that will become uncategorized if the manager confirms deletion.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "Preview clan category deletion",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Category UUID",
+                        "name": "category_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoryDeletePreviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -10415,7 +11698,7 @@
             }
         },
         "/v2/stats/armies": {
-            "x-query": {
+            "post": {
                 "description": "Uses exact army_share_code + army_items + army_counts identity. QUERY is represented through x-http-method because Swagger 2.0 has no QUERY operation key.",
                 "consumes": [
                     "application/json"
@@ -10462,7 +11745,7 @@
             }
         },
         "/v2/stats/cwl": {
-            "x-query": {
+            "post": {
                 "description": "CWL is separate from regular war, defaults to equal-town-hall attacks, and returns season aggregation. League attribution uses the CWL group containing either war clan for the matching YYYY-MM season.",
                 "consumes": [
                     "application/json"
@@ -10509,7 +11792,7 @@
             }
         },
         "/v2/stats/items": {
-            "x-query": {
+            "post": {
                 "description": "Item analysis is available for ranked battlelogs. War/CWL attack rows do not store army items, so those dimensions are intentionally absent.",
                 "consumes": [
                     "application/json"
@@ -10602,7 +11885,7 @@
             }
         },
         "/v2/stats/ranked": {
-            "x-query": {
+            "post": {
                 "description": "Requires one town hall and exactly one ranked tier. Each battle date is joined to the same YYYYMM season_id in ranked_league_group_members; basic_player.league_id is never used.",
                 "consumes": [
                     "application/json"
@@ -10649,7 +11932,7 @@
             }
         },
         "/v2/stats/war": {
-            "x-query": {
+            "post": {
                 "description": "Includes random wars only, excluding friendly and CWL wars. Equal-town-hall attacks are the default.",
                 "consumes": [
                     "application/json"
@@ -11605,9 +12888,6 @@
                 "device_id": {
                     "type": "string"
                 },
-                "device_name": {
-                    "type": "string"
-                },
                 "redirect_uri": {
                     "type": "string"
                 }
@@ -11746,9 +13026,6 @@
                     }
                 },
                 "avatar_url": {
-                    "type": "string"
-                },
-                "email": {
                     "type": "string"
                 },
                 "user_id": {
@@ -11934,6 +13211,214 @@
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.Base": {
+            "type": "object",
+            "properties": {
+                "baseLink": {
+                    "type": "string"
+                },
+                "channelId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "discordMessageUrl": {
+                    "type": "string"
+                },
+                "downloadCount": {
+                    "type": "integer"
+                },
+                "downloaders": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "downvotes": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "messageId": {
+                    "type": "string"
+                },
+                "serverId": {
+                    "type": "string"
+                },
+                "upvotes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.BaseCreateErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/modelsv2.ErrorCode"
+                },
+                "databaseInserted": {
+                    "type": "boolean"
+                },
+                "discordMessageCleanup": {
+                    "type": "string",
+                    "enum": [
+                        "notNeeded",
+                        "deleted",
+                        "alreadyMissing",
+                        "failed"
+                    ]
+                },
+                "discordMessageCreated": {
+                    "type": "boolean"
+                },
+                "discordMessageId": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "requestId": {
+                    "type": "string"
+                },
+                "retryable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "modelsv2.BaseDeleteErrorResponse": {
+            "type": "object",
+            "properties": {
+                "baseId": {
+                    "type": "string"
+                },
+                "code": {
+                    "$ref": "#/definitions/modelsv2.ErrorCode"
+                },
+                "databaseDeleted": {
+                    "type": "boolean"
+                },
+                "discordMessageCleanup": {
+                    "type": "string",
+                    "enum": [
+                        "deleted",
+                        "alreadyMissing",
+                        "failed"
+                    ]
+                },
+                "message": {
+                    "type": "string"
+                },
+                "requestId": {
+                    "type": "string"
+                },
+                "retryable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "modelsv2.BaseDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "baseId": {
+                    "type": "string"
+                },
+                "databaseDeleted": {
+                    "type": "boolean"
+                },
+                "discordMessageCleanup": {
+                    "type": "string",
+                    "enum": [
+                        "deleted",
+                        "alreadyMissing"
+                    ]
+                }
+            }
+        },
+        "modelsv2.BaseDownloadResponse": {
+            "type": "object",
+            "properties": {
+                "baseId": {
+                    "type": "string"
+                },
+                "downloadCount": {
+                    "type": "integer"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BaseDownloaderProfile": {
+            "type": "object",
+            "properties": {
+                "avatarUrl": {
+                    "type": "string"
+                },
+                "displayName": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BaseVoteRequest": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "enum": [
+                        "up",
+                        "down"
+                    ]
+                }
+            }
+        },
+        "modelsv2.BaseVoteResponse": {
+            "type": "object",
+            "properties": {
+                "baseId": {
+                    "type": "string"
+                },
+                "direction": {
+                    "type": "string"
+                },
+                "voterId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BasesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.Base"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -12315,6 +13800,20 @@
                 }
             }
         },
+        "modelsv2.CWLClanHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "clanTag": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLHistoryItem"
+                    }
+                }
+            }
+        },
         "modelsv2.CWLClanRanking": {
             "type": "object",
             "properties": {
@@ -12331,6 +13830,29 @@
                     "type": "integer"
                 },
                 "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLGroupClan": {
+            "type": "object",
+            "properties": {
+                "badgeToken": {
+                    "type": "string"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "clanTag": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLMember"
+                    }
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -12364,6 +13886,35 @@
                 }
             }
         },
+        "modelsv2.CWLHistoryItem": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.CWLGroupClan"
+                },
+                "cwlLeagueId": {
+                    "type": "integer"
+                },
+                "rounds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLRound"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "standing": {
+                    "$ref": "#/definitions/modelsv2.CWLStanding"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "warSize": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.CWLLeague": {
             "type": "object",
             "properties": {
@@ -12372,6 +13923,26 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLLeagueRankingsResponse": {
+            "type": "object",
+            "properties": {
+                "cwlLeagueId": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLStanding"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "warSize": {
+                    "type": "integer"
                 }
             }
         },
@@ -12389,28 +13960,182 @@
                 }
             }
         },
-        "modelsv2.CWLRankingHistoryItem": {
+        "modelsv2.CWLPlayerAttackPlacement": {
             "type": "object",
             "properties": {
-                "league": {
-                    "type": "string"
-                },
-                "rounds": {
+                "clan": {
                     "type": "integer"
                 },
-                "season": {
+                "group": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLPlayerClanPlacement": {
+            "type": "object",
+            "properties": {
+                "global": {
+                    "type": "integer",
+                    "x-nullable": true
+                },
+                "group": {
+                    "type": "integer",
+                    "x-nullable": true
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryAttack": {
+            "type": "object",
+            "properties": {
+                "defender": {
+                    "$ref": "#/definitions/modelsv2.CWLPlayerHistoryAttackDefender"
+                },
+                "destructionPercentage": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "opponent": {
+                    "$ref": "#/definitions/modelsv2.CWLPlayerHistoryAttackOpponent"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "round": {
+                    "type": "integer"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "warTag": {
                     "type": "string"
                 }
             }
         },
-        "modelsv2.CWLRankingHistoryResponse": {
+        "modelsv2.CWLPlayerHistoryAttackDefender": {
+            "type": "object",
+            "properties": {
+                "mapPosition": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryAttackOpponent": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryClan": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.WarBadgeURLs"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "placement": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.CWLPlayerClanPlacement"
+                        }
+                    ],
+                    "x-nullable": true
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "totalStars": {
+                    "type": "integer",
+                    "x-nullable": true
+                },
+                "wars": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.CWLPlayerHistoryWarRecord"
+                        }
+                    ],
+                    "x-nullable": true
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryItem": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLPlayerHistoryAttack"
+                    }
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.CWLPlayerHistoryClan"
+                },
+                "cwlLeagueId": {
+                    "type": "integer",
+                    "x-nullable": true
+                },
+                "missedAttacks": {
+                    "type": "integer"
+                },
+                "placement": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.CWLPlayerAttackPlacement"
+                        }
+                    ],
+                    "x-nullable": true
+                },
+                "season": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                },
+                "warSize": {
+                    "type": "integer",
+                    "x-nullable": true
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryResponse": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.CWLRankingHistoryItem"
+                        "$ref": "#/definitions/modelsv2.CWLPlayerHistoryItem"
                     }
+                }
+            }
+        },
+        "modelsv2.CWLPlayerHistoryWarRecord": {
+            "type": "object",
+            "properties": {
+                "lost": {
+                    "type": "integer"
+                },
+                "tied": {
+                    "type": "integer"
+                },
+                "won": {
+                    "type": "integer"
                 }
             }
         },
@@ -12436,6 +14161,53 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "modelsv2.CWLStanding": {
+            "type": "object",
+            "properties": {
+                "clanTag": {
+                    "type": "string"
+                },
+                "cwlLeagueId": {
+                    "type": "integer"
+                },
+                "destruction": {
+                    "type": "number"
+                },
+                "globalRank": {
+                    "type": "integer"
+                },
+                "groupRank": {
+                    "type": "integer"
+                },
+                "losses": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "ties": {
+                    "type": "integer"
+                },
+                "totalClansInGroup": {
+                    "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "warSize": {
+                    "type": "integer"
+                },
+                "warsFinished": {
+                    "type": "integer"
+                },
+                "wins": {
+                    "type": "integer"
                 }
             }
         },
@@ -12540,6 +14312,81 @@
                 },
                 "warWins": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanCategoriesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanCategory"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanCategory": {
+            "type": "object",
+            "properties": {
+                "clanCount": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "serverId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanCategoryCreateResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/modelsv2.ClanCategory"
+                }
+            }
+        },
+        "modelsv2.ClanCategoryDeletePreviewResponse": {
+            "type": "object",
+            "properties": {
+                "affectedClanCount": {
+                    "type": "integer"
+                },
+                "category": {
+                    "$ref": "#/definitions/modelsv2.ClanCategory"
+                }
+            }
+        },
+        "modelsv2.ClanCategoryDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "categoryId": {
+                    "type": "string"
+                },
+                "deleted": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "uncategorizedClanCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanCategoryRenameResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/modelsv2.ClanCategory"
                 }
             }
         },
@@ -12660,15 +14507,34 @@
                 }
             }
         },
-        "modelsv2.ClanRankingMetric": {
+        "modelsv2.ClanRankingCategory": {
             "type": "object",
             "properties": {
-                "globalRank": {
+                "placements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanRankingPlacement"
+                    }
+                },
+                "points": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanRankingPlacement": {
+            "type": "object",
+            "properties": {
+                "locationId": {
+                    "type": "string"
+                },
+                "points": {
                     "type": "integer"
                 },
-                "localRank": {},
-                "value": {
+                "rank": {
                     "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
                 }
             }
         },
@@ -12730,29 +14596,20 @@
                 "badge": {
                     "type": "string"
                 },
-                "clanPoints": {
-                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                "builderBase": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingCategory"
                 },
-                "donations": {
-                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
+                "clanCapital": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingCategory"
                 },
-                "donationsReceived": {
-                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
-                },
-                "location": {
-                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                "homeVillage": {
+                    "$ref": "#/definitions/modelsv2.ClanRankingCategory"
                 },
                 "name": {
                     "type": "string"
                 },
                 "tag": {
                     "type": "string"
-                },
-                "warWinStreak": {
-                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
-                },
-                "warWins": {
-                    "$ref": "#/definitions/modelsv2.ClanRankingMetric"
                 }
             }
         },
@@ -12836,6 +14693,9 @@
         "modelsv2.ClanSettingsResponse": {
             "type": "object",
             "properties": {
+                "category": {
+                    "$ref": "#/definitions/modelsv2.ClanCategory"
+                },
                 "clan_tag": {
                     "type": "string"
                 },
@@ -12905,6 +14765,34 @@
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CreateBaseRequest": {
+            "type": "object",
+            "properties": {
+                "baseLink": {
+                    "type": "string"
+                },
+                "channelId": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "modelsv2.CreateClanCategoryRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
                     "type": "string"
                 }
             }
@@ -13480,22 +15368,32 @@
                         "$ref": "#/definitions/modelsv2.GiveawayBooster"
                     }
                 },
-                "channel_id": {
+                "channelId": {
                     "type": "string"
                 },
-                "coc_account_required": {
+                "cocAccountRequired": {
                     "type": "boolean"
                 },
-                "end_time": {
+                "createdAt": {
                     "type": "string"
                 },
-                "entry_count": {
-                    "type": "integer"
+                "end": {
+                    "type": "string"
+                },
+                "entries": {
+                    "type": "array",
+                    "items": {}
+                },
+                "eventPending": {
+                    "type": "string"
+                },
+                "eventPendingAt": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
-                "image_url": {
+                "imageUrl": {
                     "type": "string"
                 },
                 "mentions": {
@@ -13504,13 +15402,13 @@
                         "type": "string"
                     }
                 },
-                "message_id": {
+                "messageId": {
                     "type": "string"
                 },
                 "prize": {
                     "type": "string"
                 },
-                "profile_picture_required": {
+                "profilePictureRequired": {
                     "type": "boolean"
                 },
                 "roles": {
@@ -13519,31 +15417,37 @@
                         "type": "string"
                     }
                 },
-                "roles_mode": {
+                "rolesMode": {
                     "type": "string"
                 },
-                "start_time": {
+                "serverId": {
+                    "type": "string"
+                },
+                "start": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "text_above_embed": {
+                "textAboveEmbed": {
                     "type": "string"
                 },
-                "text_in_embed": {
+                "textInEmbed": {
                     "type": "string"
                 },
-                "text_on_end": {
+                "textOnEnd": {
                     "type": "string"
                 },
                 "updated": {
                     "type": "boolean"
                 },
+                "updatedAt": {
+                    "type": "string"
+                },
                 "winners": {
                     "type": "integer"
                 },
-                "winners_list": {
+                "winnersList": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.GiveawayWinner"
@@ -13557,10 +15461,10 @@
                 "entries": {
                     "type": "integer"
                 },
-                "user_id": {
+                "userId": {
                     "type": "string"
                 },
-                "win_chance": {
+                "winChance": {
                     "type": "number"
                 }
             }
@@ -13574,16 +15478,16 @@
                         "$ref": "#/definitions/modelsv2.GiveawayEntrant"
                     }
                 },
-                "giveaway_id": {
+                "giveawayId": {
                     "type": "string"
                 },
-                "server_id": {
+                "serverId": {
+                    "type": "string"
+                },
+                "totalEntries": {
                     "type": "integer"
                 },
-                "total_entries": {
-                    "type": "integer"
-                },
-                "unique_users": {
+                "uniqueUsers": {
                     "type": "integer"
                 }
             }
@@ -13591,14 +15495,14 @@
         "modelsv2.GiveawayMutationResponse": {
             "type": "object",
             "properties": {
-                "giveaway_id": {
+                "giveawayId": {
                     "type": "string"
                 },
                 "message": {
                     "type": "string"
                 },
-                "server_id": {
-                    "type": "integer"
+                "serverId": {
+                    "type": "string"
                 }
             }
         },
@@ -13616,27 +15520,27 @@
         "modelsv2.GiveawayRerollResponse": {
             "type": "object",
             "properties": {
-                "giveaway_id": {
+                "giveawayId": {
                     "type": "string"
                 },
                 "message": {
                     "type": "string"
                 },
-                "new_winners": {
+                "newWinners": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "server_id": {
-                    "type": "integer"
+                "serverId": {
+                    "type": "string"
                 }
             }
         },
         "modelsv2.GiveawayWinner": {
             "type": "object",
             "properties": {
-                "avatar_url": {
+                "avatarUrl": {
                     "type": "string"
                 },
                 "reason": {
@@ -13648,7 +15552,7 @@
                 "timestamp": {
                     "type": "string"
                 },
-                "user_id": {
+                "userId": {
                     "type": "string"
                 },
                 "username": {
@@ -14387,10 +16291,299 @@
                 }
             }
         },
+        "modelsv2.MobilePlayerTagsRequest": {
+            "type": "object",
+            "properties": {
+                "clan_tags": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "player_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "modelsv2.MobilePublicConfigResponse": {
             "type": "object",
             "properties": {
                 "sentry_dsn": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.NotificationDeviceRequest": {
+            "type": "object",
+            "properties": {
+                "app_version": {
+                    "type": "string"
+                },
+                "authorization_status": {
+                    "type": "string",
+                    "enum": [
+                        "authorized",
+                        "provisional",
+                        "denied",
+                        "not_determined"
+                    ]
+                },
+                "build_number": {
+                    "type": "string"
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "device_model": {
+                    "type": "string"
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": [
+                        "sandbox",
+                        "production"
+                    ]
+                },
+                "locale": {
+                    "type": "string"
+                },
+                "os_version": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string",
+                    "enum": [
+                        "android",
+                        "ios"
+                    ]
+                },
+                "provider": {
+                    "type": "string",
+                    "enum": [
+                        "fcm",
+                        "apns"
+                    ]
+                },
+                "timezone": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.NotificationDeviceResponse": {
+            "type": "object",
+            "properties": {
+                "authorization_status": {
+                    "type": "string"
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "environment": {
+                    "type": "string"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.NotificationMessageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.NotificationPreferencesRequest": {
+            "type": "object",
+            "properties": {
+                "account_scope": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "selected"
+                    ]
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "enabled_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": [
+                        "sandbox",
+                        "production"
+                    ]
+                },
+                "event_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "locale": {
+                    "type": "string"
+                },
+                "reminder_timings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_clan_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_town_halls": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "subscriptions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.NotificationSubscription"
+                    }
+                },
+                "timezone": {
+                    "type": "string"
+                },
+                "war_attack_modes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "modelsv2.NotificationPreferencesResponse": {
+            "type": "object",
+            "properties": {
+                "account_scope": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "selected"
+                    ]
+                },
+                "device_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "enabled_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": [
+                        "sandbox",
+                        "production"
+                    ]
+                },
+                "event_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "locale": {
+                    "type": "string"
+                },
+                "reminder_timings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_clan_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "selected_town_halls": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "subscriptions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.NotificationSubscription"
+                    }
+                },
+                "timezone": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "war_attack_modes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "modelsv2.NotificationSubscription": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "settings": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -15416,6 +17609,14 @@
                 },
                 "server_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.RenameClanCategoryRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
                 }
             }
         },

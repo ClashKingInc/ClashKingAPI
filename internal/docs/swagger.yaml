@@ -246,8 +246,6 @@ definitions:
         type: string
       device_id:
         type: string
-      device_name:
-        type: string
       redirect_uri:
         type: string
     type: object
@@ -337,8 +335,6 @@ definitions:
           type: string
         type: array
       avatar_url:
-        type: string
-      email:
         type: string
       user_id:
         type: string
@@ -460,6 +456,144 @@ definitions:
         type: integer
       status:
         type: string
+    type: object
+  modelsv2.Base:
+    properties:
+      baseLink:
+        type: string
+      channelId:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      discordMessageUrl:
+        type: string
+      downloadCount:
+        type: integer
+      downloaders:
+        items:
+          type: string
+        type: array
+      downvotes:
+        type: integer
+      id:
+        type: string
+      images:
+        items:
+          type: string
+        type: array
+      messageId:
+        type: string
+      serverId:
+        type: string
+      upvotes:
+        type: integer
+    type: object
+  modelsv2.BaseCreateErrorResponse:
+    properties:
+      code:
+        $ref: '#/definitions/modelsv2.ErrorCode'
+      databaseInserted:
+        type: boolean
+      discordMessageCleanup:
+        enum:
+        - notNeeded
+        - deleted
+        - alreadyMissing
+        - failed
+        type: string
+      discordMessageCreated:
+        type: boolean
+      discordMessageId:
+        type: string
+      message:
+        type: string
+      requestId:
+        type: string
+      retryable:
+        type: boolean
+    type: object
+  modelsv2.BaseDeleteErrorResponse:
+    properties:
+      baseId:
+        type: string
+      code:
+        $ref: '#/definitions/modelsv2.ErrorCode'
+      databaseDeleted:
+        type: boolean
+      discordMessageCleanup:
+        enum:
+        - deleted
+        - alreadyMissing
+        - failed
+        type: string
+      message:
+        type: string
+      requestId:
+        type: string
+      retryable:
+        type: boolean
+    type: object
+  modelsv2.BaseDeleteResponse:
+    properties:
+      baseId:
+        type: string
+      databaseDeleted:
+        type: boolean
+      discordMessageCleanup:
+        enum:
+        - deleted
+        - alreadyMissing
+        type: string
+    type: object
+  modelsv2.BaseDownloadResponse:
+    properties:
+      baseId:
+        type: string
+      downloadCount:
+        type: integer
+      userId:
+        type: string
+    type: object
+  modelsv2.BaseDownloaderProfile:
+    properties:
+      avatarUrl:
+        type: string
+      displayName:
+        type: string
+      userId:
+        type: string
+    type: object
+  modelsv2.BaseVoteRequest:
+    properties:
+      direction:
+        enum:
+        - up
+        - down
+        type: string
+    type: object
+  modelsv2.BaseVoteResponse:
+    properties:
+      baseId:
+        type: string
+      direction:
+        type: string
+      voterId:
+        type: string
+    type: object
+  modelsv2.BasesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.Base'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
     type: object
   modelsv2.BattlelogArmiesResponse:
     properties:
@@ -708,6 +842,15 @@ definitions:
       warLeague:
         $ref: '#/definitions/modelsv2.CWLLeague'
     type: object
+  modelsv2.CWLClanHistoryResponse:
+    properties:
+      clanTag:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.CWLHistoryItem'
+        type: array
+    type: object
   modelsv2.CWLClanRanking:
     properties:
       destruction:
@@ -719,6 +862,21 @@ definitions:
       stars:
         type: integer
       tag:
+        type: string
+    type: object
+  modelsv2.CWLGroupClan:
+    properties:
+      badgeToken:
+        type: string
+      clanLevel:
+        type: integer
+      clanTag:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/modelsv2.CWLMember'
+        type: array
+      name:
         type: string
     type: object
   modelsv2.CWLGroupResponse:
@@ -740,12 +898,44 @@ definitions:
       state:
         type: string
     type: object
+  modelsv2.CWLHistoryItem:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.CWLGroupClan'
+      cwlLeagueId:
+        type: integer
+      rounds:
+        items:
+          $ref: '#/definitions/modelsv2.CWLRound'
+        type: array
+      season:
+        type: string
+      standing:
+        $ref: '#/definitions/modelsv2.CWLStanding'
+      state:
+        type: string
+      warSize:
+        type: integer
+    type: object
   modelsv2.CWLLeague:
     properties:
       id:
         type: integer
       name:
         type: string
+    type: object
+  modelsv2.CWLLeagueRankingsResponse:
+    properties:
+      cwlLeagueId:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.CWLStanding'
+        type: array
+      season:
+        type: string
+      warSize:
+        type: integer
     type: object
   modelsv2.CWLMember:
     properties:
@@ -756,21 +946,119 @@ definitions:
       townHallLevel:
         type: integer
     type: object
-  modelsv2.CWLRankingHistoryItem:
+  modelsv2.CWLPlayerAttackPlacement:
     properties:
-      league:
-        type: string
-      rounds:
+      clan:
         type: integer
-      season:
+      group:
+        type: integer
+    type: object
+  modelsv2.CWLPlayerClanPlacement:
+    properties:
+      global:
+        type: integer
+        x-nullable: true
+      group:
+        type: integer
+        x-nullable: true
+    type: object
+  modelsv2.CWLPlayerHistoryAttack:
+    properties:
+      defender:
+        $ref: '#/definitions/modelsv2.CWLPlayerHistoryAttackDefender'
+      destructionPercentage:
+        type: integer
+      duration:
+        type: integer
+      opponent:
+        $ref: '#/definitions/modelsv2.CWLPlayerHistoryAttackOpponent'
+      order:
+        type: integer
+      round:
+        type: integer
+      stars:
+        type: integer
+      warTag:
         type: string
     type: object
-  modelsv2.CWLRankingHistoryResponse:
+  modelsv2.CWLPlayerHistoryAttackDefender:
+    properties:
+      mapPosition:
+        type: integer
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
+    type: object
+  modelsv2.CWLPlayerHistoryAttackOpponent:
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.CWLPlayerHistoryClan:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.WarBadgeURLs'
+      name:
+        type: string
+      placement:
+        allOf:
+        - $ref: '#/definitions/modelsv2.CWLPlayerClanPlacement'
+        x-nullable: true
+      tag:
+        type: string
+      totalStars:
+        type: integer
+        x-nullable: true
+      wars:
+        allOf:
+        - $ref: '#/definitions/modelsv2.CWLPlayerHistoryWarRecord'
+        x-nullable: true
+    type: object
+  modelsv2.CWLPlayerHistoryItem:
+    properties:
+      attacks:
+        items:
+          $ref: '#/definitions/modelsv2.CWLPlayerHistoryAttack'
+        type: array
+      clan:
+        $ref: '#/definitions/modelsv2.CWLPlayerHistoryClan'
+      cwlLeagueId:
+        type: integer
+        x-nullable: true
+      missedAttacks:
+        type: integer
+      placement:
+        allOf:
+        - $ref: '#/definitions/modelsv2.CWLPlayerAttackPlacement'
+        x-nullable: true
+      season:
+        type: string
+      townHallLevel:
+        type: integer
+      warSize:
+        type: integer
+        x-nullable: true
+    type: object
+  modelsv2.CWLPlayerHistoryResponse:
     properties:
       items:
         items:
-          $ref: '#/definitions/modelsv2.CWLRankingHistoryItem'
+          $ref: '#/definitions/modelsv2.CWLPlayerHistoryItem'
         type: array
+    type: object
+  modelsv2.CWLPlayerHistoryWarRecord:
+    properties:
+      lost:
+        type: integer
+      tied:
+        type: integer
+      won:
+        type: integer
     type: object
   modelsv2.CWLRankingRounds:
     properties:
@@ -787,6 +1075,37 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  modelsv2.CWLStanding:
+    properties:
+      clanTag:
+        type: string
+      cwlLeagueId:
+        type: integer
+      destruction:
+        type: number
+      globalRank:
+        type: integer
+      groupRank:
+        type: integer
+      losses:
+        type: integer
+      season:
+        type: string
+      stars:
+        type: integer
+      ties:
+        type: integer
+      totalClansInGroup:
+        type: integer
+      updatedAt:
+        type: string
+      warSize:
+        type: integer
+      warsFinished:
+        type: integer
+      wins:
+        type: integer
     type: object
   modelsv2.CWLThresholdItem:
     properties:
@@ -855,6 +1174,54 @@ definitions:
         type: integer
       warWins:
         type: integer
+    type: object
+  modelsv2.ClanCategoriesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.ClanCategory'
+        type: array
+      total:
+        type: integer
+    type: object
+  modelsv2.ClanCategory:
+    properties:
+      clanCount:
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+      serverId:
+        type: string
+    type: object
+  modelsv2.ClanCategoryCreateResponse:
+    properties:
+      category:
+        $ref: '#/definitions/modelsv2.ClanCategory'
+    type: object
+  modelsv2.ClanCategoryDeletePreviewResponse:
+    properties:
+      affectedClanCount:
+        type: integer
+      category:
+        $ref: '#/definitions/modelsv2.ClanCategory'
+    type: object
+  modelsv2.ClanCategoryDeleteResponse:
+    properties:
+      categoryId:
+        type: string
+      deleted:
+        type: boolean
+      name:
+        type: string
+      uncategorizedClanCount:
+        type: integer
+    type: object
+  modelsv2.ClanCategoryRenameResponse:
+    properties:
+      category:
+        $ref: '#/definitions/modelsv2.ClanCategory'
     type: object
   modelsv2.ClanChangeRecord:
     properties:
@@ -932,13 +1299,25 @@ definitions:
           type: string
         type: array
     type: object
-  modelsv2.ClanRankingMetric:
+  modelsv2.ClanRankingCategory:
     properties:
-      globalRank:
+      placements:
+        items:
+          $ref: '#/definitions/modelsv2.ClanRankingPlacement'
+        type: array
+      points:
         type: integer
-      localRank: {}
-      value:
+    type: object
+  modelsv2.ClanRankingPlacement:
+    properties:
+      locationId:
+        type: string
+      points:
         type: integer
+      rank:
+        type: integer
+      updatedAt:
+        type: string
     type: object
   modelsv2.ClanRankingSnapshotItem:
     properties:
@@ -978,22 +1357,16 @@ definitions:
     properties:
       badge:
         type: string
-      clanPoints:
-        $ref: '#/definitions/modelsv2.ClanRankingMetric'
-      donations:
-        $ref: '#/definitions/modelsv2.ClanRankingMetric'
-      donationsReceived:
-        $ref: '#/definitions/modelsv2.ClanRankingMetric'
-      location:
-        $ref: '#/definitions/modelsv2.ClanLeagueRef'
+      builderBase:
+        $ref: '#/definitions/modelsv2.ClanRankingCategory'
+      clanCapital:
+        $ref: '#/definitions/modelsv2.ClanRankingCategory'
+      homeVillage:
+        $ref: '#/definitions/modelsv2.ClanRankingCategory'
       name:
         type: string
       tag:
         type: string
-      warWinStreak:
-        $ref: '#/definitions/modelsv2.ClanRankingMetric'
-      warWins:
-        $ref: '#/definitions/modelsv2.ClanRankingMetric'
     type: object
   modelsv2.ClanRecordEntry:
     properties:
@@ -1047,6 +1420,8 @@ definitions:
     type: object
   modelsv2.ClanSettingsResponse:
     properties:
+      category:
+        $ref: '#/definitions/modelsv2.ClanCategory'
       clan_tag:
         type: string
       message:
@@ -1092,6 +1467,24 @@ definitions:
       name:
         type: string
       type:
+        type: string
+    type: object
+  modelsv2.CreateBaseRequest:
+    properties:
+      baseLink:
+        type: string
+      channelId:
+        type: string
+      description:
+        type: string
+      images:
+        items:
+          type: string
+        type: array
+    type: object
+  modelsv2.CreateClanCategoryRequest:
+    properties:
+      name:
         type: string
     type: object
   modelsv2.CreatePanelRequest:
@@ -1471,49 +1864,60 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.GiveawayBooster'
         type: array
-      channel_id:
+      channelId:
         type: string
-      coc_account_required:
+      cocAccountRequired:
         type: boolean
-      end_time:
+      createdAt:
         type: string
-      entry_count:
-        type: integer
+      end:
+        type: string
+      entries:
+        items: {}
+        type: array
+      eventPending:
+        type: string
+      eventPendingAt:
+        type: string
       id:
         type: string
-      image_url:
+      imageUrl:
         type: string
       mentions:
         items:
           type: string
         type: array
-      message_id:
+      messageId:
         type: string
       prize:
         type: string
-      profile_picture_required:
+      profilePictureRequired:
         type: boolean
       roles:
         items:
           type: string
         type: array
-      roles_mode:
+      rolesMode:
         type: string
-      start_time:
+      serverId:
+        type: string
+      start:
         type: string
       status:
         type: string
-      text_above_embed:
+      textAboveEmbed:
         type: string
-      text_in_embed:
+      textInEmbed:
         type: string
-      text_on_end:
+      textOnEnd:
         type: string
       updated:
         type: boolean
+      updatedAt:
+        type: string
       winners:
         type: integer
-      winners_list:
+      winnersList:
         items:
           $ref: '#/definitions/modelsv2.GiveawayWinner'
         type: array
@@ -1522,9 +1926,9 @@ definitions:
     properties:
       entries:
         type: integer
-      user_id:
+      userId:
         type: string
-      win_chance:
+      winChance:
         type: number
     type: object
   modelsv2.GiveawayEntriesResponse:
@@ -1533,23 +1937,23 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.GiveawayEntrant'
         type: array
-      giveaway_id:
+      giveawayId:
         type: string
-      server_id:
+      serverId:
+        type: string
+      totalEntries:
         type: integer
-      total_entries:
-        type: integer
-      unique_users:
+      uniqueUsers:
         type: integer
     type: object
   modelsv2.GiveawayMutationResponse:
     properties:
-      giveaway_id:
+      giveawayId:
         type: string
       message:
         type: string
-      server_id:
-        type: integer
+      serverId:
+        type: string
     type: object
   modelsv2.GiveawayRerollRequest:
     properties:
@@ -1560,20 +1964,20 @@ definitions:
     type: object
   modelsv2.GiveawayRerollResponse:
     properties:
-      giveaway_id:
+      giveawayId:
         type: string
       message:
         type: string
-      new_winners:
+      newWinners:
         items:
           type: string
         type: array
-      server_id:
-        type: integer
+      serverId:
+        type: string
     type: object
   modelsv2.GiveawayWinner:
     properties:
-      avatar_url:
+      avatarUrl:
         type: string
       reason:
         type: string
@@ -1581,7 +1985,7 @@ definitions:
         type: string
       timestamp:
         type: string
-      user_id:
+      userId:
         type: string
       username:
         type: string
@@ -2066,83 +2470,21 @@ definitions:
       roster_id:
         type: string
     type: object
+  modelsv2.MobilePlayerTagsRequest:
+    properties:
+      clan_tags:
+        additionalProperties:
+          type: string
+        type: object
+      player_tags:
+        items:
+          type: string
+        type: array
+    type: object
   modelsv2.MobilePublicConfigResponse:
     properties:
       sentry_dsn:
         type: string
-    type: object
-  modelsv2.OpenTicket:
-    properties:
-      apply_account:
-        type: string
-      category_id:
-        type: string
-      category_name:
-        type: string
-      channel:
-        type: string
-      channel_exists:
-        type: boolean
-      discord_avatar_url:
-        type: string
-      discord_display_name:
-        type: string
-      discord_username:
-        type: string
-      linked_accounts:
-        items:
-          $ref: '#/definitions/modelsv2.LinkedAccount'
-        type: array
-      number:
-        type: integer
-      panel:
-        type: string
-      server:
-        type: string
-      set_clan:
-        type: string
-      status:
-        type: string
-      thread:
-        type: string
-      user:
-        type: string
-    type: object
-  modelsv2.OpenTicketsResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.OpenTicket'
-        type: array
-      total:
-        type: integer
-    type: object
-  modelsv2.Paging:
-    properties:
-      cursors:
-        $ref: '#/definitions/modelsv2.PagingCursors'
-    type: object
-  modelsv2.PagingCursors:
-    properties:
-      after:
-        type: string
-      before:
-        type: string
-    type: object
-  modelsv2.PlayerBattlelogHistoryResponse:
-    properties:
-      count:
-        type: integer
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.BattlelogEntry'
-        type: array
-      limit:
-        type: integer
-      player_tag:
-        type: string
-      time:
-        $ref: '#/definitions/modelsv2.PublicStatsTimeRange'
     type: object
   modelsv2.NotificationDeviceRequest:
     properties:
@@ -2326,6 +2668,79 @@ definitions:
         type: object
       type:
         type: string
+    type: object
+  modelsv2.OpenTicket:
+    properties:
+      apply_account:
+        type: string
+      category_id:
+        type: string
+      category_name:
+        type: string
+      channel:
+        type: string
+      channel_exists:
+        type: boolean
+      discord_avatar_url:
+        type: string
+      discord_display_name:
+        type: string
+      discord_username:
+        type: string
+      linked_accounts:
+        items:
+          $ref: '#/definitions/modelsv2.LinkedAccount'
+        type: array
+      number:
+        type: integer
+      panel:
+        type: string
+      server:
+        type: string
+      set_clan:
+        type: string
+      status:
+        type: string
+      thread:
+        type: string
+      user:
+        type: string
+    type: object
+  modelsv2.OpenTicketsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.OpenTicket'
+        type: array
+      total:
+        type: integer
+    type: object
+  modelsv2.Paging:
+    properties:
+      cursors:
+        $ref: '#/definitions/modelsv2.PagingCursors'
+    type: object
+  modelsv2.PagingCursors:
+    properties:
+      after:
+        type: string
+      before:
+        type: string
+    type: object
+  modelsv2.PlayerBattlelogHistoryResponse:
+    properties:
+      count:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.BattlelogEntry'
+        type: array
+      limit:
+        type: integer
+      player_tag:
+        type: string
+      time:
+        $ref: '#/definitions/modelsv2.PublicStatsTimeRange'
     type: object
   modelsv2.PlayerBattlelogStatsRequest:
     properties:
@@ -2923,6 +3338,11 @@ definitions:
         type: string
       server_id:
         type: integer
+    type: object
+  modelsv2.RenameClanCategoryRequest:
+    properties:
+      name:
+        type: string
     type: object
   modelsv2.Roster:
     properties:
@@ -5651,6 +6071,123 @@ paths:
       summary: Verify email address with 6-digit code
       tags:
       - App Authentication
+  /v2/bases/{base_id}/downloaders/{user_id}:
+    post:
+      description: Adds one Discord user ID to unique download history. Repeated downloads
+        by the same user are a no-op. This endpoint accepts only the configured bot
+        credential.
+      parameters:
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      - description: Discord user ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDownloadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Record a trusted bot base download
+      tags:
+      - Bases Bot Integration
+  /v2/bases/{base_id}/votes/{voter_id}:
+    delete:
+      description: Atomically and idempotently removes one Discord voter from both
+        base voter arrays. This endpoint accepts only the configured bot credential.
+      parameters:
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      - description: Discord voter ID
+        in: path
+        name: voter_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Remove a trusted bot base vote
+      tags:
+      - Bases Bot Integration
+    put:
+      consumes:
+      - application/json
+      description: Atomically records or changes one vote in the base voter arrays.
+        This endpoint accepts only the configured bot credential.
+      parameters:
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      - description: Discord voter ID
+        in: path
+        name: voter_id
+        required: true
+        type: string
+      - description: Vote direction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.BaseVoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BaseVoteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Record a trusted bot base vote
+      tags:
+      - Bases Bot Integration
   /v2/cdn/upload:
     post:
       consumes:
@@ -5848,8 +6385,8 @@ paths:
       - Clan
   /v2/clan/{clan_tag}/rankings:
     get:
-      description: Returns current clan ranking placements across supported ranking
-        metrics.
+      description: Returns Home Village, Builder Base, and Clan Capital current points
+        with every stored global/location placement.
       parameters:
       - description: Clan tag
         in: path
@@ -6044,7 +6581,8 @@ paths:
       - Counts
   /v2/cwl/{clan_tag}/ranking-history:
     get:
-      description: Returns CWL ranking history rows for a clan tag.
+      description: Returns typed CWL group snapshots for a clan. A group without persisted
+        standings returns its roster and lifecycle data with no synthetic ranking.
       parameters:
       - description: Clan tag
         in: path
@@ -6057,16 +6595,12 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.CWLRankingHistoryResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
+            $ref: '#/definitions/modelsv2.CWLClanHistoryResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: CWL ranking history for a clan
+      summary: CWL group history for a clan
       tags:
       - War
   /v2/cwl/league-thresholds:
@@ -6080,6 +6614,45 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.CWLThresholdResponse'
       summary: Promo and demotion thresholds for CWL leagues
+      tags:
+      - War
+  /v2/cwl/leagues/{league_id}/rankings:
+    get:
+      description: Returns only persisted standings for one season, league, and war
+        size. Empty standings are a successful empty result until Tracking has computed
+        them.
+      parameters:
+      - description: CWL league ID
+        in: path
+        name: league_id
+        required: true
+        type: integer
+      - description: CWL season (YYYY-MM)
+        in: query
+        name: season
+        required: true
+        type: string
+      - description: CWL war size
+        in: query
+        name: war_size
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLLeagueRankingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Persisted CWL league rankings
       tags:
       - War
   /v2/dates/current:
@@ -6489,7 +7062,7 @@ paths:
       tags:
       - Other
   /v2/home/activity:
-    x-query:
+    post:
       consumes:
       - application/json
       description: Uses RFC QUERY with a JSON body to return the newest merged clan
@@ -6526,6 +7099,30 @@ paths:
       tags:
       - Activity & Inactivity
       x-http-method: QUERY
+  /v2/initialization:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Initialization payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.MobilePlayerTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Initialize all account data for mobile app
+      tags:
+      - Mobile App
   /v2/leaderboard/{league_tier_id}/trophy-buckets:
     get:
       description: Returns trophy buckets of players and trophies at bucket points,
@@ -7572,7 +8169,7 @@ paths:
             $ref: '#/definitions/modelsv2.NotificationMessageResponse'
       security:
       - ApiKeyAuth: []
-      summary: Disable notification device
+      summary: Unregister notification device
       tags:
       - Notifications
     post:
@@ -7724,6 +8321,31 @@ paths:
       summary: Get player changes
       tags:
       - Player
+  /v2/player/{player_tag}/cwl/history:
+    get:
+      description: Returns player-centric CWL seasons from normalized roster, completed
+        war lineup, and attack facts. Clan totals and placements are returned only
+        when persisted standings or complete war facts support them.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLPlayerHistoryResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: CWL group history for a player
+      tags:
+      - War
   /v2/player/{player_tag}/join-leave:
     get:
       description: Returns join and leave history for a single player tag. Date filters
@@ -9484,6 +10106,306 @@ paths:
       summary: Add or update a ban
       tags:
       - Server Bans
+  /v2/server/{server_id}/bases:
+    get:
+      description: Lists only bases with explicit ownership for the authorized server.
+        Downloader IDs are returned without eager Discord profile resolution.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Maximum results (default 50, maximum 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BasesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: List a server's bases
+      tags:
+      - Bases
+    post:
+      consumes:
+      - application/json
+      description: Creates a Discord message in the selected server channel, then
+        persists an immutable base using the returned message ID. If persistence fails,
+        the API attempts to remove the new Discord message and reports the compensation
+        result.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Base
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.CreateBaseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/modelsv2.Base'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.BaseCreateErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.BaseCreateErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/modelsv2.BaseCreateErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.BaseCreateErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create an immutable server base
+      tags:
+      - Bases
+  /v2/server/{server_id}/bases/{base_id}:
+    delete:
+      description: Deletes the associated Discord message first, then deletes the
+        server-owned database row. A missing Discord message is treated as already
+        cleaned up; other Discord failures retain the database row for retry.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDeleteErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDeleteErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDeleteErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDeleteErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete an immutable server base
+      tags:
+      - Bases
+    get:
+      description: Returns one base only when it belongs to the authorized server
+        and has explicit server/channel ownership.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.Base'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a server base
+      tags:
+      - Bases
+  /v2/server/{server_id}/bases/{base_id}/downloaders/{user_id}:
+    get:
+      description: Resolves a safe current Discord display name and avatar only after
+        proving the user appears in this server-owned base's downloader history.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Base ID
+        in: path
+        name: base_id
+        required: true
+        type: string
+      - description: Discord user ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BaseDownloaderProfile'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Resolve one base downloader
+      tags:
+      - Bases
+  /v2/server/{server_id}/bases/images:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads one base image through the current Bunny CDN storage path
+        for later use in immutable base creation.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Image (max 25 MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CDNUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Upload a base image
+      tags:
+      - Bases
   /v2/server/{server_id}/bot-profile:
     get:
       description: Returns the bot name, avatar, banner, and bio configured for this
@@ -9579,6 +10501,264 @@ paths:
       summary: Get Discord channels
       tags:
       - Server Discord
+  /v2/server/{server_id}/clan-categories:
+    get:
+      description: Lists the authorized server's clan categories with current assigned-clan
+        counts.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoriesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: List clan categories
+      tags:
+      - Clan Categories
+    post:
+      consumes:
+      - application/json
+      description: Creates one normalized, exact-name-unique category for the authorized
+        server.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Category name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.CreateClanCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoryCreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a clan category
+      tags:
+      - Clan Categories
+  /v2/server/{server_id}/clan-categories/{category_id}:
+    delete:
+      description: Deletes one server-owned category. The database foreign key atomically
+        clears categoryId on affected server clans.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Category UUID
+        in: path
+        name: category_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoryDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a clan category
+      tags:
+      - Clan Categories
+    patch:
+      consumes:
+      - application/json
+      description: Renames one category only when it belongs to the authorized server.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Category UUID
+        in: path
+        name: category_id
+        required: true
+        type: string
+      - description: Replacement category name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RenameClanCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoryRenameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Rename a clan category
+      tags:
+      - Clan Categories
+  /v2/server/{server_id}/clan-categories/{category_id}/delete-preview:
+    get:
+      description: Returns the current number of this server's clans that will become
+        uncategorized if the manager confirms deletion.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Category UUID
+        in: path
+        name: category_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoryDeletePreviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Preview clan category deletion
+      tags:
+      - Clan Categories
   /v2/server/{server_id}/clan/{clan_tag}:
     delete:
       description: Removes a clan from the Discord server tracking list.
@@ -11921,7 +13101,7 @@ paths:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get category names
   /v2/stats/armies:
-    x-query:
+    post:
       consumes:
       - application/json
       description: Uses exact army_share_code + army_items + army_counts identity.
@@ -11954,7 +13134,7 @@ paths:
       - Stats
       x-http-method: QUERY
   /v2/stats/cwl:
-    x-query:
+    post:
       consumes:
       - application/json
       description: CWL is separate from regular war, defaults to equal-town-hall attacks,
@@ -11987,7 +13167,7 @@ paths:
       - Stats
       x-http-method: QUERY
   /v2/stats/items:
-    x-query:
+    post:
       consumes:
       - application/json
       description: Item analysis is available for ranked battlelogs. War/CWL attack
@@ -12051,7 +13231,7 @@ paths:
       tags:
       - Stats
   /v2/stats/ranked:
-    x-query:
+    post:
       consumes:
       - application/json
       description: Requires one town hall and exactly one ranked tier. Each battle
@@ -12084,7 +13264,7 @@ paths:
       - Stats
       x-http-method: QUERY
   /v2/stats/war:
-    x-query:
+    post:
       consumes:
       - application/json
       description: Includes random wars only, excluding friendly and CWL wars. Equal-town-hall

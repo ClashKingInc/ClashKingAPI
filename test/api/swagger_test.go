@@ -502,6 +502,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"clan_level",
 		"clan_points",
 		"clanLevelAlias",
+		"builderBasePoints",
+		"capitalPoints",
 		"member_count",
 		"troops_donated",
 		"troops_received",
@@ -553,36 +555,60 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 	if !ok {
 		t.Fatal("expected ClanRankingsResponse properties")
 	}
-	for _, field := range []string{"name", "tag", "badge", "location", "clanPoints", "warWins", "warWinStreak", "donations", "donationsReceived"} {
+	for _, field := range []string{"name", "tag", "badge", "homeVillage", "builderBase", "clanCapital"} {
 		if _, exists := clanRankingsProperties[field]; !exists {
 			t.Fatalf("expected ClanRankingsResponse to expose %s", field)
 		}
 	}
-	for _, field := range []string{"badgeUrls", "rankings", "updatedAt", "donationsSent", "global_rank", "local_rank", "country_code", "country_name"} {
+	for _, field := range []string{
+		"location",
+		"clanPoints",
+		"warWins",
+		"warWinStreak",
+		"donations",
+		"donationsReceived",
+		"badgeUrls",
+		"rankings",
+		"updatedAt",
+		"global_rank",
+		"local_rank",
+		"country_code",
+		"country_name",
+	} {
 		if _, exists := clanRankingsProperties[field]; exists {
 			t.Fatalf("expected ClanRankingsResponse not to expose legacy top-level field %s", field)
 		}
 	}
-	clanRankingMetric, ok := definitions["modelsv2.ClanRankingMetric"].(map[string]any)
+	clanRankingCategory, ok := definitions["modelsv2.ClanRankingCategory"].(map[string]any)
 	if !ok {
-		t.Fatal("expected ClanRankingMetric definition")
+		t.Fatal("expected ClanRankingCategory definition")
 	}
-	clanRankingMetricProperties, ok := clanRankingMetric["properties"].(map[string]any)
+	clanRankingCategoryProperties, ok := clanRankingCategory["properties"].(map[string]any)
 	if !ok {
-		t.Fatal("expected ClanRankingMetric properties")
+		t.Fatal("expected ClanRankingCategory properties")
 	}
-	for _, field := range []string{"value", "globalRank", "localRank"} {
-		if _, exists := clanRankingMetricProperties[field]; !exists {
-			t.Fatalf("expected ClanRankingMetric to expose %s", field)
+	for _, field := range []string{"points", "placements"} {
+		if _, exists := clanRankingCategoryProperties[field]; !exists {
+			t.Fatalf("expected ClanRankingCategory to expose %s", field)
 		}
 	}
-	for _, field := range []string{"global", "local"} {
-		if _, exists := clanRankingMetricProperties[field]; exists {
-			t.Fatalf("expected ClanRankingMetric not to expose %s", field)
+	clanRankingPlacement, ok := definitions["modelsv2.ClanRankingPlacement"].(map[string]any)
+	if !ok {
+		t.Fatal("expected ClanRankingPlacement definition")
+	}
+	clanRankingPlacementProperties, ok := clanRankingPlacement["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("expected ClanRankingPlacement properties")
+	}
+	for _, field := range []string{"locationId", "rank", "points", "updatedAt"} {
+		if _, exists := clanRankingPlacementProperties[field]; !exists {
+			t.Fatalf("expected ClanRankingPlacement to expose %s", field)
 		}
 	}
-	if _, exists := definitions["modelsv2.ClanRankingScope"]; exists {
-		t.Fatal("expected ClanRankingScope definition to be removed")
+	for _, obsoleteDefinition := range []string{"modelsv2.ClanRankingMetric", "modelsv2.ClanRankingScope"} {
+		if _, exists := definitions[obsoleteDefinition]; exists {
+			t.Fatalf("expected %s definition to be removed", obsoleteDefinition)
+		}
 	}
 }
 

@@ -125,7 +125,7 @@ func createServerGiveaway(a apptypes.Deps) fiber.Handler {
 		if err := giveawaySave(c, a, doc); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway created successfully", GiveawayID: giveawayID, ServerID: serverID})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway created successfully", GiveawayID: giveawayID, ServerID: strconv.Itoa(serverID)})
 	}
 }
 
@@ -159,13 +159,19 @@ func updateServerGiveaway(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		doc["updated"] = "yes"
+		doc["updated"] = true
 		doc["status"] = asStringOr(existing["status"], "scheduled")
+		for _, key := range []string{"entries", "winners_list", "message_id", "event_pending", "event_pending_at", "created_at"} {
+			doc[key] = existing[key]
+		}
+		if doc["image_url"] == nil && !giveawayParseBool(c.FormValue("remove_image")) {
+			doc["image_url"] = existing["image_url"]
+		}
 
 		if err := giveawaySave(c, a, doc); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway updated successfully", GiveawayID: giveawayID, ServerID: serverID})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway updated successfully", GiveawayID: giveawayID, ServerID: strconv.Itoa(serverID)})
 	}
 }
 
@@ -205,7 +211,7 @@ func deleteServerGiveaway(a apptypes.Deps) fiber.Handler {
 		if deleted == 0 {
 			return apptypes.Error(http.StatusNotFound, "Giveaway not found")
 		}
-		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway deleted successfully", GiveawayID: giveawayID, ServerID: serverID})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayMutationResponse{Message: "Giveaway deleted successfully", GiveawayID: giveawayID, ServerID: strconv.Itoa(serverID)})
 	}
 }
 
@@ -269,7 +275,7 @@ func getGiveawayEntries(a apptypes.Deps) fiber.Handler {
 
 		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayEntriesResponse{
 			GiveawayID:   giveawayID,
-			ServerID:     serverID,
+			ServerID:     strconv.Itoa(serverID),
 			TotalEntries: total,
 			UniqueUsers:  len(order),
 			Entrants:     entrants,
@@ -394,14 +400,17 @@ func rerollGiveawayWinners(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayRerollResponse{Message: "Winners rerolled successfully", GiveawayID: giveawayID, ServerID: serverID, NewWinners: newWinners})
+		return apptypes.JSON(c, http.StatusOK, modelsv2.GiveawayRerollResponse{Message: "Winners rerolled successfully", GiveawayID: giveawayID, ServerID: strconv.Itoa(serverID), NewWinners: newWinners})
 	}
 }
 
 func giveawayList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT id, server_id, status, prize, channel_id, start_time, end_time, winners,
-		       entries, winners_list, data, created_at, updated_at
+		SELECT id, server_id, prize, channel_id, status, start_time, end_time, winners,
+		       mentions, text_above_embed, text_in_embed, text_on_end, image_url,
+		       profile_picture_required, coc_account_required, roles_mode, roles, boosters,
+		       entries, winners_list, updated, message_id, event_pending, event_pending_at,
+		       created_at, updated_at
 		FROM giveaways
 		WHERE server_id = $1
 		ORDER BY COALESCE(end_time, updated_at) DESC
@@ -423,8 +432,11 @@ func giveawayList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[string]a
 
 func giveawayGet(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveawayID string) (map[string]any, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT id, server_id, status, prize, channel_id, start_time, end_time, winners,
-		       entries, winners_list, data, created_at, updated_at
+		SELECT id, server_id, prize, channel_id, status, start_time, end_time, winners,
+		       mentions, text_above_embed, text_in_embed, text_on_end, image_url,
+		       profile_picture_required, coc_account_required, roles_mode, roles, boosters,
+		       entries, winners_list, updated, message_id, event_pending, event_pending_at,
+		       created_at, updated_at
 		FROM giveaways
 		WHERE id = $1 AND server_id = $2
 	`, giveawayID, strconv.FormatInt(serverID, 10))
@@ -436,37 +448,54 @@ type giveawayRow interface {
 }
 
 func giveawayScan(row giveawayRow) (map[string]any, error) {
-	var giveawayID, serverID, status, prize, channelID string
+	var giveawayID, serverID, status, prize string
+	var channelID, imageURL, messageID, eventPending *string
 	var startTime, endTime *time.Time
 	var winners int
-	var entriesRaw, winnersRaw, dataRaw []byte
+	var mentions, roles []string
+	var textAboveEmbed, textInEmbed, textOnEnd, rolesMode string
+	var profilePictureRequired, cocAccountRequired, updated bool
+	var boostersRaw, entriesRaw, winnersRaw []byte
+	var eventPendingAt *time.Time
 	var createdAt, updatedAt time.Time
-	if err := row.Scan(&giveawayID, &serverID, &status, &prize, &channelID, &startTime, &endTime, &winners, &entriesRaw, &winnersRaw, &dataRaw, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&giveawayID, &serverID, &prize, &channelID, &status, &startTime, &endTime, &winners,
+		&mentions, &textAboveEmbed, &textInEmbed, &textOnEnd, &imageURL,
+		&profilePictureRequired, &cocAccountRequired, &rolesMode, &roles, &boostersRaw,
+		&entriesRaw, &winnersRaw, &updated, &messageID, &eventPending, &eventPendingAt,
+		&createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
-	item, _ := decodeJSONAny(dataRaw).(map[string]any)
-	if item == nil {
-		item = map[string]any{}
+	item := map[string]any{
+		"_id": giveawayID, "server_id": serverID, "prize": prize,
+		"status": status, "winners": winners, "mentions": mentions,
+		"text_above_embed": textAboveEmbed, "text_in_embed": textInEmbed, "text_on_end": textOnEnd,
+		"profile_picture_required": profilePictureRequired,
+		"coc_account_required":     cocAccountRequired, "roles_mode": rolesMode, "roles": roles,
+		"boosters": decodeJSONAny(boostersRaw), "entries": decodeJSONAny(entriesRaw),
+		"winners_list": decodeJSONAny(winnersRaw), "updated": updated,
+		"created_at": createdAt, "updated_at": updatedAt,
 	}
-	item["_id"] = giveawayID
-	item["server_id"] = serverID
-	if parsed, err := strconv.ParseInt(serverID, 10, 64); err == nil {
-		item["server_id"] = parsed
+	if channelID != nil {
+		item["channel_id"] = *channelID
 	}
-	item["status"] = status
-	item["prize"] = prize
-	item["channel_id"] = channelID
+	if imageURL != nil {
+		item["image_url"] = *imageURL
+	}
+	if messageID != nil {
+		item["message_id"] = *messageID
+	}
+	if eventPending != nil {
+		item["event_pending"] = *eventPending
+	}
+	if eventPendingAt != nil {
+		item["event_pending_at"] = *eventPendingAt
+	}
 	if startTime != nil {
 		item["start_time"] = *startTime
 	}
 	if endTime != nil {
 		item["end_time"] = *endTime
 	}
-	item["winners"] = winners
-	item["entries"] = decodeJSONAny(entriesRaw)
-	item["winners_list"] = decodeJSONAny(winnersRaw)
-	item["created_at"] = createdAt
-	item["updated_at"] = updatedAt
 	return item, nil
 }
 
@@ -479,8 +508,13 @@ func giveawaySave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	winners := asIntWithDefault(doc["winners"], 1)
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
 		INSERT INTO giveaways (id, server_id, status, prize, channel_id, start_time, end_time, winners,
-		                       entries, winners_list, data, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), now())
+		                       mentions, text_above_embed, text_in_embed, text_on_end, image_url,
+		                       profile_picture_required, coc_account_required, roles_mode, roles, boosters,
+		                       entries, winners_list, updated, message_id, event_pending, event_pending_at,
+		                       created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+		        $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb, $21, $22, $23, $24,
+		        COALESCE($25, now()), now())
 		ON CONFLICT (id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			status = EXCLUDED.status,
@@ -489,11 +523,27 @@ func giveawaySave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 			start_time = EXCLUDED.start_time,
 			end_time = EXCLUDED.end_time,
 			winners = EXCLUDED.winners,
+			mentions = EXCLUDED.mentions,
+			text_above_embed = EXCLUDED.text_above_embed,
+			text_in_embed = EXCLUDED.text_in_embed,
+			text_on_end = EXCLUDED.text_on_end,
+			image_url = EXCLUDED.image_url,
+			profile_picture_required = EXCLUDED.profile_picture_required,
+			coc_account_required = EXCLUDED.coc_account_required,
+			roles_mode = EXCLUDED.roles_mode,
+			roles = EXCLUDED.roles,
+			boosters = EXCLUDED.boosters,
 			entries = EXCLUDED.entries,
 			winners_list = EXCLUDED.winners_list,
-			data = EXCLUDED.data,
+			updated = EXCLUDED.updated,
+			message_id = EXCLUDED.message_id,
+			event_pending = EXCLUDED.event_pending,
+			event_pending_at = EXCLUDED.event_pending_at,
 			updated_at = now()
-	`, giveawayID, serverID, status, prize, channelID, timeArg(doc["start_time"]), timeArg(doc["end_time"]), winners, apptypes.Marshal(anySlice(doc["entries"])), apptypes.Marshal(anySlice(doc["winners_list"])), apptypes.Marshal(doc), doc["created_at"])
+	`, giveawayID, serverID, status, prize, channelID, timeArg(doc["start_time"]), timeArg(doc["end_time"]), winners,
+		stringSlice(doc["mentions"]), asStringOr(doc["text_above_embed"], ""), asStringOr(doc["text_in_embed"], ""), asStringOr(doc["text_on_end"], ""), doc["image_url"],
+		asBool(doc["profile_picture_required"]), asBool(doc["coc_account_required"]), asStringOr(doc["roles_mode"], "none"), stringSlice(doc["roles"]), apptypes.Marshal(doc["boosters"]),
+		apptypes.Marshal(doc["entries"]), apptypes.Marshal(doc["winners_list"]), asBool(doc["updated"]), doc["message_id"], doc["event_pending"], timeArg(doc["event_pending_at"]), doc["created_at"])
 	return err
 }
 
@@ -520,11 +570,12 @@ func timeArg(value any) any {
 func giveawayModel(doc map[string]any, winnerIdentities map[string]ticketUserIdentity) modelsv2.GiveawayConfig {
 	out := modelsv2.GiveawayConfig{
 		ID:                     asStringOr(doc["_id"], ""),
+		ServerID:               asStringOr(doc["server_id"], ""),
 		Prize:                  asStringOr(doc["prize"], ""),
 		ChannelID:              stringPtrMaybe(doc["channel_id"]),
 		Status:                 asStringOr(doc["status"], ""),
-		StartTime:              stringifyTime(doc["start_time"]),
-		EndTime:                stringifyTime(doc["end_time"]),
+		Start:                  stringifyTime(doc["start_time"]),
+		End:                    stringifyTime(doc["end_time"]),
 		Winners:                asIntWithDefault(doc["winners"], 0),
 		Mentions:               stringSlice(doc["mentions"]),
 		TextAboveEmbed:         asStringOr(doc["text_above_embed"], ""),
@@ -536,10 +587,14 @@ func giveawayModel(doc map[string]any, winnerIdentities map[string]ticketUserIde
 		RolesMode:              asStringOr(doc["roles_mode"], "none"),
 		Roles:                  stringSlice(doc["roles"]),
 		Boosters:               giveawayBoosters(doc["boosters"]),
-		EntryCount:             giveawayEntryCount(doc["entries"]),
-		Updated:                asStringOr(doc["updated"], "") == "yes" || asBool(doc["updated"]),
+		Entries:                anySlice(doc["entries"]),
+		Updated:                asBool(doc["updated"]),
 		MessageID:              stringPtrMaybe(doc["message_id"]),
+		EventPending:           stringPtrMaybe(doc["event_pending"]),
+		EventPendingAt:         timePtrString(doc["event_pending_at"]),
 		WinnersList:            giveawayWinners(doc["winners_list"], winnerIdentities),
+		CreatedAt:              stringifyTime(doc["created_at"]),
+		UpdatedAt:              stringifyTime(doc["updated_at"]),
 	}
 	return out
 }
@@ -551,7 +606,6 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 	}
 
 	userIDSet := map[string]struct{}{}
-	lookupIDs := make([]string, 0)
 	for _, doc := range docs {
 		for _, winner := range anyMapSlice(doc["winners_list"]) {
 			userID := serverAsString(winner["user_id"])
@@ -562,28 +616,14 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 				continue
 			}
 			userIDSet[userID] = struct{}{}
-			lookupIDs = append(lookupIDs, userID)
 		}
 	}
 	if len(userIDSet) == 0 {
 		return identityMap
 	}
 
-	sqlIdentities, _, err := sqlAuthUserIdentities(c, a, lookupIDs)
-	if err == nil {
-		for userID, identity := range sqlIdentities {
-			if identity.Username != nil || identity.AvatarURL != nil {
-				identityMap[userID] = identity
-			}
-		}
-	}
-
 	remaining := make([]string, 0, len(userIDSet))
 	for userID := range userIDSet {
-		identity := identityMap[userID]
-		if identity.Username != nil && identity.AvatarURL != nil {
-			continue
-		}
 		remaining = append(remaining, userID)
 	}
 
@@ -678,22 +718,28 @@ func giveawayWinners(value any, winnerIdentities map[string]ticketUserIdentity) 
 	return out
 }
 
-func giveawayEntryCount(value any) int {
-	if raw, ok := value.([]any); ok {
-		return len(raw)
-	}
-	return 0
-}
-
 func stringifyTime(value any) string {
 	switch typed := value.(type) {
 	case time.Time:
+		return typed.UTC().Format(time.RFC3339)
+	case *time.Time:
+		if typed == nil {
+			return ""
+		}
 		return typed.UTC().Format(time.RFC3339)
 	case string:
 		return typed
 	default:
 		return serverAsString(value)
 	}
+}
+
+func timePtrString(value any) *string {
+	result := stringifyTime(value)
+	if result == "" {
+		return nil
+	}
+	return &result
 }
 
 // --- helpers ---
@@ -801,6 +847,7 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 		"end_time":                 endTime,
 		"winners":                  winners,
 		"entries":                  []any{},
+		"winners_list":             []any{},
 		"mentions":                 mentions,
 		"text_above_embed":         c.FormValue("text_above_embed"),
 		"text_in_embed":            c.FormValue("text_in_embed"),
@@ -811,6 +858,10 @@ func giveawayBuildDocument(c *fiber.Ctx, a apptypes.Deps, serverID int64, giveaw
 		"roles_mode":               rolesMode,
 		"roles":                    roles,
 		"boosters":                 boosters,
+		"updated":                  false,
+		"message_id":               nil,
+		"event_pending":            nil,
+		"event_pending_at":         nil,
 	}, nil
 }
 

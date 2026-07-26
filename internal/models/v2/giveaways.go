@@ -6,9 +6,9 @@ type GiveawayBooster struct {
 }
 
 type GiveawayWinner struct {
-	UserID    string  `json:"user_id"`
+	UserID    string  `json:"userId"`
 	Username  *string `json:"username,omitempty"`
-	AvatarURL *string `json:"avatar_url,omitempty"`
+	AvatarURL *string `json:"avatarUrl,omitempty"`
 	Status    string  `json:"status"`
 	Timestamp *string `json:"timestamp,omitempty"`
 	Reason    *string `json:"reason,omitempty"`
@@ -16,26 +16,31 @@ type GiveawayWinner struct {
 
 type GiveawayConfig struct {
 	ID                     string            `json:"id"`
+	ServerID               string            `json:"serverId"`
 	Prize                  string            `json:"prize"`
-	ChannelID              *string           `json:"channel_id,omitempty"`
+	ChannelID              *string           `json:"channelId,omitempty"`
 	Status                 string            `json:"status"`
-	StartTime              string            `json:"start_time"`
-	EndTime                string            `json:"end_time"`
+	Start                  string            `json:"start"`
+	End                    string            `json:"end"`
 	Winners                int               `json:"winners"`
 	Mentions               []string          `json:"mentions"`
-	TextAboveEmbed         string            `json:"text_above_embed"`
-	TextInEmbed            string            `json:"text_in_embed"`
-	TextOnEnd              string            `json:"text_on_end"`
-	ImageURL               *string           `json:"image_url,omitempty"`
-	ProfilePictureRequired bool              `json:"profile_picture_required"`
-	COCAccountRequired     bool              `json:"coc_account_required"`
-	RolesMode              string            `json:"roles_mode"`
+	TextAboveEmbed         string            `json:"textAboveEmbed"`
+	TextInEmbed            string            `json:"textInEmbed"`
+	TextOnEnd              string            `json:"textOnEnd"`
+	ImageURL               *string           `json:"imageUrl,omitempty"`
+	ProfilePictureRequired bool              `json:"profilePictureRequired"`
+	COCAccountRequired     bool              `json:"cocAccountRequired"`
+	RolesMode              string            `json:"rolesMode"`
 	Roles                  []string          `json:"roles"`
 	Boosters               []GiveawayBooster `json:"boosters"`
-	EntryCount             int               `json:"entry_count"`
+	Entries                []any             `json:"entries"`
+	WinnersList            []GiveawayWinner  `json:"winnersList"`
 	Updated                bool              `json:"updated"`
-	MessageID              *string           `json:"message_id,omitempty"`
-	WinnersList            []GiveawayWinner  `json:"winners_list"`
+	MessageID              *string           `json:"messageId,omitempty"`
+	EventPending           *string           `json:"eventPending,omitempty"`
+	EventPendingAt         *string           `json:"eventPendingAt,omitempty"`
+	CreatedAt              string            `json:"createdAt"`
+	UpdatedAt              string            `json:"updatedAt"`
 }
 
 type ServerGiveawaysResponse struct {
@@ -47,21 +52,21 @@ type ServerGiveawaysResponse struct {
 
 type GiveawayMutationResponse struct {
 	Message    string `json:"message"`
-	GiveawayID string `json:"giveaway_id"`
-	ServerID   int    `json:"server_id"`
+	GiveawayID string `json:"giveawayId"`
+	ServerID   string `json:"serverId"`
 }
 
 type GiveawayEntrant struct {
-	UserID    string  `json:"user_id"`
+	UserID    string  `json:"userId"`
 	Entries   int     `json:"entries"`
-	WinChance float64 `json:"win_chance"`
+	WinChance float64 `json:"winChance"`
 }
 
 type GiveawayEntriesResponse struct {
-	GiveawayID   string            `json:"giveaway_id"`
-	ServerID     int               `json:"server_id"`
-	TotalEntries int               `json:"total_entries"`
-	UniqueUsers  int               `json:"unique_users"`
+	GiveawayID   string            `json:"giveawayId"`
+	ServerID     string            `json:"serverId"`
+	TotalEntries int               `json:"totalEntries"`
+	UniqueUsers  int               `json:"uniqueUsers"`
 	Entrants     []GiveawayEntrant `json:"entrants"`
 }
 
@@ -71,7 +76,7 @@ type GiveawayRerollRequest struct {
 
 type GiveawayRerollResponse struct {
 	Message    string   `json:"message"`
-	GiveawayID string   `json:"giveaway_id"`
-	ServerID   int      `json:"server_id"`
-	NewWinners []string `json:"new_winners"`
+	GiveawayID string   `json:"giveawayId"`
+	ServerID   string   `json:"serverId"`
+	NewWinners []string `json:"newWinners"`
 }

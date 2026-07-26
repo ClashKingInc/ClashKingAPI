@@ -346,6 +346,9 @@ func serverRoleLookupError(err error) error {
 }
 
 func stringSlice(value any) []string {
+	if items, ok := value.([]string); ok {
+		return append([]string{}, items...)
+	}
 	items := anySlice(value)
 	out := make([]string, 0, len(items))
 	for _, item := range items {

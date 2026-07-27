@@ -176,16 +176,17 @@ func searchFetchGuildClans(c *fiber.Ctx, a apptypes.Deps, guildID int64, query s
 		return nil
 	}
 	sqlQuery := `
-		SELECT tag
-		FROM server_clans
-		WHERE server_id = $1
+		SELECT sc.tag
+		FROM server_clans sc
+		JOIN basic_clan clan ON clan.tag = sc.tag
+		WHERE sc.server_id = $1
 	`
 	args := []any{strconv.FormatInt(guildID, 10)}
 	if len(query) > 1 {
-		sqlQuery += ` AND (name ILIKE $2 OR tag = $3)`
+		sqlQuery += ` AND (clan.name ILIKE $2 OR sc.tag = $3)`
 		args = append(args, "%"+query+"%", clashy.CorrectTag(query))
 	}
-	sqlQuery += ` ORDER BY name ASC LIMIT 25`
+	sqlQuery += ` ORDER BY clan.name ASC LIMIT 25`
 	rows, err := a.Store.SQL.Query(c.UserContext(), sqlQuery, args...)
 	if err != nil {
 		return nil

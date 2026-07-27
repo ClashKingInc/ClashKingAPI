@@ -10,6 +10,7 @@ const (
 	ErrorCodeNotFound            ErrorCode = "not_found"
 	ErrorCodeConflict            ErrorCode = "conflict"
 	ErrorCodeRateLimited         ErrorCode = "rate_limited"
+	ErrorCodeNotImplemented      ErrorCode = "not_implemented"
 	ErrorCodeUpstreamUnavailable ErrorCode = "upstream_unavailable"
 	ErrorCodeInternal            ErrorCode = "internal_error"
 )

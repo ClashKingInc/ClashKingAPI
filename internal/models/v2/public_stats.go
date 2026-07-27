@@ -2,11 +2,6 @@ package modelsv2
 
 import "time"
 
-// PlayerBattlelogStatsRequest is the request body for bulk player legend battlelog stats.
-type PlayerBattlelogStatsRequest struct {
-	PlayerTags []string `json:"player_tags"`
-}
-
 type ClanChangesResponse struct {
 	Name      string             `json:"name"`
 	Tag       string             `json:"tag"`
@@ -31,7 +26,6 @@ type ClanChangeValue struct {
 type BattlelogItemFilters struct {
 	TownHallLevel *int `json:"townHallLevel,omitempty"`
 	LeagueID      *int `json:"leagueId,omitempty"`
-	Top200        bool `json:"top200,omitempty"`
 }
 
 type BattlelogItemUsagePoint struct {
@@ -65,14 +59,18 @@ type BattlelogItemHitrateResponse struct {
 }
 
 type PlayerRankingsResponse struct {
-	Tag               string  `json:"tag"`
-	CountryCode       *string `json:"country_code"`
-	CountryName       *string `json:"country_name"`
-	Rank              *int    `json:"rank,omitempty"`
-	LocalRank         *int    `json:"local_rank"`
-	GlobalRank        *int    `json:"global_rank"`
-	BuilderGlobalRank *int    `json:"builder_global_rank"`
-	BuilderLocalRank  *int    `json:"builder_local_rank"`
+	Tag         string                `json:"tag"`
+	HomeVillage PlayerRankingCategory `json:"homeVillage"`
+	BuilderBase PlayerRankingCategory `json:"builderBase"`
+}
+
+type PlayerRankingCategory struct {
+	Points       *int    `json:"points" extensions:"x-nullable"`
+	GlobalRank   *int    `json:"globalRank" extensions:"x-nullable"`
+	LocationID   *string `json:"locationId" extensions:"x-nullable"`
+	LocationName *string `json:"locationName" extensions:"x-nullable"`
+	CountryCode  *string `json:"countryCode" extensions:"x-nullable"`
+	LocalRank    *int    `json:"localRank" extensions:"x-nullable"`
 }
 
 type PublicStatsTimeRange struct {
@@ -108,69 +106,6 @@ type PlayerBattlelogHistoryResponse struct {
 	Count     int                  `json:"count"`
 	Limit     int                  `json:"limit"`
 	Time      PublicStatsTimeRange `json:"time"`
-}
-
-type LegendBattle struct {
-	ID                    string `json:"id,omitempty"`
-	Tag                   string `json:"tag,omitempty"`
-	Name                  string `json:"name,omitempty"`
-	Stars                 int    `json:"stars"`
-	DestructionPercentage int    `json:"destructionPercentage"`
-	TrophyChange          int    `json:"trophyChange"`
-	Trophies              int    `json:"trophies,omitempty"`
-	Timestamp             string `json:"timestamp,omitempty"`
-}
-
-type LegendDay struct {
-	Attacks          []LegendBattle `json:"attacks"`
-	Defenses         []LegendBattle `json:"defenses"`
-	NumAttacks       int            `json:"num_attacks,omitempty"`
-	NumDefenses      int            `json:"num_defenses,omitempty"`
-	AttackSum        int            `json:"attack_sum,omitempty"`
-	DefenseSum       int            `json:"defense_sum,omitempty"`
-	NetGain          int            `json:"net_gain,omitempty"`
-	NewBest          bool           `json:"new_best,omitempty"`
-	Trophies         int            `json:"trophies,omitempty"`
-	PreviousTrophies int            `json:"previous_trophies,omitempty"`
-}
-
-type PlayerLegendsDayResponse struct {
-	Tag      string         `json:"tag"`
-	Day      string         `json:"day"`
-	Attacks  []LegendBattle `json:"attacks"`
-	Defenses []LegendBattle `json:"defenses"`
-	Data     LegendDay      `json:"data"`
-}
-
-type LegendSeasonStats struct {
-	AttackCount        int     `json:"attack_count"`
-	DefenseCount       int     `json:"defense_count"`
-	AttackTrophies     int     `json:"attack_trophies"`
-	DefenseTrophies    int     `json:"defense_trophies"`
-	NetTrophies        int     `json:"net_trophies"`
-	ThreeStars         int     `json:"three_stars"`
-	TwoStars           int     `json:"two_stars"`
-	OneStars           int     `json:"one_stars"`
-	ZeroStars          int     `json:"zero_stars"`
-	DefenseWins        int     `json:"defense_wins"`
-	DefenseLosses      int     `json:"defense_losses"`
-	AverageStars       float64 `json:"average_stars"`
-	AverageDestruction float64 `json:"average_destruction"`
-}
-
-type PlayerLegendSeasonResponse struct {
-	Tag    string               `json:"tag"`
-	Season string               `json:"season"`
-	Found  *bool                `json:"found,omitempty"`
-	Days   map[string]LegendDay `json:"days,omitempty"`
-	Stats  *LegendSeasonStats   `json:"stats,omitempty"`
-	Streak int                  `json:"streak,omitempty"`
-}
-
-type PlayersLegendSeasonResponse struct {
-	Season string                       `json:"season"`
-	Items  []PlayerLegendSeasonResponse `json:"items"`
-	Count  int                          `json:"count"`
 }
 
 type RankedMember struct {
@@ -263,14 +198,6 @@ type PlayerLeaderboardResponse struct {
 	GeneratedAt  *time.Time              `json:"generated_at,omitempty"`
 }
 
-type PlayerLeaderboardHistoryResponse struct {
-	Kind     string                  `json:"kind"`
-	Location string                  `json:"location"`
-	Date     string                  `json:"date"`
-	Items    []PlayerLeaderboardItem `json:"items"`
-	Count    int                     `json:"count"`
-}
-
 type PublicClanLeaderboardItem struct {
 	Tag          string          `json:"tag"`
 	Name         string          `json:"name"`
@@ -296,26 +223,19 @@ type TrophyBucket struct {
 	Trophies int64 `json:"trophies"`
 }
 
-type TrophyBucketHistory struct {
-	Date string         `json:"date"`
-	Data []TrophyBucket `json:"data"`
-}
-
 type TrophyBucketsResponse struct {
-	LeagueTierID int                   `json:"league_tier_id"`
-	Items        []TrophyBucket        `json:"items"`
-	History      []TrophyBucketHistory `json:"history,omitempty"`
-	Count        int                   `json:"count"`
+	LeagueTierID int            `json:"league_tier_id"`
+	Items        []TrophyBucket `json:"items"`
+	Count        int            `json:"count"`
 }
 
 type GroupedCountItem struct {
-	CWLLeagueID      *int  `json:"cwl_league_id,omitempty"`
-	LocationID       *int  `json:"location_id,omitempty"`
-	TownhallLevel    *int  `json:"townhall_level,omitempty"`
-	BuilderhallLevel *int  `json:"builderhall_level,omitempty"`
-	CapitalLeagueID  *int  `json:"capital_league_id,omitempty"`
-	LeagueTierID     *int  `json:"league_tier_id,omitempty"`
-	Count            int64 `json:"count"`
+	CWLLeagueID     *int  `json:"cwl_league_id,omitempty"`
+	LocationID      *int  `json:"location_id,omitempty"`
+	TownhallLevel   *int  `json:"townhall_level,omitempty"`
+	CapitalLeagueID *int  `json:"capital_league_id,omitempty"`
+	LeagueTierID    *int  `json:"league_tier_id,omitempty"`
+	Count           int64 `json:"count"`
 }
 
 type GroupedCountsResponse struct {
@@ -391,66 +311,4 @@ type GlobalCountsResponse struct {
 	PlayerCount      int64 `json:"player_count"`
 	ClanCount        int64 `json:"clan_count"`
 	WarsStored       int64 `json:"wars_stored"`
-}
-
-type RankingLocation struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	IsCountry   bool   `json:"isCountry"`
-	CountryCode string `json:"countryCode,omitempty"`
-}
-
-type RankingClan struct {
-	Tag       string          `json:"tag"`
-	Name      string          `json:"name"`
-	BadgeURLs PublicBadgeURLs `json:"badgeUrls"`
-}
-
-type PlayerRankingSnapshotItem struct {
-	Tag                 string                 `json:"tag"`
-	Name                string                 `json:"name"`
-	ExpLevel            int                    `json:"expLevel"`
-	Trophies            int                    `json:"trophies"`
-	AttackWins          int                    `json:"attackWins"`
-	DefenseWins         int                    `json:"defenseWins"`
-	Rank                int                    `json:"rank"`
-	PreviousRank        int                    `json:"previousRank"`
-	Clan                *RankingClan           `json:"clan,omitempty"`
-	League              *PublicLeagueReference `json:"league,omitempty"`
-	TownHallLevel       int                    `json:"townHallLevel,omitempty"`
-	BuilderHallLevel    int                    `json:"builderHallLevel,omitempty"`
-	BuilderBaseTrophies int                    `json:"builderBaseTrophies,omitempty"`
-}
-
-type ClanRankingSnapshotItem struct {
-	Tag               string           `json:"tag"`
-	Name              string           `json:"name"`
-	ClanLevel         int              `json:"clanLevel"`
-	ClanPoints        int              `json:"clanPoints,omitempty"`
-	ClanBuilderPoints int              `json:"clanBuilderBasePoints,omitempty"`
-	CapitalPoints     int              `json:"clanCapitalPoints,omitempty"`
-	Members           int              `json:"members"`
-	Rank              int              `json:"rank"`
-	PreviousRank      int              `json:"previousRank"`
-	Location          *RankingLocation `json:"location,omitempty"`
-	BadgeURLs         PublicBadgeURLs  `json:"badgeUrls"`
-}
-
-type PlayerRankingSnapshotResponse struct {
-	Items  []PlayerRankingSnapshotItem `json:"items"`
-	Paging *Paging                     `json:"paging,omitempty"`
-}
-
-type ClanRankingSnapshotResponse struct {
-	Items  []ClanRankingSnapshotItem `json:"items"`
-	Paging *Paging                   `json:"paging,omitempty"`
-}
-
-type Paging struct {
-	Cursors PagingCursors `json:"cursors"`
-}
-
-type PagingCursors struct {
-	Before string `json:"before,omitempty"`
-	After  string `json:"after,omitempty"`
 }

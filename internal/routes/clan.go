@@ -72,7 +72,7 @@ const clanRankingProfileQuery = `
 `
 
 const clanRankingPlacementsQuery = `
-	SELECT ranking_type, location_id, rank, points, updated_at
+	SELECT ranking_type, location_id, rank, points
 	FROM clan_rankings_current
 	WHERE clan_tag = $1
 	ORDER BY
@@ -126,7 +126,6 @@ func queryClanRankings(ctx context.Context, db clanRankingsDB, tag string) (mode
 			&placement.LocationID,
 			&placement.Rank,
 			&placement.Points,
-			&placement.UpdatedAt,
 		); err != nil {
 			return modelsv2.ClanRankingsResponse{}, err
 		}
@@ -148,41 +147,6 @@ func queryClanRankings(ctx context.Context, db clanRankingsDB, tag string) (mode
 func emptyClanRankingCategory() modelsv2.ClanRankingCategory {
 	return modelsv2.ClanRankingCategory{
 		Placements: make([]modelsv2.ClanRankingPlacement, 0),
-	}
-}
-
-// boardTotals godoc
-// @Summary Get aggregated board totals for a clan
-// @Description Returns aggregate board totals for one or more player tags.
-// @Tags Clan
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param body body modelsv2.ClanPlayerTagsBody false "Player tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func boardTotals(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var body modelsv2.ClanPlayerTagsBody
-		if len(c.Body()) > 0 {
-			_ = apptypes.DecodeJSON(c, &body)
-		}
-		if len(body.PlayerTags) == 0 {
-			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
-		}
-		var count int
-		if err := a.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT count(*)
-			FROM player_current_stats
-			WHERE player_tag = ANY($1)
-		`, clanFixTags(body.PlayerTags)).Scan(&count); err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, modelsv2.BoardTotalsResponse{
-			Tag:                clanFixTag(c.Params("clan_tag")),
-			TrackedPlayerCount: count,
-			Activity:           count,
-		})
 	}
 }
 
@@ -333,63 +297,6 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusNotFound, "Clan not found")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, enrichClanLeagueIcons(clan, leagueIconLookup(a)))
-	}
-}
-
-// clansCapitalRaids godoc
-// @Summary Get capital raids for a list of clans
-// @Description Returns raid weekend documents for the requested clan tags.
-// @Tags Clan
-// @Produce json
-// @Param body body modelsv2.ClanTagsBody true "Clan tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func clansCapitalRaids(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var body modelsv2.ClanTagsBody
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT clan_tag, start_time, end_time, state, total_attacks, capital_total_loot,
-			       raids_completed, offensive_reward, defensive_reward, members, attack_log, defense_log, data
-			FROM raid_weekends
-			WHERE clan_tag = ANY($1)
-			ORDER BY clan_tag, start_time DESC
-		`, clanFixTags(body.ClanTags))
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var clanTag, state string
-			var startTime, endTime time.Time
-			var totalAttacks, capitalLoot, raidsCompleted, offensiveReward, defensiveReward int
-			var membersRaw, attackRaw, defenseRaw, dataRaw []byte
-			if err := rows.Scan(&clanTag, &startTime, &endTime, &state, &totalAttacks, &capitalLoot, &raidsCompleted, &offensiveReward, &defensiveReward, &membersRaw, &attackRaw, &defenseRaw, &dataRaw); err != nil {
-				return err
-			}
-			item := clanDecodeJSONObject(dataRaw)
-			item["clan_tag"] = clanTag
-			item["start_time"] = startTime.UTC().Format(time.RFC3339)
-			item["end_time"] = endTime.UTC().Format(time.RFC3339)
-			item["state"] = state
-			item["total_attacks"] = totalAttacks
-			item["capital_total_loot"] = capitalLoot
-			item["raids_completed"] = raidsCompleted
-			item["offensive_reward"] = offensiveReward
-			item["defensive_reward"] = defensiveReward
-			item["members"] = clanDecodeJSONValue(membersRaw, []any{})
-			item["attack_log"] = clanDecodeJSONValue(attackRaw, []any{})
-			item["defense_log"] = clanDecodeJSONValue(defenseRaw, []any{})
-			items = append(items, item)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
 }
 

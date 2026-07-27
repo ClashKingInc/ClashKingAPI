@@ -35,6 +35,95 @@ func TestAuthenticatorRejectsMissingTokenWithUnauthorized(t *testing.T) {
 	}
 }
 
+func TestAuthenticatorLocalModeUsesPresentedBearerIdentity(t *testing.T) {
+	cfg := Config{
+		Local:     true,
+		DevUserID: "configured-dev-user",
+		SecretKey: "secret",
+	}
+	token, err := GenerateAccessToken(cfg, "oauth-user", "device-1")
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+	auth := NewAuthenticator(cfg, nil)
+	app.Get("/private", auth.Wrap(func(c *fiber.Ctx) error {
+		if got := UserID(c.UserContext()); got != "oauth-user" {
+			t.Fatalf("user ID = %q, want %q", got, "oauth-user")
+		}
+		if got := DeviceID(c.UserContext()); got != "device-1" {
+			t.Fatalf("device ID = %q, want %q", got, "device-1")
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}))
+	req := httptest.NewRequest("GET", "/private", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	response, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if response.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+	}
+}
+
+func TestAuthenticatorLocalModeFallsBackWithoutBearerToken(t *testing.T) {
+	cfg := Config{
+		Local:     true,
+		DevUserID: "configured-dev-user",
+		SecretKey: "secret",
+	}
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+	auth := NewAuthenticator(cfg, nil)
+	app.Get("/private", auth.Wrap(func(c *fiber.Ctx) error {
+		if got := UserID(c.UserContext()); got != "configured-dev-user" {
+			t.Fatalf("user ID = %q, want %q", got, "configured-dev-user")
+		}
+		if got := DeviceID(c.UserContext()); got != "" {
+			t.Fatalf("device ID = %q, want empty", got)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}))
+
+	response, err := app.Test(httptest.NewRequest("GET", "/private", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if response.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+	}
+}
+
+func TestAuthenticatorLocalModeRejectsInvalidPresentedBearerToken(t *testing.T) {
+	cfg := Config{
+		Local:     true,
+		DevUserID: "configured-dev-user",
+		SecretKey: "secret",
+	}
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+	auth := NewAuthenticator(cfg, nil)
+	handlerCalled := false
+	app.Get("/private", auth.Wrap(func(c *fiber.Ctx) error {
+		handlerCalled = true
+		return c.SendStatus(fiber.StatusNoContent)
+	}))
+	req := httptest.NewRequest("GET", "/private", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+
+	response, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if response.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusUnauthorized)
+	}
+	if handlerCalled {
+		t.Fatal("handler was called for an invalid presented token")
+	}
+}
+
 func TestAuthenticatorRejectsUnexpectedJWTAlgorithm(t *testing.T) {
 	cfg := Config{SecretKey: "secret"}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{Sub: "user-1"}).SignedString([]byte(cfg.SecretKey))
@@ -130,6 +219,12 @@ func TestAuthenticatorAllowsAccessTokenForExistingUser(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
 	auth := newAuthenticator(cfg, fakeAuthUserLookup{exists: true})
 	app.Get("/private", auth.Wrap(func(c *fiber.Ctx) error {
+		if got := UserID(c.UserContext()); got != "active-user" {
+			t.Fatalf("user ID = %q, want %q", got, "active-user")
+		}
+		if got := DeviceID(c.UserContext()); got != "device-1" {
+			t.Fatalf("device ID = %q, want %q", got, "device-1")
+		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}))
 	req := httptest.NewRequest("GET", "/private", nil)

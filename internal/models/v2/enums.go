@@ -72,6 +72,8 @@ var LogTypeEnums = []EnumValue{
 	{ID: 22, Value: "name_change", Description: "Record player name changes.", Scope: "clan"},
 	{ID: 23, Value: "legend_log_attacks", Description: "Record Legend League attacks.", Scope: "clan"},
 	{ID: 24, Value: "legend_log_defenses", Description: "Record Legend League defenses.", Scope: "clan"},
+	{ID: 25, Value: "ban_alert", Description: "Publish clan-scoped player ban alerts.", Scope: "clan"},
+	{ID: 26, Value: "reddit_feed", Description: "Publish the server Reddit feed.", Scope: "server"},
 }
 
 func HasEnumValue(values []EnumValue, candidate string) bool {

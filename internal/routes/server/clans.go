@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -25,6 +24,7 @@ import (
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param clan_tag path string true "Clan Tag"
+// @Param body body modelsv2.ClanSettingsUpdate true "Retained clan settings"
 // @Success 200 {object} modelsv2.ClanSettingsDetail
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
@@ -260,10 +260,10 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		if _, err := tx.Exec(c.UserContext(), `
-			INSERT INTO server_clans (tag, server_id, name, updated_at)
-			VALUES ($1, $2, $3, now())
-			ON CONFLICT (tag, server_id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
-		`, clan.Tag, strconv.Itoa(serverID), clan.Name); err != nil {
+			INSERT INTO server_clans (tag, server_id, updated_at)
+			VALUES ($1, $2, now())
+			ON CONFLICT (tag, server_id) DO UPDATE SET updated_at = now()
+		`, clan.Tag, strconv.Itoa(serverID)); err != nil {
 			return err
 		}
 		if err := tx.Commit(c.UserContext()); err != nil {
@@ -309,23 +309,8 @@ func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, 
 	if result.RowsAffected() == 0 {
 		return nil, apptypes.Error(http.StatusNotFound, "Server or clan not found")
 	}
-	if _, err := tx.Exec(c.UserContext(), `
-		INSERT INTO server_clan_settings (server_id, clan_tag)
-		VALUES ($1, $2) ON CONFLICT DO NOTHING
-	`, serverIDText, clanTag); err != nil {
-		return nil, err
-	}
-	set := func(column string, value any) error {
-		_, err := tx.Exec(c.UserContext(), fmt.Sprintf(`UPDATE server_clan_settings SET %s = $3, updated_at = now() WHERE server_id = $1 AND clan_tag = $2`, column), serverIDText, clanTag, value)
-		return err
-	}
 	if body.Abbreviation != nil {
 		if _, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET abbreviation = $3 WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag, *body.Abbreviation); err != nil {
-			return nil, err
-		}
-	}
-	if body.ClanChannel != nil {
-		if _, err := tx.Exec(c.UserContext(), `UPDATE server_clans SET clan_channel_id = NULLIF($3, '') WHERE server_id = $1 AND tag = $2`, serverIDText, clanTag, *body.ClanChannel); err != nil {
 			return nil, err
 		}
 	}
@@ -335,11 +320,6 @@ func updateNormalizedClanSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int, 
 			c.UserContext(), tx, serverIDText, clanTag, *normalizedCategory,
 		)
 		if err != nil {
-			return nil, err
-		}
-	}
-	for _, item := range normalizedClanSettingUpdates(body) {
-		if err := set(item.column, item.value); err != nil {
 			return nil, err
 		}
 	}
@@ -399,25 +379,6 @@ func assignClanCategory(ctx context.Context, tx pgx.Tx, serverID, clanTag, name 
 	return &category, nil
 }
 
-type normalizedClanSettingUpdate struct {
-	column string
-	value  string
-}
-
-func normalizedClanSettingUpdates(body modelsv2.ClanSettingsUpdate) []normalizedClanSettingUpdate {
-	updates := make([]normalizedClanSettingUpdate, 0, 3)
-	if body.Greeting != nil {
-		updates = append(updates, normalizedClanSettingUpdate{column: "greeting", value: *body.Greeting})
-	}
-	if body.AutoGreetOption != nil {
-		updates = append(updates, normalizedClanSettingUpdate{column: "auto_greet_option", value: *body.AutoGreetOption})
-	}
-	if body.BanAlertChannel != nil {
-		updates = append(updates, normalizedClanSettingUpdate{column: "ban_alert_channel_id", value: *body.BanAlertChannel})
-	}
-	return updates
-}
-
 // removeServerClan godoc
 // @Summary Remove a clan from the server
 // @Description Removes a clan from the Discord server tracking list.
@@ -457,12 +418,9 @@ type serverClanMemberSnapshot struct {
 func sqlServerClanListItems(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]modelsv2.ClanListItem, error) {
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
 		SELECT sc.tag, clan.name, clan.badge_token, clan.clan_level, clan.member_count,
-		       sc.abbreviation, sc.clan_channel_id, categories.name, settings.greeting,
-		       settings.auto_greet_option, settings.ban_alert_channel_id
+		       sc.abbreviation, categories.name
 		FROM server_clans sc
 		JOIN basic_clan clan ON clan.tag = sc.tag
-		LEFT JOIN server_clan_settings settings
-		       ON settings.server_id = sc.server_id AND settings.clan_tag = sc.tag
 		LEFT JOIN clan_categories categories ON categories.id = sc.category_id
 		WHERE sc.server_id = $1
 		ORDER BY clan.name ASC, sc.tag ASC
@@ -476,11 +434,10 @@ func sqlServerClanListItems(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]mod
 	for rows.Next() {
 		var tag, name, badgeToken, abbreviation string
 		var level, memberCount int
-		var clanChannel, category, greeting, autoGreetOption, banAlertChannel *string
+		var category *string
 		if err := rows.Scan(
 			&tag, &name, &badgeToken, &level, &memberCount,
-			&abbreviation, &clanChannel, &category, &greeting,
-			&autoGreetOption, &banAlertChannel,
+			&abbreviation, &category,
 		); err != nil {
 			return nil, err
 		}
@@ -488,8 +445,7 @@ func sqlServerClanListItems(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]mod
 			Tag: tag, Name: name, BadgeURL: serverClanBadgeURL(badgeToken),
 			Level: &level, MemberCount: &memberCount,
 			Settings: modelsv2.ClanSettings{
-				ClanChannel: clanChannel, Category: category, Abbreviation: &abbreviation,
-				Greeting: greeting, AutoGreetOption: autoGreetOption, BanAlertChannel: banAlertChannel,
+				Category: category, Abbreviation: &abbreviation,
 			},
 		})
 	}
@@ -530,12 +486,8 @@ func buildServerClanListItem(clanDoc map[string]any) modelsv2.ClanListItem {
 		Level:       nil,
 		MemberCount: nil,
 		Settings: modelsv2.ClanSettings{
-			ClanChannel:     stringPtrMaybe(clanDoc["clan_channel"]),
-			Category:        stringPtrMaybe(clanDoc["category"]),
-			Abbreviation:    stringPtrMaybe(clanDoc["abbreviation"]),
-			Greeting:        stringPtrMaybe(clanDoc["greeting"]),
-			AutoGreetOption: stringPtrMaybe(clanDoc["auto_greet_option"]),
-			BanAlertChannel: stringPtrMaybe(clanDoc["ban_alert_channel"]),
+			Category:     stringPtrMaybe(clanDoc["category"]),
+			Abbreviation: stringPtrMaybe(clanDoc["abbreviation"]),
 		},
 	}
 }
@@ -543,37 +495,21 @@ func buildServerClanListItem(clanDoc map[string]any) modelsv2.ClanListItem {
 func clanSettingsDetailFromDoc(doc map[string]any) modelsv2.ClanSettingsDetail {
 	item := buildServerClanListItem(doc)
 	return modelsv2.ClanSettingsDetail{
-		Tag:             item.Tag,
-		Name:            item.Name,
-		ServerID:        asIntWithDefault(doc["server"], 0),
-		ClanChannel:     item.Settings.ClanChannel,
-		Category:        item.Settings.Category,
-		Abbreviation:    item.Settings.Abbreviation,
-		Greeting:        item.Settings.Greeting,
-		AutoGreetOption: item.Settings.AutoGreetOption,
-		BanAlertChannel: item.Settings.BanAlertChannel,
+		Tag:          item.Tag,
+		Name:         item.Name,
+		ServerID:     asIntWithDefault(doc["server"], 0),
+		Category:     item.Settings.Category,
+		Abbreviation: item.Settings.Abbreviation,
 	}
 }
 
 func clanUpdateMap(body modelsv2.ClanSettingsUpdate) map[string]any {
 	update := map[string]any{}
-	if body.ClanChannel != nil {
-		update["clan_channel"] = body.ClanChannel
-	}
 	if body.Category != nil {
 		update["category"] = *body.Category
 	}
 	if body.Abbreviation != nil {
 		update["abbreviation"] = *body.Abbreviation
-	}
-	if body.Greeting != nil {
-		update["greeting"] = *body.Greeting
-	}
-	if body.AutoGreetOption != nil {
-		update["auto_greet_option"] = *body.AutoGreetOption
-	}
-	if body.BanAlertChannel != nil {
-		update["ban_alert_channel"] = body.BanAlertChannel
 	}
 	return update
 }

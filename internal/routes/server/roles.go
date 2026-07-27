@@ -153,6 +153,16 @@ func deleteServerRole(rt apptypes.Deps) apptypes.HandlerFunc {
 	}
 }
 
+// getRoleSettings godoc
+// @Summary Get role automation settings
+// @Description Returns retained role automation settings for one server.
+// @Tags Server Roles
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Success 200 {object} modelsv2.RoleSettingsResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Router /v2/server/{server_id}/role-settings [get]
 func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -169,11 +179,23 @@ func getRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			AutoEvalNickname: boolPtrMaybe(serverDoc["auto_eval_nickname"]),
 			AutoevalTriggers: stringSlice(serverDoc["autoeval_triggers"]),
 			AutoevalLog:      stringPtrMaybe(serverDoc["autoeval_log"]),
-			BlacklistedRoles: stringSlice(serverDoc["blacklisted_roles"]),
 		})
 	}
 }
 
+// patchRoleSettings godoc
+// @Summary Update role automation settings
+// @Description Updates retained role automation settings for one server.
+// @Tags Server Roles
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path int true "Server ID"
+// @Param body body modelsv2.RoleSettingsUpdate true "Role automation settings"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
+// @Router /v2/server/{server_id}/role-settings [patch]
 func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
 		serverID, err := pathInt(c, "server_id")
@@ -189,9 +211,8 @@ func patchRoleSettings(rt apptypes.Deps) apptypes.HandlerFunc {
 			AutoEvalNickname: body.AutoEvalNickname,
 			AutoevalTriggers: body.AutoevalTriggers,
 			AutoevalLog:      body.AutoevalLog,
-			BlacklistedRoles: body.BlacklistedRoles,
 		}
-		if body.AutoEvalStatus == nil && body.AutoEvalNickname == nil && body.AutoevalLog == nil && body.AutoevalTriggers == nil && body.BlacklistedRoles == nil {
+		if body.AutoEvalStatus == nil && body.AutoEvalNickname == nil && body.AutoevalLog == nil && body.AutoevalTriggers == nil {
 			return apptypes.Error(http.StatusBadRequest, "No fields to update")
 		}
 		if err := updateNormalizedServerSettings(c, rt, serverID, settingsUpdate); err != nil {

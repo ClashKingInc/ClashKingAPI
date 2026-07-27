@@ -9,6 +9,7 @@ type ServerPlayerRanking struct {
 	Trophies       *int    `json:"trophies,omitempty"`
 	GlobalRank     *int    `json:"global_rank,omitempty"`
 	LocalRank      *int    `json:"local_rank,omitempty"`
+	LocationID     *string `json:"location_id,omitempty"`
 	CountryCode    *string `json:"country_code,omitempty"`
 	CountryName    *string `json:"country_name,omitempty"`
 	LegendTrophies *int    `json:"legend_trophies,omitempty"`
@@ -51,16 +52,6 @@ type ServerWarLeaderboardItem struct {
 	DestructionPercentage float64  `json:"destruction_percentage"`
 }
 
-type ServerCapitalLeaderboardItem struct {
-	Rank        int     `json:"rank"`
-	PlayerTag   string  `json:"player_tag"`
-	PlayerName  string  `json:"player_name"`
-	ClanTag     string  `json:"clan_tag"`
-	ClanName    string  `json:"clan_name"`
-	CapitalGold float64 `json:"capital_gold"`
-	Attacks     float64 `json:"attacks"`
-}
-
 type ServerLegendsLeaderboardItem struct {
 	PlayerTag     string `json:"player_tag"`
 	PlayerName    string `json:"player_name"`
@@ -68,7 +59,6 @@ type ServerLegendsLeaderboardItem struct {
 	ClanTag       string `json:"clan_tag"`
 	ClanName      string `json:"clan_name"`
 	Trophies      int    `json:"trophies"`
-	Streak        int    `json:"streak"`
 }
 
 type ServerSeasonLeaderboardItem struct {
@@ -88,12 +78,6 @@ type ServerWarLeaderboardResponse struct {
 	ServerID int                        `json:"server_id"`
 	Items    []ServerWarLeaderboardItem `json:"items"`
 	Total    int                        `json:"total"`
-}
-
-type ServerCapitalLeaderboardResponse struct {
-	ServerID int                            `json:"server_id"`
-	Items    []ServerCapitalLeaderboardItem `json:"items"`
-	Total    int                            `json:"total"`
 }
 
 type ServerLegendsLeaderboardResponse struct {

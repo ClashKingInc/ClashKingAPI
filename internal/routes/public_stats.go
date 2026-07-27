@@ -1,9 +1,9 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -17,11 +17,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const legendLeagueID = 105000036
-
 // playerRankings godoc
 // @Summary Get current player rankings
-// @Description Returns live rankings, when available, for a player in their league or other ranking bucket.
+// @Description Returns current Home Village and Builder Base points plus global and official-location placements. A retained location can have a null local rank when the player is no longer ranked there.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -35,8 +33,104 @@ func playerRankings(a apptypes.Deps) fiber.Handler {
 		if tag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "player_tag is required")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, mobileFetchCurrentRankings(c.UserContext(), a, tag))
+		response, err := queryPlayerRankings(c.UserContext(), a.Store.SQL, tag)
+		if err != nil {
+			return err
+		}
+		if err := resolvePlayerRankingLocations(c.UserContext(), a, &response); err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
+}
+
+const playerRankingsQuery = `
+	SELECT ranking_type, location_id, rank, points
+	FROM player_rankings_current
+	WHERE player_tag = $1
+	ORDER BY
+		CASE ranking_type
+			WHEN 'home' THEN 1
+			WHEN 'builder_base' THEN 2
+		END,
+		CASE WHEN location_id = 'global' THEN 0 ELSE 1 END,
+		location_id
+`
+
+type playerRankingsDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func queryPlayerRankings(ctx context.Context, db playerRankingsDB, tag string) (modelsv2.PlayerRankingsResponse, error) {
+	response := modelsv2.PlayerRankingsResponse{Tag: tag}
+	rows, err := db.Query(ctx, playerRankingsQuery, tag)
+	if err != nil {
+		return modelsv2.PlayerRankingsResponse{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rankingType, locationID string
+		var rank, points *int
+		if err := rows.Scan(&rankingType, &locationID, &rank, &points); err != nil {
+			return modelsv2.PlayerRankingsResponse{}, err
+		}
+		category := &response.HomeVillage
+		if rankingType == "builder_base" {
+			category = &response.BuilderBase
+		}
+		if locationID == "global" {
+			category.GlobalRank = rank
+			category.Points = points
+			continue
+		}
+		category.LocationID = &locationID
+		category.LocalRank = rank
+		if category.Points == nil {
+			category.Points = points
+		}
+	}
+	return response, rows.Err()
+}
+
+func resolvePlayerRankingLocations(
+	ctx context.Context,
+	a apptypes.Deps,
+	response *modelsv2.PlayerRankingsResponse,
+) error {
+	if response.HomeVillage.LocationID == nil && response.BuilderBase.LocationID == nil {
+		return nil
+	}
+	locations, err := a.Clash.SearchLocations(ctx)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]struct {
+		name        string
+		countryCode string
+	}, len(locations))
+	for _, location := range locations {
+		byID[strconv.Itoa(location.ID)] = struct {
+			name        string
+			countryCode string
+		}{name: location.Name, countryCode: location.CountryCode}
+	}
+	for _, category := range []*modelsv2.PlayerRankingCategory{
+		&response.HomeVillage,
+		&response.BuilderBase,
+	} {
+		if category.LocationID == nil {
+			continue
+		}
+		location, ok := byID[*category.LocationID]
+		if !ok {
+			continue
+		}
+		category.LocationName = &location.name
+		if location.countryCode != "" {
+			category.CountryCode = &location.countryCode
+		}
+	}
+	return nil
 }
 
 // playerBattlelogHistory godoc
@@ -96,115 +190,6 @@ func playerBattlelogHistory(a apptypes.Deps) fiber.Handler {
 			"limit":      limit,
 			"time":       map[string]any{"start": window.start, "end": window.end},
 		})
-	}
-}
-
-// playerLegendsDayBattlelog godoc
-// @Summary Get player legends day battlelog
-// @Description Returns player legends attacks and defenses for a day.
-// @Tags Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param day path string true "Legend day YYYY-MM-DD"
-// @Success 200 {object} modelsv2.PlayerLegendsDayResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/player/{player_tag}/legends/{day}/day [get]
-func playerLegendsDayBattlelog(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := playerNormalizeTag(c.Params("player_tag"))
-		day := c.Params("day")
-		if tag == "" {
-			return apptypes.Error(fiber.StatusBadRequest, "player_tag is required")
-		}
-		if !legendsDayParam.MatchString(day) {
-			return apptypes.Error(fiber.StatusBadRequest, "invalid day format, expected YYYY-MM-DD")
-		}
-		legends, err := playerLegendsMap(c, a, tag)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return apptypes.Error(fiber.StatusNotFound, "player not found")
-			}
-			return err
-		}
-		dayData, _ := normalizeLegendDay(legends[day]).(map[string]any)
-		if dayData == nil {
-			dayData = map[string]any{}
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
-			"tag":      tag,
-			"day":      day,
-			"attacks":  legendsArray(dayData["attacks"]),
-			"defenses": legendsArray(dayData["defenses"]),
-			"data":     dayData,
-		})
-	}
-}
-
-// playerLegendsSeasonBattlelog godoc
-// @Summary Get player legends season battlelog stats
-// @Description Returns player legends +/- and overview stats for a season.
-// @Tags Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param season path string true "Legend season YYYY-MM"
-// @Success 200 {object} modelsv2.PlayerLegendSeasonResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/player/{player_tag}/legends/{season}/season [get]
-func playerLegendsSeasonBattlelog(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := playerNormalizeTag(c.Params("player_tag"))
-		season := c.Params("season")
-		if tag == "" {
-			return apptypes.Error(fiber.StatusBadRequest, "player_tag is required")
-		}
-		item, err := playerLegendSeasonStats(c, a, tag, season)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, item)
-	}
-}
-
-// playersLegendsBattlelogStats godoc
-// @Summary Get bulk player legends battlelog stats
-// @Description Returns season +/- and overview stats for a list of players.
-// @Tags Player
-// @Accept json
-// @Produce json
-// @Param season path string true "Legend season YYYY-MM"
-// @Param body body modelsv2.PlayerBattlelogStatsRequest true "Player tags"
-// @Success 200 {object} modelsv2.PlayersLegendSeasonResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/player/legends/{season}/battlelog-stats [post]
-func playersLegendsBattlelogStats(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var body modelsv2.PlayerBattlelogStatsRequest
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		season := c.Params("season")
-		items := []map[string]any{}
-		for _, rawTag := range body.PlayerTags {
-			tag := playerNormalizeTag(rawTag)
-			if tag == "" {
-				continue
-			}
-			item, err := playerLegendSeasonStats(c, a, tag, season)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					items = append(items, map[string]any{"tag": tag, "season": season, "found": false})
-					continue
-				}
-				return err
-			}
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"season": season, "items": items, "count": len(items)})
 	}
 }
 
@@ -337,7 +322,7 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 		limit := clamp(queryInt(c, "limit", 100), 1, 500)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT event_time, player_tag, clan_tag, townhall_level, change_type, previous_value, current_value
-			FROM player_profile_changes
+			FROM player_change_history
 			WHERE player_tag = $1 AND ($2 = '' OR change_type = $2)
 			ORDER BY event_time DESC
 			LIMIT $3
@@ -403,21 +388,6 @@ func leaderboardLeague(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
-}
-
-// leaderboardLeagueHistory godoc
-// @Summary Get historical league leaderboard
-// @Description Returns stored historical league leaderboard snapshots.
-// @Tags Leaderboard
-// @Produce json
-// @Param league_tier_id path int true "League tier ID"
-// @Param date path string true "Snapshot date YYYY-MM-DD"
-// @Param limit query int false "Result limit, max 200"
-// @Success 200 {object} modelsv2.PlayerLeaderboardHistoryResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/leaderboard/league/{league_tier_id}/history/{date} [get]
-func leaderboardLeagueHistory(a apptypes.Deps) fiber.Handler {
-	return leaderboardSnapshot(a, "league", "league_tier_id")
 }
 
 // leaderboardTownhalls godoc
@@ -489,21 +459,6 @@ func decodeCachedPlayerLeaderboard(raw []byte, limit int) (modelsv2.PlayerLeader
 	}, nil
 }
 
-// leaderboardTownhallsHistory godoc
-// @Summary Get historical townhall leaderboard
-// @Description Returns stored historical townhall leaderboard snapshots.
-// @Tags Leaderboard
-// @Produce json
-// @Param townhall_level path int true "Townhall level"
-// @Param date path string true "Snapshot date YYYY-MM-DD"
-// @Param limit query int false "Result limit, max 200"
-// @Success 200 {object} modelsv2.PlayerLeaderboardHistoryResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/leaderboard/townhalls/{townhall_level}/history/{date} [get]
-func leaderboardTownhallsHistory(a apptypes.Deps) fiber.Handler {
-	return leaderboardSnapshot(a, "townhall", "townhall_level")
-}
-
 // leaderboardClanDonations godoc
 // @Summary Get clan donation leaderboard
 // @Description Returns top donation clans for a location.
@@ -567,12 +522,11 @@ func leaderboardClanWinStreak(a apptypes.Deps) fiber.Handler {
 }
 
 // leaderboardTrophyBuckets godoc
-// @Summary Get trophy bucket history
-// @Description Returns trophy buckets of players and trophies at bucket points, with optional history up to 30 days.
+// @Summary Get current trophy buckets
+// @Description Returns current trophy and player totals grouped into trophy buckets for one league tier.
 // @Tags Leaderboard
 // @Produce json
 // @Param league_tier_id path int true "League tier ID"
-// @Param days query int false "History days, max 30"
 // @Success 200 {object} modelsv2.TrophyBucketsResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -583,7 +537,6 @@ func leaderboardTrophyBuckets(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid league_tier_id")
 		}
-		days := clamp(queryInt(c, "days", 0), 0, 30)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT width_bucket(trophies, 0, 7000, 14) AS bucket, count(*)::int, COALESCE(sum(trophies), 0)::bigint
 			FROM basic_player
@@ -595,39 +548,20 @@ func leaderboardTrophyBuckets(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		defer rows.Close()
-		items := []map[string]any{}
+		items := []modelsv2.TrophyBucket{}
 		for rows.Next() {
 			var bucket, players int
 			var trophies int64
 			if err := rows.Scan(&bucket, &players, &trophies); err != nil {
 				return err
 			}
-			items = append(items, map[string]any{"bucket": bucket, "players": players, "trophies": trophies})
+			items = append(items, modelsv2.TrophyBucket{Bucket: bucket, Players: players, Trophies: trophies})
 		}
-		response := map[string]any{"league_tier_id": leagueID, "items": items, "count": len(items)}
-		if days > 0 {
-			historyRows, err := a.Store.SQL.Query(c.UserContext(), `
-				SELECT date, data
-				FROM leaderboard_snapshot_items
-				WHERE kind = 'trophy_buckets' AND location_id = $1 AND date >= CURRENT_DATE - ($2::int * INTERVAL '1 day')
-				ORDER BY date DESC
-			`, strconv.Itoa(leagueID), days)
-			if err != nil {
-				return err
-			}
-			defer historyRows.Close()
-			history := []map[string]any{}
-			for historyRows.Next() {
-				var date time.Time
-				var raw []byte
-				if err := historyRows.Scan(&date, &raw); err != nil {
-					return err
-				}
-				history = append(history, map[string]any{"date": date.Format("2006-01-02"), "data": jsonValue(raw, nil)})
-			}
-			response["history"] = history
-		}
-		return apptypes.JSON(c, fiber.StatusOK, response)
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.TrophyBucketsResponse{
+			LeagueTierID: leagueID,
+			Items:        items,
+			Count:        len(items),
+		})
 	}
 }
 
@@ -651,28 +585,6 @@ func globalCWLLeagues(a apptypes.Deps) fiber.Handler {
 // @Failure 500 {object} modelsv2.ErrorResponse
 func globalClanLocations(a apptypes.Deps) fiber.Handler {
 	return groupedCounts(a, "location_id", `SELECT location_id, count(*) FROM basic_clan GROUP BY location_id ORDER BY location_id NULLS LAST`)
-}
-
-// globalTownhalls godoc
-// @Summary Get global townhall counts
-// @Description Returns counts of players at each townhall level.
-// @Tags Global
-// @Produce json
-// @Success 200 {object} modelsv2.GroupedCountsResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func globalTownhalls(a apptypes.Deps) fiber.Handler {
-	return groupedCounts(a, "townhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 0 ORDER BY level`)
-}
-
-// globalBuilderhalls godoc
-// @Summary Get global builderhall counts
-// @Description Returns counts of players at each builder hall level.
-// @Tags Global
-// @Produce json
-// @Success 200 {object} modelsv2.GroupedCountsResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func globalBuilderhalls(a apptypes.Deps) fiber.Handler {
-	return groupedCounts(a, "builderhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 1 ORDER BY level`)
 }
 
 // globalCapitalLeagues godoc
@@ -925,38 +837,11 @@ func battlelogItemLeagueHitrate(a apptypes.Deps) fiber.Handler {
 	return battlelogItemStats(a, battlelogItemDimensionLeague, battlelogItemMetricHitrate)
 }
 
-// battlelogItemTop200Usage godoc
-// @Summary Get item usage for legend top 200
-// @Description Returns 90 daily usage points for an item in ranked and legend battlelogs for players in the previous day's stored legend top 200.
-// @Tags Battlelogs
-// @Produce json
-// @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
-// @Success 200 {object} modelsv2.BattlelogItemUsageResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func battlelogItemTop200Usage(a apptypes.Deps) fiber.Handler {
-	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricUsage)
-}
-
-// battlelogItemTop200Hitrate godoc
-// @Summary Get item hitrate for legend top 200
-// @Description Returns 90 daily hitrate points for same-townhall ranked and legend attacks containing an item for players in the previous day's stored legend top 200.
-// @Tags Battlelogs
-// @Produce json
-// @Param item query string true "Troop, spell, hero, pet, or equipment item ID/name"
-// @Success 200 {object} modelsv2.BattlelogItemHitrateResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func battlelogItemTop200Hitrate(a apptypes.Deps) fiber.Handler {
-	return battlelogItemStats(a, battlelogItemDimensionTop200, battlelogItemMetricHitrate)
-}
-
 type battlelogItemDimension string
 
 const (
 	battlelogItemDimensionTownhall battlelogItemDimension = "townhall"
 	battlelogItemDimensionLeague   battlelogItemDimension = "league"
-	battlelogItemDimensionTop200   battlelogItemDimension = "top200"
 	battlelogItemMetricUsage                              = "usage"
 	battlelogItemMetricHitrate                            = "hitrate"
 )
@@ -1016,8 +901,6 @@ func battlelogItemFilter(c *fiber.Ctx, dimension battlelogItemDimension) (battle
 			return battlelogItemFilterValue{}, modelsv2.BattlelogItemFilters{}, apptypes.Error(fiber.StatusBadRequest, "invalid league_id")
 		}
 		return battlelogItemFilterValue{value: leagueID}, modelsv2.BattlelogItemFilters{LeagueID: &leagueID}, nil
-	case battlelogItemDimensionTop200:
-		return battlelogItemFilterValue{value: legendLeagueID}, modelsv2.BattlelogItemFilters{Top200: true}, nil
 	default:
 		return battlelogItemFilterValue{}, modelsv2.BattlelogItemFilters{}, apptypes.Error(fiber.StatusBadRequest, "invalid battlelog item dimension")
 	}
@@ -1090,17 +973,6 @@ func battlelogItemStatsQuery(item string, dimension battlelogItemDimension, filt
 				WHERE m.player_tag = b.player_tag
 				  AND m.season_id = to_char(b."timestamp" AT TIME ZONE 'UTC', 'YYYYMM')::bigint
 				  AND m.league_tier_id = $4
-			)`
-	case battlelogItemDimensionTop200:
-		args = append(args, strconv.Itoa(filter.value))
-		filterSQL = `AND EXISTS (
-				SELECT 1
-				FROM leaderboard_snapshot_items l
-				WHERE l.kind = 'league'
-				  AND l.location_id = $4
-				  AND l.date = (date_trunc('day', b."timestamp")::date - 1)
-				  AND l.tag = b.player_tag
-				  AND l.rank <= 200
 			)`
 	}
 	if metric == battlelogItemMetricHitrate {
@@ -1230,104 +1102,6 @@ func publicStatsCSV(c *fiber.Ctx, key string) []string {
 	return out
 }
 
-func playerLegendsMap(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
-	var raw []byte
-	err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT legends FROM player_current_stats WHERE player_tag = $1`, tag).Scan(&raw)
-	if err != nil {
-		return nil, err
-	}
-	return jsonObject(raw), nil
-}
-
-func playerLegendSeasonStats(c *fiber.Ctx, a apptypes.Deps, tag string, season string) (map[string]any, error) {
-	seasonDays, err := cocSeasonDays(season)
-	if err != nil {
-		return nil, apptypes.Error(fiber.StatusBadRequest, "invalid season format, use YYYY-MM")
-	}
-	legends, err := playerLegendsMap(c, a, tag)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
-		}
-		return nil, err
-	}
-	days := map[string]any{}
-	stats := map[string]any{
-		"attack_count":        0,
-		"defense_count":       0,
-		"attack_trophies":     0,
-		"defense_trophies":    0,
-		"net_trophies":        0,
-		"three_stars":         0,
-		"two_stars":           0,
-		"one_stars":           0,
-		"zero_stars":          0,
-		"defense_wins":        0,
-		"defense_losses":      0,
-		"average_stars":       0.0,
-		"average_destruction": 0.0,
-	}
-	totalStars := 0
-	totalDestruction := 0
-	for key, value := range legends {
-		if _, ok := seasonDays[key]; !ok {
-			continue
-		}
-		dayData, _ := normalizeLegendDay(value).(map[string]any)
-		if dayData == nil {
-			continue
-		}
-		days[key] = dayData
-		attacks := legendsArray(dayData["attacks"])
-		defenses := legendsArray(dayData["defenses"])
-		stats["attack_count"] = stats["attack_count"].(int) + len(attacks)
-		stats["defense_count"] = stats["defense_count"].(int) + len(defenses)
-		for _, rawAttack := range attacks {
-			attack, _ := rawAttack.(map[string]any)
-			stars := legendsAsInt(attack["stars"])
-			totalStars += stars
-			totalDestruction += legendsAsInt(attack["destructionPercentage"])
-			stats["attack_trophies"] = stats["attack_trophies"].(int) + publicStatsTrophyDelta(attack)
-			switch stars {
-			case 3:
-				stats["three_stars"] = stats["three_stars"].(int) + 1
-			case 2:
-				stats["two_stars"] = stats["two_stars"].(int) + 1
-			case 1:
-				stats["one_stars"] = stats["one_stars"].(int) + 1
-			default:
-				stats["zero_stars"] = stats["zero_stars"].(int) + 1
-			}
-		}
-		for _, rawDefense := range defenses {
-			defense, _ := rawDefense.(map[string]any)
-			delta := publicStatsTrophyDelta(defense)
-			stats["defense_trophies"] = stats["defense_trophies"].(int) + delta
-			if legendsAsInt(defense["stars"]) == 0 {
-				stats["defense_wins"] = stats["defense_wins"].(int) + 1
-			} else {
-				stats["defense_losses"] = stats["defense_losses"].(int) + 1
-			}
-		}
-	}
-	attackCount := stats["attack_count"].(int)
-	if attackCount > 0 {
-		stats["average_stars"] = math.Round((float64(totalStars)/float64(attackCount))*100) / 100
-		stats["average_destruction"] = math.Round((float64(totalDestruction)/float64(attackCount))*100) / 100
-	}
-	stats["net_trophies"] = stats["attack_trophies"].(int) + stats["defense_trophies"].(int)
-	return map[string]any{"tag": tag, "season": season, "days": days, "stats": stats, "streak": legends["streak"]}, nil
-}
-
-func publicStatsTrophyDelta(item map[string]any) int {
-	for _, key := range []string{"trophyChange", "trophy_change", "change", "trophies"} {
-		if value, ok := item[key]; ok {
-			return legendsAsInt(value)
-		}
-	}
-	return 0
-}
-
 func rankedMember(c *fiber.Ctx, a apptypes.Deps, tag string, seasonID int64) (map[string]any, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT player_tag, player_name, clan_tag, clan_name, placement, league_trophies,
@@ -1449,40 +1223,6 @@ func scanBasicPlayerLeaderboard(rows pgx.Rows) ([]map[string]any, error) {
 		rank++
 	}
 	return items, rows.Err()
-}
-
-func leaderboardSnapshot(a apptypes.Deps, kind string, paramName string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		location := c.Params(paramName)
-		date := c.Params("date")
-		limit := clamp(queryInt(c, "limit", 200), 1, 200)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT tag, name, rank, data
-			FROM leaderboard_snapshot_items
-			WHERE kind = $1 AND location_id = $2 AND date = $3
-			ORDER BY rank
-			LIMIT $4
-		`, kind, location, date, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var tag, name string
-			var rank int
-			var raw []byte
-			if err := rows.Scan(&tag, &name, &rank, &raw); err != nil {
-				return err
-			}
-			item := jsonObject(raw)
-			item["tag"] = tag
-			item["name"] = name
-			item["rank"] = rank
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"kind": kind, "location": location, "date": date, "items": items, "count": len(items)})
-	}
 }
 
 func clanLeaderboard(a apptypes.Deps, kind string) fiber.Handler {

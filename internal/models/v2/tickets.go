@@ -52,36 +52,6 @@ type TicketPanelsResponse struct {
 	TownhallRequirementFields []string      `json:"townhall_requirement_fields"`
 }
 
-type LinkedAccount struct {
-	PlayerTag  string  `json:"player_tag"`
-	PlayerName *string `json:"player_name"`
-	TownHall   *int    `json:"town_hall"`
-}
-
-type OpenTicket struct {
-	Channel            string          `json:"channel"`
-	ChannelExists      bool            `json:"channel_exists"`
-	User               string          `json:"user"`
-	DiscordUsername    *string         `json:"discord_username,omitempty"`
-	DiscordDisplayName *string         `json:"discord_display_name,omitempty"`
-	DiscordAvatarURL   *string         `json:"discord_avatar_url,omitempty"`
-	Thread             *string         `json:"thread,omitempty"`
-	Server             string          `json:"server"`
-	Status             string          `json:"status"`
-	Number             int             `json:"number"`
-	ApplyAccount       *string         `json:"apply_account,omitempty"`
-	Panel              string          `json:"panel"`
-	CategoryID         *string         `json:"category_id,omitempty"`
-	CategoryName       *string         `json:"category_name,omitempty"`
-	SetClan            *string         `json:"set_clan,omitempty"`
-	LinkedAccounts     []LinkedAccount `json:"linked_accounts,omitempty"`
-}
-
-type OpenTicketsResponse struct {
-	Items []OpenTicket `json:"items"`
-	Total int          `json:"total"`
-}
-
 type MessageResponse struct {
 	Message string `json:"message"`
 }
@@ -146,14 +116,6 @@ type UpdateButtonAppearanceRequest struct {
 	Label string        `json:"label"`
 	Style int           `json:"style"`
 	Emoji *DiscordEmoji `json:"emoji,omitempty"`
-}
-
-type UpdateOpenTicketStatusRequest struct {
-	Status string `json:"status"`
-}
-
-type UpdateOpenTicketClanRequest struct {
-	SetClan *string `json:"set_clan,omitempty"`
 }
 
 type DiscordEmoji struct {

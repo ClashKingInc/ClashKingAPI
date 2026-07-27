@@ -18,16 +18,10 @@ type ServerSettingsDocument struct {
 	AutoevalTriggers  []string             `json:"autoeval_triggers,omitempty"`
 	AutoevalLog       *string              `json:"autoeval_log,omitempty"`
 	Autoeval          *bool                `json:"autoeval,omitempty"`
-	BlacklistedRoles  []string             `json:"blacklisted_roles,omitempty"`
 	FullWhitelistRole *string              `json:"full_whitelist_role,omitempty"`
 	AutoboardLimit    *int                 `json:"autoboard_limit,omitempty"`
-	APIToken          *bool                `json:"api_token,omitempty"`
 	Tied              *bool                `json:"tied,omitempty"`
-	Banlist           *string              `json:"banlist,omitempty"`
-	StrikeLog         *string              `json:"strike_log,omitempty"`
-	RedditFeed        *string              `json:"reddit_feed,omitempty"`
 	FamilyLabel       *string              `json:"family_label,omitempty"`
-	Greeting          *string              `json:"greeting,omitempty"`
 	LinkParse         *LinkParseSettings   `json:"link_parse,omitempty"`
 	Countdowns        map[string]string    `json:"countdowns"`
 	ServerRoles       []ServerRole         `json:"server_roles"`

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -30,7 +29,7 @@ type normalizedHomeActivityMapping struct {
 // to QUERY by swaggerdocs.BuildDoc. The registered HTTP method is always RFC QUERY.
 //
 // @Summary Get Home activity
-// @Description Uses RFC QUERY with a JSON body to return the newest merged clan membership and player history activity.
+// @Description Uses RFC QUERY with a JSON body to return the newest clan membership activity.
 // @Tags Activity & Inactivity
 // @Accept json
 // @Produce json
@@ -124,46 +123,20 @@ func homeActivity(a apptypes.Deps) fiber.Handler {
 		}
 
 		activityRows, err := tx.Query(c.UserContext(), `
-			WITH activity AS (
-				SELECT joins."time" AS occurred_at,
-				       'join_leave'::text AS kind,
-				       joins."type" AS event_type,
-				       joins.player_tag,
-				       joins.clan_tag,
-				       joins.player_name,
-				       clans.name AS clan_name,
-				       joins.townhall_level,
-				       NULL::text AS season,
-				       NULL::integer AS value,
-				       '{}'::jsonb AS data
-				FROM join_leave_history AS joins
-				LEFT JOIN basic_clan AS clans ON clans.tag = joins.clan_tag
-				WHERE joins.clan_tag = ANY($1)
-
-				UNION ALL
-
-				SELECT history.event_time AS occurred_at,
-				       'player_history'::text AS kind,
-				       history.event_type,
-				       history.player_tag,
-				       NULLIF(history.clan_tag, '') AS clan_tag,
-				       players.name AS player_name,
-				       clans.name AS clan_name,
-				       NULL::smallint AS townhall_level,
-				       NULLIF(history.season, '') AS season,
-				       history.value,
-				       history.data
-				FROM player_history_events AS history
-				LEFT JOIN basic_player AS players ON players.tag = history.player_tag
-				LEFT JOIN basic_clan AS clans ON clans.tag = NULLIF(history.clan_tag, '')
-				WHERE history.player_tag = ANY($2)
-			)
-			SELECT occurred_at, kind, event_type, player_tag, clan_tag, player_name,
-			       clan_name, townhall_level, season, value, data
-			FROM activity
-			ORDER BY occurred_at DESC, kind ASC, player_tag ASC, event_type ASC
-			LIMIT $3
-		`, clanTags, playerTags, limit)
+			SELECT joins."time" AS occurred_at,
+			       'join_leave'::text AS kind,
+			       joins."type" AS event_type,
+			       joins.player_tag,
+			       joins.clan_tag,
+			       joins.player_name,
+			       clans.name AS clan_name,
+			       joins.townhall_level
+			FROM join_leave_history AS joins
+			LEFT JOIN basic_clan AS clans ON clans.tag = joins.clan_tag
+			WHERE joins.clan_tag = ANY($1)
+			ORDER BY occurred_at DESC, player_tag ASC, event_type ASC
+			LIMIT $2
+		`, clanTags, limit)
 		if err != nil {
 			return err
 		}
@@ -172,10 +145,8 @@ func homeActivity(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.HomeActivityItem, 0, limit)
 		for activityRows.Next() {
 			var item modelsv2.HomeActivityItem
-			var clanTag, playerName, clanName, season pgtype.Text
+			var clanTag, playerName, clanName pgtype.Text
 			var townHall pgtype.Int2
-			var value pgtype.Int4
-			var rawData []byte
 			if err := activityRows.Scan(
 				&item.Timestamp,
 				&item.Type,
@@ -185,27 +156,14 @@ func homeActivity(a apptypes.Deps) fiber.Handler {
 				&playerName,
 				&clanName,
 				&townHall,
-				&season,
-				&value,
-				&rawData,
 			); err != nil {
 				return err
 			}
 			item.ClanTag = textPointer(clanTag)
 			item.PlayerName = textPointer(playerName)
 			item.ClanName = textPointer(clanName)
-			item.Season = textPointer(season)
 			if townHall.Valid {
 				item.TownHallLevel = &townHall.Int16
-			}
-			if value.Valid {
-				item.Value = &value.Int32
-			}
-			item.Data = map[string]any{}
-			if len(rawData) > 0 {
-				if err := json.Unmarshal(rawData, &item.Data); err != nil {
-					return err
-				}
 			}
 			items = append(items, item)
 		}

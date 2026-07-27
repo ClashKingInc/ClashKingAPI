@@ -23,6 +23,8 @@ const (
 	statsDefaultArmyLimit = 25
 	statsMaximumArmyLimit = 100
 	statsMaximumItemCount = 25
+
+	townHallCountsQuery = `SELECT level, total_count FROM townhall_counts ORDER BY level`
 )
 
 var statsValidHeroes = map[string]string{
@@ -68,18 +70,24 @@ func countsOverview(a apptypes.Deps) fiber.Handler {
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/counts/players/town-halls [get]
 func countsPlayerTownhalls(a apptypes.Deps) fiber.Handler {
-	return groupedCounts(a, "townhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 0 ORDER BY level`)
+	return groupedCounts(a, "townhall_level", townHallCountsQuery)
 }
 
 // countsPlayerBuilderhalls godoc
 // @Summary Get player builder hall counts
+// @Description Builder Hall counts are not implemented because no durable Builder Hall count source exists yet.
 // @Tags Counts
 // @Produce json
-// @Success 200 {object} modelsv2.GroupedCountsResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 501 {object} modelsv2.ErrorResponse
 // @Router /v2/counts/players/builder-halls [get]
-func countsPlayerBuilderhalls(a apptypes.Deps) fiber.Handler {
-	return groupedCounts(a, "builderhall_level", `SELECT level, total_count FROM hall_counts WHERE village_type = 1 ORDER BY level`)
+func countsPlayerBuilderhalls(_ apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		return apptypes.JSON(c, fiber.StatusNotImplemented, modelsv2.ErrorResponse{
+			Code:      modelsv2.ErrorCodeNotImplemented,
+			Message:   "Builder Hall counts are not implemented",
+			RequestID: apptypes.RequestID(c),
+		})
+	}
 }
 
 // countsPlayerLeagueTiers godoc

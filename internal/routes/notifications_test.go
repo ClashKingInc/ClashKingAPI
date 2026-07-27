@@ -1,13 +1,18 @@
 package routes
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestDecodeNotificationDeviceUnregistrationAllowsEmptyBody(t *testing.T) {
@@ -42,10 +47,180 @@ func TestNotificationTagsNormalizesAndDeduplicates(t *testing.T) {
 
 func TestDefaultNotificationPreferencesUsesStableEmptyLists(t *testing.T) {
 	got := defaultNotificationPreferences("device-1", "sandbox")
-	if got.DeviceID != "device-1" || got.Environment != "sandbox" || !got.Enabled {
+	if got.DeviceID != "device-1" || got.Environment != "sandbox" || got.DeviceEnabled {
 		t.Fatalf("unexpected defaults: %#v", got)
 	}
-	if got.EnabledTypes == nil || got.SelectedAccounts == nil || got.SelectedTownHalls == nil {
+	if got.ReminderTimings == nil || got.Accounts == nil {
 		t.Fatal("default preference lists must serialize as [] instead of null")
+	}
+}
+
+func TestNotificationReminderTimingsValidateAndDeduplicate(t *testing.T) {
+	got, err := notificationReminderTimings([]int{60, 30, 60, 15})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int{60, 30, 15}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("notificationReminderTimings() = %#v, want %#v", got, want)
+	}
+	for _, invalid := range [][]int{
+		{0},
+		{2821},
+		{15, 30, 60, 120},
+	} {
+		if _, err := notificationReminderTimings(invalid); err == nil {
+			t.Fatalf("notificationReminderTimings(%v) succeeded", invalid)
+		}
+	}
+}
+
+type notificationPreferencesTestDB struct {
+	tx *notificationPreferencesTestTx
+}
+
+func (db *notificationPreferencesTestDB) QueryRow(context.Context, string, ...any) pgx.Row {
+	return nil
+}
+
+func (db *notificationPreferencesTestDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, nil
+}
+
+func (db *notificationPreferencesTestDB) Begin(context.Context) (pgx.Tx, error) {
+	return db.tx, nil
+}
+
+type notificationPreferencesTestTx struct {
+	pgx.Tx
+	deviceRows int64
+	execSQL    []string
+	querySQL   string
+	queryArgs  []any
+	accounts   []modelsv2.NotificationAccount
+	committed  bool
+	rolledBack bool
+}
+
+func (tx *notificationPreferencesTestTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	tx.execSQL = append(tx.execSQL, sql)
+	if strings.Contains(sql, "UPDATE mobile_push_devices") {
+		if tx.deviceRows == 0 {
+			return pgconn.NewCommandTag("UPDATE 0"), nil
+		}
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+	}
+	return pgconn.NewCommandTag("INSERT 1"), nil
+}
+
+func (tx *notificationPreferencesTestTx) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
+	tx.querySQL = sql
+	tx.queryArgs = args
+	return &notificationAccountTestRows{accounts: tx.accounts}, nil
+}
+
+func (tx *notificationPreferencesTestTx) Commit(context.Context) error {
+	tx.committed = true
+	return nil
+}
+
+func (tx *notificationPreferencesTestTx) Rollback(context.Context) error {
+	tx.rolledBack = true
+	return nil
+}
+
+type notificationAccountTestRows struct {
+	pgx.Rows
+	accounts []modelsv2.NotificationAccount
+	cursor   int
+}
+
+func (rows *notificationAccountTestRows) Close()     {}
+func (rows *notificationAccountTestRows) Err() error { return nil }
+func (rows *notificationAccountTestRows) Next() bool {
+	if rows.cursor >= len(rows.accounts) {
+		return false
+	}
+	rows.cursor++
+	return true
+}
+func (rows *notificationAccountTestRows) Scan(dest ...any) error {
+	account := rows.accounts[rows.cursor-1]
+	*dest[0].(*string) = account.PlayerTag
+	source := account.Source
+	*dest[1].(**string) = &source
+	return nil
+}
+
+func TestReplaceNotificationPreferencesIsAtomicAndUsesAuthoritativeAccountSources(t *testing.T) {
+	tx := &notificationPreferencesTestTx{
+		deviceRows: 1,
+		accounts: []modelsv2.NotificationAccount{
+			{PlayerTag: "#VERIFIED", Source: "verified"},
+			{PlayerTag: "#BOOKMARK", Source: "bookmarked"},
+		},
+	}
+	body := modelsv2.NotificationPreferencesRequest{
+		DeviceID:             "device-1",
+		Environment:          "production",
+		DeviceEnabled:        false,
+		AnnouncementsEnabled: true,
+		ReminderTimings:      []int{15, 60},
+		AccountTags:          []string{"#VERIFIED", "#BOOKMARK"},
+	}
+
+	response, err := replaceNotificationPreferences(
+		context.Background(),
+		&notificationPreferencesTestDB{tx: tx},
+		"user-1",
+		body,
+	)
+	if err != nil {
+		t.Fatalf("replaceNotificationPreferences() error = %v", err)
+	}
+	if !tx.committed {
+		t.Fatal("preference and account replacement did not commit")
+	}
+	joinedSQL := strings.Join(tx.execSQL, "\n")
+	for _, required := range []string{
+		"UPDATE mobile_push_devices",
+		"INSERT INTO mobile_notification_preferences",
+		"DELETE FROM mobile_notification_accounts",
+		"INSERT INTO mobile_notification_accounts",
+	} {
+		if !strings.Contains(joinedSQL, required) {
+			t.Fatalf("transaction missing %q: %s", required, joinedSQL)
+		}
+	}
+	for _, required := range []string{"player_links", "is_verified = true", "user_bookmarks", "entity_type = 'player'", "FOR KEY SHARE"} {
+		if !strings.Contains(tx.querySQL, required) {
+			t.Fatalf("eligibility query missing %q: %s", required, tx.querySQL)
+		}
+	}
+	if len(response.Accounts) != 2 ||
+		response.Accounts[0].Source != "verified" ||
+		response.Accounts[1].Source != "bookmarked" {
+		t.Fatalf("unexpected authoritative account response: %#v", response.Accounts)
+	}
+	if response.DeviceEnabled {
+		t.Fatal("device master switch must come from mobile_push_devices.enabled")
+	}
+}
+
+func TestReplaceNotificationPreferencesRejectsUnregisteredDeviceBeforeWritingPreferences(t *testing.T) {
+	tx := &notificationPreferencesTestTx{deviceRows: 0}
+	_, err := replaceNotificationPreferences(
+		context.Background(),
+		&notificationPreferencesTestDB{tx: tx},
+		"user-1",
+		modelsv2.NotificationPreferencesRequest{DeviceID: "missing", Environment: "production"},
+	)
+	if err == nil {
+		t.Fatal("replaceNotificationPreferences() succeeded for an unregistered device")
+	}
+	if tx.committed {
+		t.Fatal("unregistered device replacement committed")
+	}
+	if len(tx.execSQL) != 1 || !strings.Contains(tx.execSQL[0], "UPDATE mobile_push_devices") {
+		t.Fatalf("unexpected writes after missing device: %#v", tx.execSQL)
 	}
 }

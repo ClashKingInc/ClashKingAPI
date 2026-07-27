@@ -1,12 +1,8 @@
 package modelsv2
 
 type ClanSettingsUpdate struct {
-	ClanChannel     *string `json:"clan_channel,omitempty"`
-	Category        *string `json:"category,omitempty"`
-	Abbreviation    *string `json:"abbreviation,omitempty"`
-	Greeting        *string `json:"greeting,omitempty"`
-	AutoGreetOption *string `json:"auto_greet_option,omitempty"`
-	BanAlertChannel *string `json:"ban_alert_channel,omitempty"`
+	Category     *string `json:"category,omitempty"`
+	Abbreviation *string `json:"abbreviation,omitempty"`
 }
 
 type ClanSettingsResponse struct {
@@ -36,12 +32,8 @@ type RemoveClanResponse struct {
 }
 
 type ClanSettings struct {
-	ClanChannel     *string `json:"clan_channel,omitempty"`
-	Category        *string `json:"category,omitempty"`
-	Abbreviation    *string `json:"abbreviation,omitempty"`
-	Greeting        *string `json:"greeting,omitempty"`
-	AutoGreetOption *string `json:"auto_greet_option,omitempty"`
-	BanAlertChannel *string `json:"ban_alert_channel,omitempty"`
+	Category     *string `json:"category,omitempty"`
+	Abbreviation *string `json:"abbreviation,omitempty"`
 }
 
 type ClanListItem struct {
@@ -54,13 +46,9 @@ type ClanListItem struct {
 }
 
 type ClanSettingsDetail struct {
-	Tag             string  `json:"tag"`
-	Name            string  `json:"name"`
-	ServerID        int     `json:"server_id"`
-	ClanChannel     *string `json:"clan_channel,omitempty"`
-	Category        *string `json:"category,omitempty"`
-	Abbreviation    *string `json:"abbreviation,omitempty"`
-	Greeting        *string `json:"greeting,omitempty"`
-	AutoGreetOption *string `json:"auto_greet_option,omitempty"`
-	BanAlertChannel *string `json:"ban_alert_channel,omitempty"`
+	Tag          string  `json:"tag"`
+	Name         string  `json:"name"`
+	ServerID     int     `json:"server_id"`
+	Category     *string `json:"category,omitempty"`
+	Abbreviation *string `json:"abbreviation,omitempty"`
 }

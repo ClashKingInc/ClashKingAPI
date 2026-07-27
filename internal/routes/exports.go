@@ -290,8 +290,8 @@ func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[str
 		return nil, nil, err
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT attacker_tag,
-			COALESCE((SELECT name FROM player_current_stats WHERE player_tag = attacker_tag), attacker_tag) AS name,
+			SELECT attacker_tag,
+				COALESCE((SELECT name FROM basic_player WHERE tag = attacker_tag), attacker_tag) AS name,
 			max(attacker_townhall),
 			count(*),
 			sum(stars),
@@ -343,11 +343,11 @@ func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[str
 
 func sqlExportPlayerWarHits(c *fiber.Ctx, a apptypes.Deps, playerTag string, start float64, end float64, limit int) ([]map[string]any, error) {
 	query := `
-		SELECT e.war_end_time, e.attacking_clan_tag, e.attacker_tag,
-			COALESCE(p.name, e.attacker_tag), e.attacker_townhall,
-			e.defender_tag, e.defender_townhall, e.stars, e.destruction_percentage, e.attack_order
-		FROM war_attacks e
-		LEFT JOIN player_current_stats p ON p.player_tag = e.attacker_tag
+			SELECT e.war_end_time, e.attacking_clan_tag, e.attacker_tag,
+				COALESCE(p.name, e.attacker_tag), e.attacker_townhall,
+				e.defender_tag, e.defender_townhall, e.stars, e.destruction_percentage, e.attack_order
+			FROM war_attacks e
+			LEFT JOIN basic_player p ON p.tag = e.attacker_tag
 		WHERE e.attacker_tag = $1
 	`
 	args := []any{playerTag}

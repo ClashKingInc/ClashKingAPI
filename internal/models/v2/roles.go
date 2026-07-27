@@ -60,7 +60,6 @@ type RoleSettingsResponse struct {
 	AutoEvalNickname *bool    `json:"auto_eval_nickname,omitempty"`
 	AutoevalTriggers []string `json:"autoeval_triggers,omitempty"`
 	AutoevalLog      *string  `json:"autoeval_log,omitempty"`
-	BlacklistedRoles []string `json:"blacklisted_roles,omitempty"`
 }
 
 type RoleSettingsUpdate struct {
@@ -68,5 +67,4 @@ type RoleSettingsUpdate struct {
 	AutoEvalNickname *bool    `json:"auto_eval_nickname,omitempty"`
 	AutoevalTriggers []string `json:"autoeval_triggers,omitempty"`
 	AutoevalLog      *string  `json:"autoeval_log,omitempty"`
-	BlacklistedRoles []string `json:"blacklisted_roles,omitempty"`
 }

@@ -346,7 +346,7 @@ func scopedPlayerTags(c *fiber.Ctx, a apptypes.Deps) ([]string, map[string]strin
 		tags = append(tags, tag)
 	}
 	if len(tags) == 0 {
-		rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT player_tag, name FROM player_current_stats ORDER BY updated_at DESC LIMIT 200`)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT tag, name FROM basic_player ORDER BY tag LIMIT 200`)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -360,7 +360,7 @@ func scopedPlayerTags(c *fiber.Ctx, a apptypes.Deps) ([]string, map[string]strin
 		rows.Close()
 	}
 	if len(names) < len(tags) {
-		rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT player_tag, name FROM player_current_stats WHERE player_tag = ANY($1)`, tags)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT tag, name FROM basic_player WHERE tag = ANY($1)`, tags)
 		if err == nil {
 			for rows.Next() {
 				var tag, name string
@@ -375,7 +375,7 @@ func scopedPlayerTags(c *fiber.Ctx, a apptypes.Deps) ([]string, map[string]strin
 }
 
 func addScopedPlayersFromClans(c *fiber.Ctx, a apptypes.Deps, clanTags []string, tagSet map[string]bool, names map[string]string) error {
-	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT player_tag, name FROM player_current_stats WHERE clan_tag = ANY($1)`, clanTags)
+	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT tag, name FROM basic_player WHERE clan_tag = ANY($1)`, clanTags)
 	if err != nil {
 		return err
 	}

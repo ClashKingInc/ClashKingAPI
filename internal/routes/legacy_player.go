@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	modelsv1 "github.com/ClashKingInc/ClashKingAPI/internal/models/v1"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,117 +24,6 @@ func fixTag(tag string) string {
 		return ""
 	}
 	return "#" + tag
-}
-
-// legacyPlayerStats godoc
-// @Summary Get player stats
-// @Description Returns tracked aggregate stats for a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Success 200 {object} modelsv1.PlayerStatsResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func legacyPlayerStats(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		if tag == "" {
-			return apptypes.Error(http.StatusBadRequest, "player_tag is required")
-		}
-		result, err := v1PlayerCurrent(c, a, tag)
-		if err != nil {
-			return apptypes.Error(http.StatusNotFound, "No player found")
-		}
-		legends := cloneMap(result["legends"])
-		delete(legends, "streak")
-		out := modelsv1.PlayerStatsResponse{
-			Name:       result["name"],
-			Tag:        result["tag"],
-			Townhall:   result["townhall"],
-			Legends:    legends,
-			LastOnline: result["last_online"],
-			Looted: modelsv1.PlayerLootedData{
-				Gold: result["gold"], Elixir: result["elixir"], DarkElixir: result["dark_elixir"],
-			},
-			Trophies:                 result["trophies"],
-			WarStars:                 result["warStars"],
-			ClanCapitalContributions: result["aggressive_capitalism"],
-			Donations:                result["donations"],
-			Capital:                  result["capital_gold"],
-			ClanGames:                result["clan_games"],
-			SeasonPass:               result["season_pass"],
-			AttackWins:               result["attack_wins"],
-			Activity:                 result["activity"],
-			ClanTag:                  result["clan_tag"],
-			League:                   result["league"],
-			Location:                 result["country_name"],
-		}
-		return apptypes.JSON(c, http.StatusOK, out)
-	}
-}
-
-// playerLegends godoc
-// @Summary Get player legends data
-// @Description Returns tracked legend league data for a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param season query string false "Season YYYY-MM"
-// @Success 200 {object} modelsv1.PlayerLegendsResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func playerLegends(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		season := c.Query("season")
-		result, err := v1PlayerCurrent(c, a, tag)
-		if err != nil {
-			return apptypes.Error(http.StatusNotFound, "No player found")
-		}
-		legendData := cloneMap(result["legends"])
-		if season != "" && len(legendData) > 0 {
-			legendData = filterLegendsBySeason(legendData, season)
-		}
-		delete(legendData, "global_rank")
-		delete(legendData, "local_rank")
-		streak := legendData["streak"]
-		delete(legendData, "streak")
-		rankings := map[string]any{
-			"country_code": result["country_code"],
-			"country_name": result["country_name"],
-			"local_rank":   result["local_rank"],
-			"global_rank":  result["global_rank"],
-		}
-		return apptypes.JSON(c, http.StatusOK, modelsv1.PlayerLegendsResponse{
-			Name: result["name"], Tag: result["tag"], Townhall: result["townhall"], Legends: legendData, Rankings: rankings, Streak: streak,
-		})
-	}
-}
-
-func filterLegendsBySeason(legends map[string]any, season string) map[string]any {
-	parts := strings.SplitN(season, "-", 2)
-	if len(parts) != 2 {
-		return legends
-	}
-	var yearInt, monthInt int
-	parseYearMonth(parts[0], parts[1], &yearInt, &monthInt)
-	prevMonth := monthInt - 1
-	prevYear := yearInt
-	if prevMonth == 0 {
-		prevMonth = 12
-		prevYear--
-	}
-	start := time.Date(prevYear, time.Month(prevMonth), 1, 5, 0, 0, 0, time.UTC)
-	end := time.Date(yearInt, time.Month(monthInt), 1, 5, 0, 0, 0, time.UTC)
-	filtered := map[string]any{}
-	for d := start; d.Before(end); d = d.AddDate(0, 0, 1) {
-		key := d.Format("2006-01-02")
-		if v, ok := legends[key]; ok {
-			filtered[key] = v
-		}
-	}
-	return filtered
 }
 
 func parseYearMonth(yearStr, monthStr string, year, month *int) (bool, error) {
@@ -156,57 +44,6 @@ func parseYearMonth(yearStr, monthStr string, year, month *int) (bool, error) {
 	return true, nil
 }
 
-// playerHistorical godoc
-// @Summary Get player historical events
-// @Description Returns player history events grouped by event type for a season.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param season path string true "Season YYYY-MM"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-func playerHistorical(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		start, end, err := seasonBounds(c.Params("season"))
-		if err != nil {
-			return err
-		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT event_time, event_type, clan_tag, season, value, data
-			FROM player_history_events
-			WHERE player_tag = $1 AND event_time >= $2 AND event_time <= $3
-			ORDER BY event_time
-		`, tag, start, end)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		breakdown := map[string][]map[string]any{}
-		for rows.Next() {
-			var eventTime time.Time
-			var eventType, clanTag, season string
-			var value pgtype.Int4
-			var raw []byte
-			if err := rows.Scan(&eventTime, &eventType, &clanTag, &season, &value, &raw); err != nil {
-				return err
-			}
-			doc := jsonObject(raw)
-			doc["time"] = eventTime
-			doc["tag"] = tag
-			doc["clan"] = clanTag
-			doc["season"] = season
-			doc["type"] = eventType
-			if value.Valid {
-				doc["value"] = value.Int32
-			}
-			breakdown[eventType] = append(breakdown[eventType], doc)
-		}
-		return apptypes.JSON(c, http.StatusOK, breakdown)
-	}
-}
-
 // legacyPlayerWarhits godoc
 // @Summary Get player war hits
 // @Description Returns recent war attacks and defenses for a player.
@@ -221,71 +58,6 @@ func playerHistorical(a apptypes.Deps) fiber.Handler {
 func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return playerWarAttacks(a)(c)
-	}
-}
-
-// playerRaids godoc
-// @Summary Get player raid weekends
-// @Description Returns recent raid weekend documents containing a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param limit query int false "Maximum number of raid weekends"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func playerRaids(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		limit := queryInt(c, "limit", 1)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT rw.data
-			FROM capital_raid_members m
-			JOIN raid_weekends rw ON rw.clan_tag = m.clan_tag AND rw.start_time = m.start_time
-			WHERE m.player_tag = $1
-			ORDER BY rw.end_time DESC
-			LIMIT $2
-		`, tag, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []any{}
-		for rows.Next() {
-			var raw []byte
-			if err := rows.Scan(&raw); err != nil {
-				return err
-			}
-			items = append(items, jsonObject(raw))
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
-	}
-}
-
-// playerLegendRankings godoc
-// @Summary Get player legend ranking history
-// @Description Returns stored end-of-season legend ranking snapshots for a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param limit query int false "Maximum number of snapshots"
-// @Success 200 {array} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func playerLegendRankings(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		limit := queryInt(c, "limit", 10)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT season, player_tag, rank, trophies, data
-			FROM legend_history_snapshots
-			WHERE player_tag = $1
-			ORDER BY season DESC
-			LIMIT $2
-		`, tag, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		return apptypes.JSON(c, http.StatusOK, scanLegendHistory(rows))
 	}
 }
 
@@ -363,44 +135,6 @@ func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// playerSearchByName godoc
-// @Summary Search players by name
-// @Description Returns basic tracked player search results by name.
-// @Tags Legacy Player
-// @Produce json
-// @Param name path string true "Player name search"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func playerSearchByName(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT player_tag, name, townhall_level
-			FROM player_current_stats
-			WHERE name ILIKE '%' || $1 || '%'
-			ORDER BY name
-			LIMIT 25
-		`, c.Params("name"))
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		results := []map[string]any{}
-		for rows.Next() {
-			var tag, name string
-			var townhall pgtype.Int4
-			if err := rows.Scan(&tag, &name, &townhall); err != nil {
-				return err
-			}
-			item := map[string]any{"tag": tag, "name": name}
-			if townhall.Valid {
-				item["townhall"] = townhall.Int32
-			}
-			results = append(results, item)
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": results})
-	}
-}
-
 func queryInt(c *fiber.Ctx, key string, def int) int {
 	raw := c.Query(key)
 	if raw == "" {
@@ -442,54 +176,6 @@ func sortWarsByEndTime(wars []map[string]any) {
 	sort.SliceStable(wars, func(i, j int) bool {
 		return stringValue(wars[i]["endTime"]) > stringValue(wars[j]["endTime"])
 	})
-}
-
-func v1PlayerCurrent(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
-	var name string
-	var clanTag pgtype.Text
-	var townhall pgtype.Int4
-	var lastOnline pgtype.Timestamptz
-	var legendsRaw, donationsRaw, activityRaw, dataRaw []byte
-	var countryCode, countryName pgtype.Text
-	var globalRank, localRank pgtype.Int4
-	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT p.name, p.clan_tag, p.townhall_level, p.last_online_at, p.legends, p.donations, p.activity, p.data,
-			r.country_code, r.country_name, r.global_rank, r.local_rank
-		FROM player_current_stats p
-		LEFT JOIN player_rankings_current r ON r.player_tag = p.player_tag
-		WHERE p.player_tag = $1
-	`, tag).Scan(&name, &clanTag, &townhall, &lastOnline, &legendsRaw, &donationsRaw, &activityRaw, &dataRaw, &countryCode, &countryName, &globalRank, &localRank)
-	if err != nil {
-		return nil, err
-	}
-	item := jsonObject(dataRaw)
-	item["tag"] = tag
-	item["name"] = name
-	if clanTag.Valid {
-		item["clan_tag"] = clanTag.String
-	}
-	if townhall.Valid {
-		item["townhall"] = townhall.Int32
-	}
-	if lastOnline.Valid {
-		item["last_online"] = lastOnline.Time
-	}
-	item["legends"] = jsonObject(legendsRaw)
-	item["donations"] = jsonObject(donationsRaw)
-	item["activity"] = jsonObject(activityRaw)
-	if countryCode.Valid {
-		item["country_code"] = countryCode.String
-	}
-	if countryName.Valid {
-		item["country_name"] = countryName.String
-	}
-	if globalRank.Valid {
-		item["global_rank"] = globalRank.Int32
-	}
-	if localRank.Valid {
-		item["local_rank"] = localRank.Int32
-	}
-	return item, nil
 }
 
 const currentWarTimerQuery = `

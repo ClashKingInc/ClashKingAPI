@@ -12,6 +12,40 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func TestTownHallCountsUsesMaterializedViewWithoutVillageType(t *testing.T) {
+	const expected = `SELECT level, total_count FROM townhall_counts ORDER BY level`
+	if townHallCountsQuery != expected {
+		t.Fatalf("town hall counts query = %q, want %q", townHallCountsQuery, expected)
+	}
+	if strings.Contains(townHallCountsQuery, "village_type") {
+		t.Fatalf("town hall counts query retains removed village_type: %s", townHallCountsQuery)
+	}
+}
+
+func TestBuilderHallCountsReturnsExplicitNotImplementedResponse(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/counts/players/builder-halls", countsPlayerBuilderhalls(apptypes.Deps{}))
+
+	response, err := app.Test(httptest.NewRequest("GET", "/v2/counts/players/builder-halls", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if response.StatusCode != fiber.StatusNotImplemented {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNotImplemented)
+	}
+
+	var body modelsv2.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Code != modelsv2.ErrorCodeNotImplemented {
+		t.Fatalf("code = %q, want %q", body.Code, modelsv2.ErrorCodeNotImplemented)
+	}
+	if body.Message != "Builder Hall counts are not implemented" {
+		t.Fatalf("message = %q", body.Message)
+	}
+}
+
 func TestStatsParseWindowDefaultsAndCapsAtNinetyDays(t *testing.T) {
 	now := time.Date(2026, 7, 20, 19, 30, 0, 0, time.UTC)
 	window, err := statsParseWindow(modelsv2.StatsDateFilter{}, now)

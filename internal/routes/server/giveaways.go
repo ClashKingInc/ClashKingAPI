@@ -15,9 +15,39 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
+
+type giveawayUserIdentity struct {
+	Username    *string
+	DisplayName *string
+	AvatarURL   *string
+}
+
+func giveawayIdentityFromMember(member discord.Member) giveawayUserIdentity {
+	var username *string
+	if member.User.Username != "" {
+		name := member.User.Username
+		username = &name
+	}
+	var displayName *string
+	if effectiveName := member.EffectiveName(); effectiveName != "" {
+		name := effectiveName
+		displayName = &name
+	}
+	var avatarURL *string
+	if effectiveAvatarURL := member.EffectiveAvatarURL(); effectiveAvatarURL != "" {
+		url := effectiveAvatarURL
+		avatarURL = &url
+	}
+	return giveawayUserIdentity{
+		Username:    username,
+		DisplayName: displayName,
+		AvatarURL:   avatarURL,
+	}
+}
 
 // getServerGiveaways godoc
 // @Summary Get server giveaways
@@ -567,7 +597,7 @@ func timeArg(value any) any {
 	return nil
 }
 
-func giveawayModel(doc map[string]any, winnerIdentities map[string]ticketUserIdentity) modelsv2.GiveawayConfig {
+func giveawayModel(doc map[string]any, winnerIdentities map[string]giveawayUserIdentity) modelsv2.GiveawayConfig {
 	out := modelsv2.GiveawayConfig{
 		ID:                     asStringOr(doc["_id"], ""),
 		ServerID:               asStringOr(doc["server_id"], ""),
@@ -599,8 +629,8 @@ func giveawayModel(doc map[string]any, winnerIdentities map[string]ticketUserIde
 	return out
 }
 
-func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, docs []map[string]any) map[string]ticketUserIdentity {
-	identityMap := map[string]ticketUserIdentity{}
+func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, docs []map[string]any) map[string]giveawayUserIdentity {
+	identityMap := map[string]giveawayUserIdentity{}
 	if len(docs) == 0 {
 		return identityMap
 	}
@@ -649,7 +679,7 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 			if member == nil {
 				return
 			}
-			identity := ticketIdentityFromMember(*member)
+			identity := giveawayIdentityFromMember(*member)
 			if identity.Username == nil && identity.AvatarURL == nil {
 				return
 			}
@@ -690,7 +720,7 @@ func giveawayBoosters(value any) []modelsv2.GiveawayBooster {
 	return out
 }
 
-func giveawayWinners(value any, winnerIdentities map[string]ticketUserIdentity) []modelsv2.GiveawayWinner {
+func giveawayWinners(value any, winnerIdentities map[string]giveawayUserIdentity) []modelsv2.GiveawayWinner {
 	raw := anyMapSlice(value)
 	if len(raw) == 0 {
 		return []modelsv2.GiveawayWinner{}

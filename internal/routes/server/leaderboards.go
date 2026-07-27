@@ -73,6 +73,7 @@ func getServerLeaderboards(a apptypes.Deps) fiber.Handler {
 				"trophies":        info["trophies"],
 				"global_rank":     ranking["global_rank"],
 				"local_rank":      ranking["local_rank"],
+				"location_id":     ranking["location_id"],
 				"country_code":    ranking["country_code"],
 				"country_name":    ranking["country_name"],
 				"legend_trophies": ranking["legend_trophies"],
@@ -245,65 +246,6 @@ func getServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// getServerCapitalRaidsLeaderboard godoc
-// @Summary Get server capital raids leaderboard
-// @Description Returns players ranked by recent capital raid loot for a server.
-// @Tags Server Leaderboards
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} modelsv2.ServerCapitalLeaderboardResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/leaderboards/capital-raids [get]
-func getServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := pathInt(c, "server_id")
-		if err != nil {
-			return err
-		}
-		limit := clamp(queryIntDefault(c, "limit", 100), 1, 500)
-		clanTags, clanNameMap, _, err := lbGetServerClanAndPlayers(a, c.UserContext(), serverID)
-		if err != nil {
-			return err
-		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT clan_tag, members
-			FROM raid_weekends
-			WHERE clan_tag = ANY($1)
-			ORDER BY start_time DESC
-			LIMIT 50
-		`, clanTags)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		scores := map[string]map[string]any{}
-		for rows.Next() {
-			var clanTag string
-			var membersRaw []byte
-			if err := rows.Scan(&clanTag, &membersRaw); err != nil {
-				return err
-			}
-			for _, member := range anyMapSlice(decodeJSONAny(membersRaw)) {
-				tag := serverAsString(member["tag"])
-				if tag == "" {
-					continue
-				}
-				item := scores[tag]
-				if item == nil {
-					item = map[string]any{"player_tag": tag, "player_name": member["name"], "clan_tag": clanTag, "clan_name": clanNameMap[clanTag]}
-					scores[tag] = item
-				}
-				item["capital_gold"] = lbAsFloat(item["capital_gold"]) + lbAsFloat(member["capitalResourcesLooted"])
-				item["attacks"] = lbAsFloat(item["attacks"]) + lbAsFloat(member["attacks"])
-			}
-		}
-		items := mapsByScore(scores, "capital_gold", limit)
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"server_id": serverID, "items": items, "total": len(items)})
-	}
-}
-
 // getServerLegendsLeaderboard godoc
 // @Summary Get server legends leaderboard
 // @Description Returns tracked legend players ranked by trophies for a server.
@@ -332,8 +274,7 @@ func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 		}
 		items := make([]map[string]any, 0, len(info))
 		for tag, p := range info {
-			legends := mapMaybe(p["legends"])
-			if len(legends) == 0 {
+			if asInt64(p["league_id"]) != 29000022 {
 				continue
 			}
 			clanTag, clanName := lbClanFromPlayer(p, clanNameMap)
@@ -344,7 +285,6 @@ func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 				"clan_tag":       clanTag,
 				"clan_name":      clanName,
 				"trophies":       p["trophies"],
-				"streak":         legends["streak"],
 			})
 		}
 		sort.SliceStable(items, func(i, j int) bool { return asInt64(items[i]["trophies"]) > asInt64(items[j]["trophies"]) })
@@ -507,7 +447,13 @@ func lbRound(f float64, decimals int) float64 {
 }
 
 func lbGetServerClanAndPlayers(a apptypes.Deps, ctx context.Context, serverID int) (clanTags []string, clanNameMap map[string]string, playerTags []string, err error) {
-	rows, err := a.Store.SQL.Query(ctx, `SELECT tag, name FROM server_clans WHERE server_id = $1 ORDER BY name, tag`, strconv.Itoa(serverID))
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT sc.tag, clan.name
+		FROM server_clans sc
+		JOIN basic_clan clan ON clan.tag = sc.tag
+		WHERE sc.server_id = $1
+		ORDER BY clan.name, sc.tag
+	`, strconv.Itoa(serverID))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -527,7 +473,7 @@ func lbGetServerClanAndPlayers(a apptypes.Deps, ctx context.Context, serverID in
 	if len(clanTags) == 0 {
 		return clanTags, clanNameMap, []string{}, nil
 	}
-	playerRows, err := a.Store.SQL.Query(ctx, `SELECT player_tag FROM player_current_stats WHERE clan_tag = ANY($1)`, clanTags)
+	playerRows, err := a.Store.SQL.Query(ctx, `SELECT tag FROM basic_player WHERE clan_tag = ANY($1)`, clanTags)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -544,9 +490,9 @@ func lbGetServerClanAndPlayers(a apptypes.Deps, ctx context.Context, serverID in
 
 func lbGetPlayerInfoMap(a apptypes.Deps, ctx context.Context, playerTags []string) (map[string]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, clan_tag, name, townhall_level, legends, data
-		FROM player_current_stats
-		WHERE player_tag = ANY($1)
+		SELECT tag, clan_tag, name, townhall_level, trophies, league_id
+		FROM basic_player
+		WHERE tag = ANY($1)
 	`, playerTags)
 	if err != nil {
 		return nil, err
@@ -556,22 +502,24 @@ func lbGetPlayerInfoMap(a apptypes.Deps, ctx context.Context, playerTags []strin
 	for rows.Next() {
 		var tag, name string
 		var clanTag *string
-		var townhall *int
-		var legendsRaw, dataRaw []byte
-		if err := rows.Scan(&tag, &clanTag, &name, &townhall, &legendsRaw, &dataRaw); err != nil {
+		var townhall, trophies int
+		var leagueID *int
+		if err := rows.Scan(&tag, &clanTag, &name, &townhall, &trophies, &leagueID); err != nil {
 			return nil, err
 		}
-		item := mapMaybe(decodeJSONAny(dataRaw))
-		item["tag"] = tag
-		item["name"] = name
+		item := map[string]any{
+			"tag":      tag,
+			"name":     name,
+			"townhall": townhall,
+			"trophies": trophies,
+		}
+		if leagueID != nil {
+			item["league_id"] = *leagueID
+		}
 		if clanTag != nil {
 			item["clan"] = map[string]any{"tag": *clanTag}
 			item["clan_tag"] = *clanTag
 		}
-		if townhall != nil {
-			item["townhall"] = *townhall
-		}
-		item["legends"] = mapMaybe(decodeJSONAny(legendsRaw))
 		out[tag] = item
 	}
 	return out, rows.Err()
@@ -579,9 +527,13 @@ func lbGetPlayerInfoMap(a apptypes.Deps, ctx context.Context, playerTags []strin
 
 func lbPlayerRankMap(a apptypes.Deps, ctx context.Context, playerTags []string) (map[string]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, country_code, country_name, rank, global_rank, local_rank, data
+		SELECT player_tag, location_id, rank, points
 		FROM player_rankings_current
 		WHERE player_tag = ANY($1)
+		  AND ranking_type = 'home'
+		ORDER BY player_tag,
+			CASE WHEN location_id = 'global' THEN 0 ELSE 1 END,
+			location_id
 	`, playerTags)
 	if err != nil {
 		return nil, err
@@ -589,32 +541,57 @@ func lbPlayerRankMap(a apptypes.Deps, ctx context.Context, playerTags []string) 
 	defer rows.Close()
 	out := map[string]map[string]any{}
 	for rows.Next() {
-		var tag string
-		var countryCode, countryName *string
-		var rank, globalRank, localRank *int
-		var dataRaw []byte
-		if err := rows.Scan(&tag, &countryCode, &countryName, &rank, &globalRank, &localRank, &dataRaw); err != nil {
+		var tag, locationID string
+		var rank, points *int
+		if err := rows.Scan(&tag, &locationID, &rank, &points); err != nil {
 			return nil, err
 		}
-		item := mapMaybe(decodeJSONAny(dataRaw))
-		if countryCode != nil {
-			item["country_code"] = *countryCode
+		item := out[tag]
+		if item == nil {
+			item = map[string]any{}
+			out[tag] = item
 		}
-		if countryName != nil {
-			item["country_name"] = *countryName
+		if locationID == "global" {
+			if rank != nil {
+				item["global_rank"] = *rank
+			}
+			if points != nil {
+				item["legend_trophies"] = *points
+			}
+			continue
 		}
+		item["location_id"] = locationID
 		if rank != nil {
-			item["rank"] = *rank
+			item["local_rank"] = *rank
 		}
-		if globalRank != nil {
-			item["global_rank"] = *globalRank
-		}
-		if localRank != nil {
-			item["local_rank"] = *localRank
-		}
-		out[tag] = item
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if a.Clash == nil {
+		return out, nil
+	}
+	locations, err := a.Clash.SearchLocations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]map[string]any, len(locations))
+	for _, location := range locations {
+		byID[strconv.Itoa(location.ID)] = map[string]any{
+			"country_name": location.Name,
+			"country_code": location.CountryCode,
+		}
+	}
+	for _, item := range out {
+		locationID := asStringOr(item["location_id"], "")
+		if metadata := byID[locationID]; metadata != nil {
+			item["country_name"] = metadata["country_name"]
+			if asStringOr(metadata["country_code"], "") != "" {
+				item["country_code"] = metadata["country_code"]
+			}
+		}
+	}
+	return out, nil
 }
 
 const lbClanRankQuery = `

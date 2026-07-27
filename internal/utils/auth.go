@@ -47,7 +47,21 @@ func newAuthenticator(cfg Config, users authUserLookup) *Authenticator {
 func (a *Authenticator) Wrap(next fiber.Handler) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if a.cfg.Local {
-			ctx := context.WithValue(c.UserContext(), userIDKey, a.cfg.DevUserID)
+			token := bearerToken(c.Get("Authorization"))
+			if token == "" {
+				ctx := context.WithValue(c.UserContext(), userIDKey, a.cfg.DevUserID)
+				WithUserContext(c, ctx)
+				return next(c)
+			}
+
+			claims, err := a.parseJWT(token)
+			if err != nil {
+				return err
+			}
+			ctx := context.WithValue(c.UserContext(), userIDKey, claims.Sub)
+			if claims.Device != "" {
+				ctx = context.WithValue(ctx, deviceIDKey, claims.Device)
+			}
 			WithUserContext(c, ctx)
 			return next(c)
 		}

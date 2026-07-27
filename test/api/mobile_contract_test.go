@@ -95,11 +95,6 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 				},
 			},
 		},
-		"raid_data": map[string]any{
-			"attack_limit":  6,
-			"attacks_done":  4,
-			"unexpectedKey": true,
-		},
 	})
 
 	if _, ok := player["legends_by_season"].(map[string]any); !ok {
@@ -117,15 +112,8 @@ func TestMobilePlayerExtendedContractMatchesAppExpectations(t *testing.T) {
 		t.Fatalf("expected rankings tag fallback, got %v", got)
 	}
 
-	raidData, ok := player["raid_data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected raid_data map, got %T", player["raid_data"])
-	}
-	if got := raidData["attack_limit"]; got != 6 {
-		t.Fatalf("expected attack_limit=6, got %v", got)
-	}
-	if _, exists := raidData["unexpectedKey"]; exists {
-		t.Fatal("expected raid_data contract to strip unknown keys")
+	if _, exists := player["raid_data"]; exists {
+		t.Fatal("retired Raid Weekend data must not remain in the mobile player contract")
 	}
 
 	warData, ok := player["war_data"].(map[string]any)
@@ -230,31 +218,41 @@ func TestMobileLegendRankingsByTagFromRowsRespectsPerPlayerLimit(t *testing.T) {
 	}
 }
 
-func TestMobileCurrentRankingsByTagFromRowsUsesFallbackGlobalRank(t *testing.T) {
+func TestMobileCurrentRankingsByTagFromRowsUsesNormalizedRows(t *testing.T) {
 	results := routes.MobileCurrentRankingsByTagFromRowsForTest(
 		[]string{"#P1", "#P2", "#P3"},
 		[]map[string]any{
-			{"tag": "#P1", "country_code": "FR", "local_rank": 10},
-			{"tag": "#P2", "country_code": "US", "global_rank": 22},
+			{"tag": "#P1", "rankingType": "home", "locationId": "32000087", "rank": 10, "points": 5400},
+			{"tag": "#P2", "rankingType": "home", "locationId": "global", "rank": 22, "points": 5600},
+			{"tag": "#P2", "rankingType": "builder_base", "locationId": "32000006", "rank": nil, "points": nil},
 		},
-		[]map[string]any{
-			{"tag": "#P1", "rank": 111},
-			{"tag": "#P2", "rank": 999},
-			{"tag": "#P3", "rank": 333},
+		map[string]map[string]any{
+			"32000087": {"locationName": "France", "countryCode": "FR"},
+			"32000006": {"locationName": "United States", "countryCode": "US"},
 		},
 	)
 
-	if got := results["#P1"]["global_rank"]; got != 111 {
-		t.Fatalf("expected #P1 fallback global_rank=111, got %v", got)
+	p1Home := results["#P1"]["homeVillage"].(map[string]any)
+	if got := p1Home["localRank"]; got != 10 {
+		t.Fatalf("expected #P1 localRank=10, got %v", got)
 	}
-	if got := results["#P2"]["global_rank"]; got != 22 {
-		t.Fatalf("expected #P2 leaderboard global_rank to win, got %v", got)
+	if got := p1Home["locationId"]; got != "32000087" {
+		t.Fatalf("expected #P1 locationId to survive, got %v", got)
 	}
-	if got := results["#P3"]["global_rank"]; got != 333 {
-		t.Fatalf("expected #P3 fallback-only global_rank=333, got %v", got)
+	p2Home := results["#P2"]["homeVillage"].(map[string]any)
+	if got := p2Home["globalRank"]; got != 22 {
+		t.Fatalf("expected #P2 globalRank=22, got %v", got)
 	}
-	if got := results["#P3"]["tag"]; got != "#P3" {
-		t.Fatalf("expected default tag fallback for #P3, got %v", got)
+	p2Builder := results["#P2"]["builderBase"].(map[string]any)
+	if got := p2Builder["locationId"]; got != "32000006" {
+		t.Fatalf("expected retained builder locationId, got %v", got)
+	}
+	if got := p2Builder["localRank"]; got != nil {
+		t.Fatalf("expected retained builder localRank to remain nil, got %v", got)
+	}
+	p3Home := results["#P3"]["homeVillage"].(map[string]any)
+	if got := p3Home["globalRank"]; got != nil {
+		t.Fatalf("expected no fabricated #P3 globalRank, got %v", got)
 	}
 }
 
@@ -264,69 +262,6 @@ func TestMobilePlayerWarContextTargetClanSkipsCurrentClan(t *testing.T) {
 	}
 	if got := routes.MobilePlayerWarContextTargetClanForTest([]string{"alt", "#OTHER"}, "#VY2J0LL"); got != "#ALT" {
 		t.Fatalf("expected first normalized alternate clan, got %q", got)
-	}
-}
-
-func TestMobilePlayerRaidDataByClanFromRowsKeepsLatestPerClan(t *testing.T) {
-	results := routes.MobilePlayerRaidDataByClanFromRowsForTest(
-		[]string{"#C1", "#C2"},
-		[]map[string]any{
-			{
-				"clan_tag": "#C1",
-				"data": map[string]any{
-					"members": []any{
-						map[string]any{"tag": "#P1", "attackCount": 4, "attackLimit": 5, "bonusAttackLimit": 1},
-					},
-				},
-			},
-			{
-				"clan_tag": "#C1",
-				"data": map[string]any{
-					"members": []any{
-						map[string]any{"tag": "#P1", "attackCount": 1, "attackLimit": 5, "bonusAttackLimit": 0},
-					},
-				},
-			},
-			{
-				"clan_tag": "c2",
-				"data": map[string]any{
-					"members": []any{
-						map[string]any{"tag": "#P2", "attackCount": 3, "attackLimit": 5, "bonusAttackLimit": 0},
-					},
-				},
-			},
-		},
-	)
-
-	if got := results["#C1"]["#P1"]["attacks_done"]; got != 4 {
-		t.Fatalf("expected first row for #C1 to win, got %v", got)
-	}
-	if got := results["#C1"]["#P1"]["attack_limit"]; got != 6 {
-		t.Fatalf("expected merged attack limit=6, got %v", got)
-	}
-	if got := results["#C2"]["#P2"]["attacks_done"]; got != 3 {
-		t.Fatalf("expected normalized clan #C2 member data, got %v", got)
-	}
-}
-
-func TestMobileIsRaidsWindowAtMatchesLegacySchedule(t *testing.T) {
-	testCases := []struct {
-		name string
-		now  time.Time
-		want bool
-	}{
-		{"friday-before-open", time.Date(2026, time.May, 15, 6, 59, 0, 0, time.UTC), false},
-		{"friday-open", time.Date(2026, time.May, 15, 7, 0, 0, 0, time.UTC), true},
-		{"saturday", time.Date(2026, time.May, 16, 12, 0, 0, 0, time.UTC), true},
-		{"monday-before-close", time.Date(2026, time.May, 18, 6, 59, 0, 0, time.UTC), true},
-		{"monday-close", time.Date(2026, time.May, 18, 7, 0, 0, 0, time.UTC), false},
-		{"wednesday", time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC), false},
-	}
-
-	for _, tc := range testCases {
-		if got := routes.MobileIsRaidsWindowAtForTest(tc.now); got != tc.want {
-			t.Fatalf("%s: expected %v, got %v", tc.name, tc.want, got)
-		}
 	}
 }
 

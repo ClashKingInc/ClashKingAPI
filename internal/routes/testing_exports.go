@@ -116,20 +116,12 @@ func MobileLegendRankingsByTagFromRowsForTest[T ~map[string]any](playerTags []st
 	return mobileLegendRankingsByTagFromRows(playerTags, mobileRowsForTest(rows), limit)
 }
 
-func MobileCurrentRankingsByTagFromRowsForTest[T ~map[string]any, U ~map[string]any](playerTags []string, leaderboardRows []T, fallbackRows []U) map[string]map[string]any {
-	return mobileCurrentRankingsByTagFromRows(playerTags, mobileRowsForTest(leaderboardRows), mobileRowsForTest(fallbackRows))
+func MobileCurrentRankingsByTagFromRowsForTest[T ~map[string]any](playerTags []string, leaderboardRows []T, locationMetadata map[string]map[string]any) map[string]map[string]any {
+	return mobileCurrentRankingsByTagFromRows(playerTags, mobileRowsForTest(leaderboardRows), locationMetadata)
 }
 
 func MobilePlayerWarContextTargetClanForTest(clans []string, currentClanTag string) string {
 	return mobilePlayerWarContextTargetClan(clans, currentClanTag)
-}
-
-func MobilePlayerRaidDataByClanFromRowsForTest[T ~map[string]any](clanTags []string, rows []T) map[string]map[string]map[string]any {
-	return mobilePlayerRaidDataByClanFromRows(clanTags, mobileRowsForTest(rows))
-}
-
-func MobileIsRaidsWindowAtForTest(now time.Time) bool {
-	return mobileIsRaidsWindowAt(now)
 }
 
 func MobileWarTypeForTest(war map[string]any) string {

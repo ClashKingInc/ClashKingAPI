@@ -36,10 +36,9 @@ func privacyExport(a apptypes.Deps) fiber.Handler {
 			{"recent_searches", `SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC`, false},
 			{"legacy_search_settings", `SELECT search, updated_at FROM user_settings WHERE user_id = $1`, false},
 			{"discord_sessions", `SELECT device_id, expires_at, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC`, false},
-			{"notification_settings", `SELECT device_id, environment, enabled, locale, timezone, enabled_types, war_attack_modes, event_types, reminder_timings, account_scope, selected_accounts, selected_town_halls, selected_clan_tags, created_at, updated_at FROM mobile_notification_preferences WHERE user_id = $1`, true},
-			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, build_number, os_version, device_model, locale, timezone, authorization_status, enabled, last_seen_at, disabled_at, created_at, updated_at FROM mobile_push_devices WHERE user_id = $1`, true},
-			{"notification_war_clans", `SELECT device_id, clan_tag, war_start_enabled, score_change_enabled, war_end_enabled, cwl_rank_enabled, live_activity_enabled, enabled, created_at, updated_at FROM mobile_war_subscriptions WHERE user_id = $1`, true},
-			{"live_activities", `SELECT device_id, activity_id, clan_tag, war_id, war_tag, environment, status, started_at, ended_at, created_at, updated_at FROM mobile_live_activities WHERE user_id = $1`, true},
+			{"notification_settings", `SELECT device_id, environment, league_battles_enabled, war_attacks_enabled, war_state_enabled, war_reminders_enabled, events_enabled, announcements_enabled, upgrade_finishes_enabled, monthly_support_enabled, reminder_timings FROM mobile_notification_preferences WHERE user_id = $1`, true},
+			{"notification_accounts", `SELECT player_tag, source FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag`, true},
+			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, last_seen_at FROM mobile_push_devices WHERE user_id = $1`, true},
 		}
 		for _, item := range queries {
 			rows, err := privacyQuery(c.UserContext(), a, item.optional, item.query, userID)
@@ -64,9 +63,7 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 			name string
 			sql  string
 		}{
-			{"mobile_live_activities", `DELETE FROM mobile_live_activities WHERE user_id = $1`},
-			{"mobile_war_subscriptions", `DELETE FROM mobile_war_subscriptions WHERE user_id = $1`},
-			{"mobile_notification_subscriptions", `DELETE FROM mobile_notification_subscriptions WHERE user_id = $1`},
+			{"mobile_notification_accounts", `DELETE FROM mobile_notification_accounts WHERE user_id = $1`},
 			{"mobile_notification_preferences", `DELETE FROM mobile_notification_preferences WHERE user_id = $1`},
 			{"mobile_push_devices", `DELETE FROM mobile_push_devices WHERE user_id = $1`},
 			{"user_recent_searches", `DELETE FROM user_recent_searches WHERE user_id = $1`},

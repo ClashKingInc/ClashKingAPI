@@ -123,54 +123,6 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// clanHistorical godoc
-// @Summary Get clan historical events
-// @Description Returns tracked player history events for a clan.
-// @Tags Legacy Clans
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param timestamp_start query int false "Start Unix timestamp"
-// @Param time_stamp_end query int false "End Unix timestamp"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func clanHistorical(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()
-		end := time.Unix(legacyClanParseInt64Default(c.Query("time_stamp_end"), 9999999999), 0).UTC()
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT event_time, player_tag, clan_tag, season, event_type, value, data
-			FROM player_history_events
-			WHERE clan_tag = $1 AND event_time >= $2 AND event_time <= $3
-			ORDER BY event_time
-		`, legacyClanFixTag(c.Params("clan_tag")), start, end)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var eventTime time.Time
-			var playerTag, clanTag, season, eventType string
-			var value pgtype.Int4
-			var raw []byte
-			if err := rows.Scan(&eventTime, &playerTag, &clanTag, &season, &eventType, &value, &raw); err != nil {
-				return err
-			}
-			item := jsonObject(raw)
-			item["time"] = eventTime
-			item["tag"] = playerTag
-			item["clan"] = clanTag
-			item["season"] = season
-			item["type"] = eventType
-			if value.Valid {
-				item["value"] = value.Int32
-			}
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
-	}
-}
-
 func legacyClanParseIntDefault(raw string, fallback int) int {
 	if raw == "" {
 		return fallback

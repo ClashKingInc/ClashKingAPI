@@ -3,7 +3,6 @@ package modelsv2
 import (
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 func TestClanRankingsResponseUsesExactCamelCaseCategories(t *testing.T) {
@@ -15,7 +14,6 @@ func TestClanRankingsResponseUsesExactCamelCaseCategories(t *testing.T) {
 				LocationID: "global",
 				Rank:       18,
 				Points:     53100,
-				UpdatedAt:  time.Date(2026, time.July, 24, 12, 30, 0, 0, time.UTC),
 			}},
 		},
 		BuilderBase: ClanRankingCategory{Placements: []ClanRankingPlacement{}},
@@ -52,12 +50,12 @@ func TestClanRankingsResponseUsesExactCamelCaseCategories(t *testing.T) {
 	homeVillage := response["homeVillage"].(map[string]any)
 	placements := homeVillage["placements"].([]any)
 	placement := placements[0].(map[string]any)
-	for _, field := range []string{"locationId", "rank", "points", "updatedAt"} {
+	for _, field := range []string{"locationId", "rank", "points"} {
 		if _, exists := placement[field]; !exists {
 			t.Fatalf("placement missing %q: %s", field, payload)
 		}
 	}
-	for _, obsolete := range []string{"global", "local", "globalRank", "localRank", "countryCode", "countryName"} {
+	for _, obsolete := range []string{"global", "local", "globalRank", "localRank", "countryCode", "countryName", "updatedAt"} {
 		if _, exists := placement[obsolete]; exists {
 			t.Fatalf("placement exposes obsolete field %q: %s", obsolete, payload)
 		}

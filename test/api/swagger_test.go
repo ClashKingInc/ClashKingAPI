@@ -195,10 +195,15 @@ func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 		t.Fatalf("expected AccountsLinkedAccount.hidden to remain boolean, got %v", accountProps["hidden"])
 	}
 	itemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.HomeActivityItem")
-	assertEnum(t, itemProps["type"], []any{"join_leave", "player_history"})
-	for _, field := range []string{"timestamp", "event_type", "player_tag", "clan_tag", "data"} {
+	assertEnum(t, itemProps["type"], []any{"join_leave"})
+	for _, field := range []string{"timestamp", "event_type", "player_tag", "clan_tag"} {
 		if _, exists := itemProps[field]; !exists {
 			t.Fatalf("expected HomeActivityItem.%s", field)
+		}
+	}
+	for _, field := range []string{"data", "season", "value"} {
+		if _, exists := itemProps[field]; exists {
+			t.Fatalf("expected HomeActivityItem not to expose retired field %s", field)
 		}
 	}
 }
@@ -325,6 +330,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/player/{player_tag}/wartimer",
 		"/v2/capital/guild-leaderboard",
 		"/v2/capital/player-stats",
+		"/v2/server/{server_id}/leaderboards/capital-raids",
 		"/v2/clan/compo",
 		"/v2/clan/donations/{season}",
 		"/v2/clan/{clan_tag}/board/totals",
@@ -397,11 +403,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/cwl/{clanTag}/{season}",
 		"/list/townhalls",
 		"/list/seasons",
-		"/v2/ranking/player-trophies/{location}/{date}",
-		"/v2/ranking/player-builder/{location}/{date}",
-		"/v2/ranking/clan-trophies/{location}/{date}",
-		"/v2/ranking/clan-builder/{location}/{date}",
-		"/v2/ranking/clan-capital/{location}/{date}",
 		"/v2/cdn/upload",
 		"/v2/exports/war/cwl-summary",
 		"/v2/exports/war/player-stats",
@@ -436,10 +437,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 	for _, path := range []string{"/list/townhalls", "/list/seasons"} {
 		operation := paths[path].(map[string]any)["get"].(map[string]any)
 		assertTags(t, operation, []string{"Lists"})
-	}
-	for _, path := range []string{"/v2/ranking/player-trophies/{location}/{date}", "/v2/ranking/player-builder/{location}/{date}", "/v2/ranking/clan-trophies/{location}/{date}", "/v2/ranking/clan-builder/{location}/{date}", "/v2/ranking/clan-capital/{location}/{date}"} {
-		operation := paths[path].(map[string]any)["get"].(map[string]any)
-		assertTags(t, operation, []string{"Rankings"})
 	}
 	for _, path := range []string{"/v2/cdn/upload", "/v2/exports/war/cwl-summary", "/v2/exports/war/player-stats", "/v2/guild/{server_id}", "/v2/guilds"} {
 		method := "get"
@@ -600,10 +597,13 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 	if !ok {
 		t.Fatal("expected ClanRankingPlacement properties")
 	}
-	for _, field := range []string{"locationId", "rank", "points", "updatedAt"} {
+	for _, field := range []string{"locationId", "rank", "points"} {
 		if _, exists := clanRankingPlacementProperties[field]; !exists {
 			t.Fatalf("expected ClanRankingPlacement to expose %s", field)
 		}
+	}
+	if _, exists := clanRankingPlacementProperties["updatedAt"]; exists {
+		t.Fatal("expected ClanRankingPlacement not to expose removed updatedAt")
 	}
 	for _, obsoleteDefinition := range []string{"modelsv2.ClanRankingMetric", "modelsv2.ClanRankingScope"} {
 		if _, exists := definitions[obsoleteDefinition]; exists {
@@ -659,6 +659,78 @@ func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 		if len(params) != 1 || params[0] != "tag" {
 			t.Fatalf("expected %s query params [tag], got %v", path, params)
 		}
+	}
+}
+
+func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	definitions := swaggerDefinitions(t, doc)
+
+	playerRankings := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerRankingsResponse")
+	for _, field := range []string{"tag", "homeVillage", "builderBase"} {
+		if _, exists := playerRankings[field]; !exists {
+			t.Fatalf("PlayerRankingsResponse missing %s", field)
+		}
+	}
+	category := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerRankingCategory")
+	for _, field := range []string{"points", "globalRank", "locationId", "locationName", "countryCode", "localRank"} {
+		property, exists := category[field].(map[string]any)
+		if !exists || property["x-nullable"] != true {
+			t.Fatalf("PlayerRankingCategory.%s must be present and nullable: %#v", field, category[field])
+		}
+	}
+	for _, retired := range []string{"global_rank", "local_rank", "country_code", "country_name", "data", "updatedAt"} {
+		if _, exists := category[retired]; exists {
+			t.Fatalf("PlayerRankingCategory exposes retired field %s", retired)
+		}
+	}
+
+	preferenceRequest := swaggerDefinitionProperties(t, definitions, "modelsv2.NotificationPreferencesRequest")
+	for _, field := range []string{
+		"deviceId", "environment", "deviceEnabled", "leagueBattlesEnabled",
+		"warAttacksEnabled", "warStateEnabled", "warRemindersEnabled",
+		"eventsEnabled", "announcementsEnabled", "upgradeFinishesEnabled",
+		"monthlySupportEnabled", "reminderTimings", "accountTags",
+	} {
+		if _, exists := preferenceRequest[field]; !exists {
+			t.Fatalf("NotificationPreferencesRequest missing %s", field)
+		}
+	}
+	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions"} {
+		if _, exists := preferenceRequest[retired]; exists {
+			t.Fatalf("NotificationPreferencesRequest exposes retired field %s", retired)
+		}
+	}
+
+	deviceRequest := swaggerDefinitionProperties(t, definitions, "modelsv2.NotificationDeviceRequest")
+	for _, retired := range []string{"apns_token", "build_number", "os_version", "device_model", "timezone"} {
+		if _, exists := deviceRequest[retired]; exists {
+			t.Fatalf("NotificationDeviceRequest exposes retired field %s", retired)
+		}
+	}
+
+	for _, definitionName := range []string{
+		"modelsv2.ServerSettingsUpdate",
+		"modelsv2.ServerSettingsDocument",
+		"modelsv2.ClanSettingsUpdate",
+		"modelsv2.ClanSettingsDetail",
+		"modelsv2.ClanSettings",
+		"modelsv2.RoleSettingsUpdate",
+		"modelsv2.RoleSettingsResponse",
+	} {
+		properties := swaggerDefinitionProperties(t, definitions, definitionName)
+		for _, retired := range []string{
+			"blacklisted_roles", "clan_channel", "greeting", "auto_greet_option",
+			"ban_alert_channel", "api_token", "banlist", "strike_log", "reddit_feed",
+		} {
+			if _, exists := properties[retired]; exists {
+				t.Fatalf("%s exposes retired field %s", definitionName, retired)
+			}
+		}
+	}
+	linkParse := swaggerDefinitionProperties(t, definitions, "modelsv2.LinkParseSettings")
+	if _, exists := linkParse["channels"]; exists {
+		t.Fatal("LinkParseSettings exposes retired channel filters")
 	}
 }
 
@@ -735,16 +807,16 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	for _, path := range []string{
 		"/v2/player/{player_tag}/rankings",
 		"/v2/player/{player_tag}/battlelog/history",
-		"/v2/player/{player_tag}/legends/{day}/day",
-		"/v2/player/{player_tag}/legends/{season}/season",
-		"/v2/player/legends/{season}/battlelog-stats",
+		"/v2/player/{player_tag}/legend-history",
+		"/v2/legends/history/{season}",
 		"/v2/player/{player_tag}/ranked/{season}/battlelog",
 		"/v2/player/{player_tag}/ranked/{season}/group",
 		"/v2/player/{player_tag}/changes",
+		"/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}",
+		"/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}",
+		"/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}",
 		"/v2/leaderboard/league/{league_tier_id}",
-		"/v2/leaderboard/league/{league_tier_id}/history/{date}",
 		"/v2/leaderboard/townhalls/{townhall_level}",
-		"/v2/leaderboard/townhalls/{townhall_level}/history/{date}",
 		"/v2/leaderboard/{location_id}/clan/donations",
 		"/v2/leaderboard/{location_id}/clan/war-wins",
 		"/v2/leaderboard/clan/win-streak",
@@ -766,17 +838,101 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/clan/{clan_tag}/rankings",
 		"/v2/clan/{clan_tag}/basic",
 		"/v2/clan/{clan_tag}/badge",
-		"/v2/ranking/player-trophies/{location}/{date}",
-		"/v2/ranking/player-builder/{location}/{date}",
-		"/v2/ranking/clan-trophies/{location}/{date}",
-		"/v2/ranking/clan-builder/{location}/{date}",
-		"/v2/ranking/clan-capital/{location}/{date}",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected public stats path %s in swagger", path)
 		}
 	}
+	builderHallPath, ok := paths["/v2/counts/players/builder-halls"].(map[string]any)
+	if !ok {
+		t.Fatal("expected Builder Hall counts path object")
+	}
+	builderHallGet, ok := builderHallPath["get"].(map[string]any)
+	if !ok {
+		t.Fatal("expected Builder Hall counts GET operation")
+	}
+	builderHallResponses, ok := builderHallGet["responses"].(map[string]any)
+	if !ok {
+		t.Fatal("expected Builder Hall counts responses")
+	}
+	if _, exists := builderHallResponses["501"]; !exists {
+		t.Fatal("expected Builder Hall counts to document 501")
+	}
+	if _, exists := builderHallResponses["200"]; exists {
+		t.Fatal("expected Builder Hall counts not to advertise fake successful data")
+	}
+	for path, rawPath := range paths {
+		pathOperations, _ := rawPath.(map[string]any)
+		for _, rawOperation := range pathOperations {
+			operation, _ := rawOperation.(map[string]any)
+			responses, _ := operation["responses"].(map[string]any)
+			if _, exists := responses["501"]; exists && path != "/v2/counts/players/builder-halls" {
+				t.Fatalf("expected only Builder Hall counts to document 501, found %s", path)
+			}
+		}
+	}
+	definitions := swaggerDefinitions(t, doc)
+	groupedCountProps := swaggerDefinitionProperties(t, definitions, "modelsv2.GroupedCountItem")
+	if _, exists := groupedCountProps["builderhall_level"]; exists {
+		t.Fatal("expected grouped count model not to expose unsupported Builder Hall counts")
+	}
+	leaderboardSnapshotProps := swaggerDefinitionProperties(t, definitions, "modelsv2.LeaderboardSnapshotHistoryResponse")
+	for _, field := range []string{"type", "locationId", "date", "items"} {
+		if _, exists := leaderboardSnapshotProps[field]; !exists {
+			t.Fatalf("expected leaderboard snapshot response field %s", field)
+		}
+	}
+	leaderboardEntityProps := swaggerDefinitionProperties(t, definitions, "modelsv2.LeaderboardEntityHistoryItem")
+	for _, field := range []string{"date", "locationId", "name", "rank", "details"} {
+		if _, exists := leaderboardEntityProps[field]; !exists {
+			t.Fatalf("expected leaderboard entity response field %s", field)
+		}
+	}
+	playerLeaderboardProps := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerLeaderboardHistoryResponse")
+	if _, exists := playerLeaderboardProps["playerTag"]; !exists {
+		t.Fatal("expected player leaderboard history to expose playerTag")
+	}
+	clanLeaderboardProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLeaderboardHistoryResponse")
+	if _, exists := clanLeaderboardProps["clanTag"]; !exists {
+		t.Fatal("expected clan leaderboard history to expose clanTag")
+	}
+	for _, definition := range []string{"modelsv2.LegendSeasonHistoryResponse", "modelsv2.PlayerLegendHistoryResponse"} {
+		properties := swaggerDefinitionProperties(t, definitions, definition)
+		if len(properties) != 1 || properties["items"] == nil {
+			t.Fatalf("expected %s to expose only items, got %v", definition, properties)
+		}
+	}
+	legendHistoryItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.LegendHistoryItem")
+	for _, field := range []string{
+		"season",
+		"tag",
+		"name",
+		"expLevel",
+		"trophies",
+		"attackWins",
+		"defenseWins",
+		"rank",
+		"previousRank",
+		"clan",
+		"league",
+		"townHallLevel",
+	} {
+		if _, exists := legendHistoryItemProps[field]; !exists {
+			t.Fatalf("expected final Legend item field %s", field)
+		}
+	}
+	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
+	snapshotGet := snapshotPath["get"].(map[string]any)
+	assertParameterEnum(t, snapshotGet["parameters"], "leaderboard_type", []any{
+		"player_home_trophies",
+		"player_builder_base_trophies",
+		"clan_home_points",
+		"clan_builder_base_points",
+		"clan_capital_points",
+	})
 	for _, path := range []string{
+		"/v2/leaderboard/league/{league_tier_id}/history/{date}",
+		"/v2/leaderboard/townhalls/{townhall_level}/history/{date}",
 		"/v2/global/cwl-leagues",
 		"/v2/global/clan/locations",
 		"/v2/global/townhalls",
@@ -823,7 +979,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to build swagger doc: %v", err)
 	}
-	for _, marker := range []string{"Public Stats", "PlannedEndpoint", `"501"`, "planned public stats"} {
+	for _, marker := range []string{"Public Stats", "PlannedEndpoint", "planned public stats"} {
 		if strings.Contains(raw, marker) {
 			t.Fatalf("expected generated swagger not to contain %q", marker)
 		}

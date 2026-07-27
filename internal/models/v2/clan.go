@@ -2,10 +2,6 @@ package modelsv2
 
 import "time"
 
-type ClanPlayerTagsBody struct {
-	PlayerTags []string `json:"player_tags"`
-}
-
 type ClanTagsBody struct {
 	ClanTags []string `json:"clan_tags"`
 }

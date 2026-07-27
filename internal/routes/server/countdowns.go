@@ -170,7 +170,12 @@ func enableCountdown(rt apptypes.Deps) apptypes.HandlerFunc {
 			if tag == "" {
 				return apptypes.Error(http.StatusBadRequest, fmt.Sprintf("clan_tag is required for %s", body.CountdownType))
 			}
-			if err := rt.Store.SQL.QueryRow(c.UserContext(), `SELECT name FROM server_clans WHERE server_id = $1 AND tag = $2`, serverIDText, tag).Scan(&clanName); err != nil {
+			if err := rt.Store.SQL.QueryRow(c.UserContext(), `
+				SELECT clan.name
+				FROM server_clans sc
+				JOIN basic_clan clan ON clan.tag = sc.tag
+				WHERE sc.server_id = $1 AND sc.tag = $2
+			`, serverIDText, tag).Scan(&clanName); err != nil {
 				return notFoundErr(err, "Clan not found on this server")
 			}
 			clanTag = &tag

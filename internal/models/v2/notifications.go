@@ -9,12 +9,8 @@ type NotificationDeviceRequest struct {
 	Platform            string `json:"platform" enums:"android,ios"`
 	Environment         string `json:"environment,omitempty" enums:"sandbox,production"`
 	AppVersion          string `json:"app_version,omitempty"`
-	BuildNumber         string `json:"build_number,omitempty"`
-	OSVersion           string `json:"os_version,omitempty"`
-	DeviceModel         string `json:"device_model,omitempty"`
 	AuthorizationStatus string `json:"authorization_status,omitempty" enums:"authorized,provisional,denied,not_determined"`
 	Locale              string `json:"locale,omitempty"`
-	Timezone            string `json:"timezone,omitempty"`
 }
 
 type NotificationDeviceResponse struct {
@@ -28,32 +24,40 @@ type NotificationDeviceResponse struct {
 }
 
 type NotificationPreferencesRequest struct {
-	DeviceID          string                     `json:"device_id,omitempty"`
-	Environment       string                     `json:"environment,omitempty" enums:"sandbox,production"`
-	Enabled           bool                       `json:"enabled"`
-	Locale            string                     `json:"locale,omitempty"`
-	Timezone          string                     `json:"timezone,omitempty"`
-	EnabledTypes      []string                   `json:"enabled_types"`
-	WarAttackModes    []string                   `json:"war_attack_modes"`
-	EventTypes        []string                   `json:"event_types"`
-	ReminderTimings   []string                   `json:"reminder_timings"`
-	AccountScope      string                     `json:"account_scope" enums:"all,selected"`
-	SelectedAccounts  []string                   `json:"selected_accounts"`
-	SelectedTownHalls []int                      `json:"selected_town_halls"`
-	SelectedClanTags  []string                   `json:"selected_clan_tags"`
-	Subscriptions     []NotificationSubscription `json:"subscriptions"`
+	DeviceID               string   `json:"deviceId,omitempty"`
+	Environment            string   `json:"environment,omitempty" enums:"sandbox,production"`
+	DeviceEnabled          bool     `json:"deviceEnabled"`
+	LeagueBattlesEnabled   bool     `json:"leagueBattlesEnabled"`
+	WarAttacksEnabled      bool     `json:"warAttacksEnabled"`
+	WarStateEnabled        bool     `json:"warStateEnabled"`
+	WarRemindersEnabled    bool     `json:"warRemindersEnabled"`
+	EventsEnabled          bool     `json:"eventsEnabled"`
+	AnnouncementsEnabled   bool     `json:"announcementsEnabled"`
+	UpgradeFinishesEnabled bool     `json:"upgradeFinishesEnabled"`
+	MonthlySupportEnabled  bool     `json:"monthlySupportEnabled"`
+	ReminderTimings        []int    `json:"reminderTimings"`
+	AccountTags            []string `json:"accountTags"`
 }
 
-type NotificationSubscription struct {
-	Type      string         `json:"type"`
-	PlayerTag string         `json:"player_tag,omitempty"`
-	Enabled   bool           `json:"enabled"`
-	Settings  map[string]any `json:"settings,omitempty"`
+type NotificationAccount struct {
+	PlayerTag string `json:"playerTag"`
+	Source    string `json:"source" enums:"verified,bookmarked"`
 }
 
 type NotificationPreferencesResponse struct {
-	NotificationPreferencesRequest
-	UpdatedAt time.Time `json:"updated_at"`
+	DeviceID               string                `json:"deviceId"`
+	Environment            string                `json:"environment"`
+	DeviceEnabled          bool                  `json:"deviceEnabled"`
+	LeagueBattlesEnabled   bool                  `json:"leagueBattlesEnabled"`
+	WarAttacksEnabled      bool                  `json:"warAttacksEnabled"`
+	WarStateEnabled        bool                  `json:"warStateEnabled"`
+	WarRemindersEnabled    bool                  `json:"warRemindersEnabled"`
+	EventsEnabled          bool                  `json:"eventsEnabled"`
+	AnnouncementsEnabled   bool                  `json:"announcementsEnabled"`
+	UpgradeFinishesEnabled bool                  `json:"upgradeFinishesEnabled"`
+	MonthlySupportEnabled  bool                  `json:"monthlySupportEnabled"`
+	ReminderTimings        []int                 `json:"reminderTimings"`
+	Accounts               []NotificationAccount `json:"accounts"`
 }
 
 type NotificationMessageResponse struct {

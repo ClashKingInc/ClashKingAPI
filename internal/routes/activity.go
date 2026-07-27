@@ -327,10 +327,11 @@ func activityRequireServer(c *fiber.Ctx, a apptypes.Deps, guildID int64) error {
 
 func serverClans(c *fiber.Ctx, a apptypes.Deps, guildID int64) ([]map[string]any, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT tag, name, data
-		FROM server_clans
-		WHERE server_id = $1
-		ORDER BY tag
+		SELECT sc.tag, clan.name, sc.data
+		FROM server_clans sc
+		JOIN basic_clan clan ON clan.tag = sc.tag
+		WHERE sc.server_id = $1
+		ORDER BY sc.tag
 	`, strconv.FormatInt(guildID, 10))
 	if err != nil {
 		return nil, err
@@ -358,9 +359,14 @@ type activityPlayerStatsData struct {
 
 func activityPlayerStats(c *fiber.Ctx, a apptypes.Deps, tags []string) (map[string]activityPlayerStatsData, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT player_tag, townhall_level, last_online_at
-		FROM player_current_stats
-		WHERE player_tag = ANY($1)
+		SELECT online.tag, players.townhall_level, online.seen_at
+		FROM (
+			SELECT DISTINCT ON (tag) tag, seen_at
+			FROM player_online_events
+			WHERE tag = ANY($1)
+			ORDER BY tag, seen_at DESC
+		) AS online
+		LEFT JOIN basic_player AS players ON players.tag = online.tag
 	`, tags)
 	if err != nil {
 		return nil, err

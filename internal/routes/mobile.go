@@ -28,7 +28,6 @@ type mobileMatchupStats struct {
 }
 
 type mobilePlayersExtendedPreload struct {
-	statsMap            map[string]map[string]any
 	legendRankingsByTag map[string][]any
 	rankingsByTag       map[string]map[string]any
 	warTimerClansByTag  map[string][]string
@@ -120,7 +119,7 @@ func mobileInitialization(a apptypes.Deps) fiber.Handler {
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, clanTags, playersBasic, <-playersPreloadCh)
+			playersExtended = mobileFetchPlayersExtended(ctx, a, playerTags, playersBasic, <-playersPreloadCh)
 		}()
 		go func() {
 			defer wg.Done()
@@ -210,20 +209,16 @@ func mobilePlayerExtendedContract(item map[string]any) map[string]any {
 	out["legends_by_season"] = mobileMap(out["legends_by_season"])
 	out["legend_eos_ranking"] = mobileList(out["legend_eos_ranking"])
 	out["rankings"] = mobilePlayerRankingsContract(out["rankings"], tag)
-	out["raid_data"] = mobilePlayerRaidDataContract(out["raid_data"])
+	delete(out, "raid_data")
 	out["war_data"] = mobilePlayerWarDataContract(out["war_data"])
 	return out
 }
 
 func mobilePlayerRankingsContract(value any, playerTag string) map[string]any {
 	out := map[string]any{
-		"tag":                 playerTag,
-		"country_code":        nil,
-		"country_name":        nil,
-		"local_rank":          nil,
-		"global_rank":         nil,
-		"builder_global_rank": nil,
-		"builder_local_rank":  nil,
+		"tag":         playerTag,
+		"homeVillage": mobilePlayerRankingCategoryContract(nil),
+		"builderBase": mobilePlayerRankingCategoryContract(nil),
 	}
 	for key, value := range mobileMap(value) {
 		out[key] = value
@@ -231,15 +226,19 @@ func mobilePlayerRankingsContract(value any, playerTag string) map[string]any {
 	return out
 }
 
-func mobilePlayerRaidDataContract(value any) map[string]any {
-	data := mobileMap(value)
-	if len(data) == 0 {
-		return map[string]any{}
+func mobilePlayerRankingCategoryContract(value any) map[string]any {
+	out := map[string]any{
+		"points":       nil,
+		"globalRank":   nil,
+		"locationId":   nil,
+		"locationName": nil,
+		"countryCode":  nil,
+		"localRank":    nil,
 	}
-	return map[string]any{
-		"attack_limit": mobileInt(data["attack_limit"]),
-		"attacks_done": mobileInt(data["attacks_done"]),
+	for key, value := range mobileMap(value) {
+		out[key] = value
 	}
+	return out
 }
 
 func mobilePlayerWarDataContract(value any) map[string]any {
@@ -595,7 +594,6 @@ func mobileFetchPlayersBasic(ctx context.Context, a apptypes.Deps, playerTags []
 func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, playerTags []string) mobilePlayersExtendedPreload {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	preload := mobilePlayersExtendedPreload{
-		statsMap:            map[string]map[string]any{},
 		legendRankingsByTag: map[string][]any{},
 		rankingsByTag:       map[string]map[string]any{},
 		warTimerClansByTag:  map[string][]string{},
@@ -605,20 +603,7 @@ func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, pla
 	}
 
 	var setupWG sync.WaitGroup
-	setupWG.Add(4)
-	go func() {
-		defer setupWG.Done()
-		localStats := map[string]map[string]any{}
-		if rows, err := playerCurrentStatsByTags(ctx, a, playerTags); err == nil {
-			for _, row := range rows {
-				tag := mobileString(row["tag"])
-				if tag != "" {
-					localStats[tag] = row
-				}
-			}
-		}
-		preload.statsMap = localStats
-	}()
+	setupWG.Add(3)
 	go func() {
 		defer setupWG.Done()
 		preload.legendRankingsByTag = mobileFetchLegendRankingsBatch(ctx, a, playerTags, 10)
@@ -635,7 +620,7 @@ func mobileFetchPlayersExtendedPreload(ctx context.Context, a apptypes.Deps, pla
 	return preload
 }
 
-func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags []string, clanTags []string, playersBasic []map[string]any, preload mobilePlayersExtendedPreload) []map[string]any {
+func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags []string, playersBasic []map[string]any, preload mobilePlayersExtendedPreload) []map[string]any {
 	basicByTag := map[string]map[string]any{}
 	for _, player := range playersBasic {
 		tag := mobileString(player["tag"])
@@ -644,22 +629,7 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		}
 	}
 
-	var (
-		raidDataByClan map[string]map[string]map[string]any
-		warDataByTag   map[string]map[string]any
-		setupWG        sync.WaitGroup
-	)
-
-	setupWG.Add(2)
-	go func() {
-		defer setupWG.Done()
-		raidDataByClan = mobileFetchPlayerRaidDataBatch(ctx, a, clanTags)
-	}()
-	go func() {
-		defer setupWG.Done()
-		warDataByTag = mobileBuildPlayerWarContextsFromTimerClans(ctx, a, preload.warTimerClansByTag, basicByTag)
-	}()
-	setupWG.Wait()
+	warDataByTag := mobileBuildPlayerWarContextsFromTimerClans(ctx, a, preload.warTimerClansByTag, basicByTag)
 
 	out := make([]map[string]any, 0, len(playerTags))
 	for _, playerTag := range playerTags {
@@ -668,22 +638,7 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 			"legends_by_season":  map[string]any{},
 			"legend_eos_ranking": []any{},
 			"rankings":           mobilePlayerRankingsContract(nil, playerTag),
-			"raid_data":          map[string]any{},
 			"war_data":           map[string]any{},
-		}
-
-		if stats := preload.statsMap[playerTag]; stats != nil {
-			for key, value := range stats {
-				if key == "tag" {
-					continue
-				}
-				item[key] = value
-			}
-		}
-
-		clanTag := ""
-		if basic := basicByTag[playerTag]; basic != nil {
-			clanTag = mobileString(mobileMap(basic["clan"])["tag"])
 		}
 
 		if legendRankings := preload.legendRankingsByTag[playerTag]; legendRankings != nil {
@@ -691,9 +646,6 @@ func mobileFetchPlayersExtended(ctx context.Context, a apptypes.Deps, playerTags
 		}
 		if rankings := preload.rankingsByTag[playerTag]; rankings != nil {
 			item["rankings"] = rankings
-		}
-		if raidData := mobileLookupPlayerRaidData(raidDataByClan, playerTag, clanTag); raidData != nil {
-			item["raid_data"] = raidData
 		}
 		if warData := warDataByTag[playerTag]; warData != nil {
 			item["war_data"] = warData
@@ -760,7 +712,7 @@ func mobileLegendRankingsByTagFromRows(playerTags []string, rows []map[string]an
 func mobileLegendHistoryRows(ctx context.Context, a apptypes.Deps, playerTags []string, limit int64) []map[string]any {
 	rows, err := a.Store.SQL.Query(ctx, `
 		SELECT player_tag, season, rank, trophies, data
-		FROM legend_history_snapshots
+		FROM legend_history
 		WHERE player_tag = ANY($1)
 		ORDER BY player_tag, season DESC
 	`, playerTags)
@@ -793,28 +745,30 @@ func mobileFetchCurrentRankingsBatch(ctx context.Context, a apptypes.Deps, playe
 	}
 
 	leaderboardRows := mobileCurrentRankingRows(ctx, a, playerTags)
-
-	provisional := mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, nil)
-	missingGlobalRank := make([]string, 0, len(playerTags))
-	for _, tag := range playerTags {
-		if provisional[tag]["global_rank"] == nil {
-			missingGlobalRank = append(missingGlobalRank, tag)
+	locationMetadata := map[string]map[string]any{}
+	if a.Clash != nil {
+		locations, err := a.Clash.SearchLocations(ctx)
+		if err != nil {
+			return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, locationMetadata)
+		}
+		for _, location := range locations {
+			locationMetadata[strconv.Itoa(location.ID)] = map[string]any{
+				"locationName": location.Name,
+				"countryCode":  location.CountryCode,
+			}
 		}
 	}
-
-	var fallbackRows []map[string]any
-	if len(missingGlobalRank) > 0 {
-		fallbackRows = mobileLegendCurrentRankingRows(ctx, a, missingGlobalRank)
-	}
-
-	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, fallbackRows)
+	return mobileCurrentRankingsByTagFromRows(playerTags, leaderboardRows, locationMetadata)
 }
 
 func mobileCurrentRankingRows(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, country_code, country_name, rank, global_rank, local_rank, data
+		SELECT player_tag, ranking_type, location_id, rank, points
 		FROM player_rankings_current
 		WHERE player_tag = ANY($1)
+		ORDER BY player_tag, ranking_type,
+			CASE WHEN location_id = 'global' THEN 0 ELSE 1 END,
+			location_id
 	`, playerTags)
 	if err != nil {
 		return nil
@@ -822,62 +776,27 @@ func mobileCurrentRankingRows(ctx context.Context, a apptypes.Deps, playerTags [
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var tag string
-		var countryCode, countryName *string
-		var rank, globalRank, localRank *int
-		var dataRaw []byte
-		if err := rows.Scan(&tag, &countryCode, &countryName, &rank, &globalRank, &localRank, &dataRaw); err != nil {
+		var tag, rankingType, locationID string
+		var rank, points *int
+		if err := rows.Scan(&tag, &rankingType, &locationID, &rank, &points); err != nil {
 			continue
 		}
-		item := mobileMap(mobileDecodeJSONAny(dataRaw))
-		item["tag"] = tag
-		if countryCode != nil {
-			item["country_code"] = *countryCode
-		}
-		if countryName != nil {
-			item["country_name"] = *countryName
-		}
-		if rank != nil {
-			item["rank"] = *rank
-		}
-		if globalRank != nil {
-			item["global_rank"] = *globalRank
-		}
-		if localRank != nil {
-			item["local_rank"] = *localRank
-		}
-		out = append(out, item)
+		out = append(out, map[string]any{
+			"tag":         tag,
+			"rankingType": rankingType,
+			"locationId":  locationID,
+			"rank":        rank,
+			"points":      points,
+		})
 	}
 	return out
 }
 
-func mobileLegendCurrentRankingRows(ctx context.Context, a apptypes.Deps, playerTags []string) []map[string]any {
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, rank, data
-		FROM legend_rankings_current
-		WHERE player_tag = ANY($1)
-	`, playerTags)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var tag string
-		var rank int
-		var dataRaw []byte
-		if err := rows.Scan(&tag, &rank, &dataRaw); err != nil {
-			continue
-		}
-		item := mobileMap(mobileDecodeJSONAny(dataRaw))
-		item["tag"] = tag
-		item["rank"] = rank
-		out = append(out, item)
-	}
-	return out
-}
-
-func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []map[string]any, fallbackRows []map[string]any) map[string]map[string]any {
+func mobileCurrentRankingsByTagFromRows(
+	playerTags []string,
+	leaderboardRows []map[string]any,
+	locationMetadata map[string]map[string]any,
+) map[string]map[string]any {
 	playerTags = mobileNormalizeUniqueTags(playerTags)
 	out := make(map[string]map[string]any, len(playerTags))
 	allowed := make(map[string]bool, len(playerTags))
@@ -892,122 +811,32 @@ func mobileCurrentRankingsByTagFromRows(playerTags []string, leaderboardRows []m
 		if !allowed[tag] {
 			continue
 		}
-		out[tag] = mobilePlayerRankingsContract(clean, tag)
-	}
-
-	for _, row := range fallbackRows {
-		clean := mobileMap(row)
-		tag := mobileString(clean["tag"])
-		if !allowed[tag] || out[tag]["global_rank"] != nil {
+		categoryKey := "homeVillage"
+		if mobileString(clean["rankingType"]) == "builder_base" {
+			categoryKey = "builderBase"
+		}
+		category := mobilePlayerRankingCategoryContract(out[tag][categoryKey])
+		locationID := mobileString(clean["locationId"])
+		if locationID == "global" {
+			category["globalRank"] = clean["rank"]
+			category["points"] = clean["points"]
+			out[tag][categoryKey] = category
 			continue
 		}
-		out[tag]["global_rank"] = clean["rank"]
-	}
-	return out
-}
-
-func mobileRaidWeekendRows(ctx context.Context, a apptypes.Deps, clanTags []string) []map[string]any {
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT DISTINCT ON (clan_tag) clan_tag, members, data
-		FROM raid_weekends
-		WHERE clan_tag = ANY($1)
-		ORDER BY clan_tag, start_time DESC
-	`, clanTags)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var clanTag string
-		var membersRaw, dataRaw []byte
-		if err := rows.Scan(&clanTag, &membersRaw, &dataRaw); err != nil {
-			continue
+		category["locationId"] = locationID
+		category["localRank"] = clean["rank"]
+		if category["points"] == nil {
+			category["points"] = clean["points"]
 		}
-		data := mobileMap(mobileDecodeJSONAny(dataRaw))
-		if len(data) == 0 {
-			data = map[string]any{}
-		}
-		data["members"] = mobileDecodeJSONAny(membersRaw)
-		out = append(out, map[string]any{"clan_tag": clanTag, "data": data})
-	}
-	return out
-}
-
-func mobileFetchPlayerRaidDataBatch(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]map[string]map[string]any {
-	clanTags = mobileNormalizeUniqueClanTags(clanTags)
-	if len(clanTags) == 0 || !mobileIsRaidsWindow() {
-		return map[string]map[string]map[string]any{}
-	}
-
-	rows := mobileRaidWeekendRows(ctx, a, clanTags)
-	return mobilePlayerRaidDataByClanFromRows(clanTags, rows)
-}
-
-func mobilePlayerRaidDataByClanFromRows(clanTags []string, rows []map[string]any) map[string]map[string]map[string]any {
-	clanTags = mobileNormalizeUniqueClanTags(clanTags)
-	if len(clanTags) == 0 {
-		return map[string]map[string]map[string]any{}
-	}
-
-	allowed := make(map[string]bool, len(clanTags))
-	for _, clanTag := range clanTags {
-		allowed[clanTag] = true
-	}
-
-	out := make(map[string]map[string]map[string]any, len(clanTags))
-	for _, row := range rows {
-		clean := mobileMap(row)
-		clanTag := clanFixTag(mobileString(clean["clan_tag"]))
-		if clanTag == "" || !allowed[clanTag] || out[clanTag] != nil {
-			continue
-		}
-
-		members := make(map[string]map[string]any)
-		for _, rawMember := range mobileList(mobileMap(clean["data"])["members"]) {
-			member := mobileMap(rawMember)
-			playerTag := mobileString(member["tag"])
-			if playerTag == "" {
-				continue
-			}
-			members[playerTag] = map[string]any{
-				"attacks_done": mobileInt(member["attackCount"]),
-				"attack_limit": mobileInt(member["attackLimit"]) + mobileInt(member["bonusAttackLimit"]),
+		if metadata := locationMetadata[locationID]; metadata != nil {
+			category["locationName"] = metadata["locationName"]
+			if code := mobileString(metadata["countryCode"]); code != "" {
+				category["countryCode"] = code
 			}
 		}
-		out[clanTag] = members
+		out[tag][categoryKey] = category
 	}
 	return out
-}
-
-func mobileIsRaidsWindow() bool {
-	return mobileIsRaidsWindowAt(time.Now().UTC())
-}
-
-func mobileIsRaidsWindowAt(now time.Time) bool {
-	now = now.UTC()
-	switch now.Weekday() {
-	case time.Friday:
-		return now.Hour() >= 7
-	case time.Saturday, time.Sunday:
-		return true
-	case time.Monday:
-		return now.Hour() < 7
-	default:
-		return false
-	}
-}
-
-func mobileLookupPlayerRaidData(raidDataByClan map[string]map[string]map[string]any, playerTag string, clanTag string) map[string]any {
-	if clanTag == "" {
-		return map[string]any{}
-	}
-	if members := raidDataByClan[clanTag]; members != nil {
-		if playerData := members[playerTag]; playerData != nil {
-			return playerData
-		}
-	}
-	return map[string]any{}
 }
 
 func mobileFetchPlayerWarContext(ctx context.Context, a apptypes.Deps, playerTag string, currentClanTag string) map[string]any {

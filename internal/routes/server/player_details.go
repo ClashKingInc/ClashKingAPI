@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,10 +39,10 @@ func fetchPlayerSnapshots(ctx context.Context, sql *pgxpool.Pool, tags []string)
 	}
 
 	rows, err := sql.Query(ctx, `
-		SELECT p.player_tag, p.name, p.townhall_level, p.data, b.name
-		FROM player_current_stats p
+		SELECT p.tag, p.name, p.townhall_level, p.clan_tag, b.name, p.trophies
+		FROM basic_player p
 		LEFT JOIN basic_clan b ON b.tag = p.clan_tag
-		WHERE p.player_tag = ANY($1)
+		WHERE p.tag = ANY($1)
 	`, queryTags)
 	if err != nil {
 		return out
@@ -52,67 +51,29 @@ func fetchPlayerSnapshots(ctx context.Context, sql *pgxpool.Pool, tags []string)
 
 	for rows.Next() {
 		var tag, name string
-		var townhall *int
-		var raw []byte
-		var basicClanName *string
-		if err := rows.Scan(&tag, &name, &townhall, &raw, &basicClanName); err != nil {
+		var townhall, trophies int
+		var clanTag, clanName *string
+		if err := rows.Scan(&tag, &name, &townhall, &clanTag, &clanName, &trophies); err != nil {
 			return out
 		}
 		tag = serverNormalizeTag(tag)
 		if tag == "" {
 			continue
 		}
-		doc := map[string]any{}
-		_ = json.Unmarshal(raw, &doc)
-		doc["tag"] = tag
-		if name != "" {
-			doc["name"] = name
-		}
-		if townhall != nil {
-			doc["townhall"] = *townhall
-			doc["town_hall"] = *townhall
-		}
 
 		snapshot := serverPlayerSnapshot{}
-		if name := serverAsString(doc["name"]); name != "" {
+		if name != "" {
 			snapshot.Name = &name
 		}
-		rawTownHall := doc["town_hall"]
-		if rawTownHall == nil {
-			rawTownHall = doc["townhall"]
+		snapshot.TownHall = &townhall
+		snapshot.Trophies = &trophies
+		if clanTag != nil {
+			normalizedClanTag := serverNormalizeTag(*clanTag)
+			if normalizedClanTag != "" {
+				snapshot.ClanTag = &normalizedClanTag
+			}
 		}
-		if townHall := asIntWithDefault(rawTownHall, -1); townHall >= 0 {
-			snapshot.TownHall = &townHall
-		}
-		if trophies := asIntWithDefault(doc["trophies"], -1); trophies >= 0 {
-			snapshot.Trophies = &trophies
-		}
-
-		clan := mapMaybe(doc["clan"])
-		clanTag := serverNormalizeTag(serverAsString(clan["tag"]))
-		if clanTag == "" {
-			clanTag = serverNormalizeTag(serverAsString(doc["clan_tag"]))
-		}
-		if clanTag != "" {
-			snapshot.ClanTag = &clanTag
-		}
-		clanName := serverAsString(clan["name"])
-		if clanName == "" {
-			clanName = serverAsString(doc["clan_name"])
-		}
-		if clanName == "" && basicClanName != nil {
-			clanName = *basicClanName
-		}
-		if clanName != "" {
-			snapshot.ClanName = &clanName
-		}
-		clanRole := serverAsString(clan["role"])
-		if clanRole == "" {
-			clanRole = serverAsString(doc["role"])
-		}
-		if clanRole != "" {
-			snapshot.ClanRole = &clanRole
-		}
+		snapshot.ClanName = clanName
 
 		out[tag] = snapshot
 	}

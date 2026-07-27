@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -57,7 +56,6 @@ type clanRankingsPlacementRow struct {
 	locationID  string
 	rank        int
 	points      int
-	updatedAt   time.Time
 }
 
 type clanRankingsPlacementRows struct {
@@ -85,14 +83,12 @@ func (rows *clanRankingsPlacementRows) Scan(dest ...any) error {
 	*dest[1].(*string) = row.locationID
 	*dest[2].(*int) = row.rank
 	*dest[3].(*int) = row.points
-	*dest[4].(*time.Time) = row.updatedAt
 	return nil
 }
 
 func TestQueryClanRankingsBuildsThreeExactCategories(t *testing.T) {
 	name := "Example Clan"
 	badgeToken := "badge-token"
-	updatedAt := time.Date(2026, time.July, 24, 12, 30, 0, 0, time.UTC)
 	db := &clanRankingsTestDB{
 		profileRow: clanRankingsProfileRow{
 			name:              &name,
@@ -102,10 +98,10 @@ func TestQueryClanRankingsBuildsThreeExactCategories(t *testing.T) {
 			capitalPoints:     3124,
 		},
 		rows: &clanRankingsPlacementRows{items: []clanRankingsPlacementRow{
-			{rankingType: "home", locationID: "global", rank: 18, points: 53100, updatedAt: updatedAt},
-			{rankingType: "home", locationID: "32000006", rank: 3, points: 53110, updatedAt: updatedAt},
-			{rankingType: "builder_base", locationID: "global", rank: 41, points: 49870, updatedAt: updatedAt},
-			{rankingType: "capital", locationID: "global", rank: 9, points: 3120, updatedAt: updatedAt},
+			{rankingType: "home", locationID: "global", rank: 18, points: 53100},
+			{rankingType: "home", locationID: "32000006", rank: 3, points: 53110},
+			{rankingType: "builder_base", locationID: "global", rank: 41, points: 49870},
+			{rankingType: "capital", locationID: "global", rank: 9, points: 3120},
 		}},
 	}
 
@@ -136,7 +132,7 @@ func TestQueryClanRankingsBuildsThreeExactCategories(t *testing.T) {
 		t.Fatalf("unexpected Builder Base placements: %#v", response.BuilderBase.Placements)
 	}
 	if len(response.ClanCapital.Placements) != 1 ||
-		!response.ClanCapital.Placements[0].UpdatedAt.Equal(updatedAt) {
+		response.ClanCapital.Placements[0].Rank != 9 {
 		t.Fatalf("unexpected Clan Capital placements: %#v", response.ClanCapital.Placements)
 	}
 	if len(db.rowArgs) != 1 || db.rowArgs[0] != "#2PP" ||
@@ -179,7 +175,6 @@ func TestClanRankingQueriesUseOnlyDecisionTenColumns(t *testing.T) {
 		"location_id",
 		"rank",
 		"points",
-		"updated_at",
 		"FROM clan_rankings_current",
 		"WHERE clan_tag = $1",
 	} {
@@ -192,6 +187,7 @@ func TestClanRankingQueriesUseOnlyDecisionTenColumns(t *testing.T) {
 		"country_name",
 		"global_rank",
 		"local_rank",
+		"updated_at",
 		" data",
 		"clan_leaderboards",
 	} {

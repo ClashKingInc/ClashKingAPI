@@ -319,10 +319,8 @@ func normalizeOptionalClanTag(raw *string) *string {
 }
 
 func validateLogScope(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag *string, logTypes []string) error {
-	for _, logType := range logTypes {
-		if modelsv2.EnumScope(modelsv2.LogTypeEnums, logType) == "clan" && clanTag == nil {
-			return apptypes.Error(http.StatusBadRequest, "clan_tag is required for log type: "+logType)
-		}
+	if err := validateLogTypeScopes(clanTag, logTypes); err != nil {
+		return err
 	}
 	if clanTag == nil {
 		return nil
@@ -335,6 +333,19 @@ func validateLogScope(c *fiber.Ctx, rt apptypes.Deps, serverID int, clanTag *str
 	}
 	if !exists {
 		return apptypes.Error(http.StatusNotFound, "Clan not found on this server")
+	}
+	return nil
+}
+
+func validateLogTypeScopes(clanTag *string, logTypes []string) error {
+	for _, logType := range logTypes {
+		scope := modelsv2.EnumScope(modelsv2.LogTypeEnums, logType)
+		if scope == "clan" && clanTag == nil {
+			return apptypes.Error(http.StatusBadRequest, "clan_tag is required for log type: "+logType)
+		}
+		if scope == "server" && clanTag != nil {
+			return apptypes.Error(http.StatusBadRequest, "clan_tag is not allowed for log type: "+logType)
+		}
 	}
 	return nil
 }

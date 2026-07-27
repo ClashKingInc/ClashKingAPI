@@ -37,8 +37,6 @@ func DeleteLink(a apptypes.Deps) fiber.Handler { return deleteLink(a) }
 
 func CreateLink(a apptypes.Deps) fiber.Handler { return createLink(a) }
 
-func DeleteOpenTicket(a apptypes.Deps) fiber.Handler { return deleteOpenTicket(a) }
-
 func DeleteReminder(a apptypes.Deps) fiber.Handler { return deleteReminder(a) }
 
 func DeleteServerRole(a apptypes.Deps) fiber.Handler { return deleteServerRole(a) }
@@ -73,16 +71,10 @@ func GetLinks(a apptypes.Deps) fiber.Handler { return getLinks(a) }
 
 func ListServerRoles(a apptypes.Deps) fiber.Handler { return listServerRoles(a) }
 
-func GetOpenTickets(a apptypes.Deps) fiber.Handler { return getOpenTickets(a) }
-
 func GetRoleSettings(a apptypes.Deps) fiber.Handler { return getRoleSettings(a) }
 
 func GetServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
 	return getServerActivityLeaderboard(a)
-}
-
-func GetServerCapitalRaidsLeaderboard(a apptypes.Deps) fiber.Handler {
-	return getServerCapitalRaidsLeaderboard(a)
 }
 
 func GetServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
@@ -167,10 +159,6 @@ func StrikeSummary(a apptypes.Deps) fiber.Handler { return strikeSummary(a) }
 func TestDiscordAPI(a apptypes.Deps) fiber.Handler { return testDiscordAPIStatus(a) }
 
 func UpdateAutoboard(a apptypes.Deps) fiber.Handler { return updateAutoboard(a) }
-
-func UpdateOpenTicketClan(a apptypes.Deps) fiber.Handler { return updateOpenTicketClan(a) }
-
-func UpdateOpenTicketStatus(a apptypes.Deps) fiber.Handler { return updateOpenTicketStatus(a) }
 
 func UpdateReminder(a apptypes.Deps) fiber.Handler { return updateReminder(a) }
 

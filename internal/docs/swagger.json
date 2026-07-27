@@ -164,7 +164,7 @@
         },
         "/list/townhalls": {
             "get": {
-                "description": "Returns distinct town hall levels seen in tracked player stats.",
+                "description": "Returns distinct current town hall levels from tracked players.",
                 "produces": [
                     "application/json"
                 ],
@@ -1413,6 +1413,65 @@
                 }
             }
         },
+        "/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}": {
+            "get": {
+                "description": "Returns dated placements and full stored official details for clan Home Village, Builder Base, or Capital leaderboards.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get a clan's leaderboard history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "clan_home_points",
+                            "clan_builder_base_points",
+                            "clan_capital_points"
+                        ],
+                        "type": "string",
+                        "description": "Canonical clan leaderboard type",
+                        "name": "leaderboard_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLeaderboardHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/clan/{clan_tag}/rankings": {
             "get": {
                 "description": "Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.",
@@ -1636,6 +1695,7 @@
         },
         "/v2/counts/players/builder-halls": {
             "get": {
+                "description": "Builder Hall counts are not implemented because no durable Builder Hall count source exists yet.",
                 "produces": [
                     "application/json"
                 ],
@@ -1644,14 +1704,8 @@
                 ],
                 "summary": "Get player builder hall counts",
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.GroupedCountsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "501": {
+                        "description": "Not Implemented",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -2446,7 +2500,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Uses RFC QUERY with a JSON body to return the newest merged clan membership and player history activity.",
+                "description": "Uses RFC QUERY with a JSON body to return the newest clan membership activity.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2570,6 +2624,74 @@
                 }
             }
         },
+        "/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}": {
+            "get": {
+                "description": "Reconstructs one complete official leaderboard response from stored full response items, ordered by rank.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get a historical leaderboard snapshot",
+                "parameters": [
+                    {
+                        "enum": [
+                            "player_home_trophies",
+                            "player_builder_base_trophies",
+                            "clan_home_points",
+                            "clan_builder_base_points",
+                            "clan_capital_points"
+                        ],
+                        "type": "string",
+                        "description": "Canonical leaderboard type",
+                        "name": "leaderboard_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Global or official numeric location ID",
+                        "name": "location_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Snapshot date YYYY-MM-DD",
+                        "name": "date",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.LeaderboardSnapshotHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/leaderboard/league/{league_tier_id}": {
             "get": {
                 "description": "Returns the current top tracked players for a ranked league tier from the Valkey leaderboard snapshot.",
@@ -2610,54 +2732,6 @@
                     },
                     "503": {
                         "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/leaderboard/league/{league_tier_id}/history/{date}": {
-            "get": {
-                "description": "Returns stored historical league leaderboard snapshots.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Leaderboard"
-                ],
-                "summary": "Get historical league leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "League tier ID",
-                        "name": "league_tier_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date YYYY-MM-DD",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Result limit, max 200",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerLeaderboardHistoryResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -2712,64 +2786,16 @@
                 }
             }
         },
-        "/v2/leaderboard/townhalls/{townhall_level}/history/{date}": {
-            "get": {
-                "description": "Returns stored historical townhall leaderboard snapshots.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Leaderboard"
-                ],
-                "summary": "Get historical townhall leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Townhall level",
-                        "name": "townhall_level",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date YYYY-MM-DD",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Result limit, max 200",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerLeaderboardHistoryResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/leaderboard/{league_tier_id}/trophy-buckets": {
             "get": {
-                "description": "Returns trophy buckets of players and trophies at bucket points, with optional history up to 30 days.",
+                "description": "Returns current trophy and player totals grouped into trophy buckets for one league tier.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Leaderboard"
                 ],
-                "summary": "Get trophy bucket history",
+                "summary": "Get current trophy buckets",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2777,12 +2803,6 @@
                         "name": "league_tier_id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "History days, max 30",
-                        "name": "days",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2894,6 +2914,62 @@
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/legends/history/{season}": {
+            "get": {
+                "description": "Returns the stored final official Legend leaderboard for one completed season, ordered by rank.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get a final Legend season leaderboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Official Legend season ID in YYYY-MM format",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 25,
+                        "description": "Result limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.LegendSeasonHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -4244,59 +4320,6 @@
                 }
             }
         },
-        "/v2/player/legends/{season}/battlelog-stats": {
-            "post": {
-                "description": "Returns season +/- and overview stats for a list of players.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get bulk player legends battlelog stats",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Legend season YYYY-MM",
-                        "name": "season",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerBattlelogStatsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayersLegendSeasonResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/player/{player_tag}/battlelog/history": {
             "get": {
                 "description": "Returns historical returned battlelogs for a player, including farming hits when present.",
@@ -4599,16 +4622,16 @@
                 }
             }
         },
-        "/v2/player/{player_tag}/legends/{day}/day": {
+        "/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}": {
             "get": {
-                "description": "Returns player legends attacks and defenses for a day.",
+                "description": "Returns dated placements and full stored official details for player Home Village or Builder Base leaderboards.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Player"
+                    "Leaderboard"
                 ],
-                "summary": "Get player legends day battlelog",
+                "summary": "Get a player's leaderboard history",
                 "parameters": [
                     {
                         "type": "string",
@@ -4618,9 +4641,13 @@
                         "required": true
                     },
                     {
+                        "enum": [
+                            "player_home_trophies",
+                            "player_builder_base_trophies"
+                        ],
                         "type": "string",
-                        "description": "Legend day YYYY-MM-DD",
-                        "name": "day",
+                        "description": "Canonical player leaderboard type",
+                        "name": "leaderboard_type",
                         "in": "path",
                         "required": true
                     }
@@ -4629,7 +4656,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerLegendsDayResponse"
+                            "$ref": "#/definitions/modelsv2.PlayerLeaderboardHistoryResponse"
                         }
                     },
                     "400": {
@@ -4638,14 +4665,14 @@
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -4653,28 +4680,21 @@
                 }
             }
         },
-        "/v2/player/{player_tag}/legends/{season}/season": {
+        "/v2/player/{player_tag}/legend-history": {
             "get": {
-                "description": "Returns player legends +/- and overview stats for a season.",
+                "description": "Returns every stored final Legend season placement for one player in descending season order.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Player"
+                    "Leaderboard"
                 ],
-                "summary": "Get player legends season battlelog stats",
+                "summary": "Get a player's final Legend history",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Player tag",
                         "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Legend season YYYY-MM",
-                        "name": "season",
                         "in": "path",
                         "required": true
                     }
@@ -4683,7 +4703,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerLegendSeasonResponse"
+                            "$ref": "#/definitions/modelsv2.PlayerLegendHistoryResponse"
                         }
                     },
                     "400": {
@@ -4692,14 +4712,14 @@
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -4811,7 +4831,7 @@
         },
         "/v2/player/{player_tag}/rankings": {
             "get": {
-                "description": "Returns live rankings, when available, for a player in their league or other ranking bucket.",
+                "description": "Returns current Home Village and Builder Base points plus global and official-location placements. A retained location can have a null local rank when the player is no longer ranked there.",
                 "produces": [
                     "application/json"
                 ],
@@ -4985,216 +5005,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.MobilePublicConfigResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/ranking/clan-builder/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan builder ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rankings"
-                ],
-                "summary": "Get clan builder ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanRankingSnapshotResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/ranking/clan-capital/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan capital ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rankings"
-                ],
-                "summary": "Get clan capital ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanRankingSnapshotResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/ranking/clan-trophies/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored clan trophy ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rankings"
-                ],
-                "summary": "Get clan trophy ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanRankingSnapshotResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/ranking/player-builder/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored player builder ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rankings"
-                ],
-                "summary": "Get player builder ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerRankingSnapshotResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/ranking/player-trophies/{location}/{date}": {
-            "get": {
-                "description": "Returns a stored player trophy ranking snapshot for a location and date.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rankings"
-                ],
-                "summary": "Get player trophy ranking snapshot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Location",
-                        "name": "location",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Snapshot date",
-                        "name": "date",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerRankingSnapshotResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
@@ -8198,6 +8008,15 @@
                         "name": "clan_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Retained clan settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanSettingsUpdate"
+                        }
                     }
                 ],
                 "responses": {
@@ -9674,52 +9493,6 @@
                 }
             }
         },
-        "/v2/server/{server_id}/leaderboards/capital-raids": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns players ranked by recent capital raid loot for a server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Leaderboards"
-                ],
-                "summary": "Get server capital raids leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerCapitalLeaderboardResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/server/{server_id}/leaderboards/clan-games": {
             "get": {
                 "security": [
@@ -10503,6 +10276,103 @@
                 }
             }
         },
+        "/v2/server/{server_id}/role-settings": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns retained role automation settings for one server.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Roles"
+                ],
+                "summary": "Get role automation settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RoleSettingsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Updates retained role automation settings for one server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Roles"
+                ],
+                "summary": "Update role automation settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role automation settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RoleSettingsUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/server/{server_id}/server-roles": {
             "get": {
                 "security": [
@@ -10689,6 +10559,15 @@
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Server settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ServerSettingsUpdate"
+                        }
                     },
                     {
                         "type": "boolean",
@@ -11093,171 +10972,6 @@
                         "schema": {
                             "$ref": "#/definitions/modelsv2.CreatePanelRequest"
                         }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.MessageResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Tickets"
-                ],
-                "summary": "Get open tickets for a server",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by status",
-                        "name": "status",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.OpenTicketsResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Tickets"
-                ],
-                "summary": "Delete an open ticket",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Ticket channel ID",
-                        "name": "channel_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.MessageResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}/clan": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Tickets"
-                ],
-                "summary": "Update clan for an open ticket",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Ticket channel ID",
-                        "name": "channel_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.MessageResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/tickets/open/{channel_id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Tickets"
-                ],
-                "summary": "Update open ticket status",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Ticket channel ID",
-                        "name": "channel_id",
-                        "in": "path",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -12528,61 +12242,6 @@
         }
     },
     "definitions": {
-        "modelsv1.PlayerLegendsResponse": {
-            "type": "object",
-            "properties": {
-                "legends": {},
-                "name": {},
-                "rankings": {},
-                "streak": {},
-                "tag": {},
-                "townhall": {}
-            }
-        },
-        "modelsv1.PlayerLootedData": {
-            "type": "object",
-            "properties": {
-                "dark_elixir": {},
-                "elixir": {},
-                "gold": {}
-            }
-        },
-        "modelsv1.PlayerStatsResponse": {
-            "type": "object",
-            "properties": {
-                "activity": {},
-                "attack_wins": {},
-                "capital": {},
-                "clanCapitalContributions": {},
-                "clan_games": {},
-                "clan_tag": {},
-                "donations": {},
-                "last_online": {},
-                "league": {},
-                "legends": {},
-                "location": {},
-                "looted": {
-                    "$ref": "#/definitions/modelsv1.PlayerLootedData"
-                },
-                "name": {},
-                "season_pass": {},
-                "tag": {},
-                "townhall": {},
-                "trophies": {},
-                "warStars": {}
-            }
-        },
-        "modelsv1.V1CapitalClanTagsBody": {
-            "type": "object",
-            "properties": {
-                "clan_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "modelsv2.AccountConflictErrorResponse": {
             "type": "object",
             "properties": {
@@ -13592,9 +13251,6 @@
                 "leagueId": {
                     "type": "integer"
                 },
-                "top200": {
-                    "type": "boolean"
-                },
                 "townHallLevel": {
                     "type": "integer"
                 }
@@ -14465,6 +14121,23 @@
                 }
             }
         },
+        "modelsv2.ClanLeaderboardHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "clanTag": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.LeaderboardEntityHistoryItem"
+                    }
+                },
+                "type": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryType"
+                }
+            }
+        },
         "modelsv2.ClanLeagueRef": {
             "type": "object",
             "properties": {
@@ -14496,17 +14169,6 @@
                 }
             }
         },
-        "modelsv2.ClanPlayerTagsBody": {
-            "type": "object",
-            "properties": {
-                "player_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "modelsv2.ClanRankingCategory": {
             "type": "object",
             "properties": {
@@ -14532,61 +14194,6 @@
                 },
                 "rank": {
                     "type": "integer"
-                },
-                "updatedAt": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.ClanRankingSnapshotItem": {
-            "type": "object",
-            "properties": {
-                "badgeUrls": {
-                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
-                },
-                "clanBuilderBasePoints": {
-                    "type": "integer"
-                },
-                "clanCapitalPoints": {
-                    "type": "integer"
-                },
-                "clanLevel": {
-                    "type": "integer"
-                },
-                "clanPoints": {
-                    "type": "integer"
-                },
-                "location": {
-                    "$ref": "#/definitions/modelsv2.RankingLocation"
-                },
-                "members": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "previousRank": {
-                    "type": "integer"
-                },
-                "rank": {
-                    "type": "integer"
-                },
-                "tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.ClanRankingSnapshotResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.ClanRankingSnapshotItem"
-                    }
-                },
-                "paging": {
-                    "$ref": "#/definitions/modelsv2.Paging"
                 }
             }
         },
@@ -14641,19 +14248,7 @@
                 "abbreviation": {
                     "type": "string"
                 },
-                "auto_greet_option": {
-                    "type": "string"
-                },
-                "ban_alert_channel": {
-                    "type": "string"
-                },
                 "category": {
-                    "type": "string"
-                },
-                "clan_channel": {
-                    "type": "string"
-                },
-                "greeting": {
                     "type": "string"
                 }
             }
@@ -14664,19 +14259,7 @@
                 "abbreviation": {
                     "type": "string"
                 },
-                "auto_greet_option": {
-                    "type": "string"
-                },
-                "ban_alert_channel": {
-                    "type": "string"
-                },
                 "category": {
-                    "type": "string"
-                },
-                "clan_channel": {
-                    "type": "string"
-                },
-                "greeting": {
                     "type": "string"
                 },
                 "name": {
@@ -14707,6 +14290,17 @@
                 },
                 "updated_fields": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanSettingsUpdate": {
+            "type": "object",
+            "properties": {
+                "abbreviation": {
+                    "type": "string"
+                },
+                "category": {
+                    "type": "string"
                 }
             }
         },
@@ -15299,6 +14893,7 @@
                 "not_found",
                 "conflict",
                 "rate_limited",
+                "not_implemented",
                 "upstream_unavailable",
                 "internal_error"
             ],
@@ -15310,6 +14905,7 @@
                 "ErrorCodeNotFound",
                 "ErrorCodeConflict",
                 "ErrorCodeRateLimited",
+                "ErrorCodeNotImplemented",
                 "ErrorCodeUpstreamUnavailable",
                 "ErrorCodeInternal"
             ]
@@ -15589,9 +15185,6 @@
         "modelsv2.GroupedCountItem": {
             "type": "object",
             "properties": {
-                "builderhall_level": {
-                    "type": "integer"
-                },
                 "capital_league_id": {
                     "type": "integer"
                 },
@@ -15785,10 +15378,6 @@
                     "type": "string",
                     "x-nullable": true
                 },
-                "data": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
                 "event_type": {
                     "type": "string"
                 },
@@ -15796,9 +15385,6 @@
                     "type": "string"
                 },
                 "player_tag": {
-                    "type": "string"
-                },
-                "season": {
                     "type": "string"
                 },
                 "timestamp": {
@@ -15810,12 +15396,8 @@
                 "type": {
                     "type": "string",
                     "enum": [
-                        "join_leave",
-                        "player_history"
+                        "join_leave"
                     ]
-                },
-                "value": {
-                    "type": "integer"
                 }
             }
         },
@@ -16048,6 +15630,44 @@
                 }
             }
         },
+        "modelsv2.LeaderboardEntityHistoryItem": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.LeaderboardHistoryType": {
+            "type": "string",
+            "enum": [
+                "player_home_trophies",
+                "player_builder_base_trophies",
+                "clan_home_points",
+                "clan_builder_base_points",
+                "clan_capital_points"
+            ],
+            "x-enum-varnames": [
+                "LeaderboardHistoryTypePlayerHomeTrophies",
+                "LeaderboardHistoryTypePlayerBuilderBaseTrophies",
+                "LeaderboardHistoryTypeClanHomePoints",
+                "LeaderboardHistoryTypeClanBuilderBasePoints",
+                "LeaderboardHistoryTypeClanCapitalPoints"
+            ]
+        },
         "modelsv2.LeaderboardLeague": {
             "type": "object",
             "properties": {
@@ -16062,117 +15682,104 @@
                 }
             }
         },
-        "modelsv2.LegendBattle": {
+        "modelsv2.LeaderboardSnapshotHistoryResponse": {
             "type": "object",
             "properties": {
-                "destructionPercentage": {
-                    "type": "integer"
-                },
-                "id": {
+                "date": {
                     "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryType"
+                }
+            }
+        },
+        "modelsv2.LegendHistoryClan": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
                 },
                 "name": {
                     "type": "string"
                 },
-                "stars": {
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.LegendHistoryItem": {
+            "type": "object",
+            "properties": {
+                "attackWins": {
                     "type": "integer"
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.LegendHistoryClan"
+                },
+                "defenseWins": {
+                    "type": "integer"
+                },
+                "expLevel": {
+                    "type": "integer"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.LegendHistoryLeague"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "previousRank": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
                 },
                 "tag": {
                     "type": "string"
                 },
-                "timestamp": {
+                "townHallLevel": {
+                    "type": "integer"
+                },
+                "trophies": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.LegendHistoryLeague": {
+            "type": "object",
+            "properties": {
+                "iconUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicIconURLs"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
                     "type": "string"
-                },
-                "trophies": {
-                    "type": "integer"
-                },
-                "trophyChange": {
-                    "type": "integer"
                 }
             }
         },
-        "modelsv2.LegendDay": {
+        "modelsv2.LegendSeasonHistoryResponse": {
             "type": "object",
             "properties": {
-                "attack_sum": {
-                    "type": "integer"
-                },
-                "attacks": {
+                "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.LegendBattle"
+                        "$ref": "#/definitions/modelsv2.LegendHistoryItem"
                     }
-                },
-                "defense_sum": {
-                    "type": "integer"
-                },
-                "defenses": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.LegendBattle"
-                    }
-                },
-                "net_gain": {
-                    "type": "integer"
-                },
-                "new_best": {
-                    "type": "boolean"
-                },
-                "num_attacks": {
-                    "type": "integer"
-                },
-                "num_defenses": {
-                    "type": "integer"
-                },
-                "previous_trophies": {
-                    "type": "integer"
-                },
-                "trophies": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.LegendSeasonStats": {
-            "type": "object",
-            "properties": {
-                "attack_count": {
-                    "type": "integer"
-                },
-                "attack_trophies": {
-                    "type": "integer"
-                },
-                "average_destruction": {
-                    "type": "number"
-                },
-                "average_stars": {
-                    "type": "number"
-                },
-                "defense_count": {
-                    "type": "integer"
-                },
-                "defense_losses": {
-                    "type": "integer"
-                },
-                "defense_trophies": {
-                    "type": "integer"
-                },
-                "defense_wins": {
-                    "type": "integer"
-                },
-                "net_trophies": {
-                    "type": "integer"
-                },
-                "one_stars": {
-                    "type": "integer"
-                },
-                "three_stars": {
-                    "type": "integer"
-                },
-                "two_stars": {
-                    "type": "integer"
-                },
-                "zero_stars": {
-                    "type": "integer"
                 }
             }
         },
@@ -16185,12 +15792,6 @@
                 "base": {
                     "type": "boolean"
                 },
-                "channels": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "clan": {
                     "type": "boolean"
                 },
@@ -16199,20 +15800,6 @@
                 },
                 "show": {
                     "type": "boolean"
-                }
-            }
-        },
-        "modelsv2.LinkedAccount": {
-            "type": "object",
-            "properties": {
-                "player_name": {
-                    "type": "string"
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "town_hall": {
-                    "type": "integer"
                 }
             }
         },
@@ -16316,6 +15903,21 @@
                 }
             }
         },
+        "modelsv2.NotificationAccount": {
+            "type": "object",
+            "properties": {
+                "playerTag": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string",
+                    "enum": [
+                        "verified",
+                        "bookmarked"
+                    ]
+                }
+            }
+        },
         "modelsv2.NotificationDeviceRequest": {
             "type": "object",
             "properties": {
@@ -16331,13 +15933,7 @@
                         "not_determined"
                     ]
                 },
-                "build_number": {
-                    "type": "string"
-                },
                 "device_id": {
-                    "type": "string"
-                },
-                "device_model": {
                     "type": "string"
                 },
                 "environment": {
@@ -16348,9 +15944,6 @@
                     ]
                 },
                 "locale": {
-                    "type": "string"
-                },
-                "os_version": {
                     "type": "string"
                 },
                 "platform": {
@@ -16366,9 +15959,6 @@
                         "fcm",
                         "apns"
                     ]
-                },
-                "timezone": {
-                    "type": "string"
                 },
                 "token": {
                     "type": "string"
@@ -16412,24 +16002,20 @@
         "modelsv2.NotificationPreferencesRequest": {
             "type": "object",
             "properties": {
-                "account_scope": {
-                    "type": "string",
-                    "enum": [
-                        "all",
-                        "selected"
-                    ]
-                },
-                "device_id": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "enabled_types": {
+                "accountTags": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "announcementsEnabled": {
+                    "type": "boolean"
+                },
+                "deviceEnabled": {
+                    "type": "boolean"
+                },
+                "deviceId": {
+                    "type": "string"
                 },
                 "environment": {
                     "type": "string",
@@ -16438,242 +16024,82 @@
                         "production"
                     ]
                 },
-                "event_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "eventsEnabled": {
+                    "type": "boolean"
                 },
-                "locale": {
-                    "type": "string"
+                "leagueBattlesEnabled": {
+                    "type": "boolean"
                 },
-                "reminder_timings": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "monthlySupportEnabled": {
+                    "type": "boolean"
                 },
-                "selected_accounts": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "selected_clan_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "selected_town_halls": {
+                "reminderTimings": {
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
                 },
-                "subscriptions": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.NotificationSubscription"
-                    }
+                "upgradeFinishesEnabled": {
+                    "type": "boolean"
                 },
-                "timezone": {
-                    "type": "string"
+                "warAttacksEnabled": {
+                    "type": "boolean"
                 },
-                "war_attack_modes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "warRemindersEnabled": {
+                    "type": "boolean"
+                },
+                "warStateEnabled": {
+                    "type": "boolean"
                 }
             }
         },
         "modelsv2.NotificationPreferencesResponse": {
             "type": "object",
             "properties": {
-                "account_scope": {
-                    "type": "string",
-                    "enum": [
-                        "all",
-                        "selected"
-                    ]
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.NotificationAccount"
+                    }
                 },
-                "device_id": {
-                    "type": "string"
-                },
-                "enabled": {
+                "announcementsEnabled": {
                     "type": "boolean"
                 },
-                "enabled_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "deviceEnabled": {
+                    "type": "boolean"
                 },
-                "environment": {
-                    "type": "string",
-                    "enum": [
-                        "sandbox",
-                        "production"
-                    ]
-                },
-                "event_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "locale": {
+                "deviceId": {
                     "type": "string"
                 },
-                "reminder_timings": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "environment": {
+                    "type": "string"
                 },
-                "selected_accounts": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "eventsEnabled": {
+                    "type": "boolean"
                 },
-                "selected_clan_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "leagueBattlesEnabled": {
+                    "type": "boolean"
                 },
-                "selected_town_halls": {
+                "monthlySupportEnabled": {
+                    "type": "boolean"
+                },
+                "reminderTimings": {
                     "type": "array",
                     "items": {
                         "type": "integer"
                     }
                 },
-                "subscriptions": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.NotificationSubscription"
-                    }
-                },
-                "timezone": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "war_attack_modes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "modelsv2.NotificationSubscription": {
-            "type": "object",
-            "properties": {
-                "enabled": {
+                "upgradeFinishesEnabled": {
                     "type": "boolean"
                 },
-                "player_tag": {
-                    "type": "string"
-                },
-                "settings": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.OpenTicket": {
-            "type": "object",
-            "properties": {
-                "apply_account": {
-                    "type": "string"
-                },
-                "category_id": {
-                    "type": "string"
-                },
-                "category_name": {
-                    "type": "string"
-                },
-                "channel": {
-                    "type": "string"
-                },
-                "channel_exists": {
+                "warAttacksEnabled": {
                     "type": "boolean"
                 },
-                "discord_avatar_url": {
-                    "type": "string"
+                "warRemindersEnabled": {
+                    "type": "boolean"
                 },
-                "discord_display_name": {
-                    "type": "string"
-                },
-                "discord_username": {
-                    "type": "string"
-                },
-                "linked_accounts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.LinkedAccount"
-                    }
-                },
-                "number": {
-                    "type": "integer"
-                },
-                "panel": {
-                    "type": "string"
-                },
-                "server": {
-                    "type": "string"
-                },
-                "set_clan": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "thread": {
-                    "type": "string"
-                },
-                "user": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.OpenTicketsResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.OpenTicket"
-                    }
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.Paging": {
-            "type": "object",
-            "properties": {
-                "cursors": {
-                    "$ref": "#/definitions/modelsv2.PagingCursors"
-                }
-            }
-        },
-        "modelsv2.PagingCursors": {
-            "type": "object",
-            "properties": {
-                "after": {
-                    "type": "string"
-                },
-                "before": {
-                    "type": "string"
+                "warStateEnabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -16697,17 +16123,6 @@
                 },
                 "time": {
                     "$ref": "#/definitions/modelsv2.PublicStatsTimeRange"
-                }
-            }
-        },
-        "modelsv2.PlayerBattlelogStatsRequest": {
-            "type": "object",
-            "properties": {
-                "player_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -16774,23 +16189,17 @@
         "modelsv2.PlayerLeaderboardHistoryResponse": {
             "type": "object",
             "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "date": {
-                    "type": "string"
-                },
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.PlayerLeaderboardItem"
+                        "$ref": "#/definitions/modelsv2.LeaderboardEntityHistoryItem"
                     }
                 },
-                "kind": {
+                "playerTag": {
                     "type": "string"
                 },
-                "location": {
-                    "type": "string"
+                "type": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryType"
                 }
             }
         },
@@ -16855,55 +16264,14 @@
                 }
             }
         },
-        "modelsv2.PlayerLegendSeasonResponse": {
+        "modelsv2.PlayerLegendHistoryResponse": {
             "type": "object",
             "properties": {
-                "days": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/modelsv2.LegendDay"
-                    }
-                },
-                "found": {
-                    "type": "boolean"
-                },
-                "season": {
-                    "type": "string"
-                },
-                "stats": {
-                    "$ref": "#/definitions/modelsv2.LegendSeasonStats"
-                },
-                "streak": {
-                    "type": "integer"
-                },
-                "tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.PlayerLegendsDayResponse": {
-            "type": "object",
-            "properties": {
-                "attacks": {
+                "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.LegendBattle"
+                        "$ref": "#/definitions/modelsv2.LegendHistoryItem"
                     }
-                },
-                "data": {
-                    "$ref": "#/definitions/modelsv2.LegendDay"
-                },
-                "day": {
-                    "type": "string"
-                },
-                "defenses": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.LegendBattle"
-                    }
-                },
-                "tag": {
-                    "type": "string"
                 }
             }
         },
@@ -16959,87 +16327,43 @@
                 }
             }
         },
-        "modelsv2.PlayerRankingSnapshotItem": {
+        "modelsv2.PlayerRankingCategory": {
             "type": "object",
             "properties": {
-                "attackWins": {
-                    "type": "integer"
+                "countryCode": {
+                    "type": "string",
+                    "x-nullable": true
                 },
-                "builderBaseTrophies": {
-                    "type": "integer"
+                "globalRank": {
+                    "type": "integer",
+                    "x-nullable": true
                 },
-                "builderHallLevel": {
-                    "type": "integer"
+                "localRank": {
+                    "type": "integer",
+                    "x-nullable": true
                 },
-                "clan": {
-                    "$ref": "#/definitions/modelsv2.RankingClan"
+                "locationId": {
+                    "type": "string",
+                    "x-nullable": true
                 },
-                "defenseWins": {
-                    "type": "integer"
+                "locationName": {
+                    "type": "string",
+                    "x-nullable": true
                 },
-                "expLevel": {
-                    "type": "integer"
-                },
-                "league": {
-                    "$ref": "#/definitions/modelsv2.PublicLeagueReference"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "previousRank": {
-                    "type": "integer"
-                },
-                "rank": {
-                    "type": "integer"
-                },
-                "tag": {
-                    "type": "string"
-                },
-                "townHallLevel": {
-                    "type": "integer"
-                },
-                "trophies": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.PlayerRankingSnapshotResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.PlayerRankingSnapshotItem"
-                    }
-                },
-                "paging": {
-                    "$ref": "#/definitions/modelsv2.Paging"
+                "points": {
+                    "type": "integer",
+                    "x-nullable": true
                 }
             }
         },
         "modelsv2.PlayerRankingsResponse": {
             "type": "object",
             "properties": {
-                "builder_global_rank": {
-                    "type": "integer"
+                "builderBase": {
+                    "$ref": "#/definitions/modelsv2.PlayerRankingCategory"
                 },
-                "builder_local_rank": {
-                    "type": "integer"
-                },
-                "country_code": {
-                    "type": "string"
-                },
-                "country_name": {
-                    "type": "string"
-                },
-                "global_rank": {
-                    "type": "integer"
-                },
-                "local_rank": {
-                    "type": "integer"
-                },
-                "rank": {
-                    "type": "integer"
+                "homeVillage": {
+                    "$ref": "#/definitions/modelsv2.PlayerRankingCategory"
                 },
                 "tag": {
                     "type": "string"
@@ -17323,23 +16647,6 @@
                 }
             }
         },
-        "modelsv2.PlayersLegendSeasonResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.PlayerLegendSeasonResponse"
-                    }
-                },
-                "season": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.PublicBadgeURLs": {
             "type": "object",
             "properties": {
@@ -17431,20 +16738,6 @@
                 }
             }
         },
-        "modelsv2.PublicLeagueReference": {
-            "type": "object",
-            "properties": {
-                "iconUrls": {
-                    "$ref": "#/definitions/modelsv2.PublicIconURLs"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.PublicStatsTimeRange": {
             "type": "object",
             "properties": {
@@ -17493,37 +16786,6 @@
                     "type": "integer"
                 },
                 "tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.RankingClan": {
-            "type": "object",
-            "properties": {
-                "badgeUrls": {
-                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.RankingLocation": {
-            "type": "object",
-            "properties": {
-                "countryCode": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "isCountry": {
-                    "type": "boolean"
-                },
-                "name": {
                     "type": "string"
                 }
             }
@@ -17617,6 +16879,49 @@
             "properties": {
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.RoleSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "auto_eval_nickname": {
+                    "type": "boolean"
+                },
+                "auto_eval_status": {
+                    "type": "boolean"
+                },
+                "autoeval_log": {
+                    "type": "string"
+                },
+                "autoeval_triggers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "server_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.RoleSettingsUpdate": {
+            "type": "object",
+            "properties": {
+                "auto_eval_nickname": {
+                    "type": "boolean"
+                },
+                "auto_eval_status": {
+                    "type": "boolean"
+                },
+                "autoeval_log": {
+                    "type": "string"
+                },
+                "autoeval_triggers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -18563,49 +17868,6 @@
                 }
             }
         },
-        "modelsv2.ServerCapitalLeaderboardItem": {
-            "type": "object",
-            "properties": {
-                "attacks": {
-                    "type": "number"
-                },
-                "capital_gold": {
-                    "type": "number"
-                },
-                "clan_name": {
-                    "type": "string"
-                },
-                "clan_tag": {
-                    "type": "string"
-                },
-                "player_name": {
-                    "type": "string"
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "rank": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.ServerCapitalLeaderboardResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.ServerCapitalLeaderboardItem"
-                    }
-                },
-                "server_id": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "modelsv2.ServerClanMember": {
             "type": "object",
             "properties": {
@@ -18780,9 +18042,6 @@
                 },
                 "player_tag": {
                     "type": "string"
-                },
-                "streak": {
-                    "type": "integer"
                 },
                 "townhall_level": {
                     "type": "integer"
@@ -19062,6 +18321,9 @@
                 "local_rank": {
                     "type": "integer"
                 },
+                "location_id": {
+                    "type": "string"
+                },
                 "player_name": {
                     "type": "string"
                 },
@@ -19232,9 +18494,6 @@
         "modelsv2.ServerSettingsDocument": {
             "type": "object",
             "properties": {
-                "api_token": {
-                    "type": "boolean"
-                },
                 "auto_eval_nickname": {
                     "type": "boolean"
                 },
@@ -19248,15 +18507,6 @@
                     "type": "string"
                 },
                 "autoeval_triggers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "banlist": {
-                    "type": "string"
-                },
-                "blacklisted_roles": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -19289,9 +18539,6 @@
                 "full_whitelist_role": {
                     "type": "string"
                 },
-                "greeting": {
-                    "type": "string"
-                },
                 "link_parse": {
                     "$ref": "#/definitions/modelsv2.LinkParseSettings"
                 },
@@ -19302,9 +18549,6 @@
                     "type": "string"
                 },
                 "non_family_nickname_rule": {
-                    "type": "string"
-                },
-                "reddit_feed": {
                     "type": "string"
                 },
                 "server": {
@@ -19318,9 +18562,6 @@
                     "items": {
                         "$ref": "#/definitions/modelsv2.ServerRole"
                     }
-                },
-                "strike_log": {
-                    "type": "string"
                 },
                 "tied": {
                     "type": "boolean"
@@ -19338,6 +18579,56 @@
                 },
                 "updated_fields": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ServerSettingsUpdate": {
+            "type": "object",
+            "properties": {
+                "auto_eval_nickname": {
+                    "type": "boolean"
+                },
+                "autoboard_limit": {
+                    "type": "integer"
+                },
+                "autoeval": {
+                    "type": "boolean"
+                },
+                "autoeval_log": {
+                    "type": "string"
+                },
+                "autoeval_triggers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "change_nickname": {
+                    "type": "boolean"
+                },
+                "embed_color": {
+                    "type": "integer"
+                },
+                "family_label": {
+                    "type": "string"
+                },
+                "flair_non_family": {
+                    "type": "boolean"
+                },
+                "full_whitelist_role": {
+                    "type": "string"
+                },
+                "link_parse": {
+                    "$ref": "#/definitions/modelsv2.LinkParseSettings"
+                },
+                "nickname_rule": {
+                    "type": "string"
+                },
+                "non_family_nickname_rule": {
+                    "type": "string"
+                },
+                "tied": {
+                    "type": "boolean"
                 }
             }
         },
@@ -20247,31 +19538,11 @@
                 }
             }
         },
-        "modelsv2.TrophyBucketHistory": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.TrophyBucket"
-                    }
-                },
-                "date": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.TrophyBucketsResponse": {
             "type": "object",
             "properties": {
                 "count": {
                     "type": "integer"
-                },
-                "history": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.TrophyBucketHistory"
-                    }
                 },
                 "items": {
                     "type": "array",

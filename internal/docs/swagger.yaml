@@ -1,49 +1,5 @@
 basePath: /
 definitions:
-  modelsv1.PlayerLegendsResponse:
-    properties:
-      legends: {}
-      name: {}
-      rankings: {}
-      streak: {}
-      tag: {}
-      townhall: {}
-    type: object
-  modelsv1.PlayerLootedData:
-    properties:
-      dark_elixir: {}
-      elixir: {}
-      gold: {}
-    type: object
-  modelsv1.PlayerStatsResponse:
-    properties:
-      activity: {}
-      attack_wins: {}
-      capital: {}
-      clan_games: {}
-      clan_tag: {}
-      clanCapitalContributions: {}
-      donations: {}
-      last_online: {}
-      league: {}
-      legends: {}
-      location: {}
-      looted:
-        $ref: '#/definitions/modelsv1.PlayerLootedData'
-      name: {}
-      season_pass: {}
-      tag: {}
-      townhall: {}
-      trophies: {}
-      warStars: {}
-    type: object
-  modelsv1.V1CapitalClanTagsBody:
-    properties:
-      clan_tags:
-        items:
-          type: string
-        type: array
-    type: object
   modelsv2.AccountConflictErrorResponse:
     properties:
       account:
@@ -707,8 +663,6 @@ definitions:
     properties:
       leagueId:
         type: integer
-      top200:
-        type: boolean
       townHallLevel:
         type: integer
     type: object
@@ -1272,6 +1226,17 @@ definitions:
       server_id:
         type: string
     type: object
+  modelsv2.ClanLeaderboardHistoryResponse:
+    properties:
+      clanTag:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.LeaderboardEntityHistoryItem'
+        type: array
+      type:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryType'
+    type: object
   modelsv2.ClanLeagueRef:
     properties:
       id:
@@ -1292,13 +1257,6 @@ definitions:
       tag:
         type: string
     type: object
-  modelsv2.ClanPlayerTagsBody:
-    properties:
-      player_tags:
-        items:
-          type: string
-        type: array
-    type: object
   modelsv2.ClanRankingCategory:
     properties:
       placements:
@@ -1316,42 +1274,6 @@ definitions:
         type: integer
       rank:
         type: integer
-      updatedAt:
-        type: string
-    type: object
-  modelsv2.ClanRankingSnapshotItem:
-    properties:
-      badgeUrls:
-        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
-      clanBuilderBasePoints:
-        type: integer
-      clanCapitalPoints:
-        type: integer
-      clanLevel:
-        type: integer
-      clanPoints:
-        type: integer
-      location:
-        $ref: '#/definitions/modelsv2.RankingLocation'
-      members:
-        type: integer
-      name:
-        type: string
-      previousRank:
-        type: integer
-      rank:
-        type: integer
-      tag:
-        type: string
-    type: object
-  modelsv2.ClanRankingSnapshotResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.ClanRankingSnapshotItem'
-        type: array
-      paging:
-        $ref: '#/definitions/modelsv2.Paging'
     type: object
   modelsv2.ClanRankingsResponse:
     properties:
@@ -1386,30 +1308,14 @@ definitions:
     properties:
       abbreviation:
         type: string
-      auto_greet_option:
-        type: string
-      ban_alert_channel:
-        type: string
       category:
-        type: string
-      clan_channel:
-        type: string
-      greeting:
         type: string
     type: object
   modelsv2.ClanSettingsDetail:
     properties:
       abbreviation:
         type: string
-      auto_greet_option:
-        type: string
-      ban_alert_channel:
-        type: string
       category:
-        type: string
-      clan_channel:
-        type: string
-      greeting:
         type: string
       name:
         type: string
@@ -1430,6 +1336,13 @@ definitions:
         type: integer
       updated_fields:
         type: integer
+    type: object
+  modelsv2.ClanSettingsUpdate:
+    properties:
+      abbreviation:
+        type: string
+      category:
+        type: string
     type: object
   modelsv2.ClanTagsBody:
     properties:
@@ -1816,6 +1729,7 @@ definitions:
     - not_found
     - conflict
     - rate_limited
+    - not_implemented
     - upstream_unavailable
     - internal_error
     type: string
@@ -1827,6 +1741,7 @@ definitions:
     - ErrorCodeNotFound
     - ErrorCodeConflict
     - ErrorCodeRateLimited
+    - ErrorCodeNotImplemented
     - ErrorCodeUpstreamUnavailable
     - ErrorCodeInternal
   modelsv2.ErrorResponse:
@@ -2009,8 +1924,6 @@ definitions:
     type: object
   modelsv2.GroupedCountItem:
     properties:
-      builderhall_level:
-        type: integer
       capital_league_id:
         type: integer
       count:
@@ -2138,16 +2051,11 @@ definitions:
       clan_tag:
         type: string
         x-nullable: true
-      data:
-        additionalProperties: {}
-        type: object
       event_type:
         type: string
       player_name:
         type: string
       player_tag:
-        type: string
-      season:
         type: string
       timestamp:
         type: string
@@ -2156,10 +2064,7 @@ definitions:
       type:
         enum:
         - join_leave
-        - player_history
         type: string
-      value:
-        type: integer
     type: object
   modelsv2.HomeActivityPlayerMapping:
     properties:
@@ -2311,6 +2216,34 @@ definitions:
       tag:
         type: string
     type: object
+  modelsv2.LeaderboardEntityHistoryItem:
+    properties:
+      date:
+        type: string
+      details:
+        additionalProperties: {}
+        type: object
+      locationId:
+        type: string
+      name:
+        type: string
+      rank:
+        type: integer
+    type: object
+  modelsv2.LeaderboardHistoryType:
+    enum:
+    - player_home_trophies
+    - player_builder_base_trophies
+    - clan_home_points
+    - clan_builder_base_points
+    - clan_capital_points
+    type: string
+    x-enum-varnames:
+    - LeaderboardHistoryTypePlayerHomeTrophies
+    - LeaderboardHistoryTypePlayerBuilderBaseTrophies
+    - LeaderboardHistoryTypeClanHomePoints
+    - LeaderboardHistoryTypeClanBuilderBasePoints
+    - LeaderboardHistoryTypeClanCapitalPoints
   modelsv2.LeaderboardLeague:
     properties:
       badge:
@@ -2320,80 +2253,71 @@ definitions:
       name:
         type: string
     type: object
-  modelsv2.LegendBattle:
+  modelsv2.LeaderboardSnapshotHistoryResponse:
     properties:
-      destructionPercentage:
-        type: integer
-      id:
+      date:
         type: string
+      items:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+      locationId:
+        type: string
+      type:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryType'
+    type: object
+  modelsv2.LegendHistoryClan:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
       name:
         type: string
-      stars:
-        type: integer
       tag:
         type: string
-      timestamp:
+    type: object
+  modelsv2.LegendHistoryItem:
+    properties:
+      attackWins:
+        type: integer
+      clan:
+        $ref: '#/definitions/modelsv2.LegendHistoryClan'
+      defenseWins:
+        type: integer
+      expLevel:
+        type: integer
+      league:
+        $ref: '#/definitions/modelsv2.LegendHistoryLeague'
+      name:
         type: string
-      trophies:
+      previousRank:
         type: integer
-      trophyChange:
+      rank:
         type: integer
-    type: object
-  modelsv2.LegendDay:
-    properties:
-      attack_sum:
-        type: integer
-      attacks:
-        items:
-          $ref: '#/definitions/modelsv2.LegendBattle'
-        type: array
-      defense_sum:
-        type: integer
-      defenses:
-        items:
-          $ref: '#/definitions/modelsv2.LegendBattle'
-        type: array
-      net_gain:
-        type: integer
-      new_best:
-        type: boolean
-      num_attacks:
-        type: integer
-      num_defenses:
-        type: integer
-      previous_trophies:
+      season:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
         type: integer
       trophies:
         type: integer
     type: object
-  modelsv2.LegendSeasonStats:
+  modelsv2.LegendHistoryLeague:
     properties:
-      attack_count:
+      iconUrls:
+        $ref: '#/definitions/modelsv2.PublicIconURLs'
+      id:
         type: integer
-      attack_trophies:
-        type: integer
-      average_destruction:
-        type: number
-      average_stars:
-        type: number
-      defense_count:
-        type: integer
-      defense_losses:
-        type: integer
-      defense_trophies:
-        type: integer
-      defense_wins:
-        type: integer
-      net_trophies:
-        type: integer
-      one_stars:
-        type: integer
-      three_stars:
-        type: integer
-      two_stars:
-        type: integer
-      zero_stars:
-        type: integer
+      name:
+        type: string
+    type: object
+  modelsv2.LegendSeasonHistoryResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.LegendHistoryItem'
+        type: array
     type: object
   modelsv2.LinkParseSettings:
     properties:
@@ -2401,25 +2325,12 @@ definitions:
         type: boolean
       base:
         type: boolean
-      channels:
-        items:
-          type: string
-        type: array
       clan:
         type: boolean
       player:
         type: boolean
       show:
         type: boolean
-    type: object
-  modelsv2.LinkedAccount:
-    properties:
-      player_name:
-        type: string
-      player_tag:
-        type: string
-      town_hall:
-        type: integer
     type: object
   modelsv2.MessageResponse:
     properties:
@@ -2486,6 +2397,16 @@ definitions:
       sentry_dsn:
         type: string
     type: object
+  modelsv2.NotificationAccount:
+    properties:
+      playerTag:
+        type: string
+      source:
+        enum:
+        - verified
+        - bookmarked
+        type: string
+    type: object
   modelsv2.NotificationDeviceRequest:
     properties:
       app_version:
@@ -2497,11 +2418,7 @@ definitions:
         - denied
         - not_determined
         type: string
-      build_number:
-        type: string
       device_id:
-        type: string
-      device_model:
         type: string
       environment:
         enum:
@@ -2509,8 +2426,6 @@ definitions:
         - production
         type: string
       locale:
-        type: string
-      os_version:
         type: string
       platform:
         enum:
@@ -2521,8 +2436,6 @@ definitions:
         enum:
         - fcm
         - apns
-        type: string
-      timezone:
         type: string
       token:
         type: string
@@ -2551,181 +2464,72 @@ definitions:
     type: object
   modelsv2.NotificationPreferencesRequest:
     properties:
-      account_scope:
-        enum:
-        - all
-        - selected
-        type: string
-      device_id:
-        type: string
-      enabled:
-        type: boolean
-      enabled_types:
+      accountTags:
         items:
           type: string
         type: array
+      announcementsEnabled:
+        type: boolean
+      deviceEnabled:
+        type: boolean
+      deviceId:
+        type: string
       environment:
         enum:
         - sandbox
         - production
         type: string
-      event_types:
-        items:
-          type: string
-        type: array
-      locale:
-        type: string
-      reminder_timings:
-        items:
-          type: string
-        type: array
-      selected_accounts:
-        items:
-          type: string
-        type: array
-      selected_clan_tags:
-        items:
-          type: string
-        type: array
-      selected_town_halls:
+      eventsEnabled:
+        type: boolean
+      leagueBattlesEnabled:
+        type: boolean
+      monthlySupportEnabled:
+        type: boolean
+      reminderTimings:
         items:
           type: integer
         type: array
-      subscriptions:
-        items:
-          $ref: '#/definitions/modelsv2.NotificationSubscription'
-        type: array
-      timezone:
-        type: string
-      war_attack_modes:
-        items:
-          type: string
-        type: array
+      upgradeFinishesEnabled:
+        type: boolean
+      warAttacksEnabled:
+        type: boolean
+      warRemindersEnabled:
+        type: boolean
+      warStateEnabled:
+        type: boolean
     type: object
   modelsv2.NotificationPreferencesResponse:
     properties:
-      account_scope:
-        enum:
-        - all
-        - selected
-        type: string
-      device_id:
-        type: string
-      enabled:
+      accounts:
+        items:
+          $ref: '#/definitions/modelsv2.NotificationAccount'
+        type: array
+      announcementsEnabled:
         type: boolean
-      enabled_types:
-        items:
-          type: string
-        type: array
+      deviceEnabled:
+        type: boolean
+      deviceId:
+        type: string
       environment:
-        enum:
-        - sandbox
-        - production
         type: string
-      event_types:
-        items:
-          type: string
-        type: array
-      locale:
-        type: string
-      reminder_timings:
-        items:
-          type: string
-        type: array
-      selected_accounts:
-        items:
-          type: string
-        type: array
-      selected_clan_tags:
-        items:
-          type: string
-        type: array
-      selected_town_halls:
+      eventsEnabled:
+        type: boolean
+      leagueBattlesEnabled:
+        type: boolean
+      monthlySupportEnabled:
+        type: boolean
+      reminderTimings:
         items:
           type: integer
         type: array
-      subscriptions:
-        items:
-          $ref: '#/definitions/modelsv2.NotificationSubscription'
-        type: array
-      timezone:
-        type: string
-      updated_at:
-        type: string
-      war_attack_modes:
-        items:
-          type: string
-        type: array
-    type: object
-  modelsv2.NotificationSubscription:
-    properties:
-      enabled:
+      upgradeFinishesEnabled:
         type: boolean
-      player_tag:
-        type: string
-      settings:
-        additionalProperties: {}
-        type: object
-      type:
-        type: string
-    type: object
-  modelsv2.OpenTicket:
-    properties:
-      apply_account:
-        type: string
-      category_id:
-        type: string
-      category_name:
-        type: string
-      channel:
-        type: string
-      channel_exists:
+      warAttacksEnabled:
         type: boolean
-      discord_avatar_url:
-        type: string
-      discord_display_name:
-        type: string
-      discord_username:
-        type: string
-      linked_accounts:
-        items:
-          $ref: '#/definitions/modelsv2.LinkedAccount'
-        type: array
-      number:
-        type: integer
-      panel:
-        type: string
-      server:
-        type: string
-      set_clan:
-        type: string
-      status:
-        type: string
-      thread:
-        type: string
-      user:
-        type: string
-    type: object
-  modelsv2.OpenTicketsResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.OpenTicket'
-        type: array
-      total:
-        type: integer
-    type: object
-  modelsv2.Paging:
-    properties:
-      cursors:
-        $ref: '#/definitions/modelsv2.PagingCursors'
-    type: object
-  modelsv2.PagingCursors:
-    properties:
-      after:
-        type: string
-      before:
-        type: string
+      warRemindersEnabled:
+        type: boolean
+      warStateEnabled:
+        type: boolean
     type: object
   modelsv2.PlayerBattlelogHistoryResponse:
     properties:
@@ -2741,13 +2545,6 @@ definitions:
         type: string
       time:
         $ref: '#/definitions/modelsv2.PublicStatsTimeRange'
-    type: object
-  modelsv2.PlayerBattlelogStatsRequest:
-    properties:
-      player_tags:
-        items:
-          type: string
-        type: array
     type: object
   modelsv2.PlayerChangeRecord:
     properties:
@@ -2790,18 +2587,14 @@ definitions:
     type: object
   modelsv2.PlayerLeaderboardHistoryResponse:
     properties:
-      count:
-        type: integer
-      date:
-        type: string
       items:
         items:
-          $ref: '#/definitions/modelsv2.PlayerLeaderboardItem'
+          $ref: '#/definitions/modelsv2.LeaderboardEntityHistoryItem'
         type: array
-      kind:
+      playerTag:
         type: string
-      location:
-        type: string
+      type:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryType'
     type: object
   modelsv2.PlayerLeaderboardItem:
     properties:
@@ -2843,39 +2636,12 @@ definitions:
       townhall_level:
         type: integer
     type: object
-  modelsv2.PlayerLegendSeasonResponse:
+  modelsv2.PlayerLegendHistoryResponse:
     properties:
-      days:
-        additionalProperties:
-          $ref: '#/definitions/modelsv2.LegendDay'
-        type: object
-      found:
-        type: boolean
-      season:
-        type: string
-      stats:
-        $ref: '#/definitions/modelsv2.LegendSeasonStats'
-      streak:
-        type: integer
-      tag:
-        type: string
-    type: object
-  modelsv2.PlayerLegendsDayResponse:
-    properties:
-      attacks:
+      items:
         items:
-          $ref: '#/definitions/modelsv2.LegendBattle'
+          $ref: '#/definitions/modelsv2.LegendHistoryItem'
         type: array
-      data:
-        $ref: '#/definitions/modelsv2.LegendDay'
-      day:
-        type: string
-      defenses:
-        items:
-          $ref: '#/definitions/modelsv2.LegendBattle'
-        type: array
-      tag:
-        type: string
     type: object
   modelsv2.PlayerRankedBattlelogResponse:
     properties:
@@ -2911,60 +2677,33 @@ definitions:
       tag:
         type: string
     type: object
-  modelsv2.PlayerRankingSnapshotItem:
+  modelsv2.PlayerRankingCategory:
     properties:
-      attackWins:
-        type: integer
-      builderBaseTrophies:
-        type: integer
-      builderHallLevel:
-        type: integer
-      clan:
-        $ref: '#/definitions/modelsv2.RankingClan'
-      defenseWins:
-        type: integer
-      expLevel:
-        type: integer
-      league:
-        $ref: '#/definitions/modelsv2.PublicLeagueReference'
-      name:
+      countryCode:
         type: string
-      previousRank:
+        x-nullable: true
+      globalRank:
         type: integer
-      rank:
+        x-nullable: true
+      localRank:
         type: integer
-      tag:
+        x-nullable: true
+      locationId:
         type: string
-      townHallLevel:
+        x-nullable: true
+      locationName:
+        type: string
+        x-nullable: true
+      points:
         type: integer
-      trophies:
-        type: integer
-    type: object
-  modelsv2.PlayerRankingSnapshotResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.PlayerRankingSnapshotItem'
-        type: array
-      paging:
-        $ref: '#/definitions/modelsv2.Paging'
+        x-nullable: true
     type: object
   modelsv2.PlayerRankingsResponse:
     properties:
-      builder_global_rank:
-        type: integer
-      builder_local_rank:
-        type: integer
-      country_code:
-        type: string
-      country_name:
-        type: string
-      global_rank:
-        type: integer
-      local_rank:
-        type: integer
-      rank:
-        type: integer
+      builderBase:
+        $ref: '#/definitions/modelsv2.PlayerRankingCategory'
+      homeVillage:
+        $ref: '#/definitions/modelsv2.PlayerRankingCategory'
       tag:
         type: string
     type: object
@@ -3151,17 +2890,6 @@ definitions:
       total:
         $ref: '#/definitions/modelsv2.PlayerWarStatsBucket'
     type: object
-  modelsv2.PlayersLegendSeasonResponse:
-    properties:
-      count:
-        type: integer
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.PlayerLegendSeasonResponse'
-        type: array
-      season:
-        type: string
-    type: object
   modelsv2.PublicBadgeURLs:
     properties:
       large:
@@ -3221,15 +2949,6 @@ definitions:
       tiny:
         type: string
     type: object
-  modelsv2.PublicLeagueReference:
-    properties:
-      iconUrls:
-        $ref: '#/definitions/modelsv2.PublicIconURLs'
-      id:
-        type: integer
-      name:
-        type: string
-    type: object
   modelsv2.PublicStatsTimeRange:
     properties:
       end:
@@ -3262,26 +2981,6 @@ definitions:
       placement:
         type: integer
       tag:
-        type: string
-    type: object
-  modelsv2.RankingClan:
-    properties:
-      badgeUrls:
-        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
-      name:
-        type: string
-      tag:
-        type: string
-    type: object
-  modelsv2.RankingLocation:
-    properties:
-      countryCode:
-        type: string
-      id:
-        type: integer
-      isCountry:
-        type: boolean
-      name:
         type: string
     type: object
   modelsv2.ReminderConfig:
@@ -3343,6 +3042,34 @@ definitions:
     properties:
       name:
         type: string
+    type: object
+  modelsv2.RoleSettingsResponse:
+    properties:
+      auto_eval_nickname:
+        type: boolean
+      auto_eval_status:
+        type: boolean
+      autoeval_log:
+        type: string
+      autoeval_triggers:
+        items:
+          type: string
+        type: array
+      server_id:
+        type: integer
+    type: object
+  modelsv2.RoleSettingsUpdate:
+    properties:
+      auto_eval_nickname:
+        type: boolean
+      auto_eval_status:
+        type: boolean
+      autoeval_log:
+        type: string
+      autoeval_triggers:
+        items:
+          type: string
+        type: array
     type: object
   modelsv2.Roster:
     properties:
@@ -3961,34 +3688,6 @@ definitions:
       total:
         type: integer
     type: object
-  modelsv2.ServerCapitalLeaderboardItem:
-    properties:
-      attacks:
-        type: number
-      capital_gold:
-        type: number
-      clan_name:
-        type: string
-      clan_tag:
-        type: string
-      player_name:
-        type: string
-      player_tag:
-        type: string
-      rank:
-        type: integer
-    type: object
-  modelsv2.ServerCapitalLeaderboardResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.ServerCapitalLeaderboardItem'
-        type: array
-      server_id:
-        type: integer
-      total:
-        type: integer
-    type: object
   modelsv2.ServerClanMember:
     properties:
       clan_name:
@@ -4103,8 +3802,6 @@ definitions:
         type: string
       player_tag:
         type: string
-      streak:
-        type: integer
       townhall_level:
         type: integer
       trophies:
@@ -4286,6 +3983,8 @@ definitions:
         type: integer
       local_rank:
         type: integer
+      location_id:
+        type: string
       player_name:
         type: string
       player_tag:
@@ -4397,8 +4096,6 @@ definitions:
     type: object
   modelsv2.ServerSettingsDocument:
     properties:
-      api_token:
-        type: boolean
       auto_eval_nickname:
         type: boolean
       autoboard_limit:
@@ -4408,12 +4105,6 @@ definitions:
       autoeval_log:
         type: string
       autoeval_triggers:
-        items:
-          type: string
-        type: array
-      banlist:
-        type: string
-      blacklisted_roles:
         items:
           type: string
         type: array
@@ -4435,8 +4126,6 @@ definitions:
         type: boolean
       full_whitelist_role:
         type: string
-      greeting:
-        type: string
       link_parse:
         $ref: '#/definitions/modelsv2.LinkParseSettings'
       name:
@@ -4444,8 +4133,6 @@ definitions:
       nickname_rule:
         type: string
       non_family_nickname_rule:
-        type: string
-      reddit_feed:
         type: string
       server:
         type: integer
@@ -4455,8 +4142,6 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.ServerRole'
         type: array
-      strike_log:
-        type: string
       tied:
         type: boolean
     type: object
@@ -4468,6 +4153,39 @@ definitions:
         type: integer
       updated_fields:
         type: integer
+    type: object
+  modelsv2.ServerSettingsUpdate:
+    properties:
+      auto_eval_nickname:
+        type: boolean
+      autoboard_limit:
+        type: integer
+      autoeval:
+        type: boolean
+      autoeval_log:
+        type: string
+      autoeval_triggers:
+        items:
+          type: string
+        type: array
+      change_nickname:
+        type: boolean
+      embed_color:
+        type: integer
+      family_label:
+        type: string
+      flair_non_family:
+        type: boolean
+      full_whitelist_role:
+        type: string
+      link_parse:
+        $ref: '#/definitions/modelsv2.LinkParseSettings'
+      nickname_rule:
+        type: string
+      non_family_nickname_rule:
+        type: string
+      tied:
+        type: boolean
     type: object
   modelsv2.ServerWarLeaderboardItem:
     properties:
@@ -5075,23 +4793,10 @@ definitions:
       trophies:
         type: integer
     type: object
-  modelsv2.TrophyBucketHistory:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/modelsv2.TrophyBucket'
-        type: array
-      date:
-        type: string
-    type: object
   modelsv2.TrophyBucketsResponse:
     properties:
       count:
         type: integer
-      history:
-        items:
-          $ref: '#/definitions/modelsv2.TrophyBucketHistory'
-        type: array
       items:
         items:
           $ref: '#/definitions/modelsv2.TrophyBucket'
@@ -5559,7 +5264,7 @@ paths:
       - Lists
   /list/townhalls:
     get:
-      description: Returns distinct town hall levels seen in tracked player stats.
+      description: Returns distinct current town hall levels from tracked players.
       produces:
       - application/json
       responses:
@@ -6383,6 +6088,47 @@ paths:
       summary: Get clan join-leave stats
       tags:
       - Clan
+  /v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}:
+    get:
+      description: Returns dated placements and full stored official details for clan
+        Home Village, Builder Base, or Capital leaderboards.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: Canonical clan leaderboard type
+        enum:
+        - clan_home_points
+        - clan_builder_base_points
+        - clan_capital_points
+        in: path
+        name: leaderboard_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanLeaderboardHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a clan's leaderboard history
+      tags:
+      - Leaderboard
   /v2/clan/{clan_tag}/rankings:
     get:
       description: Returns Home Village, Builder Base, and Clan Capital current points
@@ -6533,15 +6279,13 @@ paths:
       - Counts
   /v2/counts/players/builder-halls:
     get:
+      description: Builder Hall counts are not implemented because no durable Builder
+        Hall count source exists yet.
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.GroupedCountsResponse'
-        "500":
-          description: Internal Server Error
+        "501":
+          description: Not Implemented
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get player builder hall counts
@@ -7065,8 +6809,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Uses RFC QUERY with a JSON body to return the newest merged clan
-        membership and player history activity.
+      description: Uses RFC QUERY with a JSON body to return the newest clan membership
+        activity.
       parameters:
       - description: Home activity selection
         in: body
@@ -7125,17 +6869,13 @@ paths:
       - Mobile App
   /v2/leaderboard/{league_tier_id}/trophy-buckets:
     get:
-      description: Returns trophy buckets of players and trophies at bucket points,
-        with optional history up to 30 days.
+      description: Returns current trophy and player totals grouped into trophy buckets
+        for one league tier.
       parameters:
       - description: League tier ID
         in: path
         name: league_tier_id
         required: true
-        type: integer
-      - description: History days, max 30
-        in: query
-        name: days
         type: integer
       produces:
       - application/json
@@ -7152,7 +6892,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get trophy bucket history
+      summary: Get current trophy buckets
       tags:
       - Leaderboard
   /v2/leaderboard/{location_id}/clan/donations:
@@ -7239,6 +6979,54 @@ paths:
       summary: Get clan win streak leaderboard
       tags:
       - Leaderboard
+  /v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}:
+    get:
+      description: Reconstructs one complete official leaderboard response from stored
+        full response items, ordered by rank.
+      parameters:
+      - description: Canonical leaderboard type
+        enum:
+        - player_home_trophies
+        - player_builder_base_trophies
+        - clan_home_points
+        - clan_builder_base_points
+        - clan_capital_points
+        in: path
+        name: leaderboard_type
+        required: true
+        type: string
+      - description: Global or official numeric location ID
+        in: path
+        name: location_id
+        required: true
+        type: string
+      - description: Snapshot date YYYY-MM-DD
+        in: path
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.LeaderboardSnapshotHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a historical leaderboard snapshot
+      tags:
+      - Leaderboard
   /v2/leaderboard/league/{league_tier_id}:
     get:
       description: Returns the current top tracked players for a ranked league tier
@@ -7269,38 +7057,6 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get league leaderboard
-      tags:
-      - Leaderboard
-  /v2/leaderboard/league/{league_tier_id}/history/{date}:
-    get:
-      description: Returns stored historical league leaderboard snapshots.
-      parameters:
-      - description: League tier ID
-        in: path
-        name: league_tier_id
-        required: true
-        type: integer
-      - description: Snapshot date YYYY-MM-DD
-        in: path
-        name: date
-        required: true
-        type: string
-      - description: Result limit, max 200
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.PlayerLeaderboardHistoryResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get historical league leaderboard
       tags:
       - Leaderboard
   /v2/leaderboard/townhalls/{townhall_level}:
@@ -7335,22 +7091,21 @@ paths:
       summary: Get townhall leaderboard
       tags:
       - Leaderboard
-  /v2/leaderboard/townhalls/{townhall_level}/history/{date}:
+  /v2/legends/history/{season}:
     get:
-      description: Returns stored historical townhall leaderboard snapshots.
+      description: Returns the stored final official Legend leaderboard for one completed
+        season, ordered by rank.
       parameters:
-      - description: Townhall level
+      - description: Official Legend season ID in YYYY-MM format
         in: path
-        name: townhall_level
-        required: true
-        type: integer
-      - description: Snapshot date YYYY-MM-DD
-        in: path
-        name: date
+        name: season
         required: true
         type: string
-      - description: Result limit, max 200
+      - default: 25
+        description: Result limit
         in: query
+        maximum: 200
+        minimum: 1
         name: limit
         type: integer
       produces:
@@ -7359,12 +7114,20 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.PlayerLeaderboardHistoryResponse'
+            $ref: '#/definitions/modelsv2.LegendSeasonHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get historical townhall leaderboard
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a final Legend season leaderboard
       tags:
       - Leaderboard
   /v2/link/server/{server_id}/clan/list:
@@ -8448,18 +8211,22 @@ paths:
       summary: Get player join-leave clan totals
       tags:
       - Player
-  /v2/player/{player_tag}/legends/{day}/day:
+  /v2/player/{player_tag}/leaderboard-history/{leaderboard_type}:
     get:
-      description: Returns player legends attacks and defenses for a day.
+      description: Returns dated placements and full stored official details for player
+        Home Village or Builder Base leaderboards.
       parameters:
       - description: Player tag
         in: path
         name: player_tag
         required: true
         type: string
-      - description: Legend day YYYY-MM-DD
+      - description: Canonical player leaderboard type
+        enum:
+        - player_home_trophies
+        - player_builder_base_trophies
         in: path
-        name: day
+        name: leaderboard_type
         required: true
         type: string
       produces:
@@ -8468,34 +8235,30 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.PlayerLegendsDayResponse'
+            $ref: '#/definitions/modelsv2.PlayerLeaderboardHistoryResponse'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get player legends day battlelog
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a player's leaderboard history
       tags:
-      - Player
-  /v2/player/{player_tag}/legends/{season}/season:
+      - Leaderboard
+  /v2/player/{player_tag}/legend-history:
     get:
-      description: Returns player legends +/- and overview stats for a season.
+      description: Returns every stored final Legend season placement for one player
+        in descending season order.
       parameters:
       - description: Player tag
         in: path
         name: player_tag
-        required: true
-        type: string
-      - description: Legend season YYYY-MM
-        in: path
-        name: season
         required: true
         type: string
       produces:
@@ -8504,22 +8267,22 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.PlayerLegendSeasonResponse'
+            $ref: '#/definitions/modelsv2.PlayerLegendHistoryResponse'
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get player legends season battlelog stats
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a player's final Legend history
       tags:
-      - Player
+      - Leaderboard
   /v2/player/{player_tag}/ranked/{season}/battlelog:
     get:
       description: Returns player ranked season placement plus recent ranked battlelog
@@ -8592,8 +8355,9 @@ paths:
       - Player
   /v2/player/{player_tag}/rankings:
     get:
-      description: Returns live rankings, when available, for a player in their league
-        or other ranking bucket.
+      description: Returns current Home Village and Builder Base points plus global
+        and official-location placements. A retained location can have a null local
+        rank when the player is no longer ranked there.
       parameters:
       - description: Player tag
         in: path
@@ -8686,41 +8450,6 @@ paths:
       summary: Get player war stats
       tags:
       - Player
-  /v2/player/legends/{season}/battlelog-stats:
-    post:
-      consumes:
-      - application/json
-      description: Returns season +/- and overview stats for a list of players.
-      parameters:
-      - description: Legend season YYYY-MM
-        in: path
-        name: season
-        required: true
-        type: string
-      - description: Player tags
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.PlayerBattlelogStatsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.PlayersLegendSeasonResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get bulk player legends battlelog stats
-      tags:
-      - Player
   /v2/public:
     get:
       description: Returns client-safe configuration values.
@@ -8747,151 +8476,6 @@ paths:
       summary: Get public app configuration
       tags:
       - Mobile App
-  /v2/ranking/clan-builder/{location}/{date}:
-    get:
-      description: Returns a stored clan builder ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ClanRankingSnapshotResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get clan builder ranking snapshot
-      tags:
-      - Rankings
-  /v2/ranking/clan-capital/{location}/{date}:
-    get:
-      description: Returns a stored clan capital ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ClanRankingSnapshotResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get clan capital ranking snapshot
-      tags:
-      - Rankings
-  /v2/ranking/clan-trophies/{location}/{date}:
-    get:
-      description: Returns a stored clan trophy ranking snapshot for a location and
-        date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ClanRankingSnapshotResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get clan trophy ranking snapshot
-      tags:
-      - Rankings
-  /v2/ranking/player-builder/{location}/{date}:
-    get:
-      description: Returns a stored player builder ranking snapshot for a location
-        and date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.PlayerRankingSnapshotResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get player builder ranking snapshot
-      tags:
-      - Rankings
-  /v2/ranking/player-trophies/{location}/{date}:
-    get:
-      description: Returns a stored player trophy ranking snapshot for a location
-        and date.
-      parameters:
-      - description: Location
-        in: path
-        name: location
-        required: true
-        type: string
-      - description: Snapshot date
-        in: path
-        name: date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.PlayerRankingSnapshotResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get player trophy ranking snapshot
-      tags:
-      - Rankings
   /v2/refresh:
     post:
       consumes:
@@ -10841,6 +10425,12 @@ paths:
         name: clan_tag
         required: true
         type: string
+      - description: Retained clan settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ClanSettingsUpdate'
       produces:
       - application/json
       responses:
@@ -11801,35 +11391,6 @@ paths:
       summary: Get server activity leaderboard
       tags:
       - Server Leaderboards
-  /v2/server/{server_id}/leaderboards/capital-raids:
-    get:
-      description: Returns players ranked by recent capital raid loot for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ServerCapitalLeaderboardResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get server capital raids leaderboard
-      tags:
-      - Server Leaderboards
   /v2/server/{server_id}/leaderboards/clan-games:
     get:
       description: Returns players ranked by season clan games points for a server.
@@ -12336,6 +11897,68 @@ paths:
       summary: Update a reminder
       tags:
       - Server Reminders
+  /v2/server/{server_id}/role-settings:
+    get:
+      description: Returns retained role automation settings for one server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RoleSettingsResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get role automation settings
+      tags:
+      - Server Roles
+    patch:
+      consumes:
+      - application/json
+      description: Updates retained role automation settings for one server.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Role automation settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RoleSettingsUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update role automation settings
+      tags:
+      - Server Roles
   /v2/server/{server_id}/server-roles:
     get:
       description: Returns configured roles for a server. Use type and clan_tag to
@@ -12450,6 +12073,12 @@ paths:
         name: server_id
         required: true
         type: integer
+      - description: Server settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ServerSettingsUpdate'
       - description: Include clan settings
         in: query
         name: clan_settings
@@ -12916,109 +12545,6 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Update ticket button settings
-      tags:
-      - Server Tickets
-  /v2/server/{server_id}/tickets/open:
-    get:
-      parameters:
-      - description: Discord server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Filter by status
-        in: query
-        name: status
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.OpenTicketsResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get open tickets for a server
-      tags:
-      - Server Tickets
-  /v2/server/{server_id}/tickets/open/{channel_id}:
-    delete:
-      parameters:
-      - description: Discord server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Ticket channel ID
-        in: path
-        name: channel_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.MessageResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Delete an open ticket
-      tags:
-      - Server Tickets
-  /v2/server/{server_id}/tickets/open/{channel_id}/clan:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Discord server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Ticket channel ID
-        in: path
-        name: channel_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.MessageResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update clan for an open ticket
-      tags:
-      - Server Tickets
-  /v2/server/{server_id}/tickets/open/{channel_id}/status:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Discord server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Ticket channel ID
-        in: path
-        name: channel_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.MessageResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update open ticket status
       tags:
       - Server Tickets
   /v2/static/{category}/{item_id_or_name}/max-level:

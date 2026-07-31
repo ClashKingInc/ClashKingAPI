@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"time"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -235,14 +236,13 @@ func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Success 200 {object} modelsv2.ServerDonationsLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/donations [get]
 func getServerDonationsLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return seasonStatLeaderboard(c, a, "donations", func(row map[string]any) float64 {
-			return lbAsFloat(mapMaybe(row["donations"])["donated"])
-		})
+		return seasonStatLeaderboard(c, a, "donations")
 	}
 }
 
@@ -304,63 +304,56 @@ func getServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 // @Param server_id path int true "Server ID"
 // @Param season query string false "Season YYYY-MM"
 // @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
+// @Success 200 {object} modelsv2.ServerClanGamesLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/leaderboards/clan-games [get]
 func getServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		return seasonStatLeaderboard(c, a, "clan_games", func(row map[string]any) float64 {
-			return lbAsFloat(mapMaybe(row["clan_games"])["points"])
-		})
+		return seasonStatLeaderboard(c, a, "clan_games")
 	}
 }
 
-// getServerActivityLeaderboard godoc
-// @Summary Get server activity leaderboard
-// @Description Returns players ranked by season activity for a server.
-// @Tags Server Leaderboards
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Param season query string false "Season YYYY-MM"
-// @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/leaderboards/activity [get]
-func getServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return seasonStatLeaderboard(c, a, "activity", func(row map[string]any) float64 {
-			return lbAsFloat(row["activity_score"])
-		})
-	}
-}
+const serverDonationStatChangesQuery = `
+	SELECT
+		player_tag,
+		COALESCE(sum(delta) FILTER (WHERE stat_type = 'donated'), 0)::bigint AS donated,
+		COALESCE(sum(delta) FILTER (WHERE stat_type = 'received'), 0)::bigint AS received
+	FROM player_stat_changes
+	WHERE player_tag = ANY($1)
+	  AND stat_type IN ('donated', 'received')
+	  AND event_time >= $2
+	  AND event_time < $3
+	GROUP BY player_tag
+	ORDER BY donated DESC, received DESC, player_tag
+	LIMIT $4
+`
 
-// getServerLootingLeaderboard godoc
-// @Summary Get server looting leaderboard
-// @Description Returns players ranked by season loot totals for a server.
-// @Tags Server Leaderboards
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id path int true "Server ID"
-// @Param season query string false "Season YYYY-MM"
-// @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} modelsv2.ServerSeasonLeaderboardResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/server/{server_id}/leaderboards/looting [get]
-func getServerLootingLeaderboard(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return seasonStatLeaderboard(c, a, "looting", func(row map[string]any) float64 {
-			return lbAsFloat(mapMaybe(row["data"])["gold"]) + lbAsFloat(mapMaybe(row["data"])["elixir"]) + lbAsFloat(mapMaybe(row["data"])["dark_elixir"])
-		})
-	}
-}
+const serverClanGamesStatChangesQuery = `
+	SELECT player_tag, sum(delta)::bigint AS clan_games
+	FROM player_stat_changes
+	WHERE player_tag = ANY($1)
+	  AND stat_type = 'clan_games'
+	  AND event_time >= $2
+	  AND event_time < $3
+	GROUP BY player_tag
+	ORDER BY clan_games DESC, player_tag
+	LIMIT $4
+`
 
-func seasonStatLeaderboard(c *fiber.Ctx, a apptypes.Deps, kind string, score func(map[string]any) float64) error {
+func seasonStatLeaderboard(c *fiber.Ctx, a apptypes.Deps, kind string) error {
 	serverID, err := pathInt(c, "server_id")
 	if err != nil {
 		return err
 	}
-	season := c.Query("season", lbCurrentSeason())
+	seasonID := c.Query("season")
+	if seasonID == "" {
+		seasonID = clashy.GetSeasonID()
+	}
+	season, err := clashy.GetSeasonByID(seasonID)
+	if err != nil {
+		return apptypes.Error(http.StatusBadRequest, "invalid season")
+	}
 	limit := clamp(queryIntDefault(c, "limit", 100), 1, 500)
 	_, clanNameMap, playerTags, err := lbGetServerClanAndPlayers(a, c.UserContext(), serverID)
 	if err != nil {
@@ -370,55 +363,83 @@ func seasonStatLeaderboard(c *fiber.Ctx, a apptypes.Deps, kind string, score fun
 	if err != nil {
 		return err
 	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT player_tag, clan_tag, name, townhall_level, donated, received, activity_score,
-		       donations, clan_games, activity, data
-		FROM player_season_stats
-		WHERE player_tag = ANY($1) AND season = $2
-	`, playerTags, season)
+
+	query := serverDonationStatChangesQuery
+	if kind == "clan_games" {
+		query = serverClanGamesStatChangesQuery
+	}
+	rows, err := a.Store.SQL.Query(
+		c.UserContext(),
+		query,
+		playerTags,
+		season.StartTime,
+		season.EndTime,
+		limit,
+	)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	items := []map[string]any{}
+	donationItems := make([]modelsv2.ServerDonationsLeaderboardItem, 0)
+	clanGamesItems := make([]modelsv2.ServerClanGamesLeaderboardItem, 0)
 	for rows.Next() {
-		var tag, clanTag, name string
-		var townhall *int
-		var donated, received, activityScore int
-		var donationsRaw, clanGamesRaw, activityRaw, dataRaw []byte
-		if err := rows.Scan(&tag, &clanTag, &name, &townhall, &donated, &received, &activityScore, &donationsRaw, &clanGamesRaw, &activityRaw, &dataRaw); err != nil {
-			return err
+		var tag string
+		var donated, received, clanGames int64
+		if kind == "donations" {
+			if err := rows.Scan(&tag, &donated, &received); err != nil {
+				return err
+			}
+		} else {
+			if err := rows.Scan(&tag, &clanGames); err != nil {
+				return err
+			}
 		}
-		row := mapMaybe(decodeJSONAny(dataRaw))
-		row["player_tag"] = tag
-		row["player_name"] = name
-		row["townhall_level"] = townhall
-		row["clan_tag"] = clanTag
-		row["clan_name"] = clanNameMap[clanTag]
-		row["donated"] = donated
-		row["received"] = received
-		row["activity_score"] = activityScore
-		row["donations"] = mapMaybe(decodeJSONAny(donationsRaw))
-		row["clan_games"] = mapMaybe(decodeJSONAny(clanGamesRaw))
-		row["activity"] = decodeJSONAny(activityRaw)
-		if row["player_name"] == "" {
-			row["player_name"] = info[tag]["name"]
+		player := info[tag]
+		clanTag, clanName := lbClanFromPlayer(player, clanNameMap)
+		if kind == "donations" {
+			donationItems = append(donationItems, modelsv2.ServerDonationsLeaderboardItem{
+				Rank:          len(donationItems) + 1,
+				PlayerTag:     tag,
+				PlayerName:    asStringOr(player["name"], "Unknown"),
+				TownhallLevel: intPtrMaybe(player["townhall"]),
+				ClanTag:       clanTag,
+				ClanName:      clanName,
+				Donated:       donated,
+				Received:      received,
+				Score:         donated,
+			})
+			continue
 		}
-		row["score"] = score(row)
-		items = append(items, row)
+		clanGamesItems = append(clanGamesItems, modelsv2.ServerClanGamesLeaderboardItem{
+			Rank:          len(clanGamesItems) + 1,
+			PlayerTag:     tag,
+			PlayerName:    asStringOr(player["name"], "Unknown"),
+			TownhallLevel: intPtrMaybe(player["townhall"]),
+			ClanTag:       clanTag,
+			ClanName:      clanName,
+			ClanGames:     clanGames,
+			Score:         clanGames,
+		})
 	}
-	sort.SliceStable(items, func(i, j int) bool { return lbAsFloat(items[i]["score"]) > lbAsFloat(items[j]["score"]) })
-	if len(items) > limit {
-		items = items[:limit]
+	if err := rows.Err(); err != nil {
+		return err
 	}
-	for i := range items {
-		items[i]["rank"] = i + 1
+	if kind == "donations" {
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ServerDonationsLeaderboardResponse{
+			ServerID: serverID,
+			Season:   seasonID,
+			Type:     kind,
+			Items:    donationItems,
+			Total:    len(donationItems),
+		})
 	}
-	return apptypes.JSON(c, http.StatusOK, map[string]any{"server_id": serverID, "season": season, "type": kind, "items": items, "total": len(items)})
-}
-
-func lbCurrentSeason() string {
-	return time.Now().UTC().Format("2006-01")
+	return apptypes.JSON(c, http.StatusOK, modelsv2.ServerClanGamesLeaderboardResponse{
+		ServerID: serverID,
+		Season:   seasonID,
+		Type:     kind,
+		Items:    clanGamesItems,
+		Total:    len(clanGamesItems),
+	})
 }
 
 func lbAsFloat(v any) float64 {

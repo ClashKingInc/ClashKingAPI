@@ -61,17 +61,27 @@ type ServerLegendsLeaderboardItem struct {
 	Trophies      int    `json:"trophies"`
 }
 
-type ServerSeasonLeaderboardItem struct {
-	Rank          int     `json:"rank"`
-	PlayerTag     string  `json:"player_tag"`
-	PlayerName    string  `json:"player_name"`
-	TownhallLevel *int    `json:"townhall_level,omitempty"`
-	ClanTag       string  `json:"clan_tag"`
-	ClanName      string  `json:"clan_name"`
-	Donated       int     `json:"donated,omitempty"`
-	Received      int     `json:"received,omitempty"`
-	ActivityScore int     `json:"activity_score,omitempty"`
-	Score         float64 `json:"score"`
+type ServerDonationsLeaderboardItem struct {
+	Rank          int    `json:"rank"`
+	PlayerTag     string `json:"player_tag"`
+	PlayerName    string `json:"player_name"`
+	TownhallLevel *int   `json:"townhall_level,omitempty"`
+	ClanTag       string `json:"clan_tag"`
+	ClanName      string `json:"clan_name"`
+	Donated       int64  `json:"donated"`
+	Received      int64  `json:"received"`
+	Score         int64  `json:"score"`
+}
+
+type ServerClanGamesLeaderboardItem struct {
+	Rank          int    `json:"rank"`
+	PlayerTag     string `json:"player_tag"`
+	PlayerName    string `json:"player_name"`
+	TownhallLevel *int   `json:"townhall_level,omitempty"`
+	ClanTag       string `json:"clan_tag"`
+	ClanName      string `json:"clan_name"`
+	ClanGames     int64  `json:"clan_games"`
+	Score         int64  `json:"score"`
 }
 
 type ServerWarLeaderboardResponse struct {
@@ -86,10 +96,18 @@ type ServerLegendsLeaderboardResponse struct {
 	Total    int                            `json:"total"`
 }
 
-type ServerSeasonLeaderboardResponse struct {
-	ServerID int                           `json:"server_id"`
-	Season   string                        `json:"season"`
-	Type     string                        `json:"type"`
-	Items    []ServerSeasonLeaderboardItem `json:"items"`
-	Total    int                           `json:"total"`
+type ServerDonationsLeaderboardResponse struct {
+	ServerID int                              `json:"server_id"`
+	Season   string                           `json:"season"`
+	Type     string                           `json:"type"`
+	Items    []ServerDonationsLeaderboardItem `json:"items"`
+	Total    int                              `json:"total"`
+}
+
+type ServerClanGamesLeaderboardResponse struct {
+	ServerID int                              `json:"server_id"`
+	Season   string                           `json:"season"`
+	Type     string                           `json:"type"`
+	Items    []ServerClanGamesLeaderboardItem `json:"items"`
+	Total    int                              `json:"total"`
 }

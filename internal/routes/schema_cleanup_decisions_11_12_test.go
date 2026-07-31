@@ -55,6 +55,38 @@ func TestDecisionFourteenUsesServerCustomEmbedsOnlyInSQL(t *testing.T) {
 	}
 }
 
+func TestPlayerStatChangesRetireSeasonStatsReadersAndUnsupportedLeaderboards(t *testing.T) {
+	routesDir := routesSourceDirectory(t)
+	sources := []string{
+		readCleanupSource(t, filepath.Join(routesDir, "clan.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "player.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "legacy_admin_stats.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "server", "leaderboards.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "server", "exports.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "register.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "..", "models", "v1", "player.go")),
+		readCleanupSource(t, filepath.Join(routesDir, "..", "models", "v2", "leaderboards.go")),
+	}
+	for index, source := range sources {
+		for _, obsolete := range []string{
+			"player_season_stats",
+			"clanDonationsMany",
+			"playersSummaryTop",
+			"playerSeasonStatsByTags",
+			"statsFromPlayerDocs",
+			"capitalLegacy",
+			"GetServerActivityLeaderboard",
+			"GetServerLootingLeaderboard",
+			"ActivityScore",
+			"PlayerStatsResponse",
+		} {
+			if strings.Contains(source, obsolete) {
+				t.Fatalf("cleanup source %d still contains retired symbol %q", index, obsolete)
+			}
+		}
+	}
+}
+
 func routesSourceDirectory(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)

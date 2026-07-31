@@ -2,7 +2,6 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // clanWars godoc
@@ -197,58 +195,6 @@ func clanComposition(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// clanDonationsMany godoc
-// @Summary Get donations for many clans
-// @Description Returns donation totals for multiple clans in a season.
-// @Tags Clan
-// @Produce json
-// @Param season path string true "Season"
-// @Param clan_tags query []string false "Clan tags"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func clanDonationsMany(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		season := c.Params("season")
-		tags := clanFixTags(apptypes.QueryValues(c, "clan_tags"))
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT player_tag, clan_tag, season, name, townhall_level, donations, clan_games, activity, data
-			FROM player_season_stats
-			WHERE season = $1
-			  AND (cardinality($2::text[]) = 0 OR clan_tag = ANY($2))
-			ORDER BY clan_tag, player_tag
-		`, season, tags)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var playerTag, clanTag, rowSeason, name string
-			var townhall pgtype.Int4
-			var donationsRaw, clanGamesRaw, activityRaw, dataRaw []byte
-			if err := rows.Scan(&playerTag, &clanTag, &rowSeason, &name, &townhall, &donationsRaw, &clanGamesRaw, &activityRaw, &dataRaw); err != nil {
-				return err
-			}
-			item := clanDecodeJSONObject(dataRaw)
-			item["tag"] = playerTag
-			item["clan_tag"] = clanTag
-			item["season"] = rowSeason
-			item["name"] = name
-			if townhall.Valid {
-				item["townhall"] = townhall.Int32
-			}
-			item["donations"] = clanDecodeJSONObject(donationsRaw)
-			item["clan_games"] = clanDecodeJSONObject(clanGamesRaw)
-			item["activity"] = clanDecodeJSONObject(activityRaw)
-			items = append(items, item)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, items)
-	}
-}
-
 // clansDetails godoc
 // @Summary Get full stats for a list of clans
 // @Description Returns detailed clan objects for the requested clan tags.
@@ -338,26 +284,4 @@ func clanFixTag(tag string) string {
 		return ""
 	}
 	return "#" + tag
-}
-
-func clanDecodeJSONObject(raw []byte) map[string]any {
-	value := clanDecodeJSONValue(raw, map[string]any{})
-	if obj, ok := value.(map[string]any); ok {
-		return obj
-	}
-	return map[string]any{}
-}
-
-func clanDecodeJSONValue(raw []byte, fallback any) any {
-	if len(raw) == 0 {
-		return fallback
-	}
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return fallback
-	}
-	if value == nil {
-		return fallback
-	}
-	return value
 }

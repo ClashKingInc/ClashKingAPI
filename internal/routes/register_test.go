@@ -52,6 +52,8 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/capital/player-stats",
 		"/v2/capital/guild-leaderboard",
 		"/v2/server/:server_id/leaderboards/capital-raids",
+		"/v2/server/:server_id/leaderboards/activity",
+		"/v2/server/:server_id/leaderboards/looting",
 		"/v2/clan/:clan_tag/donations/:season",
 		"/v2/legends/players/day/:day",
 		"/v2/legends/players/season/:season",
@@ -139,7 +141,9 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/player/:player_tag/join-leave",
 		"/v2/player/:player_tag/war/attacks",
 		"/v2/player/:player_tag/war/stats",
+		"/v2/player/:player_tag/stat-history",
 		"/v2/player/:player_tag/legend-history",
+		"/v2/clan/:clan_tag/legend-history",
 		"/v2/legends/history/:season",
 		"/v2/player/:player_tag/cwl/history",
 		"/v2/cwl/:clan_tag/ranking-history",
@@ -262,6 +266,29 @@ func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
 	}
 	if index := registeredRouteIndex(app, fiber.MethodPost, "/v2/home/activity"); index >= 0 {
 		t.Fatal("did not expect a POST compatibility route for /v2/home/activity")
+	}
+}
+
+func TestAutoboardsUseCleanBreakRoutes(t *testing.T) {
+	app := newRegisteredRoutesTestApp()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{fiber.MethodGet, "/v2/server/:server_id/autoboards/capabilities"},
+		{fiber.MethodGet, "/v2/server/:server_id/autoboards"},
+		{fiber.MethodPost, "/v2/server/:server_id/autoboards"},
+		{fiber.MethodPut, "/v2/server/:server_id/autoboards/:autoboard_id"},
+		{fiber.MethodDelete, "/v2/server/:server_id/autoboards/:autoboard_id"},
+	} {
+		if registeredRouteIndex(app, route.method, route.path) < 0 {
+			t.Fatalf("expected %s %s to be registered", route.method, route.path)
+		}
+	}
+	if registeredRouteIndex(app, fiber.MethodPatch, "/v2/server/:server_id/autoboards/:autoboard_id") >= 0 {
+		t.Fatal("legacy partial PATCH autoboard route is still registered")
 	}
 }
 

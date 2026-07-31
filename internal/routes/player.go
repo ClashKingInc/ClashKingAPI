@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -13,7 +12,6 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // playerWarAttacks godoc
@@ -251,116 +249,6 @@ func playersSorted(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// playersSummaryTop returns top performers in various stats categories for a season.
-//
-// @Summary Get summary of top stats for a list of players
-// @Tags Player
-// @Accept json
-// @Produce json
-// @Param season path string true "Season (e.g. 2024-01)"
-// @Param limit query int false "Max players per category (default 10)"
-// @Param body body object true "Player tags list"
-// @Success 200 {object} map[string]interface{}
-func playersSummaryTop(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		season := c.Params("season")
-		limit := c.QueryInt("limit", 10)
-		tags, err := playerTagsFromBody(c)
-		if err != nil {
-			return err
-		}
-		if len(tags) == 0 {
-			return apptypes.Error(http.StatusBadRequest, "player_tags cannot be empty")
-		}
-
-		rows, err := playerSeasonStatsByTags(c.UserContext(), a, tags, season)
-		if err != nil {
-			return err
-		}
-
-		type catEntry struct {
-			Tag   string `json:"tag"`
-			Value any    `json:"value"`
-			Count int    `json:"count"`
-		}
-
-		newData := map[string][]catEntry{}
-
-		type option struct {
-			path string
-			name string
-		}
-		opts := []option{
-			{path: "gold." + season, name: "gold"},
-			{path: "elixir." + season, name: "elixir"},
-			{path: "dark_elixir." + season, name: "dark_elixir"},
-			{path: "activity." + season, name: "activity"},
-			{path: "attack_wins." + season, name: "attack_wins"},
-			{path: "season_trophies." + season, name: "season_trophies"},
-			{path: "donations." + season + ".donated", name: "donated"},
-			{path: "donations." + season + ".received", name: "received"},
-		}
-
-		for _, opt := range opts {
-			sorted := make([]map[string]any, len(rows))
-			copy(sorted, rows)
-			sort.Slice(sorted, func(i, j int) bool {
-				vi := playerToFloat(playerDotGet(sorted[i], opt.path))
-				vj := playerToFloat(playerDotGet(sorted[j], opt.path))
-				return vi > vj
-			})
-			top := sorted
-			if len(top) > limit {
-				top = top[:limit]
-			}
-			entries := make([]catEntry, 0, len(top))
-			for count, row := range top {
-				entries = append(entries, catEntry{
-					Tag:   serverAsString(row["tag"]),
-					Value: playerDotGet(row, opt.path),
-					Count: count + 1,
-				})
-			}
-			newData[opt.name] = entries
-		}
-
-		warRows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT attacker_tag, COALESCE(sum(stars), 0)::bigint AS total_stars
-			FROM war_attacks
-			WHERE attacker_tag = ANY($1)
-			  AND war_type <> 'friendly'
-			GROUP BY attacker_tag
-			ORDER BY total_stars DESC
-			LIMIT $2
-		`, tags, limit)
-		if err != nil {
-			return err
-		}
-		defer warRows.Close()
-		warEntries := []catEntry{}
-		count := 1
-		for warRows.Next() {
-			var tag string
-			var stars int64
-			if err := warRows.Scan(&tag, &stars); err != nil {
-				return err
-			}
-			warEntries = append(warEntries, catEntry{Tag: tag, Value: stars, Count: count})
-			count++
-		}
-		if err := warRows.Err(); err != nil {
-			return err
-		}
-		newData["war_stars"] = warEntries
-
-		items := make([]map[string]any, 0, len(newData))
-		for key, val := range newData {
-			items = append(items, map[string]any{key: val})
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
-	}
-}
-
 // playersBasic returns basic CoC API data for multiple players.
 //
 // @Summary Get basic API data for multiple players
@@ -404,44 +292,6 @@ func playersBasic(a apptypes.Deps) fiber.Handler {
 
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
 	}
-}
-
-func playerSeasonStatsByTags(ctx context.Context, a apptypes.Deps, tags []string, season string) ([]map[string]any, error) {
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, clan_tag, season, name, townhall_level, donations, clan_games, activity, data, updated_at
-		FROM player_season_stats
-		WHERE player_tag = ANY($1) AND season = $2
-	`, tags, season)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []map[string]any{}
-	for rows.Next() {
-		var tag, clanTag, rowSeason, name string
-		var townhall pgtype.Int4
-		var donationsRaw, clanGamesRaw, activityRaw, dataRaw []byte
-		var updatedAt pgtype.Timestamptz
-		if err := rows.Scan(&tag, &clanTag, &rowSeason, &name, &townhall, &donationsRaw, &clanGamesRaw, &activityRaw, &dataRaw, &updatedAt); err != nil {
-			return nil, err
-		}
-		item := playerDecodeJSONObject(dataRaw)
-		item["tag"] = tag
-		item["clan_tag"] = clanTag
-		item["season"] = rowSeason
-		item["name"] = name
-		if townhall.Valid {
-			item["townhall"] = townhall.Int32
-		}
-		item["donations"] = map[string]any{rowSeason: playerDecodeJSONObject(donationsRaw)}
-		item["clan_games"] = map[string]any{rowSeason: playerDecodeJSONObject(clanGamesRaw)}
-		item["activity"] = map[string]any{rowSeason: playerDecodeJSONValue(activityRaw, 0)}
-		if updatedAt.Valid {
-			item["last_updated"] = updatedAt.Time
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
 }
 
 func playerDecodeJSONObject(raw []byte) map[string]any {

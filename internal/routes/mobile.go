@@ -711,7 +711,7 @@ func mobileLegendRankingsByTagFromRows(playerTags []string, rows []map[string]an
 
 func mobileLegendHistoryRows(ctx context.Context, a apptypes.Deps, playerTags []string, limit int64) []map[string]any {
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT player_tag, season, rank, trophies, data
+		SELECT `+legendHistoryColumns+`
 		FROM legend_history
 		WHERE player_tag = ANY($1)
 		ORDER BY player_tag, season DESC
@@ -721,19 +721,13 @@ func mobileLegendHistoryRows(ctx context.Context, a apptypes.Deps, playerTags []
 	}
 	defer rows.Close()
 	out := []map[string]any{}
+	leagues := legendLeagueTiers(a)
 	for rows.Next() {
-		var tag, season string
-		var rank, trophies int
-		var dataRaw []byte
-		if err := rows.Scan(&tag, &season, &rank, &trophies, &dataRaw); err != nil {
+		item, err := scanLegendHistoryItem(rows, leagues)
+		if err != nil {
 			continue
 		}
-		item := mobileMap(mobileDecodeJSONAny(dataRaw))
-		item["tag"] = tag
-		item["season"] = season
-		item["rank"] = rank
-		item["trophies"] = trophies
-		out = append(out, item)
+		out = append(out, legendHistoryItemMap(item))
 	}
 	return out
 }

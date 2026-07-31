@@ -176,7 +176,7 @@ All major feature domains are implemented in `internal/routes/` and `internal/ro
 
 | File | Structs |
   |---|---|
-| `player.go` | `PlayerStatsResponse`, `PlayerLegendsResponse`, `PlayerLootedData` |
+| `player.go` | `PlayerLegendsResponse` |
 | `war.go` | `CWLRankingEntry`, `CWLRankingRounds` |
 
 #### Route files updated
@@ -190,7 +190,7 @@ All major feature domains are implemented in `internal/routes/` and `internal/ro
 | `routes/activity.go` | `GuildSummaryResponse`, `InactivePlayersResponse` |
 | `routes/capital.go` | `CapitalPlayerStatsResponse`, `CapitalLeaderboardResponse` |
 | `routes/player.go` | `PlayerTagsRequest` (replaces inline struct), `PlayerSortedItem`, `PlayerLegendDaysItem`, `PlayerLegendRankingItem` |
-| `routes/player.go` | `PlayerStatsResponse`, `PlayerLegendsResponse` |
+| `routes/player.go` | `PlayerLegendsResponse` |
 | `routes/war.go` | `CWLRankingEntry` (typed function return) |
 
 ### What still needs typed models
@@ -294,7 +294,7 @@ Once typed models are in place, update all godoc `@Success` annotations:
     models/
       v1/
         capital.go              - V1CapitalClanTagsBody (original)
-        player.go               - PlayerStatsResponse, PlayerLegendsResponse, PlayerLootedData
+        player.go               - PlayerLegendsResponse
         war.go                  - CWLRankingEntry, CWLRankingRounds
       v2/
         accounts.go             - account request/response models
@@ -303,6 +303,7 @@ Once typed models are in place, update all godoc `@Success` annotations:
         autoboards.go           - AutoBoard models
         bans.go                 - BanRequest
         clan.go                 - ClanTagsBody, ClanPlayerTagsBody
+        player_stat_history.go  - PlayerStatType, PlayerStatChange, PlayerStatHistoryResponse
         clan_responses.go       - ClanRankingResponse, BoardTotalsResponse, DonationEntry, ClanCompositionResponse
         countdowns.go           - Countdown models
         dates_responses.go      - CurrentDatesResponse, SeasonBoundsResponse

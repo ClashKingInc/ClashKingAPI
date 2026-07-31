@@ -21,6 +21,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	serverManagerRead := func(handler fiber.Handler) fiber.Handler {
 		return authServerManager(a, wrap, false, handler)
 	}
+	webOrigin := apptypes.RequireWebOrigin(a.Config)
 	serverManagerWrite := func(handler fiber.Handler) fiber.Handler {
 		return authServerManager(a, wrap, true, handler)
 	}
@@ -64,6 +65,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/player/:player_tag/rankings", playerRankings(a))
 	app.Get("/v2/player/:player_tag/battlelog/history", playerBattlelogHistory(a))
 	app.Get("/v2/player/:player_tag/legend-history", playerLegendHistory(a))
+	app.Get("/v2/clan/:clan_tag/legend-history", clanLegendHistory(a))
 	app.Get("/v2/legends/history/:season", legendSeasonHistory(a))
 	app.Get("/v2/player/:player_tag/ranked/:season/battlelog", playerRankedBattlelog(a))
 	app.Get("/v2/player/:player_tag/ranked/:season/group", playerRankedGroup(a))
@@ -120,6 +122,12 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/auth/forgot-password", forgotPassword(a))
 	app.Post("/v2/reset-password", resetPassword(a))
 	app.Post("/v2/auth/reset-password", resetPassword(a))
+	app.Post("/v2/auth/web/discord", webOrigin, webDiscordAuth(a))
+	app.Post("/v2/auth/web/email", webOrigin, webEmailLogin(a))
+	app.Post("/v2/auth/web/verify-email-code", webOrigin, webVerifyEmailCode(a))
+	app.Post("/v2/auth/web/reset-password", webOrigin, webResetPassword(a))
+	app.Post("/v2/auth/web/refresh", webOrigin, webRefreshToken(a))
+	app.Post("/v2/auth/web/logout", webOrigin, webLogout(a))
 
 	app.Get("/v2/clan/:clan_tag/join-leave/stats", clanJoinLeaveStats(a))
 	app.Get("/v2/clan/:clan_tag/join-leave", clanJoinLeave(a))
@@ -149,6 +157,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Patch("/v2/server/:server_id/bot-profile", serverWrite(patchBotGuildProfile(a)))
 
 	app.Get("/v2/app/announcements/active", activeAnnouncement(a))
+	app.Get("/v2/app/discohook-resolve", wrap(resolveDiscohook(a)))
 	app.Get("/v2/app/announcements", authBot(a, listAnnouncements(a)))
 	app.Post("/v2/app/announcements", authBot(a, createAnnouncement(a)))
 	app.Get("/v2/app/announcements/:id", authBot(a, getAnnouncement(a)))
@@ -216,9 +225,10 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/server/:server_id/reminders", serverWrite(serverroutes.CreateReminder(a)))
 	app.Put("/v2/server/:server_id/reminders/:reminder_id", serverWrite(serverroutes.UpdateReminder(a)))
 	app.Delete("/v2/server/:server_id/reminders/:reminder_id", serverWrite(serverroutes.DeleteReminder(a)))
+	app.Get("/v2/server/:server_id/autoboards/capabilities", serverManagerRead(serverroutes.GetAutoboardCapabilities(a)))
 	app.Get("/v2/server/:server_id/autoboards", serverRead(serverroutes.GetAutoboards(a)))
 	app.Post("/v2/server/:server_id/autoboards", serverWrite(serverroutes.CreateAutoboard(a)))
-	app.Patch("/v2/server/:server_id/autoboards/:autoboard_id", serverWrite(serverroutes.UpdateAutoboard(a)))
+	app.Put("/v2/server/:server_id/autoboards/:autoboard_id", serverWrite(serverroutes.ReplaceAutoboard(a)))
 	app.Delete("/v2/server/:server_id/autoboards/:autoboard_id", serverWrite(serverroutes.DeleteAutoboard(a)))
 	app.Get("/v2/server/:server_id/clans", serverRead(serverroutes.GetServerClans(a)))
 	app.Patch("/v2/server/:server_id/clan/:clan_tag/settings", serverWrite(serverroutes.PatchClanSettings(a)))
@@ -286,8 +296,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/server/:server_id/leaderboards/donations", serverRead(serverroutes.GetServerDonationsLeaderboard(a)))
 	app.Get("/v2/server/:server_id/leaderboards/legends", serverRead(serverroutes.GetServerLegendsLeaderboard(a)))
 	app.Get("/v2/server/:server_id/leaderboards/clan-games", serverRead(serverroutes.GetServerClanGamesLeaderboard(a)))
-	app.Get("/v2/server/:server_id/leaderboards/activity", serverRead(serverroutes.GetServerActivityLeaderboard(a)))
-	app.Get("/v2/server/:server_id/leaderboards/looting", serverRead(serverroutes.GetServerLootingLeaderboard(a)))
 	app.Get("/v2/server/:server_id/clan/:clan_tag/countdowns", serverRead(serverroutes.GetClanCountdowns(a)))
 	app.Post("/v2/server/:server_id/countdowns", serverWrite(serverroutes.EnableCountdown(a)))
 	app.Delete("/v2/server/:server_id/countdowns", serverWrite(serverroutes.DisableCountdown(a)))
@@ -305,6 +313,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/war/clans/warhits", clanWarhits(a))
 	app.Get("/v2/player/:player_tag/war/attacks", playerWarAttacks(a))
 	app.Get("/v2/player/:player_tag/war/stats", playerWarStats(a))
+	app.Get("/v2/player/:player_tag/stat-history", playerStatHistory(a))
 	app.Get("/v2/player/:player_tag/cwl/history", cwlPlayerHistory(a))
 
 	app.Get("/v2/exports/war/cwl-summary", wrap(exportCWLSummary(a)))

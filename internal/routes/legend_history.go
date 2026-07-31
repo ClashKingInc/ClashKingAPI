@@ -2,9 +2,8 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
-	"time"
+	"strings"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -13,12 +12,29 @@ import (
 )
 
 const (
-	legendHistoryDefaultLimit = 25
-	legendHistoryMaximumLimit = 200
+	legendHistoryDefaultLimit     = 25
+	legendHistoryMaximumLimit     = 200
+	clanLegendHistoryDefaultLimit = 200
+	clanLegendHistoryMaximumLimit = 1000
 )
 
+const legendHistoryColumns = `
+	season,
+	player_tag,
+	player_name,
+	exp_level,
+	trophies,
+	attack_wins,
+	defense_wins,
+	rank,
+	clan_tag,
+	clan_name,
+	clan_badge_token,
+	league_tier_id
+`
+
 const legendSeasonHistoryQuery = `
-	SELECT season, player_tag, rank, trophies, data
+	SELECT ` + legendHistoryColumns + `
 	FROM legend_history
 	WHERE season = $1
 	ORDER BY rank
@@ -26,15 +42,25 @@ const legendSeasonHistoryQuery = `
 `
 
 const legendPlayerHistoryQuery = `
-	SELECT season, player_tag, rank, trophies, data
+	SELECT ` + legendHistoryColumns + `
 	FROM legend_history
 	WHERE player_tag = $1
 	ORDER BY season DESC
 `
 
+const legendClanHistoryQuery = `
+	SELECT ` + legendHistoryColumns + `
+	FROM legend_history
+	WHERE clan_tag = $1
+	ORDER BY rank, season DESC
+	LIMIT $2
+`
+
 type legendHistoryDB interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
+
+type legendLeagueTierLookup map[int]modelsv2.LegendHistoryLeagueTier
 
 func configuredLegendHistoryDB(a apptypes.Deps) legendHistoryDB {
 	if a.Store == nil {
@@ -44,30 +70,77 @@ func configuredLegendHistoryDB(a apptypes.Deps) legendHistoryDB {
 }
 
 func parseLegendHistorySeason(raw string) (string, bool) {
-	season, err := time.Parse("2006-01", raw)
-	if err != nil || season.Format("2006-01") != raw {
-		return "", false
-	}
-	return raw, true
+	return raw, strings.TrimSpace(raw) != "" && len(raw) <= 128
 }
 
 func legendHistoryLimit(raw string) (int, bool) {
+	return boundedLegendHistoryLimit(raw, legendHistoryDefaultLimit, legendHistoryMaximumLimit)
+}
+
+func clanLegendHistoryLimit(raw string) (int, bool) {
+	return boundedLegendHistoryLimit(raw, clanLegendHistoryDefaultLimit, clanLegendHistoryMaximumLimit)
+}
+
+func boundedLegendHistoryLimit(raw string, defaultLimit, maximum int) (int, bool) {
 	if raw == "" {
-		return legendHistoryDefaultLimit, true
+		return defaultLimit, true
 	}
 	limit, err := strconv.Atoi(raw)
-	if err != nil || limit < 1 || limit > legendHistoryMaximumLimit {
+	if err != nil || limit < 1 || limit > maximum {
 		return 0, false
 	}
 	return limit, true
 }
 
+func legendLeagueTiers(a apptypes.Deps) legendLeagueTierLookup {
+	if a.Clash == nil || a.Clash.Client() == nil {
+		return nil
+	}
+	return buildLegendLeagueTierLookup(a.Clash.Client().StaticData().Raw["league_tiers"])
+}
+
+func buildLegendLeagueTierLookup(items []map[string]any) legendLeagueTierLookup {
+	lookup := make(legendLeagueTierLookup, len(items))
+	for _, item := range items {
+		id := legendStaticInt(item["_id"])
+		if id <= 0 {
+			continue
+		}
+		tier := modelsv2.LegendHistoryLeagueTier{
+			ID:   id,
+			Name: strings.TrimSpace(staticDataAsString(item["name"])),
+		}
+		if iconURL := appItemIconURL(item); iconURL != "" {
+			tier.IconURLs = &modelsv2.PublicIconURLs{
+				Tiny: iconURL, Small: iconURL, Medium: iconURL, Large: iconURL,
+			}
+		}
+		lookup[id] = tier
+	}
+	return lookup
+}
+
+func legendStaticInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
 // legendSeasonHistory godoc
 // @Summary Get a final Legend season leaderboard
-// @Description Returns the stored final official Legend leaderboard for one completed season, ordered by rank.
+// @Description Returns the normalized final official Legend leaderboard for one season, ordered by rank.
 // @Tags Leaderboard
 // @Produce json
-// @Param season path string true "Official Legend season ID in YYYY-MM format"
+// @Param season path string true "Authoritative official Legend season ID"
 // @Param limit query int false "Result limit" default(25) minimum(1) maximum(200)
 // @Success 200 {object} modelsv2.LegendSeasonHistoryResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
@@ -75,10 +148,10 @@ func legendHistoryLimit(raw string) (int, bool) {
 // @Failure 503 {object} modelsv2.ErrorResponse
 // @Router /v2/legends/history/{season} [get]
 func legendSeasonHistory(a apptypes.Deps) fiber.Handler {
-	return legendSeasonHistoryHandler(configuredLegendHistoryDB(a))
+	return legendSeasonHistoryHandler(configuredLegendHistoryDB(a), legendLeagueTiers(a))
 }
 
-func legendSeasonHistoryHandler(db legendHistoryDB) fiber.Handler {
+func legendSeasonHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLookup) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season, ok := parseLegendHistorySeason(c.Params("season"))
 		if !ok {
@@ -91,7 +164,7 @@ func legendSeasonHistoryHandler(db legendHistoryDB) fiber.Handler {
 		if db == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
 		}
-		items, err := queryLegendHistory(c.UserContext(), db, legendSeasonHistoryQuery, season, limit)
+		items, err := queryLegendHistory(c.UserContext(), db, leagues, legendSeasonHistoryQuery, season, limit)
 		if err != nil {
 			return err
 		}
@@ -101,7 +174,7 @@ func legendSeasonHistoryHandler(db legendHistoryDB) fiber.Handler {
 
 // playerLegendHistory godoc
 // @Summary Get a player's final Legend history
-// @Description Returns every stored final Legend season placement for one player in descending season order.
+// @Description Returns every normalized final Legend season placement for one player in descending season order.
 // @Tags Leaderboard
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -111,10 +184,10 @@ func legendSeasonHistoryHandler(db legendHistoryDB) fiber.Handler {
 // @Failure 503 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/legend-history [get]
 func playerLegendHistory(a apptypes.Deps) fiber.Handler {
-	return playerLegendHistoryHandler(configuredLegendHistoryDB(a))
+	return playerLegendHistoryHandler(configuredLegendHistoryDB(a), legendLeagueTiers(a))
 }
 
-func playerLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
+func playerLegendHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLookup) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := playerNormalizeTag(c.Params("player_tag"))
 		if tag == "" {
@@ -123,7 +196,7 @@ func playerLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
 		if db == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
 		}
-		items, err := queryLegendHistory(c.UserContext(), db, legendPlayerHistoryQuery, tag)
+		items, err := queryLegendHistory(c.UserContext(), db, leagues, legendPlayerHistoryQuery, tag)
 		if err != nil {
 			return err
 		}
@@ -131,7 +204,50 @@ func playerLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
 	}
 }
 
-func queryLegendHistory(ctx context.Context, db legendHistoryDB, query string, args ...any) ([]modelsv2.LegendHistoryItem, error) {
+// clanLegendHistory godoc
+// @Summary Get a clan's final Legend finishers
+// @Description Returns normalized historical Legend finishers for one clan, ordered by best rank and then newest season.
+// @Tags Leaderboard
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Param limit query int false "Result limit" default(200) minimum(1) maximum(1000)
+// @Success 200 {object} modelsv2.ClanLegendHistoryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 503 {object} modelsv2.ErrorResponse
+// @Router /v2/clan/{clan_tag}/legend-history [get]
+func clanLegendHistory(a apptypes.Deps) fiber.Handler {
+	return clanLegendHistoryHandler(configuredLegendHistoryDB(a), legendLeagueTiers(a))
+}
+
+func clanLegendHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLookup) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		if tag == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid clan_tag")
+		}
+		limit, ok := clanLegendHistoryLimit(c.Query("limit"))
+		if !ok {
+			return apptypes.Error(fiber.StatusBadRequest, "limit must be between 1 and 1000")
+		}
+		if db == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
+		}
+		items, err := queryLegendHistory(c.UserContext(), db, leagues, legendClanHistoryQuery, tag, limit)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLegendHistoryResponse{Items: items})
+	}
+}
+
+func queryLegendHistory(
+	ctx context.Context,
+	db legendHistoryDB,
+	leagues legendLeagueTierLookup,
+	query string,
+	args ...any,
+) ([]modelsv2.LegendHistoryItem, error) {
 	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -140,21 +256,96 @@ func queryLegendHistory(ctx context.Context, db legendHistoryDB, query string, a
 
 	items := []modelsv2.LegendHistoryItem{}
 	for rows.Next() {
-		var season, playerTag string
-		var rank, trophies int
-		var raw []byte
-		if err := rows.Scan(&season, &playerTag, &rank, &trophies, &raw); err != nil {
+		item, err := scanLegendHistoryItem(rows, leagues)
+		if err != nil {
 			return nil, err
 		}
-		var item modelsv2.LegendHistoryItem
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, err
-		}
-		item.Season = season
-		item.Tag = playerTag
-		item.Rank = rank
-		item.Trophies = trophies
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+type legendHistoryScanner interface {
+	Scan(...any) error
+}
+
+func scanLegendHistoryItem(row legendHistoryScanner, leagues legendLeagueTierLookup) (modelsv2.LegendHistoryItem, error) {
+	var item modelsv2.LegendHistoryItem
+	var clanTag, clanName, clanBadgeToken *string
+	var leagueTierID *int
+	if err := row.Scan(
+		&item.Season,
+		&item.Tag,
+		&item.Name,
+		&item.ExpLevel,
+		&item.Trophies,
+		&item.AttackWins,
+		&item.DefenseWins,
+		&item.Rank,
+		&clanTag,
+		&clanName,
+		&clanBadgeToken,
+		&leagueTierID,
+	); err != nil {
+		return modelsv2.LegendHistoryItem{}, err
+	}
+	if clanTag != nil || clanName != nil || clanBadgeToken != nil {
+		item.Clan = &modelsv2.LegendHistoryClan{}
+		if clanTag != nil {
+			item.Clan.Tag = *clanTag
+		}
+		if clanName != nil {
+			item.Clan.Name = *clanName
+		}
+		if clanBadgeToken != nil && *clanBadgeToken != "" {
+			item.Clan.BadgeURLs = &modelsv2.PublicBadgeURLs{
+				Small: badgeURL(*clanBadgeToken, 70), Medium: badgeURL(*clanBadgeToken, 200), Large: badgeURL(*clanBadgeToken, 512),
+			}
+		}
+	}
+	if leagueTierID != nil {
+		tier := modelsv2.LegendHistoryLeagueTier{ID: *leagueTierID}
+		if canonical, ok := leagues[*leagueTierID]; ok {
+			tier = canonical
+		}
+		item.LeagueTier = &tier
+	}
+	return item, nil
+}
+
+func legendHistoryItemMap(item modelsv2.LegendHistoryItem) map[string]any {
+	out := map[string]any{
+		"season": item.Season, "tag": item.Tag, "name": item.Name,
+		"expLevel": item.ExpLevel, "trophies": item.Trophies,
+		"attackWins": item.AttackWins, "defenseWins": item.DefenseWins, "rank": item.Rank,
+	}
+	if item.Clan != nil {
+		clan := map[string]any{}
+		if item.Clan.Tag != "" {
+			clan["tag"] = item.Clan.Tag
+		}
+		if item.Clan.Name != "" {
+			clan["name"] = item.Clan.Name
+		}
+		if item.Clan.BadgeURLs != nil {
+			clan["badgeUrls"] = map[string]any{
+				"small": item.Clan.BadgeURLs.Small, "medium": item.Clan.BadgeURLs.Medium, "large": item.Clan.BadgeURLs.Large,
+			}
+		}
+		out["clan"] = clan
+	}
+	if item.LeagueTier != nil {
+		tier := map[string]any{"id": item.LeagueTier.ID}
+		if item.LeagueTier.Name != "" {
+			tier["name"] = item.LeagueTier.Name
+		}
+		if item.LeagueTier.IconURLs != nil {
+			tier["iconUrls"] = map[string]any{
+				"tiny": item.LeagueTier.IconURLs.Tiny, "small": item.LeagueTier.IconURLs.Small,
+				"medium": item.LeagueTier.IconURLs.Medium, "large": item.LeagueTier.IconURLs.Large,
+			}
+		}
+		out["leagueTier"] = tier
+	}
+	return out
 }

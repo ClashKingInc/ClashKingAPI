@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -209,6 +210,17 @@ type basicClanData struct {
 	received      int
 	members       any
 	lastActive    pgtype.Timestamptz
+}
+
+func clanDecodeJSONValue(raw []byte, fallback any) any {
+	if len(raw) == 0 {
+		return fallback
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return fallback
+	}
+	return value
 }
 
 func scanBasicClanData(row basicClanScanner) (basicClanData, error) {

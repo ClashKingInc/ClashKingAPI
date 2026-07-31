@@ -11,7 +11,6 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const maxBadgeResponseSize = 5 * 1024 * 1024
@@ -152,22 +151,6 @@ func shortlink(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// capitalLegacy godoc
-// @Summary Get legacy capital stats
-// @Description Returns scoped clan capital stats for players.
-// @Tags Legacy Capital
-// @Produce json
-// @Param player_tags query []string false "Player tags"
-// @Param clan_tags query []string false "Clan tags"
-// @Param server query int false "Discord server ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func capitalLegacy(a apptypes.Deps) fiber.Handler {
-	return statsFromPlayerDocs(a, "raided", func(doc map[string]any, season string) map[string]any {
-		return map[string]any{"donated": intValue(doc["capital_gold_donos"]), "raided": intValue(doc["capital_resources_looted"]), "attacks": intValue(doc["attack_count"]), "medals": intValue(doc["medals"])}
-	}, map[string]any{"donated": 0, "raided": 0, "attacks": 0, "medals": 0})
-}
-
 // warStatsLegacy godoc
 // @Summary Get legacy war stats
 // @Description Returns scoped war hit-rate stats for players.
@@ -213,91 +196,6 @@ func warStatsLegacy(a apptypes.Deps) fiber.Handler {
 			})
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items, "totals": map[string]any{}, "clan_totals": []any{}, "metadata": map[string]any{}})
-	}
-}
-
-func statsFromPlayerDocs(a apptypes.Deps, defaultSort string, extractor func(map[string]any, string) map[string]any, totalsSeed map[string]any) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tags, names, err := scopedPlayerTags(c, a)
-		if err != nil {
-			return err
-		}
-		sortField := c.Query("sort_field", defaultSort)
-		descending := c.Query("descending", "true") != "false"
-		limit := clamp(queryInt(c, "limit", 50), 1, 500)
-		season := legacyFirstNonEmpty(c.Query("season"), currentGamesSeason())
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT s.player_tag, s.clan_tag, s.name, s.townhall_level, s.donated, s.received, s.capital_gold_donos, s.activity_score,
-				s.donations, s.clan_games, s.activity, s.data,
-				COALESCE(cm.attack_count, 0), COALESCE(cm.capital_resources_looted, 0)
-			FROM player_season_stats s
-			LEFT JOIN LATERAL (
-				SELECT sum(attack_count)::int AS attack_count, sum(capital_resources_looted)::int AS capital_resources_looted
-				FROM capital_raid_members
-				WHERE player_tag = s.player_tag AND to_char(start_time, 'YYYY-MM') = s.season
-			) cm ON true
-			WHERE s.season = $1 AND s.player_tag = ANY($2)
-		`, season, tags)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		clanTotals := map[string]map[string]any{}
-		items := []map[string]any{}
-		totals := cloneMap(totalsSeed)
-		for rows.Next() {
-			var tag, clanTag, name string
-			var townhall pgtype.Int4
-			var donated, received, capitalGold, activityScore, raidAttacks, raidLoot int
-			var donationsRaw, gamesRaw, activityRaw, dataRaw []byte
-			if err := rows.Scan(&tag, &clanTag, &name, &townhall, &donated, &received, &capitalGold, &activityScore, &donationsRaw, &gamesRaw, &activityRaw, &dataRaw, &raidAttacks, &raidLoot); err != nil {
-				return err
-			}
-			doc := jsonObject(dataRaw)
-			doc["tag"] = tag
-			doc["name"] = legacyFirstNonEmpty(name, names[tag])
-			doc["clan_tag"] = clanTag
-			doc["townhall"] = townhall.Int32
-			doc["donated"] = donated
-			doc["received"] = received
-			doc["capital_gold_donos"] = capitalGold
-			doc["activity_score"] = activityScore
-			doc["attack_count"] = raidAttacks
-			doc["capital_resources_looted"] = raidLoot
-			doc["donations"] = jsonObject(donationsRaw)
-			doc["clan_games"] = jsonObject(gamesRaw)
-			doc["activity"] = jsonObject(activityRaw)
-			for k, v := range extractor(doc, season) {
-				doc[k] = v
-				if _, ok := totals[k]; ok {
-					totals[k] = intValue(totals[k]) + intValue(v)
-				}
-			}
-			if clanTag != "" {
-				if clanTotals[clanTag] == nil {
-					clanTotals[clanTag] = map[string]any{"tag": clanTag}
-				}
-				for k, v := range extractor(doc, season) {
-					clanTotals[clanTag][k] = intValue(clanTotals[clanTag][k]) + intValue(v)
-				}
-			}
-			items = append(items, doc)
-		}
-		sortMapsByNumeric(items, sortField, descending)
-		if len(items) > limit {
-			items = items[:limit]
-		}
-		for i := range items {
-			items[i]["rank"] = i + 1
-		}
-		byClan := make([]map[string]any, 0, len(clanTotals))
-		for _, v := range clanTotals {
-			byClan = append(byClan, v)
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{
-			"items": items, "totals": totals, "clan_totals": byClan,
-			"metadata": map[string]any{"sort_order": cond(descending, "descending", "ascending"), "sort_field": sortField, "season": season},
-		})
 	}
 }
 
@@ -453,13 +351,6 @@ func floatValue(value any) float64 {
 	default:
 		return 0
 	}
-}
-
-func cond[T any](ok bool, a, b T) T {
-	if ok {
-		return a
-	}
-	return b
 }
 
 func sanitizeAny(value any) any {

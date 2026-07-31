@@ -32,6 +32,9 @@ type Config struct {
 	EncryptionKey       string
 	SecretKey           string
 	RefreshSecret       string
+	NativeTokenAudience string
+	WebTokenAudience    string
+	WebAllowedOrigins   []string
 	DiscordRedirectURI  string
 	DiscordClientID     string
 	DiscordClientSecret string
@@ -76,6 +79,9 @@ func Load() (Config, error) {
 		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
 		SecretKey:           os.Getenv("SECRET_KEY"),
 		RefreshSecret:       os.Getenv("REFRESH_SECRET"),
+		NativeTokenAudience: firstNonEmpty(os.Getenv("NATIVE_TOKEN_AUDIENCE"), "clashking-native"),
+		WebTokenAudience:    firstNonEmpty(os.Getenv("WEB_TOKEN_AUDIENCE"), "clashking-web"),
+		WebAllowedOrigins:   splitCSV(os.Getenv("WEB_ALLOWED_ORIGINS")),
 		DiscordRedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
@@ -93,6 +99,9 @@ func Load() (Config, error) {
 	if cfg.Local {
 		cfg.ListenHost = "127.0.0.1"
 		cfg.ListenPort = 8000
+		if len(cfg.WebAllowedOrigins) == 0 {
+			cfg.WebAllowedOrigins = []string{"http://localhost:3002", "http://localhost:8080"}
+		}
 	} else {
 		cfg.ListenHost = "0.0.0.0"
 		cfg.ListenPort = 8010
@@ -143,6 +152,9 @@ func (c Config) validate() error {
 		return errors.New("LOCAL=TRUE requires DEV_USER_ID")
 	}
 	if !c.Local {
+		if len(c.WebAllowedOrigins) == 0 {
+			return errors.New("WEB_ALLOWED_ORIGINS is required outside local mode")
+		}
 		for key, value := range map[string]string{
 			"SMTP_USERNAME": c.SMTPUsername,
 			"SMTP_PASSWORD": c.SMTPPassword,
@@ -161,6 +173,23 @@ func (c Config) validate() error {
 		return errors.New("SMTP_STARTTLS and SMTP_SSL_TLS cannot both be enabled")
 	}
 	return nil
+}
+
+func splitCSV(raw string) []string {
+	seen := make(map[string]struct{})
+	values := make([]string, 0)
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(strings.TrimSuffix(value, "/"))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	return values
 }
 
 func firstNonEmpty(values ...string) string {

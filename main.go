@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
@@ -110,11 +108,7 @@ func (a *App) buildFiber() (*fiber.App, error) {
 	app.Use(utils.FiberMiddleware())
 	app.Use(utils.SentryScopeMiddleware())
 	app.Use(fiberrecover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: strings.Join(utils.APIRequestMethods(), ","),
-		AllowHeaders: "*",
-	}))
+	app.Use(utils.CORSMiddleware(a.Config))
 	app.Use(compress.New())
 	a.registerRoutes(app)
 	if err := a.registerSwaggerRoutes(app); err != nil {

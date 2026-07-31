@@ -618,7 +618,7 @@ func storeRefreshToken(ctx context.Context, a apptypes.Deps, userID, refreshToke
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	claims, err := parseRefreshToken(a, refreshToken)
+	claims, err := parseStoredRefreshToken(a, refreshToken)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func rotateRefreshToken(ctx context.Context, a apptypes.Deps, oldToken, newToken
 	if a.Store.SQL == nil {
 		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
-	claims, err := parseRefreshToken(a, newToken)
+	claims, err := parseStoredRefreshToken(a, newToken)
 	if err != nil {
 		return err
 	}
@@ -800,6 +800,36 @@ func loadDiscordAuthUserInfo(
 }
 
 func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) {
+	return parseRefreshTokenForAudience(a, token, nativeRefreshAudience(a.Config))
+}
+
+func parseWebRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) {
+	return parseRefreshTokenForAudience(a, token, webRefreshAudience(a.Config))
+}
+
+func parseStoredRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) {
+	claims, err := parseSignedRefreshToken(a, token)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAudience(claims, nativeRefreshAudience(a.Config)) && !hasAudience(claims, webRefreshAudience(a.Config)) {
+		return nil, apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token audience.")
+	}
+	return claims, nil
+}
+
+func parseRefreshTokenForAudience(a apptypes.Deps, token, audience string) (*apptypes.Claims, error) {
+	claims, err := parseSignedRefreshToken(a, token)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAudience(claims, audience) {
+		return nil, apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token audience.")
+	}
+	return claims, nil
+}
+
+func parseSignedRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) {
 	claims := &apptypes.Claims{}
 	_, err := jwt.ParseWithClaims(
 		token,
@@ -813,6 +843,37 @@ func parseRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, error) 
 		return nil, apptypes.Error(fiber.StatusUnauthorized, "Invalid refresh token signature.")
 	}
 	return claims, nil
+}
+
+func nativeRefreshAudience(cfg apptypes.Config) string {
+	if value := strings.TrimSpace(cfg.NativeTokenAudience); value != "" {
+		return value
+	}
+	return "clashking-native"
+}
+
+func webRefreshAudience(cfg apptypes.Config) string {
+	if value := strings.TrimSpace(cfg.WebTokenAudience); value != "" {
+		return value
+	}
+	return "clashking-web"
+}
+
+func hasAudience(claims *apptypes.Claims, audience string) bool {
+	for _, value := range claims.Audience {
+		if value == audience {
+			return true
+		}
+	}
+	return false
+}
+
+func revokeRefreshToken(ctx context.Context, a apptypes.Deps, token string) error {
+	if a.Store.SQL == nil {
+		return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+	}
+	_, err := a.Store.SQL.Exec(ctx, `DELETE FROM auth_refresh_tokens WHERE token_hash = $1`, tokenHash(token))
+	return err
 }
 
 func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discord.OAuth2User) (string, error) {

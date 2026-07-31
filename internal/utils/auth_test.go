@@ -185,6 +185,69 @@ func TestGenerateRefreshTokenUsesThirtyDayRollingExpiry(t *testing.T) {
 	}
 }
 
+func TestNativeAndWebTokensUseSeparateServerSelectedPolicies(t *testing.T) {
+	cfg := Config{
+		SecretKey:           "access-secret",
+		RefreshSecret:       "refresh-secret",
+		NativeTokenAudience: "native-audience",
+		WebTokenAudience:    "web-audience",
+	}
+	nativeToken, err := GenerateAccessToken(cfg, "user-1", "device-1")
+	if err != nil {
+		t.Fatalf("generate native access token: %v", err)
+	}
+	webToken, err := GenerateWebAccessToken(cfg, "user-1", "device-1")
+	if err != nil {
+		t.Fatalf("generate web access token: %v", err)
+	}
+
+	nativeClaims := parseAccessClaimsForTest(t, cfg.SecretKey, nativeToken)
+	webClaims := parseAccessClaimsForTest(t, cfg.SecretKey, webToken)
+	if !claimsHasAudience(nativeClaims, cfg.NativeTokenAudience) || claimsHasAudience(nativeClaims, cfg.WebTokenAudience) {
+		t.Fatalf("native audience = %#v", nativeClaims.Audience)
+	}
+	if !claimsHasAudience(webClaims, cfg.WebTokenAudience) || claimsHasAudience(webClaims, cfg.NativeTokenAudience) {
+		t.Fatalf("web audience = %#v", webClaims.Audience)
+	}
+	if got := nativeClaims.ExpiresAt.Sub(nativeClaims.IssuedAt.Time); got != 24*time.Hour {
+		t.Fatalf("native access lifetime = %s, want 24h", got)
+	}
+	if got := webClaims.ExpiresAt.Sub(webClaims.IssuedAt.Time); got != 15*time.Minute {
+		t.Fatalf("web access lifetime = %s, want 15m", got)
+	}
+}
+
+func TestAuthenticatorRejectsLegacyAccessTokenWithoutAudience(t *testing.T) {
+	cfg := Config{SecretKey: "secret"}
+	legacy := Claims{
+		Sub: "user-1",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(time.Hour)),
+		},
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacy).SignedString([]byte(cfg.SecretKey))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	if _, err := NewAuthenticator(cfg, nil).parseJWT(token); err == nil {
+		t.Fatal("expected access token without an audience to be rejected")
+	}
+}
+
+func parseAccessClaimsForTest(t *testing.T, secret, token string) *Claims {
+	t.Helper()
+	claims := &Claims{}
+	if _, err := jwt.ParseWithClaims(
+		token,
+		claims,
+		func(*jwt.Token) (any, error) { return []byte(secret), nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	); err != nil {
+		t.Fatalf("parse access token: %v", err)
+	}
+	return claims
+}
+
 func TestAuthenticatorRejectsAccessTokenAfterUserDeletion(t *testing.T) {
 	cfg := Config{SecretKey: "secret"}
 	token, err := GenerateAccessToken(cfg, "deleted-user", "device-1")

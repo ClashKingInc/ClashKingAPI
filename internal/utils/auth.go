@@ -24,6 +24,11 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+const (
+	defaultNativeTokenAudience = "clashking-native"
+	defaultWebTokenAudience    = "clashking-web"
+)
+
 type Authenticator struct {
 	cfg   Config
 	users authUserLookup
@@ -120,6 +125,9 @@ func (a *Authenticator) parseJWT(token string) (*Claims, error) {
 	if claims.Sub == "" {
 		return nil, Error(fiber.StatusUnauthorized, "User not found")
 	}
+	if !claimsHasAudience(claims, nativeTokenAudience(a.cfg)) && !claimsHasAudience(claims, webTokenAudience(a.cfg)) {
+		return nil, Error(fiber.StatusUnauthorized, "Invalid token audience")
+	}
 	return claims, nil
 }
 
@@ -134,28 +142,69 @@ func DeviceID(ctx context.Context) string {
 }
 
 func GenerateAccessToken(cfg Config, userID, deviceID string) (string, error) {
+	return generateAccessToken(cfg, userID, deviceID, nativeTokenAudience(cfg), 24*time.Hour)
+}
+
+func GenerateWebAccessToken(cfg Config, userID, deviceID string) (string, error) {
+	return generateAccessToken(cfg, userID, deviceID, webTokenAudience(cfg), 15*time.Minute)
+}
+
+func generateAccessToken(cfg Config, userID, deviceID, audience string, lifetime time.Duration) (string, error) {
 	claims := Claims{
 		Sub:    userID,
 		Device: deviceID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{audience},
 			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(lifetime)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.SecretKey))
 }
 
 func GenerateRefreshToken(cfg Config, userID, deviceID string) (string, error) {
+	return generateRefreshToken(cfg, userID, deviceID, nativeTokenAudience(cfg))
+}
+
+func GenerateWebRefreshToken(cfg Config, userID, deviceID string) (string, error) {
+	return generateRefreshToken(cfg, userID, deviceID, webTokenAudience(cfg))
+}
+
+func generateRefreshToken(cfg Config, userID, deviceID, audience string) (string, error) {
 	claims := Claims{
 		Sub:    userID,
 		Device: deviceID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{audience},
 			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(30 * 24 * time.Hour)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.RefreshSecret))
+}
+
+func nativeTokenAudience(cfg Config) string {
+	if value := strings.TrimSpace(cfg.NativeTokenAudience); value != "" {
+		return value
+	}
+	return defaultNativeTokenAudience
+}
+
+func webTokenAudience(cfg Config) string {
+	if value := strings.TrimSpace(cfg.WebTokenAudience); value != "" {
+		return value
+	}
+	return defaultWebTokenAudience
+}
+
+func claimsHasAudience(claims *Claims, audience string) bool {
+	for _, value := range claims.Audience {
+		if value == audience {
+			return true
+		}
+	}
+	return false
 }
 
 func Marshal(v any) string {

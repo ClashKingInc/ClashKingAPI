@@ -6,18 +6,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
 func TestBuildFiberAllowsRFCQueryPreflight(t *testing.T) {
-	a := &App{}
+	a := &App{Deps: utils.Deps{Config: utils.Config{
+		WebAllowedOrigins: []string{"https://app.clashk.ing"},
+	}}}
 	app, err := a.buildFiber()
 	if err != nil {
 		t.Fatalf("build fiber: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodOptions, "/v2/home/activity", nil)
-	req.Header.Set("Origin", "https://app.clashking.xyz")
+	req.Header.Set("Origin", "https://app.clashk.ing")
 	req.Header.Set("Access-Control-Request-Method", "QUERY")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
 	resp, err := app.Test(req)

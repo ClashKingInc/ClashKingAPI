@@ -23,6 +23,15 @@ type AuthRefreshTokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type AuthWebResponse struct {
+	AccessToken string       `json:"access_token"`
+	User        AuthUserInfo `json:"user"`
+}
+
+type AuthWebRefreshResponse struct {
+	AccessToken string `json:"access_token"`
+}
+
 type AuthEmailAuthRequest struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`

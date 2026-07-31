@@ -199,7 +199,14 @@ func webRefreshToken(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		stored, err := findRefreshToken(c.UserContext(), a, oldToken)
-		if err != nil || stored.UserID != claims.Sub || time.Now().UTC().After(stored.ExpiresAt) {
+		if err != nil {
+			if !isInvalidWebRefreshCredential(err) {
+				return err
+			}
+			clearWebRefreshCookie(c)
+			return apptypes.Error(fiber.StatusUnauthorized, "Invalid browser session")
+		}
+		if stored.UserID != claims.Sub || time.Now().UTC().After(stored.ExpiresAt) {
 			clearWebRefreshCookie(c)
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid browser session")
 		}
@@ -212,12 +219,19 @@ func webRefreshToken(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		if err := rotateRefreshToken(c.UserContext(), a, oldToken, newRefreshToken, claims.Sub, claims.Device); err != nil {
-			clearWebRefreshCookie(c)
-			return apptypes.Error(fiber.StatusUnauthorized, "Browser session was already refreshed")
+			if isInvalidWebRefreshCredential(err) {
+				clearWebRefreshCookie(c)
+				return apptypes.Error(fiber.StatusUnauthorized, "Browser session was already refreshed")
+			}
+			return err
 		}
 		setWebRefreshCookie(c, newRefreshToken)
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthWebRefreshResponse{AccessToken: accessToken})
 	}
+}
+
+func isInvalidWebRefreshCredential(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows) || errors.Is(err, errRefreshTokenConsumed)
 }
 
 // webLogout revokes and expires the browser refresh cookie.

@@ -28,6 +28,8 @@ import (
 
 const defaultAvatarURL = "https://clashkingfiles.b-cdn.net/stickers/Troop_HV_Goblin.png"
 
+var errRefreshTokenConsumed = errors.New("refresh token was already consumed")
+
 // verifyEmailCode verifies a pending email registration code and returns auth tokens.
 //
 // @Summary Verify email address with 6-digit code
@@ -695,7 +697,7 @@ func rotateRefreshTokenInStore(
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("refresh token was already consumed")
+		return errRefreshTokenConsumed
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO auth_refresh_tokens (token_hash, user_id, device_id, expires_at)

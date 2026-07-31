@@ -1,13 +1,27 @@
 package routes
 
 import (
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 )
+
+func TestWebRefreshOnlyInvalidatesRejectedCredentials(t *testing.T) {
+	if !isInvalidWebRefreshCredential(pgx.ErrNoRows) {
+		t.Fatal("missing refresh row must invalidate the browser credential")
+	}
+	if !isInvalidWebRefreshCredential(errRefreshTokenConsumed) {
+		t.Fatal("consumed refresh token must invalidate the browser credential")
+	}
+	if isInvalidWebRefreshCredential(errors.New("database unavailable")) {
+		t.Fatal("transient database errors must not invalidate the browser credential")
+	}
+}
 
 func TestWebRefreshCookieIsHostOnlySecureHttpOnlyAndStrict(t *testing.T) {
 	app := fiber.New()

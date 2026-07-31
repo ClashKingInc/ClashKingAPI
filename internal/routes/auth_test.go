@@ -367,7 +367,7 @@ func TestRotateRefreshTokenRejectsAlreadyConsumedToken(t *testing.T) {
 		"device-1",
 		time.Now().UTC().Add(30*24*time.Hour),
 	)
-	if err == nil || err.Error() != "refresh token was already consumed" {
+	if !errors.Is(err, errRefreshTokenConsumed) {
 		t.Fatalf("rotation error = %v, want already-consumed error", err)
 	}
 	if tx.commitCalled || len(tx.execCalls) != 1 || tx.rollbackCalls != 1 {

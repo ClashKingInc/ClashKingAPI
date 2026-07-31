@@ -14,7 +14,7 @@ func TestBuildFiberSupportsQueryCORSPreflight(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(fiber.MethodOptions, "/v2/stats/armies", nil)
-	req.Header.Set(fiber.HeaderOrigin, "https://dashboard.clashk.ing")
+	req.Header.Set(fiber.HeaderOrigin, "https://dash.clashk.ing")
 	req.Header.Set(fiber.HeaderAccessControlRequestMethod, "QUERY")
 	req.Header.Set(fiber.HeaderAccessControlRequestHeaders, fiber.HeaderContentType)
 	resp, err := app.Test(req)

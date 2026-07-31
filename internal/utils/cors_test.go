@@ -19,7 +19,7 @@ func newCORSTestApp(cfg Config) *fiber.App {
 }
 
 func TestCORSPublicReadsRemainWildcard(t *testing.T) {
-	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dashboard.clashk.ing"}})
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
 	request := httptest.NewRequest(fiber.MethodGet, "/v2/stats/public", nil)
 	request.Header.Set(fiber.HeaderOrigin, "https://unrelated.example")
 
@@ -53,9 +53,9 @@ func TestCORSAllowedWebOriginCanReadPublicRoutesWithCredentials(t *testing.T) {
 }
 
 func TestCORSAllowedWebOriginGetsCredentialedPreflight(t *testing.T) {
-	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dashboard.clashk.ing"}})
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
 	request := httptest.NewRequest(fiber.MethodOptions, "/v2/auth/web/refresh", nil)
-	request.Header.Set(fiber.HeaderOrigin, "https://dashboard.clashk.ing")
+	request.Header.Set(fiber.HeaderOrigin, "https://dash.clashk.ing")
 	request.Header.Set(fiber.HeaderAccessControlRequestMethod, fiber.MethodPost)
 	request.Header.Set(fiber.HeaderAccessControlRequestHeaders, "content-type")
 
@@ -66,7 +66,7 @@ func TestCORSAllowedWebOriginGetsCredentialedPreflight(t *testing.T) {
 	if response.StatusCode != fiber.StatusNoContent {
 		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
 	}
-	if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != "https://dashboard.clashk.ing" {
+	if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != "https://dash.clashk.ing" {
 		t.Fatalf("allow origin = %q", got)
 	}
 	if got := response.Header.Get(fiber.HeaderAccessControlAllowCredentials); got != "true" {
@@ -78,7 +78,7 @@ func TestCORSAllowedWebOriginGetsCredentialedPreflight(t *testing.T) {
 }
 
 func TestCORSRejectsUnknownOriginForCredentialedRoute(t *testing.T) {
-	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dashboard.clashk.ing"}})
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
 	request := httptest.NewRequest(fiber.MethodOptions, "/v2/auth/web/refresh", nil)
 	request.Header.Set(fiber.HeaderOrigin, "https://attacker.example")
 	request.Header.Set(fiber.HeaderAccessControlRequestMethod, fiber.MethodPost)
@@ -97,7 +97,7 @@ func TestCORSRejectsUnknownOriginForCredentialedRoute(t *testing.T) {
 }
 
 func TestRequireWebOriginRejectsActualCrossSiteRequest(t *testing.T) {
-	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dashboard.clashk.ing"}})
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
 	request := httptest.NewRequest(fiber.MethodPost, "/v2/auth/web/refresh", nil)
 	request.Header.Set(fiber.HeaderOrigin, "https://attacker.example")
 

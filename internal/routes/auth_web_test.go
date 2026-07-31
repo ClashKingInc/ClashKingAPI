@@ -64,19 +64,19 @@ func TestWebRefreshParserRejectsNativeRefreshToken(t *testing.T) {
 
 func TestValidateWebRedirectURIRequiresMatchingAllowedOrigin(t *testing.T) {
 	cfg := apptypes.Config{WebAllowedOrigins: []string{
-		"https://dashboard.clashk.ing",
+		"https://dash.clashk.ing",
 		"https://app.clashk.ing",
 	}}
 	if err := validateWebRedirectURI(
 		cfg,
-		"https://dashboard.clashk.ing",
-		"https://dashboard.clashk.ing/auth/callback",
+		"https://dash.clashk.ing",
+		"https://dash.clashk.ing/auth/callback",
 	); err != nil {
 		t.Fatalf("allowed redirect was rejected: %v", err)
 	}
 	if err := validateWebRedirectURI(
 		cfg,
-		"https://dashboard.clashk.ing",
+		"https://dash.clashk.ing",
 		"https://app.clashk.ing/auth/callback",
 	); err == nil {
 		t.Fatal("expected redirect on a different allowed origin to be rejected")

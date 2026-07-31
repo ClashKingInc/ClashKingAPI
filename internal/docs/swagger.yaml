@@ -304,45 +304,126 @@ definitions:
       verification_code:
         type: string
     type: object
+  modelsv2.AuthWebRefreshResponse:
+    properties:
+      access_token:
+        type: string
+    type: object
+  modelsv2.AuthWebResponse:
+    properties:
+      access_token:
+        type: string
+      user:
+        $ref: '#/definitions/modelsv2.AuthUserInfo'
+    type: object
+  modelsv2.AutoBoardCapabilitiesResponse:
+    properties:
+      boardTypes:
+        items:
+          $ref: '#/definitions/modelsv2.AutoBoardTypeCapability'
+        type: array
+    type: object
   modelsv2.AutoBoardConfig:
     properties:
-      board_type:
+      boardType:
         type: string
-      button_id:
-        type: string
-      channel_deleted:
+      channelDeleted:
         type: boolean
-      channel_id:
+      channelId:
         type: string
-      created_at:
+      createdAt:
         type: string
-      days:
+      deliveryMode:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      intervalMinutes:
+        type: integer
+      lastRunAt:
+        type: string
+      messageId:
+        type: string
+      nextRunAt:
+        type: string
+      schedule:
+        $ref: '#/definitions/modelsv2.AutoBoardSchedule'
+      targetKind:
+        type: string
+      targetScope:
+        type: string
+      targets:
         items:
           type: string
         type: array
-      id:
+      threadId:
         type: string
-      locale:
-        type: string
-      thread_id:
-        type: string
-      type:
-        type: string
-      webhook_id:
+      updatedAt:
         type: string
     type: object
-  modelsv2.AutoBoardOperationResponse:
+  modelsv2.AutoBoardDeleteResponse:
     properties:
-      autoboard_id:
+      deleted:
+        type: boolean
+      id:
         type: string
-      message:
-        type: string
-      server_id:
+    type: object
+  modelsv2.AutoBoardItemResponse:
+    properties:
+      item:
+        $ref: '#/definitions/modelsv2.AutoBoardConfig'
+    type: object
+  modelsv2.AutoBoardRefreshIntervalCapability:
+    properties:
+      defaultMinutes:
         type: integer
-      type:
-        type: string
-      updated_fields:
+      maxMinutes:
         type: integer
+      minMinutes:
+        type: integer
+    type: object
+  modelsv2.AutoBoardSchedule:
+    properties:
+      dayOfMonth:
+        type: integer
+      kind:
+        type: string
+      timeOfDay:
+        type: string
+      timezone:
+        type: string
+      weekdays:
+        items:
+          type: integer
+        type: array
+    type: object
+  modelsv2.AutoBoardTypeCapability:
+    properties:
+      allowedModes:
+        items:
+          type: string
+        type: array
+      allowedScopes:
+        items:
+          type: string
+        type: array
+      boardType:
+        type: string
+      label:
+        type: string
+      maxTargets:
+        type: integer
+      minTargets:
+        type: integer
+      refreshInterval:
+        $ref: '#/definitions/modelsv2.AutoBoardRefreshIntervalCapability'
+      targetKind:
+        type: string
+      uiCapabilities:
+        items:
+          type: string
+        type: array
     type: object
   modelsv2.BanEdit:
     properties:
@@ -1242,6 +1323,13 @@ definitions:
       id:
         type: integer
     type: object
+  modelsv2.ClanLegendHistoryResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.LegendHistoryItem'
+        type: array
+    type: object
   modelsv2.ClanListItem:
     properties:
       badge_url:
@@ -1382,6 +1470,29 @@ definitions:
       type:
         type: string
     type: object
+  modelsv2.CreateAutoBoardRequest:
+    properties:
+      boardType:
+        type: string
+      channelId:
+        type: string
+      deliveryMode:
+        type: string
+      enabled:
+        type: boolean
+      intervalMinutes:
+        type: integer
+      schedule:
+        $ref: '#/definitions/modelsv2.AutoBoardSchedule'
+      targetScope:
+        type: string
+      targets:
+        items:
+          type: string
+        type: array
+      threadId:
+        type: string
+    type: object
   modelsv2.CreateBaseRequest:
     properties:
       baseLink:
@@ -1404,6 +1515,42 @@ definitions:
     properties:
       name:
         type: string
+    type: object
+  modelsv2.CreateReminderRequest:
+    properties:
+      attack_threshold:
+        type: integer
+      channel_id:
+        type: string
+      clan_tag:
+        type: string
+      custom_text:
+        type: string
+      ping_type:
+        type: string
+      point_threshold:
+        type: integer
+      roles:
+        items:
+          type: string
+        type: array
+      roster_id:
+        type: string
+      thread_id:
+        type: string
+        x-nullable: true
+      time:
+        type: string
+      townhall_filter:
+        items:
+          type: integer
+        type: array
+      type:
+        type: string
+      war_types:
+        items:
+          type: string
+        type: array
     type: object
   modelsv2.CreateRosterRequest:
     properties:
@@ -1525,6 +1672,15 @@ definitions:
       message:
         type: string
     type: object
+  modelsv2.DiscohookResolveResponse:
+    properties:
+      payload:
+        items:
+          type: integer
+        type: array
+      resolvedUrl:
+        type: string
+    type: object
   modelsv2.DiscordChannel:
     properties:
       id:
@@ -1536,6 +1692,11 @@ definitions:
       parent_name:
         type: string
       type:
+        enum:
+        - category
+        - text
+        - news
+        - forum
         type: string
     type: object
   modelsv2.DiscordEmbed:
@@ -2221,14 +2382,89 @@ definitions:
       date:
         type: string
       details:
-        additionalProperties: {}
-        type: object
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryItem'
       locationId:
         type: string
       name:
         type: string
       rank:
         type: integer
+    type: object
+  modelsv2.LeaderboardHistoryClanReference:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.LeaderboardHistoryItem:
+    properties:
+      attackWins:
+        type: integer
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
+      builderBaseBattleWins:
+        type: integer
+      builderBaseLeague:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryLeagueReference'
+      builderBasePoints:
+        type: integer
+      builderBaseTrophies:
+        type: integer
+      capitalPoints:
+        type: integer
+      clan:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryClanReference'
+      clanLevel:
+        type: integer
+      clanPoints:
+        type: integer
+      defenseWins:
+        type: integer
+      expLevel:
+        type: integer
+      league:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryLeagueReference'
+      leagueTier:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryLeagueReference'
+      location:
+        $ref: '#/definitions/modelsv2.LeaderboardHistoryLocationReference'
+      members:
+        type: integer
+      name:
+        type: string
+      previousRank:
+        type: integer
+      rank:
+        type: integer
+      tag:
+        type: string
+      trophies:
+        type: integer
+    type: object
+  modelsv2.LeaderboardHistoryLeagueReference:
+    properties:
+      iconUrls:
+        $ref: '#/definitions/modelsv2.PublicIconURLs'
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  modelsv2.LeaderboardHistoryLocationReference:
+    properties:
+      countryCode:
+        type: string
+      id:
+        type: integer
+      isCountry:
+        type: boolean
+      localizedName:
+        type: string
+      name:
+        type: string
     type: object
   modelsv2.LeaderboardHistoryType:
     enum:
@@ -2259,8 +2495,7 @@ definitions:
         type: string
       items:
         items:
-          additionalProperties: {}
-          type: object
+          $ref: '#/definitions/modelsv2.LeaderboardHistoryItem'
         type: array
       locationId:
         type: string
@@ -2286,24 +2521,20 @@ definitions:
         type: integer
       expLevel:
         type: integer
-      league:
-        $ref: '#/definitions/modelsv2.LegendHistoryLeague'
+      leagueTier:
+        $ref: '#/definitions/modelsv2.LegendHistoryLeagueTier'
       name:
         type: string
-      previousRank:
-        type: integer
       rank:
         type: integer
       season:
         type: string
       tag:
         type: string
-      townHallLevel:
-        type: integer
       trophies:
         type: integer
     type: object
-  modelsv2.LegendHistoryLeague:
+  modelsv2.LegendHistoryLeagueTier:
     properties:
       iconUrls:
         $ref: '#/definitions/modelsv2.PublicIconURLs'
@@ -2707,6 +2938,42 @@ definitions:
       tag:
         type: string
     type: object
+  modelsv2.PlayerStatChange:
+    properties:
+      clanTag:
+        type: string
+        x-nullable: true
+      currentValue:
+        type: integer
+      delta:
+        type: integer
+      eventTime:
+        format: date-time
+        type: string
+      previousValue:
+        type: integer
+      statType:
+        $ref: '#/definitions/modelsv2.PlayerStatType'
+    type: object
+  modelsv2.PlayerStatHistoryResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.PlayerStatChange'
+        type: array
+    type: object
+  modelsv2.PlayerStatType:
+    enum:
+    - donated
+    - received
+    - clan_games
+    - capital_gold_donated
+    type: string
+    x-enum-varnames:
+    - PlayerStatTypeDonated
+    - PlayerStatTypeReceived
+    - PlayerStatTypeClanGames
+    - PlayerStatTypeCapitalGoldDonated
   modelsv2.PlayerUpgradePreferencesPatchRequest:
     properties:
       preferences:
@@ -3005,6 +3272,9 @@ definitions:
         type: array
       roster_id:
         type: string
+      thread_id:
+        type: string
+        x-nullable: true
       time:
         type: string
       townhall_filter:
@@ -3041,6 +3311,29 @@ definitions:
   modelsv2.RenameClanCategoryRequest:
     properties:
       name:
+        type: string
+    type: object
+  modelsv2.ReplaceAutoBoardRequest:
+    properties:
+      boardType:
+        type: string
+      channelId:
+        type: string
+      deliveryMode:
+        type: string
+      enabled:
+        type: boolean
+      intervalMinutes:
+        type: integer
+      schedule:
+        $ref: '#/definitions/modelsv2.AutoBoardSchedule'
+      targetScope:
+        type: string
+      targets:
+        items:
+          type: string
+        type: array
+      threadId:
         type: string
     type: object
   modelsv2.RoleSettingsResponse:
@@ -3675,18 +3968,52 @@ definitions:
     type: object
   modelsv2.ServerAutoBoardsResponse:
     properties:
-      autoboards:
+      items:
         items:
           $ref: '#/definitions/modelsv2.AutoBoardConfig'
         type: array
       limit:
         type: integer
-      post_count:
+      refreshCount:
         type: integer
-      refresh_count:
+      sendCount:
         type: integer
       total:
         type: integer
+    type: object
+  modelsv2.ServerClanGamesLeaderboardItem:
+    properties:
+      clan_games:
+        type: integer
+      clan_name:
+        type: string
+      clan_tag:
+        type: string
+      player_name:
+        type: string
+      player_tag:
+        type: string
+      rank:
+        type: integer
+      score:
+        type: integer
+      townhall_level:
+        type: integer
+    type: object
+  modelsv2.ServerClanGamesLeaderboardResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.ServerClanGamesLeaderboardItem'
+        type: array
+      season:
+        type: string
+      server_id:
+        type: integer
+      total:
+        type: integer
+      type:
+        type: string
     type: object
   modelsv2.ServerClanMember:
     properties:
@@ -3740,6 +4067,42 @@ definitions:
           $ref: '#/definitions/modelsv2.CountdownStatus'
         type: array
       server_id:
+        type: string
+    type: object
+  modelsv2.ServerDonationsLeaderboardItem:
+    properties:
+      clan_name:
+        type: string
+      clan_tag:
+        type: string
+      donated:
+        type: integer
+      player_name:
+        type: string
+      player_tag:
+        type: string
+      rank:
+        type: integer
+      received:
+        type: integer
+      score:
+        type: integer
+      townhall_level:
+        type: integer
+    type: object
+  modelsv2.ServerDonationsLeaderboardResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.ServerDonationsLeaderboardItem'
+        type: array
+      season:
+        type: string
+      server_id:
+        type: integer
+      total:
+        type: integer
+      type:
         type: string
     type: object
   modelsv2.ServerEmbed:
@@ -3906,6 +4269,7 @@ definitions:
         type: boolean
       thread_id:
         type: string
+        x-nullable: true
       type:
         type: string
       webhook_id:
@@ -4055,44 +4419,6 @@ definitions:
         type: array
       server_id:
         type: integer
-    type: object
-  modelsv2.ServerSeasonLeaderboardItem:
-    properties:
-      activity_score:
-        type: integer
-      clan_name:
-        type: string
-      clan_tag:
-        type: string
-      donated:
-        type: integer
-      player_name:
-        type: string
-      player_tag:
-        type: string
-      rank:
-        type: integer
-      received:
-        type: integer
-      score:
-        type: number
-      townhall_level:
-        type: integer
-    type: object
-  modelsv2.ServerSeasonLeaderboardResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.ServerSeasonLeaderboardItem'
-        type: array
-      season:
-        type: string
-      server_id:
-        type: integer
-      total:
-        type: integer
-      type:
-        type: string
     type: object
   modelsv2.ServerSettingsDocument:
     properties:
@@ -4804,6 +5130,36 @@ definitions:
       league_tier_id:
         type: integer
     type: object
+  modelsv2.UpdateReminderRequest:
+    properties:
+      attack_threshold:
+        type: integer
+      channel_id:
+        type: string
+      custom_text:
+        type: string
+      ping_type:
+        type: string
+      point_threshold:
+        type: integer
+      roles:
+        items:
+          type: string
+        type: array
+      thread_id:
+        type: string
+        x-nullable: true
+      time:
+        type: string
+      townhall_filter:
+        items:
+          type: integer
+        type: array
+      war_types:
+        items:
+          type: string
+        type: array
+    type: object
   modelsv2.UpdateRosterRequest:
     properties:
       alias:
@@ -4878,6 +5234,7 @@ definitions:
         type: array
       thread_id:
         type: string
+        x-nullable: true
     type: object
   modelsv2.UpsertEmbedRequest:
     properties:
@@ -5497,6 +5854,34 @@ paths:
       summary: Get active app announcement
       tags:
       - Mobile App
+  /v2/app/discohook-resolve:
+    get:
+      parameters:
+      - description: Discohook share URL
+        in: query
+        name: url
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.DiscohookResolveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Resolve a Discohook share URL
+      tags:
+      - Dashboard
   /v2/auth/discord:
     post:
       consumes:
@@ -5776,6 +6161,120 @@ paths:
       summary: Verify email address with 6-digit code
       tags:
       - App Authentication
+  /v2/auth/web/discord:
+    post:
+      consumes:
+      - application/json
+      description: Returns a short-lived access token and sets a rotating HttpOnly
+        refresh cookie.
+      parameters:
+      - description: Discord OAuth payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthDiscordOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthWebResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Authenticate a browser with Discord
+      tags:
+      - Web Authentication
+  /v2/auth/web/email:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthEmailAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthWebResponse'
+      summary: Authenticate a browser with email
+      tags:
+      - Web Authentication
+  /v2/auth/web/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+      summary: Log out a browser session
+      tags:
+      - Web Authentication
+  /v2/auth/web/refresh:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthWebRefreshResponse'
+      summary: Refresh a browser session
+      tags:
+      - Web Authentication
+  /v2/auth/web/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthWebResponse'
+      summary: Reset a browser account password
+      tags:
+      - Web Authentication
+  /v2/auth/web/verify-email-code:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Verification payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.AuthEmailCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AuthWebResponse'
+      summary: Verify browser email registration
+      tags:
+      - Web Authentication
   /v2/bases/{base_id}/downloaders/{user_id}:
     post:
       description: Adds one Discord user ID to unique download history. Repeated downloads
@@ -6090,8 +6589,8 @@ paths:
       - Clan
   /v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}:
     get:
-      description: Returns dated placements and full stored official details for clan
-        Home Village, Builder Base, or Capital leaderboards.
+      description: Returns typed dated placements for clan Home Village, Builder Base,
+        or Capital leaderboards.
       parameters:
       - description: Clan tag
         in: path
@@ -6127,6 +6626,45 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get a clan's leaderboard history
+      tags:
+      - Leaderboard
+  /v2/clan/{clan_tag}/legend-history:
+    get:
+      description: Returns normalized historical Legend finishers for one clan, ordered
+        by best rank and then newest season.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - default: 200
+        description: Result limit
+        in: query
+        maximum: 1000
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanLegendHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a clan's final Legend finishers
       tags:
       - Leaderboard
   /v2/clan/{clan_tag}/rankings:
@@ -6981,8 +7519,8 @@ paths:
       - Leaderboard
   /v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}:
     get:
-      description: Reconstructs one complete official leaderboard response from stored
-        full response items, ordered by rank.
+      description: Reconstructs one typed official leaderboard response from its canonical
+        history table, ordered by rank.
       parameters:
       - description: Canonical leaderboard type
         enum:
@@ -7093,10 +7631,10 @@ paths:
       - Leaderboard
   /v2/legends/history/{season}:
     get:
-      description: Returns the stored final official Legend leaderboard for one completed
+      description: Returns the normalized final official Legend leaderboard for one
         season, ordered by rank.
       parameters:
-      - description: Official Legend season ID in YYYY-MM format
+      - description: Authoritative official Legend season ID
         in: path
         name: season
         required: true
@@ -8213,8 +8751,8 @@ paths:
       - Player
   /v2/player/{player_tag}/leaderboard-history/{leaderboard_type}:
     get:
-      description: Returns dated placements and full stored official details for player
-        Home Village or Builder Base leaderboards.
+      description: Returns typed dated placements for player Home Village or Builder
+        Base leaderboards.
       parameters:
       - description: Player tag
         in: path
@@ -8253,8 +8791,8 @@ paths:
       - Leaderboard
   /v2/player/{player_tag}/legend-history:
     get:
-      description: Returns every stored final Legend season placement for one player
-        in descending season order.
+      description: Returns every normalized final Legend season placement for one
+        player in descending season order.
       parameters:
       - description: Player tag
         in: path
@@ -8380,6 +8918,59 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get current player rankings
+      tags:
+      - Player
+  /v2/player/{player_tag}/stat-history:
+    get:
+      description: Returns stored typed positive stat changes for a player over a
+        half-open Unix timestamp range, newest first.
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Inclusive start Unix timestamp. Defaults to all history.
+        in: query
+        name: timestamp_start
+        type: integer
+      - description: Exclusive end Unix timestamp.
+        in: query
+        name: timestamp_end
+        type: integer
+      - description: Typed stat filter.
+        enum:
+        - donated
+        - received
+        - clan_games
+        - capital_gold_donated
+        in: query
+        name: stat_type
+        type: string
+      - description: Maximum number of changes. Default and max 500.
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PlayerStatHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get player stat changes
       tags:
       - Player
   /v2/player/{player_tag}/war/attacks:
@@ -9460,8 +10051,8 @@ paths:
       - Search
   /v2/server/{server_id}/autoboards:
     get:
-      description: Returns all autoboards for a server with post/refresh counts and
-        limit.
+      description: Returns typed autoboards and resolves each stored webhook back
+        to its Discord parent channel.
       parameters:
       - description: Server ID
         in: path
@@ -9491,21 +10082,27 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a new autoboard. Fails if the server autoboard limit is
-        reached.
+      description: Creates a typed autoboard after validating its registry capability,
+        target scope, delivery schedule, and Discord destination.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
+      - description: Autoboard
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.CreateAutoBoardRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
-            $ref: '#/definitions/modelsv2.AutoBoardOperationResponse'
+            $ref: '#/definitions/modelsv2.AutoBoardItemResponse'
         "400":
           description: Bad Request
           schema:
@@ -9518,6 +10115,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
       security:
       - ApiKeyAuth: []
       summary: Create an autoboard
@@ -9525,7 +10126,7 @@ paths:
       - Server Autoboards
   /v2/server/{server_id}/autoboards/{autoboard_id}:
     delete:
-      description: Deletes an autoboard by ID.
+      description: Deletes a server-scoped autoboard and its normalized targets.
       parameters:
       - description: Server ID
         in: path
@@ -9543,7 +10144,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AutoBoardOperationResponse'
+            $ref: '#/definitions/modelsv2.AutoBoardDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -9557,10 +10162,10 @@ paths:
       summary: Delete an autoboard
       tags:
       - Server Autoboards
-    patch:
+    put:
       consumes:
       - application/json
-      description: Updates fields of an existing autoboard by ID.
+      description: Fully replaces an autoboard. This endpoint is not a partial patch.
       parameters:
       - description: Server ID
         in: path
@@ -9572,13 +10177,19 @@ paths:
         name: autoboard_id
         required: true
         type: string
+      - description: Complete replacement
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ReplaceAutoBoardRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AutoBoardOperationResponse'
+            $ref: '#/definitions/modelsv2.AutoBoardItemResponse'
         "400":
           description: Bad Request
           schema:
@@ -9591,9 +10202,43 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
       security:
       - ApiKeyAuth: []
-      summary: Update an autoboard
+      summary: Replace an autoboard
+      tags:
+      - Server Autoboards
+  /v2/server/{server_id}/autoboards/capabilities:
+    get:
+      description: Returns the code-owned board-type registry used by Dashboard. No
+        board type is inferred from stored rows.
+      parameters:
+      - description: Server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AutoBoardCapabilitiesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get autoboard capabilities
       tags:
       - Server Autoboards
   /v2/server/{server_id}/bans:
@@ -10055,8 +10700,8 @@ paths:
       - Bot Profile
   /v2/server/{server_id}/channels:
     get:
-      description: Returns category, text, and news channels for the Discord server,
-        sorted by category.
+      description: Returns category, text, announcement, and forum channels for the
+        Discord server, sorted by category.
       parameters:
       - description: Server ID
         in: path
@@ -10825,8 +11470,8 @@ paths:
       - Dashboard Access
   /v2/server/{server_id}/discord-channels:
     get:
-      description: Returns category, text, and news channels for the Discord server,
-        sorted by category.
+      description: Returns category, text, announcement, and forum channels for the
+        Discord server, sorted by category.
       parameters:
       - description: Server ID
         in: path
@@ -11358,39 +12003,6 @@ paths:
       summary: Get server leaderboards
       tags:
       - Server Leaderboards
-  /v2/server/{server_id}/leaderboards/activity:
-    get:
-      description: Returns players ranked by season activity for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Season YYYY-MM
-        in: query
-        name: season
-        type: string
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ServerSeasonLeaderboardResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get server activity leaderboard
-      tags:
-      - Server Leaderboards
   /v2/server/{server_id}/leaderboards/clan-games:
     get:
       description: Returns players ranked by season clan games points for a server.
@@ -11414,7 +12026,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.ServerSeasonLeaderboardResponse'
+            $ref: '#/definitions/modelsv2.ServerClanGamesLeaderboardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -11447,7 +12063,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.ServerSeasonLeaderboardResponse'
+            $ref: '#/definitions/modelsv2.ServerDonationsLeaderboardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -11484,39 +12104,6 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get server legends leaderboard
-      tags:
-      - Server Leaderboards
-  /v2/server/{server_id}/leaderboards/looting:
-    get:
-      description: Returns players ranked by season loot totals for a server.
-      parameters:
-      - description: Server ID
-        in: path
-        name: server_id
-        required: true
-        type: integer
-      - description: Season YYYY-MM
-        in: query
-        name: season
-        type: string
-      - description: Maximum number of rows
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.ServerSeasonLeaderboardResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Get server looting leaderboard
       tags:
       - Server Leaderboards
   /v2/server/{server_id}/leaderboards/war-performance:
@@ -11656,9 +12243,10 @@ paths:
     put:
       consumes:
       - application/json
-      description: Assigns a Discord channel to independent log types in one optional
-        clan scope. The API reuses a bot-owned webhook in the channel or creates one
-        with the bot profile.
+      description: Assigns a Discord destination to independent log types in one optional
+        clan scope. Text and announcement channels may be used directly or with a
+        child thread. Forum channels require a child post. The API reuses a bot-owned
+        webhook in the parent channel or creates one with the bot profile.
       parameters:
       - description: Server ID
         in: path
@@ -11793,13 +12381,20 @@ paths:
       consumes:
       - application/json
       description: Creates a new reminder (war, capital, clan games, inactivity, or
-        roster).
+        roster). Text and announcement channels may be used directly or with a child
+        thread. Forum channels require a child post.
       parameters:
       - description: Server ID
         in: path
         name: server_id
         required: true
         type: integer
+      - description: Reminder settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.CreateReminderRequest'
       produces:
       - application/json
       responses:
@@ -11817,6 +12412,10 @@ paths:
             $ref: '#/definitions/modelsv2.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       security:
@@ -11861,7 +12460,9 @@ paths:
     put:
       consumes:
       - application/json
-      description: Updates an existing reminder by ID.
+      description: Updates an existing reminder by ID. Updating a destination accepts
+        a parent channel plus an optional child thread; forum parents require a child
+        post.
       parameters:
       - description: Server ID
         in: path
@@ -11873,6 +12474,12 @@ paths:
         name: reminder_id
         required: true
         type: string
+      - description: Reminder settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.UpdateReminderRequest'
       produces:
       - application/json
       responses:
@@ -11890,6 +12497,10 @@ paths:
             $ref: '#/definitions/modelsv2.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "502":
+          description: Bad Gateway
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       security:

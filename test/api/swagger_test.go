@@ -158,6 +158,59 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	}
 }
 
+func TestAutoboardOpenAPIUsesTypedCleanBreakContract(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	capabilities, ok := paths["/v2/server/{server_id}/autoboards/capabilities"].(map[string]any)
+	if !ok {
+		t.Fatal("expected autoboard capabilities path")
+	}
+	if _, ok := capabilities["get"].(map[string]any); !ok {
+		t.Fatal("expected GET autoboard capabilities operation")
+	}
+
+	itemPath, ok := paths["/v2/server/{server_id}/autoboards/{autoboard_id}"].(map[string]any)
+	if !ok {
+		t.Fatal("expected autoboard item path")
+	}
+	if _, ok := itemPath["put"].(map[string]any); !ok {
+		t.Fatal("expected full-replacement PUT autoboard operation")
+	}
+	if _, exists := itemPath["patch"]; exists {
+		t.Fatal("legacy partial PATCH autoboard operation is still documented")
+	}
+
+	definitions, ok := doc["definitions"].(map[string]any)
+	if !ok {
+		t.Fatal("expected Swagger definitions")
+	}
+	request, ok := definitions["modelsv2.CreateAutoBoardRequest"].(map[string]any)
+	if !ok {
+		t.Fatal("expected typed create autoboard definition")
+	}
+	properties, ok := request["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("expected create autoboard properties")
+	}
+	for _, required := range []string{
+		"boardType", "targetScope", "targets", "deliveryMode", "channelId", "threadId",
+		"enabled", "intervalMinutes", "schedule",
+	} {
+		if _, exists := properties[required]; !exists {
+			t.Fatalf("autoboard create contract is missing %q", required)
+		}
+	}
+	for _, retired := range []string{
+		"type", "button_id", "webhook_id", "messageId", "days", "locale", "data",
+		"board_type", "target_scope", "delivery_mode", "channel_id", "thread_id", "interval_minutes",
+	} {
+		if _, exists := properties[retired]; exists {
+			t.Fatalf("autoboard create contract still exposes %q", retired)
+		}
+	}
+}
+
 func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)
@@ -331,6 +384,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/capital/guild-leaderboard",
 		"/v2/capital/player-stats",
 		"/v2/server/{server_id}/leaderboards/capital-raids",
+		"/v2/server/{server_id}/leaderboards/activity",
+		"/v2/server/{server_id}/leaderboards/looting",
 		"/v2/clan/compo",
 		"/v2/clan/donations/{season}",
 		"/v2/clan/{clan_tag}/board/totals",
@@ -393,6 +448,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/player/{player_tag}/join-leave",
 		"/v2/player/{player_tag}/join-leave/totals",
 		"/v2/player/{player_tag}/join-leave/shared",
+		"/v2/player/{player_tag}/stat-history",
 		"/v2/clan/{clan_tag}/badge",
 		"/v2/links/{id}/searches",
 		"/v2/links/{id}/{playerTag}",
@@ -662,6 +718,91 @@ func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 	}
 }
 
+func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	definitions := swaggerDefinitions(t, doc)
+
+	path := "/v2/player/{player_tag}/stat-history"
+	operation := paths[path].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(
+		t,
+		operation["parameters"],
+		"stat_type",
+		[]any{"donated", "received", "clan_games", "capital_gold_donated"},
+	)
+	queryParams := swaggerQueryParams(t, paths, path)
+	wantParams := []string{"timestamp_start", "timestamp_end", "stat_type", "limit"}
+	if !reflect.DeepEqual(queryParams, wantParams) {
+		t.Fatalf("player stat history query params = %v, want %v", queryParams, wantParams)
+	}
+
+	response := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerStatHistoryResponse")
+	assertArrayItemsRef(t, response["items"], "#/definitions/modelsv2.PlayerStatChange")
+
+	item := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerStatChange")
+	for _, field := range []string{
+		"eventTime",
+		"clanTag",
+		"statType",
+		"previousValue",
+		"currentValue",
+		"delta",
+	} {
+		if _, exists := item[field]; !exists {
+			t.Fatalf("PlayerStatChange missing %s", field)
+		}
+	}
+	if clanTag, ok := item["clanTag"].(map[string]any); !ok || clanTag["x-nullable"] != true {
+		t.Fatalf("PlayerStatChange.clanTag must be nullable: %#v", item["clanTag"])
+	}
+	for _, retired := range []string{
+		"playerTag",
+		"season",
+		"trophies",
+		"loot",
+		"activity",
+		"activityScore",
+		"attackWins",
+		"townHallLevel",
+		"lastOnline",
+		"data",
+	} {
+		if _, exists := item[retired]; exists {
+			t.Fatalf("PlayerStatChange exposes retired field %s", retired)
+		}
+	}
+
+	donationItem := swaggerDefinitionProperties(t, definitions, "modelsv2.ServerDonationsLeaderboardItem")
+	for _, field := range []string{"donated", "received"} {
+		if _, exists := donationItem[field]; !exists {
+			t.Fatalf("ServerDonationsLeaderboardItem missing %s", field)
+		}
+	}
+	for _, unsupported := range []string{"clan_games", "activity_score"} {
+		if _, exists := donationItem[unsupported]; exists {
+			t.Fatalf("ServerDonationsLeaderboardItem exposes %s", unsupported)
+		}
+	}
+	clanGamesItem := swaggerDefinitionProperties(t, definitions, "modelsv2.ServerClanGamesLeaderboardItem")
+	if _, exists := clanGamesItem["clan_games"]; !exists {
+		t.Fatal("ServerClanGamesLeaderboardItem missing truthful clan_games aggregate")
+	}
+	for _, unsupported := range []string{"donated", "received", "activity_score"} {
+		if _, exists := clanGamesItem[unsupported]; exists {
+			t.Fatalf("ServerClanGamesLeaderboardItem exposes %s", unsupported)
+		}
+	}
+	donationsOperation := paths["/v2/server/{server_id}/leaderboards/donations"].(map[string]any)["get"].(map[string]any)
+	donationsResponses := donationsOperation["responses"].(map[string]any)
+	donationsSchema := donationsResponses["200"].(map[string]any)["schema"]
+	assertRef(t, donationsSchema, "#/definitions/modelsv2.ServerDonationsLeaderboardResponse")
+	clanGamesOperation := paths["/v2/server/{server_id}/leaderboards/clan-games"].(map[string]any)["get"].(map[string]any)
+	clanGamesResponses := clanGamesOperation["responses"].(map[string]any)
+	clanGamesSchema := clanGamesResponses["200"].(map[string]any)["schema"]
+	assertRef(t, clanGamesSchema, "#/definitions/modelsv2.ServerClanGamesLeaderboardResponse")
+}
+
 func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	definitions := swaggerDefinitions(t, doc)
@@ -808,6 +949,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/player/{player_tag}/rankings",
 		"/v2/player/{player_tag}/battlelog/history",
 		"/v2/player/{player_tag}/legend-history",
+		"/v2/clan/{clan_tag}/legend-history",
 		"/v2/legends/history/{season}",
 		"/v2/player/{player_tag}/ranked/{season}/battlelog",
 		"/v2/player/{player_tag}/ranked/{season}/group",
@@ -888,6 +1030,39 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 			t.Fatalf("expected leaderboard entity response field %s", field)
 		}
 	}
+	leaderboardItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.LeaderboardHistoryItem")
+	for _, field := range []string{
+		"tag",
+		"name",
+		"expLevel",
+		"trophies",
+		"attackWins",
+		"defenseWins",
+		"builderBaseTrophies",
+		"builderBaseBattleWins",
+		"clan",
+		"league",
+		"leagueTier",
+		"builderBaseLeague",
+		"badgeUrls",
+		"clanLevel",
+		"clanPoints",
+		"builderBasePoints",
+		"capitalPoints",
+		"members",
+		"location",
+		"rank",
+		"previousRank",
+	} {
+		if _, exists := leaderboardItemProps[field]; !exists {
+			t.Fatalf("expected typed leaderboard history item field %s", field)
+		}
+	}
+	for _, forbidden := range []string{"data", "kind", "badgeToken"} {
+		if _, exists := leaderboardItemProps[forbidden]; exists {
+			t.Fatalf("typed leaderboard history item exposes internal field %s", forbidden)
+		}
+	}
 	playerLeaderboardProps := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerLeaderboardHistoryResponse")
 	if _, exists := playerLeaderboardProps["playerTag"]; !exists {
 		t.Fatal("expected player leaderboard history to expose playerTag")
@@ -896,7 +1071,11 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	if _, exists := clanLeaderboardProps["clanTag"]; !exists {
 		t.Fatal("expected clan leaderboard history to expose clanTag")
 	}
-	for _, definition := range []string{"modelsv2.LegendSeasonHistoryResponse", "modelsv2.PlayerLegendHistoryResponse"} {
+	for _, definition := range []string{
+		"modelsv2.LegendSeasonHistoryResponse",
+		"modelsv2.PlayerLegendHistoryResponse",
+		"modelsv2.ClanLegendHistoryResponse",
+	} {
 		properties := swaggerDefinitionProperties(t, definitions, definition)
 		if len(properties) != 1 || properties["items"] == nil {
 			t.Fatalf("expected %s to expose only items, got %v", definition, properties)
@@ -912,13 +1091,25 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"attackWins",
 		"defenseWins",
 		"rank",
-		"previousRank",
 		"clan",
-		"league",
-		"townHallLevel",
+		"leagueTier",
 	} {
 		if _, exists := legendHistoryItemProps[field]; !exists {
 			t.Fatalf("expected final Legend item field %s", field)
+		}
+	}
+	for _, unavailable := range []string{"previousRank", "league", "townHallLevel", "badgeToken", "data"} {
+		if _, exists := legendHistoryItemProps[unavailable]; exists {
+			t.Fatalf("Legend item exposes unavailable/internal field %s", unavailable)
+		}
+	}
+	clanLegendPath := paths["/v2/clan/{clan_tag}/legend-history"].(map[string]any)
+	clanLegendGet := clanLegendPath["get"].(map[string]any)
+	clanLegendParameters := clanLegendGet["parameters"].([]any)
+	for _, raw := range clanLegendParameters {
+		parameter := raw.(map[string]any)
+		if parameter["name"] == "limit" && parameter["maximum"] != float64(1000) {
+			t.Fatalf("clan Legend limit maximum = %#v, want 1000", parameter["maximum"])
 		}
 	}
 	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
@@ -1005,6 +1196,58 @@ func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 			t.Fatalf("expected %s QUERY operation to consume application/json, got %v", path, consumes)
 		}
 	}
+}
+
+func TestServerLogAndReminderDestinationOpenAPIContract(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	definitions := swaggerDefinitions(t, doc)
+
+	for _, definition := range []string{
+		"modelsv2.ServerLog",
+		"modelsv2.UpdateServerLogsRequest",
+		"modelsv2.ReminderConfig",
+		"modelsv2.CreateReminderRequest",
+		"modelsv2.UpdateReminderRequest",
+	} {
+		props := swaggerDefinitionProperties(t, definitions, definition)
+		thread, ok := props["thread_id"].(map[string]any)
+		if !ok || thread["type"] != "string" || thread["x-nullable"] != true {
+			t.Fatalf("expected %s.thread_id to be nullable string, got %v", definition, props["thread_id"])
+		}
+	}
+
+	channelProps := swaggerDefinitionProperties(t, definitions, "modelsv2.DiscordChannel")
+	assertEnum(t, channelProps["type"], []any{"category", "text", "news", "forum"})
+
+	paths := swaggerPaths(t, doc)
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/logs", "put", "#/definitions/modelsv2.UpdateServerLogsRequest")
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders", "post", "#/definitions/modelsv2.CreateReminderRequest")
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders/{reminder_id}", "put", "#/definitions/modelsv2.UpdateReminderRequest")
+}
+
+func assertSwaggerBodyRef(t *testing.T, paths map[string]any, path, method, wantRef string) {
+	t.Helper()
+	pathItem, ok := paths[path].(map[string]any)
+	if !ok {
+		t.Fatalf("expected path %s", path)
+	}
+	operation, ok := pathItem[method].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s %s operation", method, path)
+	}
+	params, _ := operation["parameters"].([]any)
+	for _, raw := range params {
+		param, _ := raw.(map[string]any)
+		if param["in"] != "body" {
+			continue
+		}
+		schema, _ := param["schema"].(map[string]any)
+		if schema["$ref"] != wantRef {
+			t.Fatalf("expected %s %s body ref %s, got %v", method, path, wantRef, schema)
+		}
+		return
+	}
+	t.Fatalf("expected %s %s body parameter", method, path)
 }
 
 func buildSwaggerDoc(t *testing.T) map[string]any {

@@ -531,6 +531,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/app/discohook-resolve": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "Resolve a Discohook share URL",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discohook share URL",
+                        "name": "url",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.DiscohookResolveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/auth/discord": {
             "post": {
                 "description": "Exchanges Discord OAuth credentials for a ClashKing session.",
@@ -949,6 +994,183 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/discord": {
+            "post": {
+                "description": "Returns a short-lived access token and sets a rotating HttpOnly refresh cookie.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Authenticate a browser with Discord",
+                "parameters": [
+                    {
+                        "description": "Discord OAuth payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthDiscordOAuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthWebResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/email": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Authenticate a browser with email",
+                "parameters": [
+                    {
+                        "description": "Login payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthEmailAuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthWebResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/logout": {
+            "post": {
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Log out a browser session",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/refresh": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Refresh a browser session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthWebRefreshResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/reset-password": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Reset a browser account password",
+                "parameters": [
+                    {
+                        "description": "Reset payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthResetPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthWebResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/auth/web/verify-email-code": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Web Authentication"
+                ],
+                "summary": "Verify browser email registration",
+                "parameters": [
+                    {
+                        "description": "Verification payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthEmailCodeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AuthWebResponse"
                         }
                     }
                 }
@@ -1422,7 +1644,7 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}": {
             "get": {
-                "description": "Returns dated placements and full stored official details for clan Home Village, Builder Base, or Capital leaderboards.",
+                "description": "Returns typed dated placements for clan Home Village, Builder Base, or Capital leaderboards.",
                 "produces": [
                     "application/json"
                 ],
@@ -1456,6 +1678,62 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanLeaderboardHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/legend-history": {
+            "get": {
+                "description": "Returns normalized historical Legend finishers for one clan, ordered by best rank and then newest season.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get a clan's final Legend finishers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 200,
+                        "description": "Result limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLegendHistoryResponse"
                         }
                     },
                     "400": {
@@ -2633,7 +2911,7 @@ const docTemplate = `{
         },
         "/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}": {
             "get": {
-                "description": "Reconstructs one complete official leaderboard response from stored full response items, ordered by rank.",
+                "description": "Reconstructs one typed official leaderboard response from its canonical history table, ordered by rank.",
                 "produces": [
                     "application/json"
                 ],
@@ -2930,7 +3208,7 @@ const docTemplate = `{
         },
         "/v2/legends/history/{season}": {
             "get": {
-                "description": "Returns the stored final official Legend leaderboard for one completed season, ordered by rank.",
+                "description": "Returns the normalized final official Legend leaderboard for one season, ordered by rank.",
                 "produces": [
                     "application/json"
                 ],
@@ -2941,7 +3219,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Official Legend season ID in YYYY-MM format",
+                        "description": "Authoritative official Legend season ID",
                         "name": "season",
                         "in": "path",
                         "required": true
@@ -4631,7 +4909,7 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}": {
             "get": {
-                "description": "Returns dated placements and full stored official details for player Home Village or Builder Base leaderboards.",
+                "description": "Returns typed dated placements for player Home Village or Builder Base leaderboards.",
                 "produces": [
                     "application/json"
                 ],
@@ -4689,7 +4967,7 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/legend-history": {
             "get": {
-                "description": "Returns every stored final Legend season placement for one player in descending season order.",
+                "description": "Returns every normalized final Legend season placement for one player in descending season order.",
                 "produces": [
                     "application/json"
                 ],
@@ -4870,6 +5148,83 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/stat-history": {
+            "get": {
+                "description": "Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player stat changes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Inclusive start Unix timestamp. Defaults to all history.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exclusive end Unix timestamp.",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "donated",
+                            "received",
+                            "clan_games",
+                            "capital_gold_donated"
+                        ],
+                        "type": "string",
+                        "description": "Typed stat filter.",
+                        "name": "stat_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of changes. Default and max 500.",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerStatHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -6544,7 +6899,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns all autoboards for a server with post/refresh counts and limit.",
+                "description": "Returns typed autoboards and resolves each stored webhook back to its Discord parent channel.",
                 "produces": [
                     "application/json"
                 ],
@@ -6588,7 +6943,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Creates a new autoboard. Fails if the server autoboard limit is reached.",
+                "description": "Creates a typed autoboard after validating its registry capability, target scope, delivery schedule, and Discord destination.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6606,13 +6961,22 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Autoboard",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CreateAutoBoardRequest"
+                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AutoBoardOperationResponse"
+                            "$ref": "#/definitions/modelsv2.AutoBoardItemResponse"
                         }
                     },
                     "400": {
@@ -6632,18 +6996,145 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/autoboards/capabilities": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the code-owned board-type registry used by Dashboard. No board type is inferred from stored rows.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Autoboards"
+                ],
+                "summary": "Get autoboard capabilities",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AutoBoardCapabilitiesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
                     }
                 }
             }
         },
         "/v2/server/{server_id}/autoboards/{autoboard_id}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Fully replaces an autoboard. This endpoint is not a partial patch.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server Autoboards"
+                ],
+                "summary": "Replace an autoboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Autoboard ID",
+                        "name": "autoboard_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Complete replacement",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ReplaceAutoBoardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AutoBoardItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Deletes an autoboard by ID.",
+                "description": "Deletes a server-scoped autoboard and its normalized targets.",
                 "produces": [
                     "application/json"
                 ],
@@ -6671,61 +7162,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AutoBoardOperationResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Updates fields of an existing autoboard by ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Autoboards"
-                ],
-                "summary": "Update an autoboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Autoboard ID",
-                        "name": "autoboard_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AutoBoardOperationResponse"
+                            "$ref": "#/definitions/modelsv2.AutoBoardDeleteResponse"
                         }
                     },
                     "400": {
@@ -7447,7 +7884,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
+                "description": "Returns category, text, announcement, and forum channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
                 ],
@@ -8631,7 +9068,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns category, text, and news channels for the Discord server, sorted by category.",
+                "description": "Returns category, text, announcement, and forum channels for the Discord server, sorted by category.",
                 "produces": [
                     "application/json"
                 ],
@@ -9448,58 +9885,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/server/{server_id}/leaderboards/activity": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns players ranked by season activity for a server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Leaderboards"
-                ],
-                "summary": "Get server activity leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerSeasonLeaderboardResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/server/{server_id}/leaderboards/clan-games": {
             "get": {
                 "security": [
@@ -9540,7 +9925,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerSeasonLeaderboardResponse"
+                            "$ref": "#/definitions/modelsv2.ServerClanGamesLeaderboardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -9592,7 +9983,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerSeasonLeaderboardResponse"
+                            "$ref": "#/definitions/modelsv2.ServerDonationsLeaderboardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -9639,58 +10036,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ServerLegendsLeaderboardResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/server/{server_id}/leaderboards/looting": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Returns players ranked by season loot totals for a server.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Server Leaderboards"
-                ],
-                "summary": "Get server looting leaderboard",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Server ID",
-                        "name": "server_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of rows",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ServerSeasonLeaderboardResponse"
                         }
                     },
                     "500": {
@@ -9793,7 +10138,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Assigns a Discord channel to independent log types in one optional clan scope. The API reuses a bot-owned webhook in the channel or creates one with the bot profile.",
+                "description": "Assigns a Discord destination to independent log types in one optional clan scope. Text and announcement channels may be used directly or with a child thread. Forum channels require a child post. The API reuses a bot-owned webhook in the parent channel or creates one with the bot profile.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10122,7 +10467,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Creates a new reminder (war, capital, clan games, inactivity, or roster).",
+                "description": "Creates a new reminder (war, capital, clan games, inactivity, or roster). Text and announcement channels may be used directly or with a child thread. Forum channels require a child post.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10140,6 +10485,15 @@ const docTemplate = `{
                         "name": "server_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Reminder settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CreateReminderRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -10166,6 +10520,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -10177,7 +10537,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Updates an existing reminder by ID.",
+                "description": "Updates an existing reminder by ID. Updating a destination accepts a parent channel plus an optional child thread; forum parents require a child post.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10202,6 +10562,15 @@ const docTemplate = `{
                         "name": "reminder_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Reminder settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.UpdateReminderRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -10225,6 +10594,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -12713,64 +13088,189 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.AuthWebRefreshResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.AuthWebResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/modelsv2.AuthUserInfo"
+                }
+            }
+        },
+        "modelsv2.AutoBoardCapabilitiesResponse": {
+            "type": "object",
+            "properties": {
+                "boardTypes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.AutoBoardTypeCapability"
+                    }
+                }
+            }
+        },
         "modelsv2.AutoBoardConfig": {
             "type": "object",
             "properties": {
-                "board_type": {
+                "boardType": {
                     "type": "string"
                 },
-                "button_id": {
-                    "type": "string"
-                },
-                "channel_deleted": {
+                "channelDeleted": {
                     "type": "boolean"
                 },
-                "channel_id": {
+                "channelId": {
                     "type": "string"
                 },
-                "created_at": {
+                "createdAt": {
                     "type": "string"
                 },
-                "days": {
+                "deliveryMode": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "intervalMinutes": {
+                    "type": "integer"
+                },
+                "lastRunAt": {
+                    "type": "string"
+                },
+                "messageId": {
+                    "type": "string"
+                },
+                "nextRunAt": {
+                    "type": "string"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/modelsv2.AutoBoardSchedule"
+                },
+                "targetKind": {
+                    "type": "string"
+                },
+                "targetScope": {
+                    "type": "string"
+                },
+                "targets": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "id": {
+                "threadId": {
                     "type": "string"
                 },
-                "locale": {
-                    "type": "string"
-                },
-                "thread_id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "webhook_id": {
+                "updatedAt": {
                     "type": "string"
                 }
             }
         },
-        "modelsv2.AutoBoardOperationResponse": {
+        "modelsv2.AutoBoardDeleteResponse": {
             "type": "object",
             "properties": {
-                "autoboard_id": {
-                    "type": "string"
+                "deleted": {
+                    "type": "boolean"
                 },
-                "message": {
+                "id": {
                     "type": "string"
-                },
-                "server_id": {
+                }
+            }
+        },
+        "modelsv2.AutoBoardItemResponse": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/modelsv2.AutoBoardConfig"
+                }
+            }
+        },
+        "modelsv2.AutoBoardRefreshIntervalCapability": {
+            "type": "object",
+            "properties": {
+                "defaultMinutes": {
                     "type": "integer"
                 },
-                "type": {
+                "maxMinutes": {
+                    "type": "integer"
+                },
+                "minMinutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.AutoBoardSchedule": {
+            "type": "object",
+            "properties": {
+                "dayOfMonth": {
+                    "type": "integer"
+                },
+                "kind": {
                     "type": "string"
                 },
-                "updated_fields": {
+                "timeOfDay": {
+                    "type": "string"
+                },
+                "timezone": {
+                    "type": "string"
+                },
+                "weekdays": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "modelsv2.AutoBoardTypeCapability": {
+            "type": "object",
+            "properties": {
+                "allowedModes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "allowedScopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "boardType": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "maxTargets": {
                     "type": "integer"
+                },
+                "minTargets": {
+                    "type": "integer"
+                },
+                "refreshInterval": {
+                    "$ref": "#/definitions/modelsv2.AutoBoardRefreshIntervalCapability"
+                },
+                "targetKind": {
+                    "type": "string"
+                },
+                "uiCapabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -14153,6 +14653,17 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ClanLegendHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.LegendHistoryItem"
+                    }
+                }
+            }
+        },
         "modelsv2.ClanListItem": {
             "type": "object",
             "properties": {
@@ -14370,6 +14881,41 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CreateAutoBoardRequest": {
+            "type": "object",
+            "properties": {
+                "boardType": {
+                    "type": "string"
+                },
+                "channelId": {
+                    "type": "string"
+                },
+                "deliveryMode": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "intervalMinutes": {
+                    "type": "integer"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/modelsv2.AutoBoardSchedule"
+                },
+                "targetScope": {
+                    "type": "string"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "threadId": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.CreateBaseRequest": {
             "type": "object",
             "properties": {
@@ -14403,6 +14949,60 @@ const docTemplate = `{
             "properties": {
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.CreateReminderRequest": {
+            "type": "object",
+            "properties": {
+                "attack_threshold": {
+                    "type": "integer"
+                },
+                "channel_id": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "custom_text": {
+                    "type": "string"
+                },
+                "ping_type": {
+                    "type": "string"
+                },
+                "point_threshold": {
+                    "type": "integer"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "roster_id": {
+                    "type": "string"
+                },
+                "thread_id": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "time": {
+                    "type": "string"
+                },
+                "townhall_filter": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                },
+                "war_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -14589,6 +15189,20 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.DiscohookResolveResponse": {
+            "type": "object",
+            "properties": {
+                "payload": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "resolvedUrl": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.DiscordChannel": {
             "type": "object",
             "properties": {
@@ -14605,7 +15219,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "category",
+                        "text",
+                        "news",
+                        "forum"
+                    ]
                 }
             }
         },
@@ -15644,8 +16264,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "details": {
-                    "type": "object",
-                    "additionalProperties": {}
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryItem"
                 },
                 "locationId": {
                     "type": "string"
@@ -15655,6 +16274,122 @@ const docTemplate = `{
                 },
                 "rank": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.LeaderboardHistoryClanReference": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.LeaderboardHistoryItem": {
+            "type": "object",
+            "properties": {
+                "attackWins": {
+                    "type": "integer"
+                },
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
+                },
+                "builderBaseBattleWins": {
+                    "type": "integer"
+                },
+                "builderBaseLeague": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLeagueReference"
+                },
+                "builderBasePoints": {
+                    "type": "integer"
+                },
+                "builderBaseTrophies": {
+                    "type": "integer"
+                },
+                "capitalPoints": {
+                    "type": "integer"
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryClanReference"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "clanPoints": {
+                    "type": "integer"
+                },
+                "defenseWins": {
+                    "type": "integer"
+                },
+                "expLevel": {
+                    "type": "integer"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLeagueReference"
+                },
+                "leagueTier": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLeagueReference"
+                },
+                "location": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLocationReference"
+                },
+                "members": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "previousRank": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "trophies": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.LeaderboardHistoryLeagueReference": {
+            "type": "object",
+            "properties": {
+                "iconUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicIconURLs"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.LeaderboardHistoryLocationReference": {
+            "type": "object",
+            "properties": {
+                "countryCode": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "isCountry": {
+                    "type": "boolean"
+                },
+                "localizedName": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -15698,8 +16433,7 @@ const docTemplate = `{
                 "items": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": {}
+                        "$ref": "#/definitions/modelsv2.LeaderboardHistoryItem"
                     }
                 },
                 "locationId": {
@@ -15739,14 +16473,11 @@ const docTemplate = `{
                 "expLevel": {
                     "type": "integer"
                 },
-                "league": {
-                    "$ref": "#/definitions/modelsv2.LegendHistoryLeague"
+                "leagueTier": {
+                    "$ref": "#/definitions/modelsv2.LegendHistoryLeagueTier"
                 },
                 "name": {
                     "type": "string"
-                },
-                "previousRank": {
-                    "type": "integer"
                 },
                 "rank": {
                     "type": "integer"
@@ -15757,15 +16488,12 @@ const docTemplate = `{
                 "tag": {
                     "type": "string"
                 },
-                "townHallLevel": {
-                    "type": "integer"
-                },
                 "trophies": {
                     "type": "integer"
                 }
             }
         },
-        "modelsv2.LegendHistoryLeague": {
+        "modelsv2.LegendHistoryLeagueTier": {
             "type": "object",
             "properties": {
                 "iconUrls": {
@@ -16377,6 +17105,57 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.PlayerStatChange": {
+            "type": "object",
+            "properties": {
+                "clanTag": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "currentValue": {
+                    "type": "integer"
+                },
+                "delta": {
+                    "type": "integer"
+                },
+                "eventTime": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "previousValue": {
+                    "type": "integer"
+                },
+                "statType": {
+                    "$ref": "#/definitions/modelsv2.PlayerStatType"
+                }
+            }
+        },
+        "modelsv2.PlayerStatHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PlayerStatChange"
+                    }
+                }
+            }
+        },
+        "modelsv2.PlayerStatType": {
+            "type": "string",
+            "enum": [
+                "donated",
+                "received",
+                "clan_games",
+                "capital_gold_donated"
+            ],
+            "x-enum-varnames": [
+                "PlayerStatTypeDonated",
+                "PlayerStatTypeReceived",
+                "PlayerStatTypeClanGames",
+                "PlayerStatTypeCapitalGoldDonated"
+            ]
+        },
         "modelsv2.PlayerUpgradePreferencesPatchRequest": {
             "type": "object",
             "required": [
@@ -16830,6 +17609,10 @@ const docTemplate = `{
                 "roster_id": {
                     "type": "string"
                 },
+                "thread_id": {
+                    "type": "string",
+                    "x-nullable": true
+                },
                 "time": {
                     "type": "string"
                 },
@@ -16885,6 +17668,41 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ReplaceAutoBoardRequest": {
+            "type": "object",
+            "properties": {
+                "boardType": {
+                    "type": "string"
+                },
+                "channelId": {
+                    "type": "string"
+                },
+                "deliveryMode": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "intervalMinutes": {
+                    "type": "integer"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/modelsv2.AutoBoardSchedule"
+                },
+                "targetScope": {
+                    "type": "string"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "threadId": {
                     "type": "string"
                 }
             }
@@ -17855,7 +18673,7 @@ const docTemplate = `{
         "modelsv2.ServerAutoBoardsResponse": {
             "type": "object",
             "properties": {
-                "autoboards": {
+                "items": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.AutoBoardConfig"
@@ -17864,14 +18682,66 @@ const docTemplate = `{
                 "limit": {
                     "type": "integer"
                 },
-                "post_count": {
+                "refreshCount": {
                     "type": "integer"
                 },
-                "refresh_count": {
+                "sendCount": {
                     "type": "integer"
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ServerClanGamesLeaderboardItem": {
+            "type": "object",
+            "properties": {
+                "clan_games": {
+                    "type": "integer"
+                },
+                "clan_name": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "player_name": {
+                    "type": "string"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "townhall_level": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ServerClanGamesLeaderboardResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerClanGamesLeaderboardItem"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "server_id": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -17954,6 +18824,61 @@ const docTemplate = `{
                     }
                 },
                 "server_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ServerDonationsLeaderboardItem": {
+            "type": "object",
+            "properties": {
+                "clan_name": {
+                    "type": "string"
+                },
+                "clan_tag": {
+                    "type": "string"
+                },
+                "donated": {
+                    "type": "integer"
+                },
+                "player_name": {
+                    "type": "string"
+                },
+                "player_tag": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "received": {
+                    "type": "integer"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "townhall_level": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ServerDonationsLeaderboardResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ServerDonationsLeaderboardItem"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "server_id": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -18208,7 +19133,8 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "thread_id": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "type": {
                     "type": "string"
@@ -18437,64 +19363,6 @@ const docTemplate = `{
                 },
                 "server_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.ServerSeasonLeaderboardItem": {
-            "type": "object",
-            "properties": {
-                "activity_score": {
-                    "type": "integer"
-                },
-                "clan_name": {
-                    "type": "string"
-                },
-                "clan_tag": {
-                    "type": "string"
-                },
-                "donated": {
-                    "type": "integer"
-                },
-                "player_name": {
-                    "type": "string"
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "rank": {
-                    "type": "integer"
-                },
-                "received": {
-                    "type": "integer"
-                },
-                "score": {
-                    "type": "number"
-                },
-                "townhall_level": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.ServerSeasonLeaderboardResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.ServerSeasonLeaderboardItem"
-                    }
-                },
-                "season": {
-                    "type": "string"
-                },
-                "server_id": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
                 }
             }
         },
@@ -19562,6 +20430,51 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.UpdateReminderRequest": {
+            "type": "object",
+            "properties": {
+                "attack_threshold": {
+                    "type": "integer"
+                },
+                "channel_id": {
+                    "type": "string"
+                },
+                "custom_text": {
+                    "type": "string"
+                },
+                "ping_type": {
+                    "type": "string"
+                },
+                "point_threshold": {
+                    "type": "integer"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "thread_id": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "time": {
+                    "type": "string"
+                },
+                "townhall_filter": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "war_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "modelsv2.UpdateRosterRequest": {
             "type": "object",
             "properties": {
@@ -19671,7 +20584,8 @@ const docTemplate = `{
                     }
                 },
                 "thread_id": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },

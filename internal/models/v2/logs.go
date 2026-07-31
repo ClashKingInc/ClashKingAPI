@@ -5,7 +5,7 @@ type ServerLog struct {
 	Type      string  `json:"type"`
 	WebhookID string  `json:"webhook_id"`
 	ChannelID *string `json:"channel_id,omitempty"`
-	ThreadID  *string `json:"thread_id,omitempty"`
+	ThreadID  *string `json:"thread_id,omitempty" extensions:"x-nullable"`
 	Disabled  bool    `json:"disabled"`
 }
 
@@ -23,7 +23,7 @@ type ServerLogsResponse struct {
 type UpdateServerLogsRequest struct {
 	ClanTag   *string  `json:"clan_tag,omitempty"`
 	ChannelID string   `json:"channel_id"`
-	ThreadID  *string  `json:"thread_id,omitempty"`
+	ThreadID  *string  `json:"thread_id,omitempty" extensions:"x-nullable"`
 	LogTypes  []string `json:"log_types"`
 }
 

@@ -59,6 +59,10 @@ func EnableCountdown(a apptypes.Deps) fiber.Handler { return enableCountdown(a) 
 
 func GetAutoboards(a apptypes.Deps) fiber.Handler { return getAutoboards(a) }
 
+func GetAutoboardCapabilities(a apptypes.Deps) fiber.Handler {
+	return getAutoboardCapabilities(a)
+}
+
 func GetBans(a apptypes.Deps) fiber.Handler { return getBans(a) }
 
 func GetClanCountdowns(a apptypes.Deps) fiber.Handler { return getClanCountdowns(a) }
@@ -72,10 +76,6 @@ func GetLinks(a apptypes.Deps) fiber.Handler { return getLinks(a) }
 func ListServerRoles(a apptypes.Deps) fiber.Handler { return listServerRoles(a) }
 
 func GetRoleSettings(a apptypes.Deps) fiber.Handler { return getRoleSettings(a) }
-
-func GetServerActivityLeaderboard(a apptypes.Deps) fiber.Handler {
-	return getServerActivityLeaderboard(a)
-}
 
 func GetServerClanGamesLeaderboard(a apptypes.Deps) fiber.Handler {
 	return getServerClanGamesLeaderboard(a)
@@ -107,10 +107,6 @@ func GetServerLegendsLeaderboard(a apptypes.Deps) fiber.Handler {
 }
 
 func GetServerLogs(a apptypes.Deps) fiber.Handler { return getServerLogs(a) }
-
-func GetServerLootingLeaderboard(a apptypes.Deps) fiber.Handler {
-	return getServerLootingLeaderboard(a)
-}
 
 func GetServerPanel(a apptypes.Deps) fiber.Handler { return getServerPanel(a) }
 
@@ -158,7 +154,7 @@ func StrikeSummary(a apptypes.Deps) fiber.Handler { return strikeSummary(a) }
 
 func TestDiscordAPI(a apptypes.Deps) fiber.Handler { return testDiscordAPIStatus(a) }
 
-func UpdateAutoboard(a apptypes.Deps) fiber.Handler { return updateAutoboard(a) }
+func ReplaceAutoboard(a apptypes.Deps) fiber.Handler { return replaceAutoboard(a) }
 
 func UpdateReminder(a apptypes.Deps) fiber.Handler { return updateReminder(a) }
 

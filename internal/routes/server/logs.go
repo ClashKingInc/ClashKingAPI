@@ -9,7 +9,6 @@ import (
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/disgoorg/disgo/discord"
-	"github.com/disgoorg/snowflake/v2"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -39,7 +38,7 @@ func getServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // putServerLogs godoc
 // @Summary Set server logs
-// @Description Assigns a Discord channel to independent log types in one optional clan scope. The API reuses a bot-owned webhook in the channel or creates one with the bot profile.
+// @Description Assigns a Discord destination to independent log types in one optional clan scope. Text and announcement channels may be used directly or with a child thread. Forum channels require a child post. The API reuses a bot-owned webhook in the parent channel or creates one with the bot profile.
 // @Tags Server Logs
 // @Accept json
 // @Produce json
@@ -70,19 +69,16 @@ func putServerLogs(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := validateLogScope(c, rt, serverID, clanTag, logTypes); err != nil {
 			return err
 		}
-		channelID, err := strconv.ParseInt(strings.TrimSpace(body.ChannelID), 10, 64)
-		if err != nil || channelID <= 0 {
-			return apptypes.Error(http.StatusBadRequest, "Invalid channel_id")
-		}
-		threadID, err := parseOptionalInt64(body.ThreadID)
+		channelID, err := parseDiscordDestinationID(body.ChannelID, "channel_id")
 		if err != nil {
-			return apptypes.Error(http.StatusBadRequest, "Invalid thread_id")
-		}
-		if err := validateLogThread(c, rt, channelID, threadID); err != nil {
 			return err
 		}
-		if rt.Discord == nil {
-			return apptypes.Error(http.StatusBadGateway, "Discord is unavailable")
+		threadID, err := parseOptionalDiscordDestinationID(body.ThreadID, "thread_id")
+		if err != nil {
+			return err
+		}
+		if err := validateDiscordDestination(c, rt, serverID, channelID, threadID); err != nil {
+			return err
 		}
 		webhook, err := rt.Discord.FindOrCreateLogWebhook(c.UserContext(), int64(serverID), channelID)
 		if err != nil {
@@ -350,24 +346,6 @@ func validateLogTypeScopes(clanTag *string, logTypes []string) error {
 	return nil
 }
 
-func validateLogThread(c *fiber.Ctx, rt apptypes.Deps, channelID int64, threadID *int64) error {
-	if threadID == nil {
-		return nil
-	}
-	if rt.Discord == nil {
-		return apptypes.Error(http.StatusBadGateway, "Discord is unavailable")
-	}
-	channel, err := rt.Discord.GetChannel(c.UserContext(), *threadID)
-	if err != nil {
-		return apptypes.Error(http.StatusBadGateway, "Failed to fetch Discord thread")
-	}
-	thread, ok := channel.(interface{ ParentID() *snowflake.ID })
-	if !ok || thread.ParentID() == nil || int64(*thread.ParentID()) != channelID {
-		return apptypes.Error(http.StatusBadRequest, "thread_id is not in channel_id")
-	}
-	return nil
-}
-
 func queryLogWebhookIDs(c *fiber.Ctx, rt apptypes.Deps, serverID string, clanTag *string, logTypes []string) []string {
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
 		SELECT DISTINCT webhook_id FROM server_logs
@@ -403,17 +381,6 @@ func cleanupUnusedLogWebhooks(c *fiber.Ctx, rt apptypes.Deps, serverID string, c
 			_ = rt.Discord.DeleteWebhook(c.UserContext(), parsed)
 		}
 	}
-}
-
-func parseOptionalInt64(value *string) (*int64, error) {
-	if value == nil || strings.TrimSpace(*value) == "" {
-		return nil, nil
-	}
-	parsed, err := strconv.ParseInt(strings.TrimSpace(*value), 10, 64)
-	if err != nil || parsed <= 0 {
-		return nil, strconv.ErrSyntax
-	}
-	return &parsed, nil
 }
 
 func optionalInt64String(value *int64) *string {

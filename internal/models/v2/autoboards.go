@@ -1,51 +1,83 @@
 package modelsv2
 
+type AutoBoardRefreshIntervalCapability struct {
+	MinMinutes     int `json:"minMinutes"`
+	MaxMinutes     int `json:"maxMinutes"`
+	DefaultMinutes int `json:"defaultMinutes"`
+}
+
+type AutoBoardTypeCapability struct {
+	BoardType       string                              `json:"boardType"`
+	Label           string                              `json:"label"`
+	TargetKind      string                              `json:"targetKind"`
+	MinTargets      int                                 `json:"minTargets"`
+	MaxTargets      int                                 `json:"maxTargets"`
+	AllowedScopes   []string                            `json:"allowedScopes"`
+	AllowedModes    []string                            `json:"allowedModes"`
+	RefreshInterval *AutoBoardRefreshIntervalCapability `json:"refreshInterval"`
+	UICapabilities  []string                            `json:"uiCapabilities"`
+}
+
+type AutoBoardCapabilitiesResponse struct {
+	BoardTypes []AutoBoardTypeCapability `json:"boardTypes"`
+}
+
+type AutoBoardSchedule struct {
+	Kind       string `json:"kind"`
+	Timezone   string `json:"timezone"`
+	TimeOfDay  string `json:"timeOfDay"`
+	Weekdays   []int  `json:"weekdays,omitempty"`
+	DayOfMonth *int   `json:"dayOfMonth,omitempty"`
+}
+
 type AutoBoardConfig struct {
-	ID             string   `json:"id"`
-	Type           string   `json:"type"`
-	BoardType      string   `json:"board_type"`
-	ButtonID       string   `json:"button_id"`
-	WebhookID      string   `json:"webhook_id"`
-	ThreadID       *string  `json:"thread_id,omitempty"`
-	ChannelID      *string  `json:"channel_id,omitempty"`
-	ChannelDeleted bool     `json:"channel_deleted,omitempty"`
-	Days           []string `json:"days,omitempty"`
-	Locale         string   `json:"locale,omitempty"`
-	CreatedAt      *string  `json:"created_at,omitempty"`
+	ID              string             `json:"id"`
+	BoardType       string             `json:"boardType"`
+	TargetKind      string             `json:"targetKind"`
+	TargetScope     string             `json:"targetScope"`
+	Targets         []string           `json:"targets"`
+	DeliveryMode    string             `json:"deliveryMode"`
+	ChannelID       *string            `json:"channelId"`
+	ChannelDeleted  bool               `json:"channelDeleted"`
+	ThreadID        *string            `json:"threadId"`
+	MessageID       *string            `json:"messageId"`
+	Enabled         bool               `json:"enabled"`
+	IntervalMinutes *int               `json:"intervalMinutes"`
+	Schedule        *AutoBoardSchedule `json:"schedule"`
+	NextRunAt       *string            `json:"nextRunAt"`
+	LastRunAt       *string            `json:"lastRunAt"`
+	CreatedAt       string             `json:"createdAt"`
+	UpdatedAt       string             `json:"updatedAt"`
 }
 
 type ServerAutoBoardsResponse struct {
-	Autoboards   []AutoBoardConfig `json:"autoboards"`
+	Items        []AutoBoardConfig `json:"items"`
 	Total        int               `json:"total"`
-	PostCount    int               `json:"post_count"`
-	RefreshCount int               `json:"refresh_count"`
+	RefreshCount int               `json:"refreshCount"`
+	SendCount    int               `json:"sendCount"`
 	Limit        int               `json:"limit"`
 }
 
-type CreateAutoBoardRequest struct {
-	Type      string   `json:"type"`
-	BoardType string   `json:"board_type"`
-	ButtonID  string   `json:"button_id"`
-	WebhookID string   `json:"webhook_id"`
-	ThreadID  *string  `json:"thread_id,omitempty"`
-	ChannelID *string  `json:"channel_id,omitempty"`
-	Days      []string `json:"days,omitempty"`
-	Locale    string   `json:"locale,omitempty"`
+type AutoBoardWriteRequest struct {
+	BoardType       string             `json:"boardType"`
+	TargetScope     string             `json:"targetScope"`
+	Targets         []string           `json:"targets"`
+	DeliveryMode    string             `json:"deliveryMode"`
+	ChannelID       string             `json:"channelId"`
+	ThreadID        *string            `json:"threadId"`
+	Enabled         bool               `json:"enabled"`
+	IntervalMinutes *int               `json:"intervalMinutes"`
+	Schedule        *AutoBoardSchedule `json:"schedule"`
 }
 
-type UpdateAutoBoardRequest struct {
-	Type      *string   `json:"type,omitempty"`
-	BoardType *string   `json:"board_type,omitempty"`
-	ChannelID *string   `json:"channel_id,omitempty"`
-	Days      *[]string `json:"days,omitempty"`
-	WebhookID *string   `json:"webhook_id,omitempty"`
-	ThreadID  *string   `json:"thread_id,omitempty"`
+type CreateAutoBoardRequest = AutoBoardWriteRequest
+type ReplaceAutoBoardRequest = AutoBoardWriteRequest
+
+type AutoBoardItemResponse struct {
+	Item AutoBoardConfig `json:"item"`
 }
 
-type AutoBoardOperationResponse struct {
-	Message       string `json:"message"`
-	AutoboardID   string `json:"autoboard_id"`
-	ServerID      int    `json:"server_id,omitempty"`
-	Type          string `json:"type,omitempty"`
-	UpdatedFields int    `json:"updated_fields,omitempty"`
+type AutoBoardDeleteResponse struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }

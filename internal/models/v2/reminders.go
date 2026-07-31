@@ -5,6 +5,7 @@ type ReminderConfig struct {
 	Type            string   `json:"type"`
 	ClanTag         *string  `json:"clan_tag,omitempty"`
 	ChannelID       *string  `json:"channel_id,omitempty"`
+	ThreadID        *string  `json:"thread_id,omitempty" extensions:"x-nullable"`
 	Time            string   `json:"time"`
 	CustomText      *string  `json:"custom_text,omitempty"`
 	TownhallFilter  []int    `json:"townhall_filter,omitempty"`
@@ -28,6 +29,7 @@ type CreateReminderRequest struct {
 	Type            string   `json:"type"`
 	ClanTag         string   `json:"clan_tag"`
 	ChannelID       string   `json:"channel_id"`
+	ThreadID        *string  `json:"thread_id,omitempty" extensions:"x-nullable"`
 	Time            string   `json:"time"`
 	CustomText      string   `json:"custom_text"`
 	TownhallFilter  []int    `json:"townhall_filter"`
@@ -41,6 +43,7 @@ type CreateReminderRequest struct {
 
 type UpdateReminderRequest struct {
 	ChannelID       *string  `json:"channel_id,omitempty"`
+	ThreadID        *string  `json:"thread_id,omitempty" extensions:"x-nullable"`
 	Time            *string  `json:"time,omitempty"`
 	CustomText      *string  `json:"custom_text,omitempty"`
 	TownhallFilter  []int    `json:"townhall_filter,omitempty"`

@@ -38,7 +38,7 @@ type ServerPanelResponse struct {
 type DiscordChannel struct {
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
-	Type       string  `json:"type"`
+	Type       string  `json:"type" enums:"category,text,news,forum"`
 	ParentID   *string `json:"parent_id,omitempty"`
 	ParentName *string `json:"parent_name,omitempty"`
 }

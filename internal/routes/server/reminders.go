@@ -60,16 +60,18 @@ func getServerReminders(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // createReminder godoc
 // @Summary Create a reminder
-// @Description Creates a new reminder (war, capital, clan games, inactivity, or roster).
+// @Description Creates a new reminder (war, capital, clan games, inactivity, or roster). Text and announcement channels may be used directly or with a child thread. Forum channels require a child post.
 // @Tags Server Reminders
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
+// @Param body body modelsv2.CreateReminderRequest true "Reminder settings"
 // @Success 200 {object} modelsv2.ReminderOperationResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders [post]
 func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -84,10 +86,14 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
+		channelID, threadID, err := validateReminderDestination(c, rt, serverID, body.ChannelID, body.ThreadID)
+		if err != nil {
+			return err
+		}
 		doc := map[string]any{
 			"type":    body.Type,
 			"server":  serverID,
-			"channel": body.ChannelID,
+			"channel": strconv.FormatInt(channelID, 10),
 			"time":    body.Time,
 		}
 		if body.ClanTag != "" {
@@ -130,9 +136,9 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 				trigger_threshold, point_threshold, attack_threshold, roster_id, ping_type, data,
 				created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, '', $5, NULL,
-				$6, $7, $8, $9, $10, $11,
-				$12, $13::jsonb, $14::jsonb, NULLIF($15, ''), NULLIF($16, ''), $17::jsonb,
+				$1, $2, $3, $4, '', $5, $6,
+				$7, $8, $9, $10, $11, $12,
+				$13, $14::jsonb, $15::jsonb, NULLIF($16, ''), NULLIF($17, ''), $18::jsonb,
 				now(), now()
 			)
 			RETURNING id::text
@@ -141,7 +147,8 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 			reminderTypeCode(body.Type),
 			body.Type,
 			serverNormalizeTag(body.ClanTag),
-			body.ChannelID,
+			strconv.FormatInt(channelID, 10),
+			optionalInt64String(threadID),
 			reminderMinutes(body.Time),
 			body.Time,
 			body.CustomText,
@@ -164,17 +171,19 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 
 // updateReminder godoc
 // @Summary Update a reminder
-// @Description Updates an existing reminder by ID.
+// @Description Updates an existing reminder by ID. Updating a destination accepts a parent channel plus an optional child thread; forum parents require a child post.
 // @Tags Server Reminders
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param reminder_id path string true "Reminder ID"
+// @Param body body modelsv2.UpdateReminderRequest true "Reminder settings"
 // @Success 200 {object} modelsv2.ReminderOperationResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
+// @Failure 502 {object} modelsv2.ErrorResponse
 // @Router /v2/server/{server_id}/reminders/{reminder_id} [put]
 func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 	return func(c *fiber.Ctx) error {
@@ -193,6 +202,21 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		existingType := serverAsString(existing["type"])
 		update := reminderUpdateMap(body, existingType)
+		destinationChanged := body.ChannelID != nil || body.ThreadID != nil
+		var channelID, threadID *string
+		if destinationChanged {
+			rawChannelID := serverAsString(existing["channel"])
+			if body.ChannelID != nil {
+				rawChannelID = *body.ChannelID
+			}
+			parsedChannelID, parsedThreadID, destinationErr := validateReminderDestination(c, rt, serverID, rawChannelID, body.ThreadID)
+			if destinationErr != nil {
+				return destinationErr
+			}
+			channelIDText := strconv.FormatInt(parsedChannelID, 10)
+			channelID = &channelIDText
+			threadID = optionalInt64String(parsedThreadID)
+		}
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `
 			UPDATE reminders
 			SET channel_id = COALESCE($3, channel_id),
@@ -207,12 +231,13 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 				ping_type = COALESCE($12, ping_type),
 				trigger_threshold = COALESCE($13, trigger_threshold),
 				data = data || $14::jsonb,
+				thread_id = CASE WHEN $15 THEN $16 ELSE thread_id END,
 				updated_at = now()
 			WHERE server_id = $1 AND id = $2::uuid
 		`,
 			strconv.Itoa(serverID),
 			id,
-			updateString(update, "channel"),
+			channelID,
 			updateString(update, "time"),
 			updateReminderMinutes(update),
 			updateString(update, "custom_text"),
@@ -224,6 +249,8 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 			updateString(update, "ping_type"),
 			updateThreshold(update),
 			apptypes.Marshal(update),
+			destinationChanged,
+			threadID,
 		)
 		if err != nil {
 			return err
@@ -278,6 +305,7 @@ func reminderConfigFromDoc(reminder map[string]any) modelsv2.ReminderConfig {
 		Type:            reminderType,
 		ClanTag:         stringPtrMaybe(reminder["clan"]),
 		ChannelID:       stringPtrMaybe(reminder["channel"]),
+		ThreadID:        stringPtrMaybe(reminder["thread"]),
 		Time:            serverAsString(reminder["time"]),
 		CustomText:      stringPtrMaybe(reminder["custom_text"]),
 		TownhallFilter:  thFilter,
@@ -331,7 +359,7 @@ func sqlReminderRows(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT id::text, type_name, clan_tag, channel_id, trigger_time, custom_text, townhalls,
+		SELECT id::text, type_name, clan_tag, channel_id, thread_id, trigger_time, custom_text, townhalls,
 			roles, war_type_names, point_threshold, attack_threshold, roster_id, ping_type
 		FROM reminders
 		WHERE server_id = $1
@@ -360,7 +388,7 @@ func sqlReminderRow(c *fiber.Ctx, rt apptypes.Deps, serverID int, reminderID str
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT id::text, type_name, clan_tag, channel_id, trigger_time, custom_text, townhalls,
+		SELECT id::text, type_name, clan_tag, channel_id, thread_id, trigger_time, custom_text, townhalls,
 			roles, war_type_names, point_threshold, attack_threshold, roster_id, ping_type
 		FROM reminders
 		WHERE server_id = $1 AND id = $2::uuid
@@ -385,11 +413,11 @@ type reminderScanner interface {
 
 func scanReminderRows(row reminderScanner) (map[string]any, error) {
 	var id, reminderType string
-	var clanTag, channelID, triggerTime, customText, rosterID, pingType *string
+	var clanTag, channelID, threadID, triggerTime, customText, rosterID, pingType *string
 	var townhalls []int
 	var roles, warTypes []string
 	var pointRaw, attackRaw []byte
-	if err := row.Scan(&id, &reminderType, &clanTag, &channelID, &triggerTime, &customText, &townhalls, &roles, &warTypes, &pointRaw, &attackRaw, &rosterID, &pingType); err != nil {
+	if err := row.Scan(&id, &reminderType, &clanTag, &channelID, &threadID, &triggerTime, &customText, &townhalls, &roles, &warTypes, &pointRaw, &attackRaw, &rosterID, &pingType); err != nil {
 		return nil, err
 	}
 	out := map[string]any{
@@ -404,11 +432,33 @@ func scanReminderRows(row reminderScanner) (map[string]any, error) {
 	}
 	setStringIfPresent(out, "clan", clanTag)
 	setStringIfPresent(out, "channel", channelID)
+	setStringIfPresent(out, "thread", threadID)
 	setStringIfPresent(out, "time", triggerTime)
 	setStringIfPresent(out, "custom_text", customText)
 	setStringIfPresent(out, "roster", rosterID)
 	setStringIfPresent(out, "ping_type", pingType)
 	return out, nil
+}
+
+func validateReminderDestination(
+	c *fiber.Ctx,
+	rt apptypes.Deps,
+	serverID int,
+	rawChannelID string,
+	rawThreadID *string,
+) (int64, *int64, error) {
+	channelID, err := parseDiscordDestinationID(rawChannelID, "channel_id")
+	if err != nil {
+		return 0, nil, err
+	}
+	threadID, err := parseOptionalDiscordDestinationID(rawThreadID, "thread_id")
+	if err != nil {
+		return 0, nil, err
+	}
+	if err := validateDiscordDestination(c, rt, serverID, channelID, threadID); err != nil {
+		return 0, nil, err
+	}
+	return channelID, threadID, nil
 }
 
 func sqlEnsureServer(c *fiber.Ctx, rt apptypes.Deps, serverID int) error {

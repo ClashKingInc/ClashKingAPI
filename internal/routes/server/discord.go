@@ -12,7 +12,7 @@ import (
 
 // getServerChannels godoc
 // @Summary Get Discord channels
-// @Description Returns category, text, and news channels for the Discord server, sorted by category.
+// @Description Returns category, text, announcement, and forum channels for the Discord server, sorted by category.
 // @Tags Server Discord
 // @Produce json
 // @Security ApiKeyAuth
@@ -43,16 +43,11 @@ func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 				"id":   channel.ID().String(),
 				"name": channel.Name(),
 			}
-			switch channel.Type() {
-			case discord.ChannelTypeGuildCategory:
-				item["type"] = "category"
-			case discord.ChannelTypeGuildNews:
-				item["type"] = "news"
-			case discord.ChannelTypeGuildText:
-				item["type"] = "text"
-			default:
+			channelType, ok := discordChannelTypeName(channel.Type())
+			if !ok {
 				continue
 			}
+			item["type"] = channelType
 			if parentID := channel.ParentID(); parentID != nil {
 				item["parent_id"] = parentID.String()
 				item["parent_name"] = parentNames[parentID.String()]
@@ -72,6 +67,21 @@ func getServerChannels(a apptypes.Deps) apptypes.HandlerFunc {
 		})
 
 		return apptypes.JSON(c, http.StatusOK, items)
+	}
+}
+
+func discordChannelTypeName(channelType discord.ChannelType) (string, bool) {
+	switch channelType {
+	case discord.ChannelTypeGuildCategory:
+		return "category", true
+	case discord.ChannelTypeGuildNews:
+		return "news", true
+	case discord.ChannelTypeGuildText:
+		return "text", true
+	case discord.ChannelTypeGuildForum:
+		return "forum", true
+	default:
+		return "", false
 	}
 }
 
@@ -200,7 +210,7 @@ func selectableDiscordRoles(roles []discord.Role, serverID int) []discord.Role {
 
 // getServerDiscordChannels godoc
 // @Summary Get Discord channels
-// @Description Returns category, text, and news channels for the Discord server, sorted by category.
+// @Description Returns category, text, announcement, and forum channels for the Discord server, sorted by category.
 // @Tags Server Discord
 // @Produce json
 // @Security ApiKeyAuth

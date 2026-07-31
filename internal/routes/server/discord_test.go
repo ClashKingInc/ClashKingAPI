@@ -22,3 +22,22 @@ func TestSelectableDiscordRolesExcludesEveryoneAndManagedRoles(t *testing.T) {
 		t.Fatalf("selectableDiscordRoles() = %#v", available)
 	}
 }
+
+func TestDiscordChannelTypeNameIncludesForumForDestinationSelectors(t *testing.T) {
+	for _, testCase := range []struct {
+		channelType discord.ChannelType
+		want        string
+		wantOK      bool
+	}{
+		{channelType: discord.ChannelTypeGuildCategory, want: "category", wantOK: true},
+		{channelType: discord.ChannelTypeGuildText, want: "text", wantOK: true},
+		{channelType: discord.ChannelTypeGuildNews, want: "news", wantOK: true},
+		{channelType: discord.ChannelTypeGuildForum, want: "forum", wantOK: true},
+		{channelType: discord.ChannelTypeGuildVoice},
+	} {
+		got, ok := discordChannelTypeName(testCase.channelType)
+		if got != testCase.want || ok != testCase.wantOK {
+			t.Fatalf("discordChannelTypeName(%d) = %q, %v; want %q, %v", testCase.channelType, got, ok, testCase.want, testCase.wantOK)
+		}
+	}
+}

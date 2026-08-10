@@ -210,9 +210,9 @@ func TestInsertAndRenameClanCategoryUseNormalizedServerScopedContract(t *testing
 	}
 	insertCall := insertTx.queryCalls[0]
 	for _, required := range []string{
-		"INSERT INTO clan_categories (server_id, name)",
-		"VALUES ($1, $2)",
-		"RETURNING id::text, server_id, name, 0::int",
+		"INSERT INTO server_clan_categories (server_id, name, position)",
+		"COALESCE(max(position) + 1, 0)",
+		"RETURNING id::text, server_id, name, position, 0::int",
 	} {
 		if !strings.Contains(insertCall.sql, required) {
 			t.Fatalf("insert query missing %q: %s", required, insertCall.sql)
@@ -383,7 +383,7 @@ func TestRemoveClanCategoryLocksCountsAndDeletesInOneTransaction(t *testing.T) {
 	if tx.commitCalls != 1 || tx.rollbackCalls != 1 {
 		t.Fatalf("unexpected delete transaction lifecycle: commit=%d rollback=%d", tx.commitCalls, tx.rollbackCalls)
 	}
-	if len(tx.queryCalls) != 2 || len(tx.execCalls) != 1 {
+	if len(tx.queryCalls) != 2 || len(tx.execCalls) != 2 {
 		t.Fatalf("unexpected delete SQL calls: query=%d exec=%d", len(tx.queryCalls), len(tx.execCalls))
 	}
 	for _, required := range []string{"server_id = $1", "id = $2::uuid", "FOR UPDATE"} {
@@ -396,13 +396,18 @@ func TestRemoveClanCategoryLocksCountsAndDeletesInOneTransaction(t *testing.T) {
 			t.Fatalf("delete count query missing %q: %s", required, tx.queryCalls[1].sql)
 		}
 	}
-	for _, required := range []string{"DELETE FROM clan_categories", "server_id = $1", "id = $2::uuid"} {
+	for _, required := range []string{"DELETE FROM server_clan_categories", "server_id = $1", "id = $2::uuid"} {
 		if !strings.Contains(tx.execCalls[0].sql, required) {
 			t.Fatalf("delete query missing %q: %s", required, tx.execCalls[0].sql)
 		}
 	}
 	if strings.Contains(tx.execCalls[0].sql, "UPDATE server_clans") {
 		t.Fatalf("delete bypasses the ON DELETE SET NULL foreign key: %s", tx.execCalls[0].sql)
+	}
+	for _, required := range []string{"SET position = position - 1", "server_id = $1", "position > $2"} {
+		if !strings.Contains(tx.execCalls[1].sql, required) {
+			t.Fatalf("delete position compaction missing %q: %s", required, tx.execCalls[1].sql)
+		}
 	}
 }
 
@@ -479,7 +484,8 @@ func TestAssignClanCategoryUsesTheSameCategoryRepresentationAndExactConflictKey(
 	}
 	insert := tx.queryCalls[0]
 	for _, required := range []string{
-		"INSERT INTO clan_categories (server_id, name)",
+		"INSERT INTO server_clan_categories (server_id, name, position)",
+		"COALESCE(max(position) + 1, 0)",
 		"ON CONFLICT (server_id, name) DO UPDATE",
 		"RETURNING id::text",
 	} {
@@ -534,8 +540,85 @@ func categoryScan(id, serverID, name string, clanCount int) func(...any) error {
 		*dest[0].(*string) = id
 		*dest[1].(*string) = serverID
 		*dest[2].(*string) = name
-		*dest[3].(*int) = clanCount
+		*dest[3].(*int) = 0
+		*dest[4].(*int) = clanCount
 		return nil
+	}
+}
+
+func TestNormalizeClanCategoryOrderRejectsInvalidAndDuplicateIDs(t *testing.T) {
+	valid := "019c95ab-f582-79a6-a309-6ea9202878cd"
+	if _, err := normalizeClanCategoryOrder([]string{"not-a-uuid"}); err == nil {
+		t.Fatal("expected invalid UUID to fail")
+	}
+	if _, err := normalizeClanCategoryOrder([]string{valid, valid}); err == nil {
+		t.Fatal("expected duplicate UUID to fail")
+	}
+	got, err := normalizeClanCategoryOrder([]string{" " + valid + " "})
+	if err != nil || len(got) != 1 || got[0].String() != valid {
+		t.Fatalf("normalize order = %#v, %v", got, err)
+	}
+}
+
+func TestReplaceClanCategoryOrderIsCompleteServerScopedAndAtomic(t *testing.T) {
+	first := "019c95ab-f582-79a6-a309-6ea9202878cd"
+	second := "019c95ab-f582-79a6-a309-6ea9202878ce"
+	categoryIDs, err := normalizeClanCategoryOrder([]string{second, first})
+	if err != nil {
+		t.Fatalf("normalize order: %v", err)
+	}
+	tx := &fakeClanCategoryTx{
+		rows: []pgx.Row{fakeClanCategoryRow{scan: func(dest ...any) error {
+			*dest[0].(*int) = 2
+			*dest[1].(*int) = 2
+			return nil
+		}}},
+		execTags: []pgconn.CommandTag{
+			pgconn.NewCommandTag("SELECT 2"),
+			pgconn.NewCommandTag("SET CONSTRAINTS"),
+			pgconn.NewCommandTag("UPDATE 2"),
+		},
+	}
+	if err := replaceClanCategoryOrder(context.Background(), &fakeClanCategoryDB{tx: tx}, "111111111111111111", categoryIDs); err != nil {
+		t.Fatalf("replace order: %v", err)
+	}
+	if tx.commitCalls != 1 || tx.rollbackCalls != 1 {
+		t.Fatalf("unexpected reorder lifecycle: %#v", tx)
+	}
+	if len(tx.execCalls) != 3 || len(tx.queryCalls) != 1 {
+		t.Fatalf("unexpected reorder calls: exec=%d query=%d", len(tx.execCalls), len(tx.queryCalls))
+	}
+	for _, required := range []string{"server_id = $1", "FOR UPDATE"} {
+		if !strings.Contains(tx.execCalls[0].sql, required) {
+			t.Fatalf("reorder lock missing %q: %s", required, tx.execCalls[0].sql)
+		}
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "SET CONSTRAINTS server_clan_categories_server_id_position_key DEFERRED") {
+		t.Fatalf("reorder does not defer unique order constraint: %s", tx.execCalls[1].sql)
+	}
+	for _, required := range []string{"WITH ORDINALITY", "SET position = (ordered.ordinality - 1)::int", "category.server_id = $1"} {
+		if !strings.Contains(tx.execCalls[2].sql, required) {
+			t.Fatalf("reorder update missing %q: %s", required, tx.execCalls[2].sql)
+		}
+	}
+}
+
+func TestReplaceClanCategoryOrderRejectsPartialList(t *testing.T) {
+	categoryIDs, err := normalizeClanCategoryOrder([]string{"019c95ab-f582-79a6-a309-6ea9202878cd"})
+	if err != nil {
+		t.Fatalf("normalize order: %v", err)
+	}
+	tx := &fakeClanCategoryTx{
+		rows: []pgx.Row{fakeClanCategoryRow{scan: func(dest ...any) error {
+			*dest[0].(*int) = 2
+			*dest[1].(*int) = 1
+			return nil
+		}}},
+	}
+	err = replaceClanCategoryOrder(context.Background(), &fakeClanCategoryDB{tx: tx}, "111111111111111111", categoryIDs)
+	assertClanCategoryAppError(t, err, http.StatusBadRequest)
+	if tx.commitCalls != 0 || tx.rollbackCalls != 1 || len(tx.execCalls) != 1 {
+		t.Fatalf("partial reorder reached mutation: %#v", tx)
 	}
 }
 

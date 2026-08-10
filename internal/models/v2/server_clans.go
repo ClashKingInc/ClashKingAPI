@@ -1,5 +1,7 @@
 package modelsv2
 
+import "time"
+
 type ClanSettingsUpdate struct {
 	Category     *string `json:"category,omitempty"`
 	Abbreviation *string `json:"abbreviation,omitempty"`
@@ -42,6 +44,7 @@ type ClanListItem struct {
 	BadgeURL    *string      `json:"badge_url,omitempty"`
 	Level       *int         `json:"level,omitempty"`
 	MemberCount *int         `json:"member_count,omitempty"`
+	AddedAt     time.Time    `json:"added_at"`
 	Settings    ClanSettings `json:"settings"`
 }
 

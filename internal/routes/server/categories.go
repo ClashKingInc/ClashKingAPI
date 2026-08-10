@@ -153,6 +153,48 @@ func renameClanCategory(a apptypes.Deps) fiber.Handler {
 	}
 }
 
+// reorderClanCategories godoc
+// @Summary Reorder clan categories
+// @Description Replaces the authorized server's complete clan-category order.
+// @Tags Clan Categories
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param server_id path string true "Discord server ID"
+// @Param body body modelsv2.ReorderClanCategoriesRequest true "Complete ordered category ID list"
+// @Success 200 {object} modelsv2.ClanCategoriesResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 403 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 503 {object} modelsv2.ErrorResponse
+// @Router /v2/server/{server_id}/clan-categories/order [put]
+func reorderClanCategories(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		db, err := configuredClanCategoryDB(a)
+		if err != nil {
+			return err
+		}
+		var body modelsv2.ReorderClanCategoriesRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		categoryIDs, err := normalizeClanCategoryOrder(body.CategoryIDs)
+		if err != nil {
+			return err
+		}
+		serverID := strings.TrimSpace(c.Params("server_id"))
+		if err := replaceClanCategoryOrder(c.UserContext(), db, serverID, categoryIDs); err != nil {
+			return clanCategoryOperationError(err, "Failed to reorder clan categories")
+		}
+		items, err := queryClanCategories(c.UserContext(), db, serverID)
+		if err != nil {
+			return apptypes.Error(http.StatusInternalServerError, "Clan categories were reordered but could not be reloaded")
+		}
+		return apptypes.JSON(c, http.StatusOK, modelsv2.ClanCategoriesResponse{Items: items, Total: len(items)})
+	}
+}
+
 // previewClanCategoryDelete godoc
 // @Summary Preview clan category deletion
 // @Description Returns the current number of this server's clans that will become uncategorized if the manager confirms deletion.
@@ -239,15 +281,15 @@ func configuredClanCategoryDB(a apptypes.Deps) (clanCategoryDB, error) {
 
 func queryClanCategories(ctx context.Context, db clanCategoryDB, serverID string) ([]modelsv2.ClanCategory, error) {
 	rows, err := db.Query(ctx, `
-		SELECT category.id::text, category.server_id, category.name,
+		SELECT category.id::text, category.server_id, category.name, category.position,
 		       count(clan.tag)::int AS clan_count
-		FROM clan_categories category
+		FROM server_clan_categories category
 		LEFT JOIN server_clans clan
 		       ON clan.server_id = category.server_id
 		      AND clan.category_id = category.id
 		WHERE category.server_id = $1
-		GROUP BY category.id, category.server_id, category.name
-		ORDER BY lower(category.name), category.name, category.id
+		GROUP BY category.id, category.server_id, category.name, category.position
+		ORDER BY category.position, category.id
 	`, serverID)
 	if err != nil {
 		return nil, err
@@ -270,14 +312,14 @@ func queryClanCategories(ctx context.Context, db clanCategoryDB, serverID string
 
 func queryClanCategory(ctx context.Context, db clanCategoryDB, serverID, categoryID string) (modelsv2.ClanCategory, error) {
 	return scanClanCategory(db.QueryRow(ctx, `
-		SELECT category.id::text, category.server_id, category.name,
+		SELECT category.id::text, category.server_id, category.name, category.position,
 		       count(clan.tag)::int AS clan_count
-		FROM clan_categories category
+		FROM server_clan_categories category
 		LEFT JOIN server_clans clan
 		       ON clan.server_id = category.server_id
 		      AND clan.category_id = category.id
 		WHERE category.server_id = $1 AND category.id = $2::uuid
-		GROUP BY category.id, category.server_id, category.name
+		GROUP BY category.id, category.server_id, category.name, category.position
 	`, serverID, categoryID))
 }
 
@@ -289,9 +331,11 @@ func insertClanCategory(ctx context.Context, db clanCategoryDB, serverID, name s
 	defer tx.Rollback(ctx)
 
 	category, err := scanClanCategory(tx.QueryRow(ctx, `
-		INSERT INTO clan_categories (server_id, name)
-		VALUES ($1, $2)
-		RETURNING id::text, server_id, name, 0::int
+		INSERT INTO server_clan_categories (server_id, name, position)
+		SELECT $1, $2, COALESCE(max(position) + 1, 0)
+		FROM server_clan_categories
+		WHERE server_id = $1
+		RETURNING id::text, server_id, name, position, 0::int
 	`, serverID, name))
 	if err != nil {
 		return modelsv2.ClanCategory{}, err
@@ -310,10 +354,10 @@ func updateClanCategoryName(ctx context.Context, db clanCategoryDB, serverID, ca
 	defer tx.Rollback(ctx)
 
 	category, err := scanClanCategory(tx.QueryRow(ctx, `
-		UPDATE clan_categories category
+		UPDATE server_clan_categories category
 		SET name = $3
 		WHERE category.server_id = $1 AND category.id = $2::uuid
-		RETURNING category.id::text, category.server_id, category.name,
+		RETURNING category.id::text, category.server_id, category.name, category.position,
 		          (
 		              SELECT count(*)::int
 		              FROM server_clans clan
@@ -338,12 +382,13 @@ func removeClanCategory(ctx context.Context, db clanCategoryDB, serverID, catego
 	defer tx.Rollback(ctx)
 
 	var storedID, name string
+	var position int
 	if err := tx.QueryRow(ctx, `
-		SELECT id::text, name
-		FROM clan_categories
+		SELECT id::text, name, position
+		FROM server_clan_categories
 		WHERE server_id = $1 AND id = $2::uuid
 		FOR UPDATE
-	`, serverID, categoryID).Scan(&storedID, &name); err != nil {
+	`, serverID, categoryID).Scan(&storedID, &name, &position); err != nil {
 		return modelsv2.ClanCategoryDeleteResponse{}, err
 	}
 
@@ -357,7 +402,7 @@ func removeClanCategory(ctx context.Context, db clanCategoryDB, serverID, catego
 	}
 
 	tag, err := tx.Exec(ctx, `
-		DELETE FROM clan_categories
+		DELETE FROM server_clan_categories
 		WHERE server_id = $1 AND id = $2::uuid
 	`, serverID, categoryID)
 	if err != nil {
@@ -365,6 +410,13 @@ func removeClanCategory(ctx context.Context, db clanCategoryDB, serverID, catego
 	}
 	if tag.RowsAffected() != 1 {
 		return modelsv2.ClanCategoryDeleteResponse{}, pgx.ErrNoRows
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE server_clan_categories
+		SET position = position - 1
+		WHERE server_id = $1 AND position > $2
+	`, serverID, position); err != nil {
+		return modelsv2.ClanCategoryDeleteResponse{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return modelsv2.ClanCategoryDeleteResponse{}, err
@@ -383,9 +435,72 @@ func scanClanCategory(row clanCategoryRowScanner) (modelsv2.ClanCategory, error)
 		&category.ID,
 		&category.ServerID,
 		&category.Name,
+		&category.Position,
 		&category.ClanCount,
 	)
 	return category, err
+}
+
+func normalizeClanCategoryOrder(values []string) ([]uuid.UUID, error) {
+	categoryIDs := make([]uuid.UUID, 0, len(values))
+	seen := make(map[uuid.UUID]struct{}, len(values))
+	for _, value := range values {
+		categoryID, err := uuid.Parse(strings.TrimSpace(value))
+		if err != nil {
+			return nil, apptypes.Error(http.StatusBadRequest, "categoryIds must contain only UUIDs")
+		}
+		if _, exists := seen[categoryID]; exists {
+			return nil, apptypes.Error(http.StatusBadRequest, "categoryIds must not contain duplicates")
+		}
+		seen[categoryID] = struct{}{}
+		categoryIDs = append(categoryIDs, categoryID)
+	}
+	return categoryIDs, nil
+}
+
+func replaceClanCategoryOrder(ctx context.Context, db clanCategoryDB, serverID string, categoryIDs []uuid.UUID) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		SELECT id
+		FROM server_clan_categories
+		WHERE server_id = $1
+		FOR UPDATE
+	`, serverID); err != nil {
+		return err
+	}
+	var total, matched int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*)::int,
+		       count(*) FILTER (WHERE id = ANY($2::uuid[]))::int
+		FROM server_clan_categories
+		WHERE server_id = $1
+	`, serverID, categoryIDs).Scan(&total, &matched); err != nil {
+		return err
+	}
+	if total != len(categoryIDs) || matched != len(categoryIDs) {
+		return apptypes.Error(http.StatusBadRequest, "categoryIds must contain every category for this server exactly once")
+	}
+	if _, err := tx.Exec(ctx, `SET CONSTRAINTS server_clan_categories_server_id_position_key DEFERRED`); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE server_clan_categories category
+		SET position = (ordered.ordinality - 1)::int
+		FROM unnest($2::uuid[]) WITH ORDINALITY AS ordered(id, ordinality)
+		WHERE category.server_id = $1 AND category.id = ordered.id
+	`, serverID, categoryIDs)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != int64(len(categoryIDs)) {
+		return pgx.ErrNoRows
+	}
+	return tx.Commit(ctx)
 }
 
 func normalizeClanCategoryName(value string) (string, error) {

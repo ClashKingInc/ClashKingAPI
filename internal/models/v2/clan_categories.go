@@ -4,6 +4,7 @@ type ClanCategory struct {
 	ID        string `json:"id"`
 	ServerID  string `json:"serverId"`
 	Name      string `json:"name"`
+	Position  int    `json:"position"`
 	ClanCount int    `json:"clanCount"`
 }
 
@@ -18,6 +19,10 @@ type CreateClanCategoryRequest struct {
 
 type RenameClanCategoryRequest struct {
 	Name string `json:"name"`
+}
+
+type ReorderClanCategoriesRequest struct {
+	CategoryIDs []string `json:"categoryIds"`
 }
 
 type ClanCategoryCreateResponse struct {

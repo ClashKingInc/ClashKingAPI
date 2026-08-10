@@ -128,6 +128,8 @@ func PreviewClanCategoryDelete(a apptypes.Deps) fiber.Handler {
 
 func RenameClanCategory(a apptypes.Deps) fiber.Handler { return renameClanCategory(a) }
 
+func ReorderClanCategories(a apptypes.Deps) fiber.Handler { return reorderClanCategories(a) }
+
 func PatchServerLogs(a apptypes.Deps) fiber.Handler { return patchServerLogs(a) }
 
 func PatchRoleSettings(a apptypes.Deps) fiber.Handler { return patchRoleSettings(a) }

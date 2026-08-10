@@ -161,7 +161,6 @@ func TestValidateAutoBoardWeekdaySendSchedule(t *testing.T) {
 		Enabled:      true,
 		Schedule: &modelsv2.AutoBoardSchedule{
 			Kind:      "weekdays",
-			Timezone:  "America/Chicago",
 			TimeOfDay: "13:45",
 			Weekdays:  []int{5, 1},
 		},
@@ -172,8 +171,8 @@ func TestValidateAutoBoardWeekdaySendSchedule(t *testing.T) {
 	if got, want := write.ScheduleWeekdays, []int16{1, 5}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("weekdays = %#v, want %#v", got, want)
 	}
-	if write.NextRunAt == nil || write.NextRunAt.Before(now) {
-		t.Fatalf("next_run_at = %v", write.NextRunAt)
+	if want := time.Date(2026, time.July, 31, 13, 45, 0, 0, time.UTC); write.NextRunAt == nil || !write.NextRunAt.Equal(want) {
+		t.Fatalf("next_run_at = %v, want %v", write.NextRunAt, want)
 	}
 }
 
@@ -213,7 +212,6 @@ func TestAutoBoardSQLUsesFinalTypedTablesAndColumns(t *testing.T) {
 		"target_scope",
 		"delivery_mode",
 		"schedule_kind",
-		"schedule_timezone",
 		"schedule_time",
 		"schedule_weekdays",
 		"schedule_day_of_month",
@@ -226,6 +224,7 @@ func TestAutoBoardSQLUsesFinalTypedTablesAndColumns(t *testing.T) {
 		}
 	}
 	for _, retired := range []string{
+		"schedule_timezone",
 		"SELECT id::text, type, board_type, button_id",
 		"INSERT INTO autoboards (\n\t\t\tserver_id, type",
 		" data, created_at",

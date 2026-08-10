@@ -24,7 +24,6 @@ type AutoBoardCapabilitiesResponse struct {
 
 type AutoBoardSchedule struct {
 	Kind       string `json:"kind"`
-	Timezone   string `json:"timezone"`
 	TimeOfDay  string `json:"timeOfDay"`
 	Weekdays   []int  `json:"weekdays,omitempty"`
 	DayOfMonth *int   `json:"dayOfMonth,omitempty"`

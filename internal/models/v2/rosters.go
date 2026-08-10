@@ -1,57 +1,51 @@
 package modelsv2
 
 type RosterMember struct {
-	Name             string   `json:"name"`
-	Tag              string   `json:"tag"`
-	Townhall         int      `json:"townhall"`
-	HeroLevels       *int     `json:"hero_lvs,omitempty"`
-	Discord          *string  `json:"discord,omitempty"`
-	DiscordUsername  *string  `json:"discord_username,omitempty"`
-	DiscordAvatarURL *string  `json:"discord_avatar_url,omitempty"`
-	CurrentClan      *string  `json:"current_clan,omitempty"`
-	CurrentClanTag   *string  `json:"current_clan_tag,omitempty"`
-	WarPreference    *bool    `json:"war_pref,omitempty"`
-	Trophies         *int     `json:"trophies,omitempty"`
-	Substitute       *bool    `json:"sub,omitempty"`
-	SignupGroup      *string  `json:"signup_group,omitempty"`
-	Hitrate          *float64 `json:"hitrate,omitempty"`
-	LastOnline       *int64   `json:"last_online,omitempty"`
-	CurrentLeague    *string  `json:"current_league,omitempty"`
-	AddedAt          *int64   `json:"added_at,omitempty"`
-	LastUpdated      *int64   `json:"last_updated,omitempty"`
-	IsInFamily       *bool    `json:"is_in_family,omitempty"`
-	MemberStatus     *string  `json:"member_status,omitempty"`
-	ErrorDetails     *string  `json:"error_details,omitempty"`
+	Name             string         `json:"name"`
+	Tag              string         `json:"tag"`
+	Townhall         int            `json:"townhall"`
+	Trophies         *int           `json:"trophies,omitempty"`
+	CurrentClan      *string        `json:"current_clan,omitempty"`
+	CurrentClanTag   *string        `json:"current_clan_tag,omitempty"`
+	LeagueID         *int           `json:"league_id,omitempty"`
+	LeagueName       *string        `json:"league_name,omitempty"`
+	HeroLevelSum     int            `json:"hero_level_sum,omitempty"`
+	MaxPercent       *float64       `json:"max_percent,omitempty"`
+	WarPreference    *bool          `json:"war_pref,omitempty"`
+	Discord          *string        `json:"discord,omitempty"`
+	DiscordUsername  *string        `json:"discord_username,omitempty"`
+	DiscordAvatarURL *string        `json:"discord_avatar_url,omitempty"`
+	LastOnline       *string        `json:"last_online,omitempty"`
+	RefreshedAt      *string        `json:"refreshed_at,omitempty"`
+	Answers          map[string]any `json:"answers,omitempty"`
 }
 
 type Roster struct {
-	CustomID                string         `json:"custom_id"`
-	ServerID                string         `json:"server_id"`
-	Alias                   string         `json:"alias"`
-	Description             *string        `json:"description,omitempty"`
-	RosterType              string         `json:"roster_type" enums:"clan,family"`
-	SignupScope             string         `json:"signup_scope" enums:"clan-only,family-wide"`
-	ClanTag                 *string        `json:"clan_tag,omitempty"`
-	ClanName                *string        `json:"clan_name,omitempty"`
-	ClanBadge               *string        `json:"clan_badge,omitempty"`
-	GroupID                 *string        `json:"group_id,omitempty"`
-	Members                 []RosterMember `json:"members"`
-	MinTownhall             *int           `json:"min_th,omitempty"`
-	MaxTownhall             *int           `json:"max_th,omitempty"`
-	RosterSize              *int           `json:"roster_size,omitempty"`
-	MinSignups              *int           `json:"min_signups,omitempty"`
-	MaxAccountsPerUser      *int           `json:"max_accounts_per_user,omitempty"`
-	TownhallRestriction     *string        `json:"th_restriction,omitempty"`
-	AllowedSignupCategories []string       `json:"allowed_signup_categories,omitempty"`
-	DefaultSignupCategory   *string        `json:"default_signup_category,omitempty"`
-	Columns                 []string       `json:"columns,omitempty"`
-	Sort                    []string       `json:"sort,omitempty"`
-	Image                   *string        `json:"image,omitempty"`
-	EventStartTime          *int64         `json:"event_start_time,omitempty"`
-	RecurrenceDays          *int           `json:"recurrence_days,omitempty"`
-	RecurrenceDayOfMonth    *int           `json:"recurrence_day_of_month,omitempty"`
-	CreatedAt               string         `json:"created_at"`
-	UpdatedAt               string         `json:"updated_at"`
+	ID                   string           `json:"id" format:"uuid"`
+	ServerID             string           `json:"server_id"`
+	Alias                string           `json:"alias"`
+	Description          *string          `json:"description,omitempty"`
+	RosterType           string           `json:"roster_type" enums:"clan,family"`
+	SignupScope          string           `json:"signup_scope" enums:"clan-only,family-wide"`
+	ClanTag              *string          `json:"clan_tag,omitempty"`
+	ClanName             *string          `json:"clan_name,omitempty"`
+	ClanBadge            *string          `json:"clan_badge,omitempty"`
+	GroupID              *string          `json:"group_id,omitempty"`
+	Members              []RosterMember   `json:"members"`
+	MinTownhall          *int             `json:"min_th,omitempty"`
+	MaxTownhall          *int             `json:"max_th,omitempty"`
+	MinSignups           *int             `json:"min_signups,omitempty"`
+	MaxAccountsPerUser   *int             `json:"max_accounts_per_user,omitempty"`
+	Columns              []string         `json:"columns,omitempty"`
+	Sort                 []RosterViewSort `json:"sort,omitempty"`
+	WebhookID            *string          `json:"webhook_id,omitempty"`
+	MessageID            *string          `json:"message_id,omitempty"`
+	Image                *string          `json:"image,omitempty"`
+	EventStartTime       *int64           `json:"event_start_time,omitempty"`
+	RecurrenceDays       *int             `json:"recurrence_days,omitempty"`
+	RecurrenceDayOfMonth *int             `json:"recurrence_day_of_month,omitempty"`
+	CreatedAt            string           `json:"created_at"`
+	UpdatedAt            string           `json:"updated_at"`
 }
 
 type CreateRosterRequest struct {
@@ -65,24 +59,23 @@ type CreateRosterRequest struct {
 }
 
 type UpdateRosterRequest struct {
-	Alias                   *string  `json:"alias,omitempty"`
-	Description             *string  `json:"description,omitempty"`
-	RosterType              *string  `json:"roster_type,omitempty" enums:"clan,family"`
-	SignupScope             *string  `json:"signup_scope,omitempty" enums:"clan-only,family-wide"`
-	ClanTag                 *string  `json:"clan_tag,omitempty"`
-	GroupID                 *string  `json:"group_id,omitempty"`
-	MinTownhall             *int     `json:"min_th,omitempty"`
-	MaxTownhall             *int     `json:"max_th,omitempty"`
-	RosterSize              *int     `json:"roster_size,omitempty"`
-	MinSignups              *int     `json:"min_signups,omitempty"`
-	MaxAccountsPerUser      *int     `json:"max_accounts_per_user,omitempty"`
-	AllowedSignupCategories []string `json:"allowed_signup_categories,omitempty"`
-	DefaultSignupCategory   *string  `json:"default_signup_category,omitempty"`
-	Columns                 []string `json:"columns,omitempty"`
-	Sort                    []string `json:"sort,omitempty"`
-	EventStartTime          *int64   `json:"event_start_time,omitempty"`
-	RecurrenceDays          *int     `json:"recurrence_days,omitempty"`
-	RecurrenceDayOfMonth    *int     `json:"recurrence_day_of_month,omitempty"`
+	Alias                *string          `json:"alias,omitempty"`
+	Description          *string          `json:"description,omitempty"`
+	RosterType           *string          `json:"roster_type,omitempty" enums:"clan,family"`
+	SignupScope          *string          `json:"signup_scope,omitempty" enums:"clan-only,family-wide"`
+	ClanTag              *string          `json:"clan_tag,omitempty"`
+	GroupID              *string          `json:"group_id,omitempty"`
+	MinTownhall          *int             `json:"min_th,omitempty"`
+	MaxTownhall          *int             `json:"max_th,omitempty"`
+	MinSignups           *int             `json:"min_signups,omitempty"`
+	MaxAccountsPerUser   *int             `json:"max_accounts_per_user,omitempty"`
+	Columns              []string         `json:"columns,omitempty"`
+	Sort                 []RosterViewSort `json:"sort,omitempty"`
+	WebhookID            *string          `json:"webhook_id,omitempty"`
+	MessageID            *string          `json:"message_id,omitempty"`
+	EventStartTime       *int64           `json:"event_start_time,omitempty"`
+	RecurrenceDays       *int             `json:"recurrence_days,omitempty"`
+	RecurrenceDayOfMonth *int             `json:"recurrence_day_of_month,omitempty"`
 }
 
 type RosterMutationResponse struct {
@@ -144,30 +137,24 @@ type MissingRosterMembersResponse struct {
 }
 
 type RosterGroup struct {
-	GroupID                 string   `json:"group_id"`
-	ServerID                string   `json:"server_id"`
-	Name                    string   `json:"name"`
-	Alias                   *string  `json:"alias,omitempty"`
-	Description             *string  `json:"description,omitempty"`
-	MaxAccountsPerUser      *int     `json:"max_accounts_per_user,omitempty"`
-	RosterSize              *int     `json:"roster_size,omitempty"`
-	MinSignups              *int     `json:"min_signups,omitempty"`
-	AllowedSignupCategories []string `json:"allowed_signup_categories,omitempty"`
-	DefaultSignupCategory   *string  `json:"default_signup_category,omitempty"`
-	Rosters                 []Roster `json:"rosters,omitempty"`
-	CreatedAt               string   `json:"created_at"`
-	UpdatedAt               string   `json:"updated_at"`
+	GroupID            string   `json:"group_id"`
+	ServerID           string   `json:"server_id"`
+	Name               string   `json:"name"`
+	Alias              *string  `json:"alias,omitempty"`
+	Description        *string  `json:"description,omitempty"`
+	MaxAccountsPerUser *int     `json:"max_accounts_per_user,omitempty"`
+	MinSignups         *int     `json:"min_signups,omitempty"`
+	Rosters            []Roster `json:"rosters,omitempty"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
 }
 
 type RosterGroupRequest struct {
-	Name                    *string  `json:"name,omitempty"`
-	Alias                   *string  `json:"alias,omitempty"`
-	Description             *string  `json:"description,omitempty"`
-	MaxAccountsPerUser      *int     `json:"max_accounts_per_user,omitempty"`
-	RosterSize              *int     `json:"roster_size,omitempty"`
-	MinSignups              *int     `json:"min_signups,omitempty"`
-	AllowedSignupCategories []string `json:"allowed_signup_categories,omitempty"`
-	DefaultSignupCategory   *string  `json:"default_signup_category,omitempty"`
+	Name               *string `json:"name,omitempty"`
+	Alias              *string `json:"alias,omitempty"`
+	Description        *string `json:"description,omitempty"`
+	MaxAccountsPerUser *int    `json:"max_accounts_per_user,omitempty"`
+	MinSignups         *int    `json:"min_signups,omitempty"`
 }
 
 type RosterGroupMutationResponse struct {
@@ -190,38 +177,6 @@ type RosterGroupDeleteResponse struct {
 	AffectedRosters int64  `json:"affected_rosters"`
 }
 
-type RosterSignupCategory struct {
-	CustomID    string  `json:"custom_id"`
-	ServerID    string  `json:"server_id"`
-	Name        string  `json:"name"`
-	Alias       *string `json:"alias,omitempty"`
-	Description *string `json:"description,omitempty"`
-	SortOrder   int     `json:"sort_order"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
-}
-
-type RosterSignupCategoryRequest struct {
-	CustomID    *string `json:"custom_id,omitempty"`
-	Name        *string `json:"name,omitempty"`
-	Alias       *string `json:"alias,omitempty"`
-	Description *string `json:"description,omitempty"`
-	SortOrder   *int    `json:"sort_order,omitempty"`
-}
-
-type RosterSignupCategoryMutationResponse struct {
-	Message  string               `json:"message"`
-	CustomID string               `json:"custom_id,omitempty"`
-	Category RosterSignupCategory `json:"category,omitempty"`
-}
-
-type RosterSignupCategoryListResponse struct {
-	Items      []RosterSignupCategory `json:"items"`
-	Categories []RosterSignupCategory `json:"categories"`
-	Count      int                    `json:"count"`
-	ServerID   string                 `json:"server_id"`
-}
-
 type RosterMembersRequest struct {
 	Members    []RosterMember `json:"members,omitempty"`
 	Add        []RosterMember `json:"add,omitempty"`
@@ -230,9 +185,7 @@ type RosterMembersRequest struct {
 }
 
 type RosterMemberUpdateRequest struct {
-	SignupGroup  *string `json:"signup_group,omitempty"`
-	MemberStatus *string `json:"member_status,omitempty"`
-	Substitute   *bool   `json:"sub,omitempty"`
+	Answers map[string]any `json:"answers"`
 }
 
 type RosterMemberResponse struct {

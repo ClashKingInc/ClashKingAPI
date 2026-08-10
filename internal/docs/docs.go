@@ -739,7 +739,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AuthUserInfo"
+                            "$ref": "#/definitions/modelsv2.CurrentUserInfo"
                         }
                     },
                     "401": {
@@ -4695,7 +4695,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AuthUserInfo"
+                            "$ref": "#/definitions/modelsv2.CurrentUserInfo"
                         }
                     },
                     "401": {
@@ -16481,6 +16481,29 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CurrentUserInfo": {
+            "type": "object",
+            "properties": {
+                "account_summary": {
+                    "$ref": "#/definitions/modelsv2.UserAccountSummary"
+                },
+                "auth_methods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "avatar_url": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.CurrentDatesResponse": {
             "type": "object",
             "properties": {
@@ -22550,6 +22573,14 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "stars": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.UserAccountSummary": {
+            "type": "object",
+            "properties": {
+                "follower_count": {
                     "type": "integer"
                 }
             }

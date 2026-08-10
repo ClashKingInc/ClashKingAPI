@@ -1738,6 +1738,21 @@ definitions:
         - family-wide
         type: string
     type: object
+  modelsv2.CurrentUserInfo:
+    properties:
+      account_summary:
+        $ref: '#/definitions/modelsv2.UserAccountSummary'
+      auth_methods:
+        items:
+          type: string
+        type: array
+      avatar_url:
+        type: string
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
   modelsv2.CurrentDatesResponse:
     properties:
       clan-games:
@@ -5754,6 +5769,11 @@ definitions:
       stars:
         type: integer
     type: object
+  modelsv2.UserAccountSummary:
+    properties:
+      follower_count:
+        type: integer
+    type: object
   modelsv2.WarBadgeURLs:
     properties:
       large:
@@ -6534,7 +6554,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AuthUserInfo'
+            $ref: '#/definitions/modelsv2.CurrentUserInfo'
         "401":
           description: Unauthorized
           schema:
@@ -9147,7 +9167,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AuthUserInfo'
+            $ref: '#/definitions/modelsv2.CurrentUserInfo'
         "401":
           description: Unauthorized
           schema:

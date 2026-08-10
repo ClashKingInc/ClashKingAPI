@@ -7,6 +7,18 @@ type AuthUserInfo struct {
 	AuthMethods []string `json:"auth_methods"`
 }
 
+type CurrentUserInfo struct {
+	UserID         string             `json:"user_id"`
+	Username       string             `json:"username"`
+	AvatarURL      string             `json:"avatar_url"`
+	AuthMethods    []string           `json:"auth_methods"`
+	AccountSummary UserAccountSummary `json:"account_summary"`
+}
+
+type UserAccountSummary struct {
+	FollowerCount int64 `json:"follower_count"`
+}
+
 type AuthResponse struct {
 	AccessToken  string       `json:"access_token"`
 	RefreshToken string       `json:"refresh_token"`

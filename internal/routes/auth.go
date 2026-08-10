@@ -93,7 +93,7 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 // @Tags App Authentication
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} modelsv2.AuthUserInfo
+// @Success 200 {object} modelsv2.CurrentUserInfo
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/me [get]
 // @Router /v2/auth/me [get]
@@ -105,7 +105,7 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusUnauthorized, "User session is no longer valid")
 		}
 		if user.Provider == authProviderEmail {
-			return apptypes.JSON(c, fiber.StatusOK, emailAuthUserInfo(user))
+			return respondCurrentUser(c, a, emailAuthUserInfo(user))
 		}
 		if user.Provider != authProviderDiscord {
 			return apptypes.Error(fiber.StatusUnauthorized, "User identity is not configured")
@@ -125,8 +125,40 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, info)
+		return respondCurrentUser(c, a, info)
 	}
+}
+
+func respondCurrentUser(c *fiber.Ctx, a apptypes.Deps, info modelsv2.AuthUserInfo) error {
+	accountSummary, err := loadUserAccountSummary(c.UserContext(), a.Store.SQL, info.UserID)
+	if err != nil {
+		return err
+	}
+	return apptypes.JSON(c, fiber.StatusOK, modelsv2.CurrentUserInfo{
+		UserID:         info.UserID,
+		Username:       info.Username,
+		AvatarURL:      info.AvatarURL,
+		AuthMethods:    info.AuthMethods,
+		AccountSummary: accountSummary,
+	})
+}
+
+type userAccountSummaryQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func loadUserAccountSummary(ctx context.Context, db userAccountSummaryQuerier, userID string) (modelsv2.UserAccountSummary, error) {
+	var summary modelsv2.UserAccountSummary
+	err := db.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT bookmarks.user_id)
+		FROM player_links AS links
+		JOIN user_bookmarks AS bookmarks
+			ON bookmarks.tag = links.tag
+			AND bookmarks.entity_type = 'player'
+		WHERE links.user_id = $1
+			AND links.is_verified = true
+	`, userID).Scan(&summary.FollowerCount)
+	return summary, err
 }
 
 // discordAuth starts Discord login flow handling.

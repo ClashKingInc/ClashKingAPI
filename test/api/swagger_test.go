@@ -158,6 +158,33 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	}
 }
 
+func TestCurrentUserDocIncludesAccountSummary(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	for _, path := range []string{"/v2/me", "/v2/auth/me"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		response := operation["responses"].(map[string]any)["200"].(map[string]any)
+		schema := response["schema"].(map[string]any)
+		if schema["$ref"] != "#/definitions/modelsv2.CurrentUserInfo" {
+			t.Fatalf("%s current-user schema = %v", path, schema["$ref"])
+		}
+	}
+
+	definitions := doc["definitions"].(map[string]any)
+	currentUser := definitions["modelsv2.CurrentUserInfo"].(map[string]any)
+	properties := currentUser["properties"].(map[string]any)
+	accountSummary := properties["account_summary"].(map[string]any)
+	if accountSummary["$ref"] != "#/definitions/modelsv2.UserAccountSummary" {
+		t.Fatalf("account_summary schema = %v", accountSummary["$ref"])
+	}
+	summary := definitions["modelsv2.UserAccountSummary"].(map[string]any)
+	summaryProperties := summary["properties"].(map[string]any)
+	if _, ok := summaryProperties["follower_count"]; !ok {
+		t.Fatal("account summary schema omits follower_count")
+	}
+}
+
 func TestAutoboardOpenAPIUsesTypedCleanBreakContract(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)

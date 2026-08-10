@@ -150,6 +150,60 @@ type fakeDiscordProfileProvider struct {
 	accessToken string
 }
 
+type accountSummaryTestDB struct {
+	query string
+	args  []any
+	count int64
+	err   error
+}
+
+func (db *accountSummaryTestDB) QueryRow(_ context.Context, query string, args ...any) pgx.Row {
+	db.query = query
+	db.args = args
+	return accountSummaryTestRow{count: db.count, err: db.err}
+}
+
+type accountSummaryTestRow struct {
+	count int64
+	err   error
+}
+
+func (row accountSummaryTestRow) Scan(dest ...any) error {
+	if row.err != nil {
+		return row.err
+	}
+	*(dest[0].(*int64)) = row.count
+	return nil
+}
+
+func TestLoadUserAccountSummaryCountsDistinctBookmarkOwnersForVerifiedPlayers(t *testing.T) {
+	db := &accountSummaryTestDB{count: 7}
+	summary, err := loadUserAccountSummary(context.Background(), db, "user-1")
+	if err != nil {
+		t.Fatalf("load account summary: %v", err)
+	}
+	if summary.FollowerCount != 7 {
+		t.Fatalf("follower count = %d, want 7", summary.FollowerCount)
+	}
+	if len(db.args) != 1 || db.args[0] != "user-1" {
+		t.Fatalf("query args = %#v, want current user ID", db.args)
+	}
+	for _, required := range []string{
+		"COUNT(DISTINCT bookmarks.user_id)",
+		"bookmarks.tag = links.tag",
+		"bookmarks.entity_type = 'player'",
+		"links.user_id = $1",
+		"links.is_verified = true",
+	} {
+		if !strings.Contains(db.query, required) {
+			t.Fatalf("account summary query omits %q: %s", required, db.query)
+		}
+	}
+	if strings.Contains(db.query, "hidden") {
+		t.Fatalf("account summary query incorrectly excludes hidden verified accounts: %s", db.query)
+	}
+}
+
 func (p *fakeDiscordProfileProvider) GetCurrentUser(_ context.Context, accessToken string) (*discord.OAuth2User, error) {
 	p.accessToken = accessToken
 	return p.profile, p.err

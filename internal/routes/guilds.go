@@ -67,17 +67,49 @@ func getUserGuilds(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(http.StatusInternalServerError, "Failed to verify bot guild access with Discord: "+err.Error())
 		}
+		activity, err := loadServerActivity(c.UserContext(), a, guildIDs)
+		if err != nil {
+			return err
+		}
 
 		result := make([]modelsv2.GuildInfo, 0, len(accessibleGuilds))
+		inactiveCutoff := time.Now().UTC().AddDate(0, 0, -90)
 		for i, g := range accessibleGuilds {
 			hasBot := hasBotFlags[i]
 			info := buildGuildInfo(g, hasBot)
 			info.Delegated = !hasManageGuild(g)
+			info.LastCommandAt = activity[g.ID.String()]
+			info.Inactive = serverInactive(hasBot, info.LastCommandAt, inactiveCutoff)
 			result = append(result, info)
 		}
 
 		return apptypes.JSON(c, http.StatusOK, result)
 	}
+}
+
+func serverInactive(hasBot bool, lastCommandAt *time.Time, cutoff time.Time) bool {
+	return hasBot && (lastCommandAt == nil || lastCommandAt.Before(cutoff))
+}
+
+func loadServerActivity(ctx context.Context, a apptypes.Deps, serverIDs []string) (map[string]*time.Time, error) {
+	result := make(map[string]*time.Time)
+	if len(serverIDs) == 0 || a.Store.SQL == nil {
+		return result, nil
+	}
+	rows, err := a.Store.SQL.Query(ctx, `SELECT id, last_command_at FROM servers WHERE id = ANY($1)`, serverIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var lastCommandAt *time.Time
+		if err := rows.Scan(&id, &lastCommandAt); err != nil {
+			return nil, err
+		}
+		result[id] = lastCommandAt
+	}
+	return result, rows.Err()
 }
 
 func resolveBotPresence(ctx context.Context, discordAdapter *apptypes.DiscordAdapter, guilds []discord.OAuth2Guild) ([]bool, error) {

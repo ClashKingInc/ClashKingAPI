@@ -391,8 +391,6 @@ definitions:
         type: string
       timeOfDay:
         type: string
-      timezone:
-        type: string
       weekdays:
         items:
           type: integer
@@ -492,6 +490,15 @@ definitions:
       server_id:
         type: integer
       status:
+        type: string
+    type: object
+  modelsv2.BanRequest:
+    properties:
+      added_by:
+        type: string
+      image:
+        type: string
+      reason:
         type: string
     type: object
   modelsv2.Base:
@@ -799,6 +806,69 @@ definitions:
       metric:
         type: string
     type: object
+  modelsv2.BillingAssignmentRequest:
+    properties:
+      serverId:
+        type: string
+    type: object
+  modelsv2.BillingCheckoutRequest:
+    properties:
+      serverId:
+        type: string
+    type: object
+  modelsv2.BillingSessionResponse:
+    properties:
+      url:
+        type: string
+    type: object
+  modelsv2.BillingSubscriptionResponse:
+    properties:
+      active:
+        type: boolean
+      assignedServerId:
+        type: string
+      bookmarkNotificationsLimit:
+        type: integer
+      checkoutEnabled:
+        type: boolean
+      provider:
+        type: string
+      rosterAssistantMonthlyCreditUsd:
+        type: number
+      rosterAssistantRemainingUsd:
+        type: number
+      rosterAssistantSpentUsd:
+        type: number
+      status:
+        type: string
+    type: object
+  modelsv2.BillingUsageResponse:
+    properties:
+      assignedSubscriberCount:
+        type: integer
+      globalFreeAvailable:
+        type: boolean
+      paidLimitUsd:
+        type: number
+      paidRemainingUsd:
+        type: number
+      paidSpentUsd:
+        type: number
+      resetsAt:
+        type: string
+      serverId:
+        type: string
+      serverLimitUsd:
+        type: number
+      serverSpentUsd:
+        type: number
+      subscriptionActive:
+        type: boolean
+      userLimitUsd:
+        type: number
+      userSpentUsd:
+        type: number
+    type: object
   modelsv2.BotGuildProfile:
     properties:
       avatar_inherited:
@@ -860,6 +930,20 @@ definitions:
       url:
         type: string
     type: object
+  modelsv2.CWLBonusRecipient:
+    properties:
+      medalCount:
+        type: integer
+      playerTag:
+        type: string
+    type: object
+  modelsv2.CWLBonusRecipientsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.CWLBonusRecipient'
+        type: array
+    type: object
   modelsv2.CWLClan:
     properties:
       badgeUrls:
@@ -914,6 +998,15 @@ definitions:
       name:
         type: string
     type: object
+  modelsv2.CWLGroupMember:
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
+    type: object
   modelsv2.CWLGroupResponse:
     properties:
       clan_rankings:
@@ -932,6 +1025,12 @@ definitions:
         type: string
       state:
         type: string
+    type: object
+  modelsv2.CWLGroupRound:
+    properties:
+      warTags:
+        items: {}
+        type: array
     type: object
   modelsv2.CWLHistoryItem:
     properties:
@@ -1104,11 +1203,54 @@ definitions:
       won:
         type: integer
     type: object
+  modelsv2.CWLResponse:
+    properties:
+      clans:
+        items:
+          $ref: '#/definitions/modelsv2.CWLStoredGroupClan'
+        type: array
+      rounds:
+        items:
+          $ref: '#/definitions/modelsv2.CWLGroupRound'
+        type: array
+      season:
+        type: string
+      state:
+        type: string
+      warLeague:
+        $ref: '#/definitions/modelsv2.LeagueReference'
+    type: object
   modelsv2.CWLRound:
     properties:
       warTags:
         items:
           type: string
+        type: array
+    type: object
+  modelsv2.CWLSeasonItem:
+    properties:
+      destruction:
+        type: number
+      rank:
+        type: integer
+      rounds:
+        $ref: '#/definitions/modelsv2.CWLRankingRounds'
+      season:
+        type: string
+      stars:
+        type: integer
+      state:
+        type: string
+      warLeague:
+        $ref: '#/definitions/modelsv2.LeagueReference'
+      warSize:
+        type: integer
+    type: object
+  modelsv2.CWLSeasonsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.CWLSeasonItem'
         type: array
     type: object
   modelsv2.CWLStanding:
@@ -1141,6 +1283,21 @@ definitions:
         type: integer
       wins:
         type: integer
+    type: object
+  modelsv2.CWLStoredGroupClan:
+    properties:
+      badgeUrls:
+        $ref: '#/definitions/modelsv2.PublicBadgeURLs'
+      clanLevel:
+        type: integer
+      members:
+        items:
+          $ref: '#/definitions/modelsv2.CWLGroupMember'
+        type: array
+      name:
+        type: string
+      tag:
+        type: string
     type: object
   modelsv2.CWLThresholdItem:
     properties:
@@ -1227,6 +1384,8 @@ definitions:
         type: string
       name:
         type: string
+      position:
+        type: integer
       serverId:
         type: string
     type: object
@@ -1332,6 +1491,8 @@ definitions:
     type: object
   modelsv2.ClanListItem:
     properties:
+      added_at:
+        type: string
       badge_url:
         type: string
       level:
@@ -1674,10 +1835,7 @@ definitions:
     type: object
   modelsv2.DiscohookResolveResponse:
     properties:
-      payload:
-        items:
-          type: integer
-        type: array
+      payload: {}
       resolvedUrl:
         type: string
     type: object
@@ -2055,6 +2213,8 @@ definitions:
     properties:
       avatarUrl:
         type: string
+      inServer:
+        type: boolean
       reason:
         type: string
       status:
@@ -2145,6 +2305,10 @@ definitions:
       icon:
         type: string
       id:
+        type: string
+      inactive:
+        type: boolean
+      last_command_at:
         type: string
       member_count:
         type: integer
@@ -2291,15 +2455,6 @@ definitions:
       type:
         type: string
     type: object
-  modelsv2.JoinLeaveMovingPlayer:
-    properties:
-      count:
-        type: integer
-      name:
-        type: string
-      tag:
-        type: string
-    type: object
   modelsv2.JoinLeaveResponse:
     properties:
       available:
@@ -2308,6 +2463,8 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.JoinLeaveEvent'
         type: array
+      uniquePlayers:
+        type: integer
     type: object
   modelsv2.JoinLeaveSharedClanTotal:
     properties:
@@ -2322,44 +2479,6 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.JoinLeaveSharedClanTotal'
         type: array
-    type: object
-  modelsv2.JoinLeaveStats:
-    properties:
-      avg_time_between_join_leave: {}
-      first_event: {}
-      last_event: {}
-      most_moving_hour: {}
-      most_moving_players:
-        items:
-          $ref: '#/definitions/modelsv2.JoinLeaveMovingPlayer'
-        type: array
-      moving_players:
-        type: integer
-      players_left_forever:
-        type: integer
-      players_still_in_clan:
-        type: integer
-      rejoined_players:
-        type: integer
-      total_events:
-        type: integer
-      total_joins:
-        type: integer
-      total_leaves:
-        type: integer
-      unique_players:
-        type: integer
-    type: object
-  modelsv2.JoinLeaveStatsResponse:
-    properties:
-      clan_tag:
-        type: string
-      stats:
-        $ref: '#/definitions/modelsv2.JoinLeaveStats'
-      timestamp_end:
-        type: integer
-      timestamp_start:
-        type: integer
     type: object
   modelsv2.JoinLeaveTotalsResponse:
     properties:
@@ -2502,6 +2621,15 @@ definitions:
       type:
         $ref: '#/definitions/modelsv2.LeaderboardHistoryType'
     type: object
+  modelsv2.LeagueReference:
+    properties:
+      iconUrl:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
   modelsv2.LegendHistoryClan:
     properties:
       badgeUrls:
@@ -2630,6 +2758,8 @@ definitions:
     type: object
   modelsv2.NotificationAccount:
     properties:
+      active:
+        type: boolean
       playerTag:
         type: string
       source:
@@ -2637,6 +2767,11 @@ definitions:
         - verified
         - bookmarked
         type: string
+    type: object
+  modelsv2.NotificationAccountPreferenceRequest:
+    properties:
+      enabled:
+        type: boolean
     type: object
   modelsv2.NotificationDeviceRequest:
     properties:
@@ -2666,7 +2801,6 @@ definitions:
       provider:
         enum:
         - fcm
-        - apns
         type: string
       token:
         type: string
@@ -2695,13 +2829,7 @@ definitions:
     type: object
   modelsv2.NotificationPreferencesRequest:
     properties:
-      accountTags:
-        items:
-          type: string
-        type: array
       announcementsEnabled:
-        type: boolean
-      deviceEnabled:
         type: boolean
       deviceId:
         type: string
@@ -2712,16 +2840,18 @@ definitions:
         type: string
       eventsEnabled:
         type: boolean
-      leagueBattlesEnabled:
+      legendAttacksEnabled:
+        type: boolean
+      legendDefensesEnabled:
         type: boolean
       monthlySupportEnabled:
+        type: boolean
+      notificationsEnabled:
         type: boolean
       reminderTimings:
         items:
           type: integer
         type: array
-      upgradeFinishesEnabled:
-        type: boolean
       warAttacksEnabled:
         type: boolean
       warRemindersEnabled:
@@ -2737,24 +2867,24 @@ definitions:
         type: array
       announcementsEnabled:
         type: boolean
-      deviceEnabled:
-        type: boolean
       deviceId:
         type: string
       environment:
         type: string
       eventsEnabled:
         type: boolean
-      leagueBattlesEnabled:
+      legendAttacksEnabled:
+        type: boolean
+      legendDefensesEnabled:
         type: boolean
       monthlySupportEnabled:
+        type: boolean
+      notificationsEnabled:
         type: boolean
       reminderTimings:
         items:
           type: integer
         type: array
-      upgradeFinishesEnabled:
-        type: boolean
       warAttacksEnabled:
         type: boolean
       warRemindersEnabled:
@@ -3216,6 +3346,40 @@ definitions:
       tiny:
         type: string
     type: object
+  modelsv2.PublicRosterMember:
+    properties:
+      currentClanName:
+        type: string
+      currentClanTag:
+        type: string
+      name:
+        type: string
+      playerTag:
+        type: string
+      townhall:
+        type: integer
+    type: object
+  modelsv2.PublicRosterViewerResponse:
+    properties:
+      clanBadgeUrl:
+        type: string
+      clanName:
+        type: string
+      clanTag:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/modelsv2.PublicRosterMember'
+        type: array
+      name:
+        type: string
+      updatedAt:
+        type: string
+    type: object
   modelsv2.PublicStatsTimeRange:
     properties:
       end:
@@ -3313,6 +3477,13 @@ definitions:
       name:
         type: string
     type: object
+  modelsv2.ReorderClanCategoriesRequest:
+    properties:
+      categoryIds:
+        items:
+          type: string
+        type: array
+    type: object
   modelsv2.ReplaceAutoBoardRequest:
     properties:
       boardType:
@@ -3335,6 +3506,13 @@ definitions:
         type: array
       threadId:
         type: string
+    type: object
+  modelsv2.ReplaceCWLBonusRecipientsRequest:
+    properties:
+      recipients:
+        items:
+          $ref: '#/definitions/modelsv2.CWLBonusRecipient'
+        type: array
     type: object
   modelsv2.RoleSettingsResponse:
     properties:
@@ -3368,10 +3546,6 @@ definitions:
     properties:
       alias:
         type: string
-      allowed_signup_categories:
-        items:
-          type: string
-        type: array
       clan_badge:
         type: string
       clan_name:
@@ -3384,15 +3558,14 @@ definitions:
         type: array
       created_at:
         type: string
-      custom_id:
-        type: string
-      default_signup_category:
-        type: string
       description:
         type: string
       event_start_time:
         type: integer
       group_id:
+        type: string
+      id:
+        format: uuid
         type: string
       image:
         type: string
@@ -3404,6 +3577,8 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.RosterMember'
         type: array
+      message_id:
+        type: string
       min_signups:
         type: integer
       min_th:
@@ -3411,8 +3586,6 @@ definitions:
       recurrence_day_of_month:
         type: integer
       recurrence_days:
-        type: integer
-      roster_size:
         type: integer
       roster_type:
         enum:
@@ -3428,11 +3601,74 @@ definitions:
         type: string
       sort:
         items:
+          $ref: '#/definitions/modelsv2.RosterViewSort'
+        type: array
+      updated_at:
+        type: string
+      webhook_id:
+        type: string
+    type: object
+  modelsv2.RosterAIMessage:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      parts:
+        items:
+          $ref: '#/definitions/modelsv2.RosterAIMessagePart'
+        type: array
+      role:
+        enum:
+        - user
+        - assistant
+        type: string
+    type: object
+  modelsv2.RosterAIMessagePart:
+    properties:
+      approval:
+        $ref: '#/definitions/modelsv2.RosterAIToolApproval'
+      input: {}
+      state:
+        type: string
+      text:
+        type: string
+      toolCallId:
+        type: string
+      type:
+        type: string
+    type: object
+  modelsv2.RosterAIRequest:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/modelsv2.RosterAIMessage'
+        type: array
+      rosterIds:
+        items:
           type: string
         type: array
-      th_restriction:
+      serverId:
         type: string
-      updated_at:
+      viewId:
+        type: string
+    type: object
+  modelsv2.RosterAIToolApproval:
+    properties:
+      approved:
+        type: boolean
+      id:
+        type: string
+      reason:
+        type: string
+    type: object
+  modelsv2.RosterAccountSelector:
+    properties:
+      id:
+        type: string
+      required:
+        type: boolean
+      type:
         type: string
     type: object
   modelsv2.RosterAutomation:
@@ -3555,13 +3791,7 @@ definitions:
     properties:
       alias:
         type: string
-      allowed_signup_categories:
-        items:
-          type: string
-        type: array
       created_at:
-        type: string
-      default_signup_category:
         type: string
       description:
         type: string
@@ -3573,8 +3803,6 @@ definitions:
         type: integer
       name:
         type: string
-      roster_size:
-        type: integer
       rosters:
         items:
           $ref: '#/definitions/modelsv2.Roster'
@@ -3613,12 +3841,6 @@ definitions:
     properties:
       alias:
         type: string
-      allowed_signup_categories:
-        items:
-          type: string
-        type: array
-      default_signup_category:
-        type: string
       description:
         type: string
       max_accounts_per_user:
@@ -3627,8 +3849,6 @@ definitions:
         type: integer
       name:
         type: string
-      roster_size:
-        type: integer
     type: object
   modelsv2.RosterGroupResponse:
     properties:
@@ -3646,13 +3866,12 @@ definitions:
     type: object
   modelsv2.RosterMember:
     properties:
-      added_at:
-        type: integer
+      answers:
+        additionalProperties: {}
+        type: object
       current_clan:
         type: string
       current_clan_tag:
-        type: string
-      current_league:
         type: string
       discord:
         type: string
@@ -3660,26 +3879,20 @@ definitions:
         type: string
       discord_username:
         type: string
-      error_details:
-        type: string
-      hero_lvs:
+      hero_level_sum:
         type: integer
-      hitrate:
-        type: number
-      is_in_family:
-        type: boolean
       last_online:
-        type: integer
-      last_updated:
-        type: integer
-      member_status:
         type: string
+      league_id:
+        type: integer
+      league_name:
+        type: string
+      max_percent:
+        type: number
       name:
         type: string
-      signup_group:
+      refreshed_at:
         type: string
-      sub:
-        type: boolean
       tag:
         type: string
       townhall:
@@ -3698,12 +3911,9 @@ definitions:
     type: object
   modelsv2.RosterMemberUpdateRequest:
     properties:
-      member_status:
-        type: string
-      signup_group:
-        type: string
-      sub:
-        type: boolean
+      answers:
+        additionalProperties: {}
+        type: object
     type: object
   modelsv2.RosterMembersRequest:
     properties:
@@ -3726,6 +3936,81 @@ definitions:
           type: string
         type: array
     type: object
+  modelsv2.RosterMembershipApplyRequest:
+    properties:
+      changes:
+        items:
+          $ref: '#/definitions/modelsv2.RosterMembershipChange'
+        type: array
+      expectedRevisions:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      serverId:
+        type: string
+    type: object
+  modelsv2.RosterMembershipChange:
+    properties:
+      action:
+        enum:
+        - add
+        - remove
+        - move
+        type: string
+      fromRosterId:
+        type: string
+      playerTag:
+        type: string
+      reason:
+        type: string
+      toRosterId:
+        type: string
+    type: object
+  modelsv2.RosterMetric:
+    properties:
+      cacheTtlSeconds:
+        type: integer
+      dependsOn:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      id:
+        type: string
+      kind:
+        enum:
+        - snapshot
+        - historical
+        - derived
+        - presentation
+        type: string
+      label:
+        type: string
+      valueType:
+        enum:
+        - string
+        - number
+        - boolean
+        - json
+        - time
+        type: string
+    type: object
+  modelsv2.RosterMetricQueryRequest:
+    properties:
+      force:
+        type: boolean
+      metricId:
+        type: string
+      parameters:
+        additionalProperties: {}
+        type: object
+      rosterIds:
+        items:
+          type: string
+        type: array
+    type: object
   modelsv2.RosterMutationResponse:
     properties:
       message:
@@ -3733,6 +4018,58 @@ definitions:
       roster:
         $ref: '#/definitions/modelsv2.Roster'
       roster_id:
+        type: string
+    type: object
+  modelsv2.RosterQuestion:
+    properties:
+      id:
+        type: string
+      label:
+        type: string
+      options:
+        items:
+          type: string
+        type: array
+      order:
+        type: integer
+      required:
+        type: boolean
+      type:
+        enum:
+        - text
+        - boolean
+        - single_select
+        type: string
+    type: object
+  modelsv2.RosterQuestionnaire:
+    properties:
+      accountSelector:
+        $ref: '#/definitions/modelsv2.RosterAccountSelector'
+      questions:
+        items:
+          $ref: '#/definitions/modelsv2.RosterQuestion'
+        type: array
+    type: object
+  modelsv2.RosterQuestionnaireMutationResponse:
+    properties:
+      affectedMemberCount:
+        type: integer
+      questionnaire:
+        $ref: '#/definitions/modelsv2.RosterQuestionnaire'
+    type: object
+  modelsv2.RosterQuestionnaireWrite:
+    properties:
+      questions:
+        items:
+          $ref: '#/definitions/modelsv2.RosterQuestion'
+        type: array
+    type: object
+  modelsv2.RosterRefreshRequest:
+    properties:
+      scope:
+        enum:
+        - data
+        - role
         type: string
     type: object
   modelsv2.RosterRefreshResponse:
@@ -3744,65 +4081,212 @@ definitions:
           $ref: '#/definitions/modelsv2.Roster'
         type: array
     type: object
+  modelsv2.RosterRefreshResponseV2:
+    properties:
+      failedPlayers:
+        type: integer
+      refreshId:
+        type: string
+      refreshedAt:
+        type: string
+      refreshedPlayers:
+        type: integer
+      reused:
+        type: boolean
+      roleId:
+        type: string
+      roleMemberUserIds:
+        items:
+          type: string
+        type: array
+      scope:
+        type: string
+      status:
+        type: string
+    type: object
   modelsv2.RosterResponse:
     properties:
       roster:
         $ref: '#/definitions/modelsv2.Roster'
     type: object
-  modelsv2.RosterSignupCategory:
+  modelsv2.RosterSignupSubmission:
     properties:
-      alias:
+      answers:
+        additionalProperties: {}
+        type: object
+      createdAt:
         type: string
-      created_at:
+      id:
         type: string
-      custom_id:
+      playerTag:
         type: string
-      description:
+      rosterId:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  modelsv2.RosterSignupSubmissionRequest:
+    properties:
+      answers:
+        additionalProperties: {}
+        type: object
+      discordAvatarUrl:
+        type: string
+      discordUserId:
+        type: string
+      discordUsername:
+        type: string
+      playerTag:
+        type: string
+    type: object
+  modelsv2.RosterView:
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      id:
         type: string
       name:
         type: string
-      server_id:
+      serverId:
         type: string
-      sort_order:
+      shareId:
+        type: string
+      sourceCode:
+        type: string
+      sourceVersion:
         type: integer
-      updated_at:
+      spec:
+        $ref: '#/definitions/modelsv2.RosterViewSpec'
+      updatedAt:
         type: string
     type: object
-  modelsv2.RosterSignupCategoryListResponse:
+  modelsv2.RosterViewColumn:
     properties:
-      categories:
-        items:
-          $ref: '#/definitions/modelsv2.RosterSignupCategory'
-        type: array
-      count:
-        type: integer
-      items:
-        items:
-          $ref: '#/definitions/modelsv2.RosterSignupCategory'
-        type: array
-      server_id:
-        type: string
-    type: object
-  modelsv2.RosterSignupCategoryMutationResponse:
-    properties:
-      category:
-        $ref: '#/definitions/modelsv2.RosterSignupCategory'
-      custom_id:
-        type: string
-      message:
-        type: string
-    type: object
-  modelsv2.RosterSignupCategoryRequest:
-    properties:
-      alias:
-        type: string
-      custom_id:
-        type: string
       description:
         type: string
+      format:
+        type: string
+      id:
+        type: string
+      label:
+        type: string
+      metricId:
+        type: string
+      parameters:
+        additionalProperties: {}
+        type: object
+    type: object
+  modelsv2.RosterViewFilter:
+    properties:
+      columnId:
+        type: string
+      operator:
+        enum:
+        - eq
+        - neq
+        - gt
+        - gte
+        - lt
+        - lte
+        - in
+        - contains
+        type: string
+      value: {}
+    type: object
+  modelsv2.RosterViewHighlight:
+    properties:
+      columnId:
+        type: string
+      id:
+        type: string
+      target:
+        enum:
+        - row
+        - column
+        - cell
+        type: string
+      tone:
+        enum:
+        - red
+        - amber
+        - green
+        - blue
+        - purple
+        - gray
+        type: string
+      when:
+        $ref: '#/definitions/modelsv2.RosterViewHighlightCondition'
+    type: object
+  modelsv2.RosterViewHighlightCondition:
+    properties:
+      columnId:
+        type: string
+      operator:
+        enum:
+        - eq
+        - neq
+        - gt
+        - gte
+        - lt
+        - lte
+        - in
+        - contains
+        type: string
+      value: {}
+    type: object
+  modelsv2.RosterViewSort:
+    properties:
+      columnId:
+        type: string
+      direction:
+        enum:
+        - asc
+        - desc
+        type: string
+    type: object
+  modelsv2.RosterViewSpec:
+    properties:
+      columns:
+        items:
+          $ref: '#/definitions/modelsv2.RosterViewColumn'
+        type: array
+      filters:
+        items:
+          $ref: '#/definitions/modelsv2.RosterViewFilter'
+        type: array
+      highlights:
+        items:
+          $ref: '#/definitions/modelsv2.RosterViewHighlight'
+        type: array
+      limit:
+        type: integer
+      schemaVersion:
+        enum:
+        - 1
+        type: integer
+      sort:
+        items:
+          $ref: '#/definitions/modelsv2.RosterViewSort'
+        type: array
+    type: object
+  modelsv2.RosterViewUpdate:
+    properties:
       name:
         type: string
-      sort_order:
+      sourceCode:
+        type: string
+      sourceVersion:
+        type: integer
+    type: object
+  modelsv2.RosterViewWrite:
+    properties:
+      name:
+        type: string
+      sourceCode:
+        type: string
+      sourceVersion:
         type: integer
     type: object
   modelsv2.SearchBookmarkItem:
@@ -4956,6 +5440,22 @@ definitions:
       total_weight:
         type: integer
     type: object
+  modelsv2.StrikeRequest:
+    properties:
+      added_by:
+        type: string
+      image:
+        type: string
+      reason:
+        type: string
+      rollover_days:
+        type: integer
+      strike_weight:
+        default: 1
+        maximum: 2147483647
+        minimum: 1
+        type: integer
+    type: object
   modelsv2.StrikeSummaryResponse:
     properties:
       player_tag:
@@ -5164,18 +5664,12 @@ definitions:
     properties:
       alias:
         type: string
-      allowed_signup_categories:
-        items:
-          type: string
-        type: array
       clan_tag:
         type: string
       columns:
         items:
           type: string
         type: array
-      default_signup_category:
-        type: string
       description:
         type: string
       event_start_time:
@@ -5186,6 +5680,8 @@ definitions:
         type: integer
       max_th:
         type: integer
+      message_id:
+        type: string
       min_signups:
         type: integer
       min_th:
@@ -5193,8 +5689,6 @@ definitions:
       recurrence_day_of_month:
         type: integer
       recurrence_days:
-        type: integer
-      roster_size:
         type: integer
       roster_type:
         enum:
@@ -5208,8 +5702,10 @@ definitions:
         type: string
       sort:
         items:
-          type: string
+          $ref: '#/definitions/modelsv2.RosterViewSort'
         type: array
+      webhook_id:
+        type: string
     type: object
   modelsv2.UpdateServerLogsDisabledRequest:
     properties:
@@ -5509,6 +6005,58 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.WarWeeklyHitrateItem'
         type: array
+    type: object
+  routes.clanWarLogClanSide:
+    properties:
+      attacks:
+        type: integer
+      badgeUrls:
+        $ref: '#/definitions/routes.officialBadgeURLs'
+      clanLevel:
+        type: integer
+      destructionPercentage:
+        type: number
+      name:
+        type: string
+      stars:
+        type: integer
+      tag:
+        type: string
+    type: object
+  routes.clanWarLogItem:
+    properties:
+      attacksPerMember:
+        type: integer
+      clan:
+        $ref: '#/definitions/routes.clanWarLogClanSide'
+      endTime:
+        type: string
+      opponent:
+        $ref: '#/definitions/routes.clanWarLogClanSide'
+      result:
+        type: string
+      teamSize:
+        type: integer
+    type: object
+  routes.clanWarLogResponse:
+    properties:
+      isPrivate:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/routes.clanWarLogItem'
+        type: array
+      reconstructed:
+        type: boolean
+    type: object
+  routes.officialBadgeURLs:
+    properties:
+      large:
+        type: string
+      medium:
+        type: string
+      small:
+        type: string
     type: object
 info:
   contact: {}
@@ -6392,6 +6940,110 @@ paths:
       summary: Record a trusted bot base vote
       tags:
       - Bases Bot Integration
+  /v2/billing/stripe/checkout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Initial server assignment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.BillingCheckoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BillingSessionResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create Stripe Checkout session
+      tags:
+      - Billing
+  /v2/billing/stripe/portal:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BillingSessionResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create Stripe customer portal session
+      tags:
+      - Billing
+  /v2/billing/stripe/webhook:
+    post:
+      parameters:
+      - description: Stripe webhook signature
+        in: header
+        name: Stripe-Signature
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+      summary: Receive Stripe subscription events
+      tags:
+      - Billing
+  /v2/billing/subscription:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BillingSubscriptionResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get subscription entitlement
+      tags:
+      - Billing
+  /v2/billing/subscription/assignment:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Server assignment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.BillingAssignmentRequest'
+      responses:
+        "204":
+          description: No Content
+      security:
+      - ApiKeyAuth: []
+      summary: Assign subscription roster assistant credit
+      tags:
+      - Billing
+  /v2/billing/usage:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: serverId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.BillingUsageResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get monthly roster assistant usage
+      tags:
+      - Billing
   /v2/cdn/upload:
     post:
       consumes:
@@ -6512,8 +7164,9 @@ paths:
       - Clan
   /v2/clan/{clan_tag}/join-leave:
     get:
-      description: Returns join and leave history for a single clan tag. Date filters
-        use ISO-8601 values such as 2026-05-01T00:00:00Z.
+      description: Returns join and leave history for a single clan tag. available
+        and uniquePlayers are all-time totals; date filters only affect returned items.
+        Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
       parameters:
       - description: Clan tag
         in: path
@@ -6549,42 +7202,6 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get clan join-leave history
-      tags:
-      - Clan
-  /v2/clan/{clan_tag}/join-leave/stats:
-    get:
-      description: Returns join and leave summary stats for a single clan tag. Date
-        filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
-      parameters:
-      - description: Clan tag
-        in: path
-        name: clan_tag
-        required: true
-        type: string
-      - description: Only include events at or after this ISO-8601 time
-        in: query
-        name: time[after]
-        type: string
-      - description: Only include events at or before this ISO-8601 time
-        in: query
-        name: time[before]
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.JoinLeaveStatsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      summary: Get clan join-leave stats
       tags:
       - Clan
   /v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}:
@@ -6689,6 +7306,46 @@ paths:
           schema:
             $ref: '#/definitions/modelsv2.ErrorResponse'
       summary: Get rankings of a clan
+      tags:
+      - Clan
+  /v2/clan/{clan_tag}/war-log:
+    get:
+      description: Returns the official war log when public. Private logs are reconstructed
+        from stored wars with the same item shape and are marked with isPrivate and
+        reconstructed.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - default: 50
+        description: Maximum wars to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/routes.clanWarLogResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a clan war log
       tags:
       - Clan
   /v2/clan/{clan_tag}/wars:
@@ -6861,6 +7518,34 @@ paths:
       summary: Get player town hall counts
       tags:
       - Counts
+  /v2/cwl/{clan_tag}:
+    get:
+      description: Returns the requested season, or the most recent stored season
+        when season is omitted.
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: CWL season (YYYY-MM or YYYY-MM-DD)
+        in: query
+        name: season
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Get a stored CWL group
+      tags:
+      - CWL
   /v2/cwl/{clan_tag}/ranking-history:
     get:
       description: Returns typed CWL group snapshots for a clan. A group without persisted
@@ -6885,6 +7570,24 @@ paths:
       summary: CWL group history for a clan
       tags:
       - War
+  /v2/cwl/{clan_tag}/seasons:
+    get:
+      parameters:
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLSeasonsResponse'
+      summary: List stored CWL seasons for a clan
+      tags:
+      - CWL
   /v2/cwl/league-thresholds:
     get:
       description: Returns the static CWL promotion and demotion thresholds list.
@@ -8454,6 +9157,34 @@ paths:
       summary: Get current user information
       tags:
       - App Authentication
+  /v2/notifications/accounts/{player_tag}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Player tag
+        in: path
+        name: player_tag
+        required: true
+        type: string
+      - description: Account notification preference
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.NotificationAccountPreferenceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationAccount'
+      security:
+      - ApiKeyAuth: []
+      summary: Set player notification preference
+      tags:
+      - Notifications
   /v2/notifications/devices:
     delete:
       parameters:
@@ -8649,8 +9380,9 @@ paths:
       - War
   /v2/player/{player_tag}/join-leave:
     get:
-      description: Returns join and leave history for a single player tag. Date filters
-        use ISO-8601 values such as 2026-05-01T00:00:00Z.
+      description: Returns join and leave history for a single player tag. available
+        is the all-time event total; date filters only affect returned items. Date
+        filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
       parameters:
       - description: Player tag
         in: path
@@ -9067,6 +9799,30 @@ paths:
       summary: Get public app configuration
       tags:
       - Mobile App
+  /v2/public/rosters/{publicShareId}:
+    get:
+      description: Returns a restricted snapshot without answers, refresh errors,
+        raw Discord IDs, or webhook fields.
+      parameters:
+      - description: Public share ID
+        in: path
+        name: publicShareId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.PublicRosterViewerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: View a public roster
+      tags:
+      - Public Rosters
   /v2/refresh:
     post:
       consumes:
@@ -9492,123 +10248,6 @@ paths:
       summary: List roster groups
       tags:
       - Rosters
-  /v2/roster-signup-category:
-    post:
-      consumes:
-      - application/json
-      description: Creates a new signup category.
-      parameters:
-      - description: Discord server ID
-        in: query
-        name: server_id
-        required: true
-        type: integer
-      - description: Signup category
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.RosterSignupCategoryRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/modelsv2.RosterSignupCategoryMutationResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Create roster signup category
-      tags:
-      - Rosters
-  /v2/roster-signup-category/{custom_id}:
-    delete:
-      description: Deletes a signup category.
-      parameters:
-      - description: Custom ID
-        in: path
-        name: custom_id
-        required: true
-        type: string
-      - description: Discord server ID
-        in: query
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.MessageResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Delete roster signup category
-      tags:
-      - Rosters
-    patch:
-      consumes:
-      - application/json
-      description: Updates a signup category.
-      parameters:
-      - description: Custom ID
-        in: path
-        name: custom_id
-        required: true
-        type: string
-      - description: Discord server ID
-        in: query
-        name: server_id
-        required: true
-        type: integer
-      - description: Signup category fields
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/modelsv2.RosterSignupCategoryRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.RosterSignupCategoryMutationResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Update roster signup category
-      tags:
-      - Rosters
-  /v2/roster-signup-category/list:
-    get:
-      description: Returns signup categories for a server.
-      parameters:
-      - description: Discord server ID
-        in: query
-        name: server_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.RosterSignupCategoryListResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: List roster signup categories
-      tags:
-      - Rosters
   /v2/roster/{roster_id}:
     delete:
       description: Permanently deletes a roster.
@@ -9903,6 +10542,124 @@ paths:
       summary: List rosters
       tags:
       - Rosters
+  /v2/roster/ai/context:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates and meters an AI request, then returns trusted roster
+        context to the Assistant Worker.
+      parameters:
+      - description: Conversation and roster attachments
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterAIRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Prepare trusted AI roster context
+      tags:
+      - Roster Builder
+  /v2/roster/membership-changes:
+    post:
+      consumes:
+      - application/json
+      description: Atomically applies exact membership changes when every affected
+        roster still has the expected revision.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Exact changes and expected roster revisions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterMembershipApplyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Apply an approved transient roster proposal
+      tags:
+      - Roster Builder
+  /v2/roster/metrics:
+    get:
+      description: Returns stable metric IDs available to saved roster views and the
+        AI builder.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/modelsv2.RosterMetric'
+              type: array
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roster metrics
+      tags:
+      - Roster Builder
+  /v2/roster/metrics/query:
+    post:
+      consumes:
+      - application/json
+      description: Executes one allowlisted snapshot, historical, or derived metric
+        with replayable parameters without creating a saved view.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Metric recipe
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterMetricQueryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Query one roster metric recipe
+      tags:
+      - Roster Builder
   /v2/roster/missing-members:
     get:
       description: Identifies clan members not yet registered in a roster.
@@ -9938,6 +10695,41 @@ paths:
       summary: Get missing members
       tags:
       - Rosters
+  /v2/roster/questionnaire:
+    put:
+      consumes:
+      - application/json
+      description: The fixed account selector is always first; incompatible edits
+        transactionally remove matching member answers.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: query
+        name: roster_id
+        required: true
+        type: string
+      - description: Up to four questions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterQuestionnaireWrite'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterQuestionnaireMutationResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Replace a roster questionnaire
+      tags:
+      - Roster Builder
   /v2/roster/refresh:
     post:
       description: Refreshes member data from CoC API for one or more rosters.
@@ -9970,6 +10762,45 @@ paths:
       summary: Refresh rosters
       tags:
       - Rosters
+  /v2/roster/refresh-data:
+    post:
+      consumes:
+      - application/json
+      description: Enforces the configured data cooldown, deduplicates player tags,
+        and invalidates only base view caches.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: query
+        name: roster_id
+        required: true
+        type: string
+      - description: Refresh scope
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterRefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterRefreshResponseV2'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh roster snapshot data
+      tags:
+      - Roster Builder
   /v2/roster/server/{server_id}/members:
     get:
       description: Returns all clan members for all clans linked to a server.
@@ -9989,6 +10820,156 @@ paths:
       summary: Get server clan members
       tags:
       - Rosters
+  /v2/roster/views:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/modelsv2.RosterView'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List saved roster views
+      tags:
+      - Roster Builder
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Typed saved view
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterViewWrite'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/modelsv2.RosterView'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a saved roster view
+      tags:
+      - Roster Builder
+  /v2/roster/views/{viewId}:
+    delete:
+      parameters:
+      - description: View ID
+        in: path
+        name: viewId
+        required: true
+        type: string
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a saved roster view
+      tags:
+      - Roster Builder
+    get:
+      parameters:
+      - description: View ID
+        in: path
+        name: viewId
+        required: true
+        type: string
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterView'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a saved roster view
+      tags:
+      - Roster Builder
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: View ID
+        in: path
+        name: viewId
+        required: true
+        type: string
+      - description: Discord server ID
+        in: query
+        name: server_id
+        required: true
+        type: string
+      - description: Typed view
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterViewUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterView'
+      security:
+      - ApiKeyAuth: []
+      summary: Update a saved roster view
+      tags:
+      - Roster Builder
+  /v2/roster/views/shared/{shareId}:
+    get:
+      description: Resolves the server for a compact saved-view link after enforcing
+        normal dashboard roster authorization.
+      parameters:
+      - description: Compact share ID
+        in: path
+        name: shareId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterView'
+      security:
+      - ApiKeyAuth: []
+      summary: Resolve an authenticated saved-view share link
+      tags:
+      - Roster Builder
   /v2/search/{guild_id}/banned-players:
     get:
       description: Returns banned players matching the query in the given guild.
@@ -10315,6 +11296,12 @@ paths:
         name: player_tag
         required: true
         type: string
+      - description: Ban details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.BanRequest'
       produces:
       - application/json
       responses:
@@ -10988,6 +11975,55 @@ paths:
       summary: Preview clan category deletion
       tags:
       - Clan Categories
+  /v2/server/{server_id}/clan-categories/order:
+    put:
+      consumes:
+      - application/json
+      description: Replaces the authorized server's complete clan-category order.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Complete ordered category ID list
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ReorderClanCategoriesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.ClanCategoriesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Reorder clan categories
+      tags:
+      - Clan Categories
   /v2/server/{server_id}/clan/{clan_tag}:
     delete:
       description: Removes a clan from the Discord server tracking list.
@@ -11367,6 +12403,73 @@ paths:
       summary: Enable a countdown
       tags:
       - Server Countdowns
+  /v2/server/{server_id}/cwl/{clan_tag}/bonus-recipients:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: CWL season (YYYY-MM or YYYY-MM-DD)
+        in: query
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusRecipientsResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get stored CWL bonus recipients
+      tags:
+      - CWL
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: integer
+      - description: Clan tag
+        in: path
+        name: clan_tag
+        required: true
+        type: string
+      - description: CWL season (YYYY-MM or YYYY-MM-DD)
+        in: query
+        name: season
+        required: true
+        type: string
+      - description: Recipients
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.ReplaceCWLBonusRecipientsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusRecipientsResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Replace stored CWL bonus recipients
+      tags:
+      - CWL
   /v2/server/{server_id}/dashboard-access:
     get:
       description: Returns assignable Discord roles and role grants. Requires Manage
@@ -12352,6 +13455,36 @@ paths:
       summary: Update server welcome panel
       tags:
       - Server Panels
+  /v2/server/{server_id}/reactivate:
+    post:
+      description: Treats an authenticated Dashboard reactivation as server activity
+        and restarts the 90-day tracking clock.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.NotificationMessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Re-enable server tracking
+      tags:
+      - Other
   /v2/server/{server_id}/reminders:
     get:
       description: Returns all reminders for a server grouped by type.
@@ -12570,6 +13703,183 @@ paths:
       summary: Update role automation settings
       tags:
       - Server Roles
+  /v2/server/{server_id}/rosters:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List roster-builder rosters
+      tags:
+      - Roster Builder
+  /v2/server/{server_id}/rosters/{roster_id}:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get a roster-builder roster
+      tags:
+      - Roster Builder
+  /v2/server/{server_id}/rosters/{roster_id}/missing-members:
+    get:
+      description: Returns roster output data; the bot resolves guild membership and
+        sends reminders.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List clan members missing from a roster
+      tags:
+      - Roster Builder
+  /v2/server/{server_id}/rosters/{roster_id}/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Data refreshes are synchronous and reuse a snapshot inside the
+        configured cooldown. Role refresh returns the configured role and cache-ready
+        Discord user IDs.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      - description: Refresh scope
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterRefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterRefreshResponseV2'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh roster data or prepare role reconciliation
+      tags:
+      - Roster Builder
+  /v2/server/{server_id}/rosters/{roster_id}/signup-form:
+    get:
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.RosterQuestionnaire'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a roster signup form
+      tags:
+      - Roster Builder
+  /v2/server/{server_id}/rosters/{roster_id}/submissions:
+    post:
+      consumes:
+      - application/json
+      description: The account selector is represented by playerTag and must belong
+        to the authenticated user.
+      parameters:
+      - description: Discord server ID
+        in: path
+        name: server_id
+        required: true
+        type: string
+      - description: Roster ID
+        in: path
+        name: roster_id
+        required: true
+        type: string
+      - description: Signup
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.RosterSignupSubmissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/modelsv2.RosterSignupSubmission'
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Submit a roster signup
+      tags:
+      - Roster Builder
   /v2/server/{server_id}/server-roles:
     get:
       description: Returns configured roles for a server. Use type and clan_tag to
@@ -12799,6 +14109,12 @@ paths:
         name: player_tag
         required: true
         type: string
+      - description: Strike details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.StrikeRequest'
       produces:
       - application/json
       responses:

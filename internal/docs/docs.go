@@ -1351,6 +1351,179 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/billing/stripe/checkout": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Create Stripe Checkout session",
+                "parameters": [
+                    {
+                        "description": "Initial server assignment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingCheckoutRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingSessionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/billing/stripe/portal": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Create Stripe customer portal session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingSessionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/billing/stripe/webhook": {
+            "post": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Receive Stripe subscription events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stripe webhook signature",
+                        "name": "Stripe-Signature",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/v2/billing/subscription": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Get subscription entitlement",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingSubscriptionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/billing/subscription/assignment": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Assign subscription roster assistant credit",
+                "parameters": [
+                    {
+                        "description": "Server assignment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingAssignmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/v2/billing/usage": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Get monthly roster assistant usage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "serverId",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BillingUsageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/cdn/upload": {
             "post": {
                 "security": [
@@ -1531,7 +1704,7 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns join and leave history for a single clan tag. available and uniquePlayers are all-time totals; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
                 "produces": [
                     "application/json"
                 ],
@@ -1572,59 +1745,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.JoinLeaveResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clan/{clan_tag}/join-leave/stats": {
-            "get": {
-                "description": "Returns join and leave summary stats for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get clan join-leave stats",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Only include events at or after this ISO-8601 time",
-                        "name": "time[after]",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Only include events at or before this ISO-8601 time",
-                        "name": "time[before]",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.JoinLeaveStatsResponse"
                         }
                     },
                     "400": {
@@ -1781,6 +1901,65 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanRankingsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/war-log": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the official war log when public. Private logs are reconstructed from stored wars with the same item shape and are marked with isPrivate and reconstructed.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get a clan war log",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum wars to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/routes.clanWarLogResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -2123,6 +2302,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/cwl/{clan_tag}": {
+            "get": {
+                "description": "Returns the requested season, or the most recent stored season when season is omitted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL"
+                ],
+                "summary": "Get a stored CWL group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM or YYYY-MM-DD)",
+                        "name": "season",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/cwl/{clan_tag}/ranking-history": {
             "get": {
                 "description": "Returns typed CWL group snapshots for a clan. A group without persisted standings returns its roster and lifecycle data with no synthetic ranking.",
@@ -2153,6 +2373,34 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/cwl/{clan_tag}/seasons": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL"
+                ],
+                "summary": "List stored CWL seasons for a clan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLSeasonsResponse"
                         }
                     }
                 }
@@ -4459,6 +4707,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/notifications/accounts/{player_tag}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Set player notification preference",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Account notification preference",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationAccountPreferenceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationAccount"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/notifications/devices": {
             "post": {
                 "security": [
@@ -4760,7 +5053,7 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single player tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
                 "produces": [
                     "application/json"
                 ],
@@ -5367,6 +5660,41 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.MobilePublicConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/public/rosters/{publicShareId}": {
+            "get": {
+                "description": "Returns a restricted snapshot without answers, refresh errors, raw Discord IDs, or webhook fields.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Public Rosters"
+                ],
+                "summary": "View a public roster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public share ID",
+                        "name": "publicShareId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PublicRosterViewerResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
@@ -6028,14 +6356,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/roster-signup-category": {
+        "/v2/roster/ai/context": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Creates a new signup category.",
+                "description": "Authenticates and meters an AI request, then returns trusted roster context to the Assistant Worker.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6043,55 +6371,102 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Rosters"
+                    "Roster Builder"
                 ],
-                "summary": "Create roster signup category",
+                "summary": "Prepare trusted AI roster context",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "description": "Conversation and roster attachments",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterAIRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/roster/membership-changes": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Atomically applies exact membership changes when every affected roster still has the expected revision.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Apply an approved transient roster proposal",
+                "parameters": [
+                    {
+                        "type": "string",
                         "description": "Discord server ID",
                         "name": "server_id",
                         "in": "query",
                         "required": true
                     },
                     {
-                        "description": "Signup category",
+                        "description": "Exact changes and expected roster revisions",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RosterSignupCategoryRequest"
+                            "$ref": "#/definitions/modelsv2.RosterMembershipApplyRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RosterSignupCategoryMutationResponse"
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/v2/roster-signup-category/list": {
+        "/v2/roster/metrics": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns signup categories for a server.",
+                "description": "Returns stable metric IDs available to saved roster views and the AI builder.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Rosters"
+                    "Roster Builder"
                 ],
-                "summary": "List roster signup categories",
+                "summary": "List roster metrics",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Discord server ID",
                         "name": "server_id",
                         "in": "query",
@@ -6102,65 +6477,26 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RosterSignupCategoryListResponse"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/modelsv2.RosterMetric"
+                                }
+                            }
                         }
                     }
                 }
             }
         },
-        "/v2/roster-signup-category/{custom_id}": {
-            "delete": {
+        "/v2/roster/metrics/query": {
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Deletes a signup category.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Rosters"
-                ],
-                "summary": "Delete roster signup category",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Custom ID",
-                        "name": "custom_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord server ID",
-                        "name": "server_id",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.MessageResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Updates a signup category.",
+                "description": "Executes one allowlisted snapshot, historical, or derived metric with replayable parameters without creating a saved view.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6168,31 +6504,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Rosters"
+                    "Roster Builder"
                 ],
-                "summary": "Update roster signup category",
+                "summary": "Query one roster metric recipe",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Custom ID",
-                        "name": "custom_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
                         "description": "Discord server ID",
                         "name": "server_id",
                         "in": "query",
                         "required": true
                     },
                     {
-                        "description": "Signup category fields",
+                        "description": "Metric recipe",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RosterSignupCategoryRequest"
+                            "$ref": "#/definitions/modelsv2.RosterMetricQueryRequest"
                         }
                     }
                 ],
@@ -6200,13 +6529,8 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.RosterSignupCategoryMutationResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -6265,6 +6589,59 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/roster/questionnaire": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "The fixed account selector is always first; incompatible edits transactionally remove matching member answers.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Replace a roster questionnaire",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Up to four questions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterQuestionnaireWrite"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterQuestionnaireMutationResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/roster/refresh": {
             "post": {
                 "security": [
@@ -6316,6 +6693,65 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/roster/refresh-data": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Enforces the configured data cooldown, deduplicates player tags, and invalidates only base view caches.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Refresh roster snapshot data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Refresh scope",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterRefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterRefreshResponseV2"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/roster/server/{server_id}/members": {
             "get": {
                 "description": "Returns all clan members for all clans linked to a server.",
@@ -6340,6 +6776,244 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ServerClanMembersResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/roster/views": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "List saved roster views",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/modelsv2.RosterView"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Create a saved roster view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Typed saved view",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterViewWrite"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterView"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/roster/views/shared/{shareId}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Resolves the server for a compact saved-view link after enforcing normal dashboard roster authorization.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Resolve an authenticated saved-view share link",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Compact share ID",
+                        "name": "shareId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterView"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/roster/views/{viewId}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Get a saved roster view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "View ID",
+                        "name": "viewId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterView"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Delete a saved roster view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "View ID",
+                        "name": "viewId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Update a saved roster view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "View ID",
+                        "name": "viewId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Typed view",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterViewUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterView"
                         }
                     }
                 }
@@ -7258,6 +7932,15 @@ const docTemplate = `{
                         "name": "player_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Ban details",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BanRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -8051,6 +8734,82 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/clan-categories/order": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Replaces the authorized server's complete clan-category order.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan Categories"
+                ],
+                "summary": "Reorder clan categories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Complete ordered category ID list",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ReorderClanCategoriesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanCategoriesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -8902,6 +9661,110 @@ const docTemplate = `{
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/cwl/{clan_tag}/bonus-recipients": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL"
+                ],
+                "summary": "Get stored CWL bonus recipients",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM or YYYY-MM-DD)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusRecipientsResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL"
+                ],
+                "summary": "Replace stored CWL bonus recipients",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM or YYYY-MM-DD)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Recipients",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ReplaceCWLBonusRecipientsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusRecipientsResponse"
                         }
                     }
                 }
@@ -10422,6 +11285,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/server/{server_id}/reactivate": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Treats an authenticated Dashboard reactivation as server activity and restarts the 90-day tracking clock.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Other"
+                ],
+                "summary": "Re-enable server tracking",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.NotificationMessageResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/server/{server_id}/reminders": {
             "get": {
                 "security": [
@@ -10750,6 +11659,278 @@ const docTemplate = `{
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "List roster-builder rosters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters/{roster_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Get a roster-builder roster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters/{roster_id}/missing-members": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns roster output data; the bot resolves guild membership and sends reminders.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "List clan members missing from a roster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters/{roster_id}/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Data refreshes are synchronous and reuse a snapshot inside the configured cooldown. Role refresh returns the configured role and cache-ready Discord user IDs.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Refresh roster data or prepare role reconciliation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Refresh scope",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterRefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterRefreshResponseV2"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters/{roster_id}/signup-form": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Get a roster signup form",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterQuestionnaire"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/server/{server_id}/rosters/{roster_id}/submissions": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "The account selector is represented by playerTag and must belong to the authenticated user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Roster Builder"
+                ],
+                "summary": "Submit a roster signup",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "server_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Roster ID",
+                        "name": "roster_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Signup",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.RosterSignupSubmissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/modelsv2.RosterSignupSubmission"
+                            }
                         }
                     }
                 }
@@ -11164,6 +12345,15 @@ const docTemplate = `{
                         "name": "player_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Strike details",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.StrikeRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -13222,9 +14412,6 @@ const docTemplate = `{
                 "timeOfDay": {
                     "type": "string"
                 },
-                "timezone": {
-                    "type": "string"
-                },
                 "weekdays": {
                     "type": "array",
                     "items": {
@@ -13376,6 +14563,20 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BanRequest": {
+            "type": "object",
+            "properties": {
+                "added_by": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "reason": {
                     "type": "string"
                 }
             }
@@ -13843,6 +15044,103 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.BillingAssignmentRequest": {
+            "type": "object",
+            "properties": {
+                "serverId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BillingCheckoutRequest": {
+            "type": "object",
+            "properties": {
+                "serverId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BillingSessionResponse": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BillingSubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "assignedServerId": {
+                    "type": "string"
+                },
+                "bookmarkNotificationsLimit": {
+                    "type": "integer"
+                },
+                "checkoutEnabled": {
+                    "type": "boolean"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "rosterAssistantMonthlyCreditUsd": {
+                    "type": "number"
+                },
+                "rosterAssistantRemainingUsd": {
+                    "type": "number"
+                },
+                "rosterAssistantSpentUsd": {
+                    "type": "number"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BillingUsageResponse": {
+            "type": "object",
+            "properties": {
+                "assignedSubscriberCount": {
+                    "type": "integer"
+                },
+                "globalFreeAvailable": {
+                    "type": "boolean"
+                },
+                "paidLimitUsd": {
+                    "type": "number"
+                },
+                "paidRemainingUsd": {
+                    "type": "number"
+                },
+                "paidSpentUsd": {
+                    "type": "number"
+                },
+                "resetsAt": {
+                    "type": "string"
+                },
+                "serverId": {
+                    "type": "string"
+                },
+                "serverLimitUsd": {
+                    "type": "number"
+                },
+                "serverSpentUsd": {
+                    "type": "number"
+                },
+                "subscriptionActive": {
+                    "type": "boolean"
+                },
+                "userLimitUsd": {
+                    "type": "number"
+                },
+                "userSpentUsd": {
+                    "type": "number"
+                }
+            }
+        },
         "modelsv2.BotGuildProfile": {
             "type": "object",
             "properties": {
@@ -13937,6 +15235,28 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CWLBonusRecipient": {
+            "type": "object",
+            "properties": {
+                "medalCount": {
+                    "type": "integer"
+                },
+                "playerTag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLBonusRecipientsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLBonusRecipient"
+                    }
+                }
+            }
+        },
         "modelsv2.CWLClan": {
             "type": "object",
             "properties": {
@@ -14020,6 +15340,20 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CWLGroupMember": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.CWLGroupResponse": {
             "type": "object",
             "properties": {
@@ -14046,6 +15380,15 @@ const docTemplate = `{
                 },
                 "state": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLGroupRound": {
+            "type": "object",
+            "properties": {
+                "warTags": {
+                    "type": "array",
+                    "items": {}
                 }
             }
         },
@@ -14316,6 +15659,32 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CWLResponse": {
+            "type": "object",
+            "properties": {
+                "clans": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLStoredGroupClan"
+                    }
+                },
+                "rounds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLGroupRound"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.LeagueReference"
+                }
+            }
+        },
         "modelsv2.CWLRound": {
             "type": "object",
             "properties": {
@@ -14323,6 +15692,46 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "modelsv2.CWLSeasonItem": {
+            "type": "object",
+            "properties": {
+                "destruction": {
+                    "type": "number"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "rounds": {
+                    "$ref": "#/definitions/modelsv2.CWLRankingRounds"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.LeagueReference"
+                },
+                "warSize": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLSeasonsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLSeasonItem"
                     }
                 }
             }
@@ -14371,6 +15780,29 @@ const docTemplate = `{
                 },
                 "wins": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLStoredGroupClan": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLGroupMember"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
                 }
             }
         },
@@ -14503,6 +15935,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "position": {
+                    "type": "integer"
                 },
                 "serverId": {
                     "type": "string"
@@ -14667,6 +16102,9 @@ const docTemplate = `{
         "modelsv2.ClanListItem": {
             "type": "object",
             "properties": {
+                "added_at": {
+                    "type": "string"
+                },
                 "badge_url": {
                     "type": "string"
                 },
@@ -15192,12 +16630,7 @@ const docTemplate = `{
         "modelsv2.DiscohookResolveResponse": {
             "type": "object",
             "properties": {
-                "payload": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
+                "payload": {},
                 "resolvedUrl": {
                     "type": "string"
                 }
@@ -15766,6 +17199,9 @@ const docTemplate = `{
                 "avatarUrl": {
                     "type": "string"
                 },
+                "inServer": {
+                    "type": "boolean"
+                },
                 "reason": {
                     "type": "string"
                 },
@@ -15903,6 +17339,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "inactive": {
+                    "type": "boolean"
+                },
+                "last_command_at": {
                     "type": "string"
                 },
                 "member_count": {
@@ -16126,20 +17568,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.JoinLeaveMovingPlayer": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.JoinLeaveResponse": {
             "type": "object",
             "properties": {
@@ -16151,6 +17579,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.JoinLeaveEvent"
                     }
+                },
+                "uniquePlayers": {
+                    "type": "integer"
                 }
             }
         },
@@ -16173,62 +17604,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.JoinLeaveSharedClanTotal"
                     }
-                }
-            }
-        },
-        "modelsv2.JoinLeaveStats": {
-            "type": "object",
-            "properties": {
-                "avg_time_between_join_leave": {},
-                "first_event": {},
-                "last_event": {},
-                "most_moving_hour": {},
-                "most_moving_players": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.JoinLeaveMovingPlayer"
-                    }
-                },
-                "moving_players": {
-                    "type": "integer"
-                },
-                "players_left_forever": {
-                    "type": "integer"
-                },
-                "players_still_in_clan": {
-                    "type": "integer"
-                },
-                "rejoined_players": {
-                    "type": "integer"
-                },
-                "total_events": {
-                    "type": "integer"
-                },
-                "total_joins": {
-                    "type": "integer"
-                },
-                "total_leaves": {
-                    "type": "integer"
-                },
-                "unique_players": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.JoinLeaveStatsResponse": {
-            "type": "object",
-            "properties": {
-                "clan_tag": {
-                    "type": "string"
-                },
-                "stats": {
-                    "$ref": "#/definitions/modelsv2.JoinLeaveStats"
-                },
-                "timestamp_end": {
-                    "type": "integer"
-                },
-                "timestamp_start": {
-                    "type": "integer"
                 }
             }
         },
@@ -16444,6 +17819,20 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.LeagueReference": {
+            "type": "object",
+            "properties": {
+                "iconUrl": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.LegendHistoryClan": {
             "type": "object",
             "properties": {
@@ -16641,6 +18030,9 @@ const docTemplate = `{
         "modelsv2.NotificationAccount": {
             "type": "object",
             "properties": {
+                "active": {
+                    "type": "boolean"
+                },
                 "playerTag": {
                     "type": "string"
                 },
@@ -16650,6 +18042,14 @@ const docTemplate = `{
                         "verified",
                         "bookmarked"
                     ]
+                }
+            }
+        },
+        "modelsv2.NotificationAccountPreferenceRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -16691,8 +18091,7 @@ const docTemplate = `{
                 "provider": {
                     "type": "string",
                     "enum": [
-                        "fcm",
-                        "apns"
+                        "fcm"
                     ]
                 },
                 "token": {
@@ -16737,16 +18136,7 @@ const docTemplate = `{
         "modelsv2.NotificationPreferencesRequest": {
             "type": "object",
             "properties": {
-                "accountTags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "announcementsEnabled": {
-                    "type": "boolean"
-                },
-                "deviceEnabled": {
                     "type": "boolean"
                 },
                 "deviceId": {
@@ -16762,10 +18152,16 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "leagueBattlesEnabled": {
+                "legendAttacksEnabled": {
+                    "type": "boolean"
+                },
+                "legendDefensesEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
+                    "type": "boolean"
+                },
+                "notificationsEnabled": {
                     "type": "boolean"
                 },
                 "reminderTimings": {
@@ -16773,9 +18169,6 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
-                },
-                "upgradeFinishesEnabled": {
-                    "type": "boolean"
                 },
                 "warAttacksEnabled": {
                     "type": "boolean"
@@ -16800,9 +18193,6 @@ const docTemplate = `{
                 "announcementsEnabled": {
                     "type": "boolean"
                 },
-                "deviceEnabled": {
-                    "type": "boolean"
-                },
                 "deviceId": {
                     "type": "string"
                 },
@@ -16812,10 +18202,16 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "leagueBattlesEnabled": {
+                "legendAttacksEnabled": {
+                    "type": "boolean"
+                },
+                "legendDefensesEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
+                    "type": "boolean"
+                },
+                "notificationsEnabled": {
                     "type": "boolean"
                 },
                 "reminderTimings": {
@@ -16823,9 +18219,6 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
-                },
-                "upgradeFinishesEnabled": {
-                    "type": "boolean"
                 },
                 "warAttacksEnabled": {
                     "type": "boolean"
@@ -17524,6 +18917,58 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.PublicRosterMember": {
+            "type": "object",
+            "properties": {
+                "currentClanName": {
+                    "type": "string"
+                },
+                "currentClanTag": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "playerTag": {
+                    "type": "string"
+                },
+                "townhall": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.PublicRosterViewerResponse": {
+            "type": "object",
+            "properties": {
+                "clanBadgeUrl": {
+                    "type": "string"
+                },
+                "clanName": {
+                    "type": "string"
+                },
+                "clanTag": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PublicRosterMember"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.PublicStatsTimeRange": {
             "type": "object",
             "properties": {
@@ -17672,6 +19117,17 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ReorderClanCategoriesRequest": {
+            "type": "object",
+            "properties": {
+                "categoryIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "modelsv2.ReplaceAutoBoardRequest": {
             "type": "object",
             "properties": {
@@ -17704,6 +19160,17 @@ const docTemplate = `{
                 },
                 "threadId": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.ReplaceCWLBonusRecipientsRequest": {
+            "type": "object",
+            "properties": {
+                "recipients": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLBonusRecipient"
+                    }
                 }
             }
         },
@@ -17756,12 +19223,6 @@ const docTemplate = `{
                 "alias": {
                     "type": "string"
                 },
-                "allowed_signup_categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "clan_badge": {
                     "type": "string"
                 },
@@ -17780,12 +19241,6 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
-                "custom_id": {
-                    "type": "string"
-                },
-                "default_signup_category": {
-                    "type": "string"
-                },
                 "description": {
                     "type": "string"
                 },
@@ -17794,6 +19249,10 @@ const docTemplate = `{
                 },
                 "group_id": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
                 },
                 "image": {
                     "type": "string"
@@ -17810,6 +19269,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/modelsv2.RosterMember"
                     }
                 },
+                "message_id": {
+                    "type": "string"
+                },
                 "min_signups": {
                     "type": "integer"
                 },
@@ -17820,9 +19282,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "recurrence_days": {
-                    "type": "integer"
-                },
-                "roster_size": {
                     "type": "integer"
                 },
                 "roster_type": {
@@ -17845,13 +19304,109 @@ const docTemplate = `{
                 "sort": {
                     "type": "array",
                     "items": {
+                        "$ref": "#/definitions/modelsv2.RosterViewSort"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "webhook_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterAIMessage": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterAIMessagePart"
+                    }
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "assistant"
+                    ]
+                }
+            }
+        },
+        "modelsv2.RosterAIMessagePart": {
+            "type": "object",
+            "properties": {
+                "approval": {
+                    "$ref": "#/definitions/modelsv2.RosterAIToolApproval"
+                },
+                "input": {},
+                "state": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "toolCallId": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterAIRequest": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterAIMessage"
+                    }
+                },
+                "rosterIds": {
+                    "type": "array",
+                    "items": {
                         "type": "string"
                     }
                 },
-                "th_restriction": {
+                "serverId": {
                     "type": "string"
                 },
-                "updated_at": {
+                "viewId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterAIToolApproval": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterAccountSelector": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -18039,16 +19594,7 @@ const docTemplate = `{
                 "alias": {
                     "type": "string"
                 },
-                "allowed_signup_categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "created_at": {
-                    "type": "string"
-                },
-                "default_signup_category": {
                     "type": "string"
                 },
                 "description": {
@@ -18065,9 +19611,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "roster_size": {
-                    "type": "integer"
                 },
                 "rosters": {
                     "type": "array",
@@ -18128,15 +19671,6 @@ const docTemplate = `{
                 "alias": {
                     "type": "string"
                 },
-                "allowed_signup_categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "default_signup_category": {
-                    "type": "string"
-                },
                 "description": {
                     "type": "string"
                 },
@@ -18148,9 +19682,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "roster_size": {
-                    "type": "integer"
                 }
             }
         },
@@ -18179,16 +19710,14 @@ const docTemplate = `{
         "modelsv2.RosterMember": {
             "type": "object",
             "properties": {
-                "added_at": {
-                    "type": "integer"
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "current_clan": {
                     "type": "string"
                 },
                 "current_clan_tag": {
-                    "type": "string"
-                },
-                "current_league": {
                     "type": "string"
                 },
                 "discord": {
@@ -18200,35 +19729,26 @@ const docTemplate = `{
                 "discord_username": {
                     "type": "string"
                 },
-                "error_details": {
-                    "type": "string"
-                },
-                "hero_lvs": {
+                "hero_level_sum": {
                     "type": "integer"
-                },
-                "hitrate": {
-                    "type": "number"
-                },
-                "is_in_family": {
-                    "type": "boolean"
                 },
                 "last_online": {
-                    "type": "integer"
-                },
-                "last_updated": {
-                    "type": "integer"
-                },
-                "member_status": {
                     "type": "string"
+                },
+                "league_id": {
+                    "type": "integer"
+                },
+                "league_name": {
+                    "type": "string"
+                },
+                "max_percent": {
+                    "type": "number"
                 },
                 "name": {
                     "type": "string"
                 },
-                "signup_group": {
+                "refreshed_at": {
                     "type": "string"
-                },
-                "sub": {
-                    "type": "boolean"
                 },
                 "tag": {
                     "type": "string"
@@ -18258,14 +19778,9 @@ const docTemplate = `{
         "modelsv2.RosterMemberUpdateRequest": {
             "type": "object",
             "properties": {
-                "member_status": {
-                    "type": "string"
-                },
-                "signup_group": {
-                    "type": "string"
-                },
-                "sub": {
-                    "type": "boolean"
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {}
                 }
             }
         },
@@ -18300,6 +19815,115 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.RosterMembershipApplyRequest": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterMembershipChange"
+                    }
+                },
+                "expectedRevisions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                },
+                "serverId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterMembershipChange": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "add",
+                        "remove",
+                        "move"
+                    ]
+                },
+                "fromRosterId": {
+                    "type": "string"
+                },
+                "playerTag": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "toRosterId": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterMetric": {
+            "type": "object",
+            "properties": {
+                "cacheTtlSeconds": {
+                    "type": "integer"
+                },
+                "dependsOn": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "snapshot",
+                        "historical",
+                        "derived",
+                        "presentation"
+                    ]
+                },
+                "label": {
+                    "type": "string"
+                },
+                "valueType": {
+                    "type": "string",
+                    "enum": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "json",
+                        "time"
+                    ]
+                }
+            }
+        },
+        "modelsv2.RosterMetricQueryRequest": {
+            "type": "object",
+            "properties": {
+                "force": {
+                    "type": "boolean"
+                },
+                "metricId": {
+                    "type": "string"
+                },
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "rosterIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "modelsv2.RosterMutationResponse": {
             "type": "object",
             "properties": {
@@ -18311,6 +19935,85 @@ const docTemplate = `{
                 },
                 "roster_id": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterQuestion": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "boolean",
+                        "single_select"
+                    ]
+                }
+            }
+        },
+        "modelsv2.RosterQuestionnaire": {
+            "type": "object",
+            "properties": {
+                "accountSelector": {
+                    "$ref": "#/definitions/modelsv2.RosterAccountSelector"
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterQuestion"
+                    }
+                }
+            }
+        },
+        "modelsv2.RosterQuestionnaireMutationResponse": {
+            "type": "object",
+            "properties": {
+                "affectedMemberCount": {
+                    "type": "integer"
+                },
+                "questionnaire": {
+                    "$ref": "#/definitions/modelsv2.RosterQuestionnaire"
+                }
+            }
+        },
+        "modelsv2.RosterQuestionnaireWrite": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterQuestion"
+                    }
+                }
+            }
+        },
+        "modelsv2.RosterRefreshRequest": {
+            "type": "object",
+            "properties": {
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "data",
+                        "role"
+                    ]
                 }
             }
         },
@@ -18328,6 +20031,41 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.RosterRefreshResponseV2": {
+            "type": "object",
+            "properties": {
+                "failedPlayers": {
+                    "type": "integer"
+                },
+                "refreshId": {
+                    "type": "string"
+                },
+                "refreshedAt": {
+                    "type": "string"
+                },
+                "refreshedPlayers": {
+                    "type": "integer"
+                },
+                "reused": {
+                    "type": "boolean"
+                },
+                "roleId": {
+                    "type": "string"
+                },
+                "roleMemberUserIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.RosterResponse": {
             "type": "object",
             "properties": {
@@ -18336,88 +20074,264 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.RosterSignupCategory": {
+        "modelsv2.RosterSignupSubmission": {
             "type": "object",
             "properties": {
-                "alias": {
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "createdAt": {
                     "type": "string"
                 },
-                "created_at": {
+                "id": {
                     "type": "string"
                 },
-                "custom_id": {
+                "playerTag": {
                     "type": "string"
                 },
-                "description": {
+                "rosterId": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterSignupSubmissionRequest": {
+            "type": "object",
+            "properties": {
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "discordAvatarUrl": {
+                    "type": "string"
+                },
+                "discordUserId": {
+                    "type": "string"
+                },
+                "discordUsername": {
+                    "type": "string"
+                },
+                "playerTag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.RosterView": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "createdBy": {
+                    "type": "string"
+                },
+                "id": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
-                "server_id": {
+                "serverId": {
                     "type": "string"
                 },
-                "sort_order": {
+                "shareId": {
+                    "type": "string"
+                },
+                "sourceCode": {
+                    "type": "string"
+                },
+                "sourceVersion": {
                     "type": "integer"
                 },
-                "updated_at": {
+                "spec": {
+                    "$ref": "#/definitions/modelsv2.RosterViewSpec"
+                },
+                "updatedAt": {
                     "type": "string"
                 }
             }
         },
-        "modelsv2.RosterSignupCategoryListResponse": {
+        "modelsv2.RosterViewColumn": {
             "type": "object",
             "properties": {
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RosterSignupCategory"
-                    }
-                },
-                "count": {
-                    "type": "integer"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.RosterSignupCategory"
-                    }
-                },
-                "server_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.RosterSignupCategoryMutationResponse": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "$ref": "#/definitions/modelsv2.RosterSignupCategory"
-                },
-                "custom_id": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.RosterSignupCategoryRequest": {
-            "type": "object",
-            "properties": {
-                "alias": {
-                    "type": "string"
-                },
-                "custom_id": {
-                    "type": "string"
-                },
                 "description": {
                     "type": "string"
                 },
+                "format": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "metricId": {
+                    "type": "string"
+                },
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "modelsv2.RosterViewFilter": {
+            "type": "object",
+            "properties": {
+                "columnId": {
+                    "type": "string"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "eq",
+                        "neq",
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "in",
+                        "contains"
+                    ]
+                },
+                "value": {}
+            }
+        },
+        "modelsv2.RosterViewHighlight": {
+            "type": "object",
+            "properties": {
+                "columnId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string",
+                    "enum": [
+                        "row",
+                        "column",
+                        "cell"
+                    ]
+                },
+                "tone": {
+                    "type": "string",
+                    "enum": [
+                        "red",
+                        "amber",
+                        "green",
+                        "blue",
+                        "purple",
+                        "gray"
+                    ]
+                },
+                "when": {
+                    "$ref": "#/definitions/modelsv2.RosterViewHighlightCondition"
+                }
+            }
+        },
+        "modelsv2.RosterViewHighlightCondition": {
+            "type": "object",
+            "properties": {
+                "columnId": {
+                    "type": "string"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "eq",
+                        "neq",
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "in",
+                        "contains"
+                    ]
+                },
+                "value": {}
+            }
+        },
+        "modelsv2.RosterViewSort": {
+            "type": "object",
+            "properties": {
+                "columnId": {
+                    "type": "string"
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": [
+                        "asc",
+                        "desc"
+                    ]
+                }
+            }
+        },
+        "modelsv2.RosterViewSpec": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterViewColumn"
+                    }
+                },
+                "filters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterViewFilter"
+                    }
+                },
+                "highlights": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterViewHighlight"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "schemaVersion": {
+                    "type": "integer",
+                    "enum": [
+                        1
+                    ]
+                },
+                "sort": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.RosterViewSort"
+                    }
+                }
+            }
+        },
+        "modelsv2.RosterViewUpdate": {
+            "type": "object",
+            "properties": {
                 "name": {
                     "type": "string"
                 },
-                "sort_order": {
+                "sourceCode": {
+                    "type": "string"
+                },
+                "sourceVersion": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.RosterViewWrite": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "sourceCode": {
+                    "type": "string"
+                },
+                "sourceVersion": {
                     "type": "integer"
                 }
             }
@@ -20164,6 +22078,29 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.StrikeRequest": {
+            "type": "object",
+            "properties": {
+                "added_by": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "rollover_days": {
+                    "type": "integer"
+                },
+                "strike_weight": {
+                    "type": "integer",
+                    "default": 1,
+                    "maximum": 2147483647,
+                    "minimum": 1
+                }
+            }
+        },
         "modelsv2.StrikeSummaryResponse": {
             "type": "object",
             "properties": {
@@ -20481,12 +22418,6 @@ const docTemplate = `{
                 "alias": {
                     "type": "string"
                 },
-                "allowed_signup_categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "clan_tag": {
                     "type": "string"
                 },
@@ -20495,9 +22426,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "default_signup_category": {
-                    "type": "string"
                 },
                 "description": {
                     "type": "string"
@@ -20514,6 +22442,9 @@ const docTemplate = `{
                 "max_th": {
                     "type": "integer"
                 },
+                "message_id": {
+                    "type": "string"
+                },
                 "min_signups": {
                     "type": "integer"
                 },
@@ -20524,9 +22455,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "recurrence_days": {
-                    "type": "integer"
-                },
-                "roster_size": {
                     "type": "integer"
                 },
                 "roster_type": {
@@ -20546,8 +22474,11 @@ const docTemplate = `{
                 "sort": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/modelsv2.RosterViewSort"
                     }
+                },
+                "webhook_id": {
+                    "type": "string"
                 }
             }
         },
@@ -21008,6 +22939,86 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.WarWeeklyHitrateItem"
                     }
+                }
+            }
+        },
+        "routes.clanWarLogClanSide": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "integer"
+                },
+                "badgeUrls": {
+                    "$ref": "#/definitions/routes.officialBadgeURLs"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "destructionPercentage": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes.clanWarLogItem": {
+            "type": "object",
+            "properties": {
+                "attacksPerMember": {
+                    "type": "integer"
+                },
+                "clan": {
+                    "$ref": "#/definitions/routes.clanWarLogClanSide"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "opponent": {
+                    "$ref": "#/definitions/routes.clanWarLogClanSide"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "teamSize": {
+                    "type": "integer"
+                }
+            }
+        },
+        "routes.clanWarLogResponse": {
+            "type": "object",
+            "properties": {
+                "isPrivate": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/routes.clanWarLogItem"
+                    }
+                },
+                "reconstructed": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "routes.officialBadgeURLs": {
+            "type": "object",
+            "properties": {
+                "large": {
+                    "type": "string"
+                },
+                "medium": {
+                    "type": "string"
+                },
+                "small": {
+                    "type": "string"
                 }
             }
         }

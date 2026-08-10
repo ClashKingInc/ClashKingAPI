@@ -688,17 +688,6 @@ func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 		}
 	}
 
-	params := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/join-leave/stats")
-	wantStats := []string{"time[after]", "time[before]"}
-	if len(params) != len(wantStats) {
-		t.Fatalf("expected stats query params %v, got %v", wantStats, params)
-	}
-	for i, want := range wantStats {
-		if params[i] != want {
-			t.Fatalf("expected stats query param %d to be %s, got %s", i, want, params[i])
-		}
-	}
-
 	for _, path := range []string{
 		"/v2/player/{player_tag}/join-leave/totals",
 	} {
@@ -828,16 +817,17 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 
 	preferenceRequest := swaggerDefinitionProperties(t, definitions, "modelsv2.NotificationPreferencesRequest")
 	for _, field := range []string{
-		"deviceId", "environment", "deviceEnabled", "leagueBattlesEnabled",
+		"deviceId", "environment", "notificationsEnabled",
+		"legendAttacksEnabled", "legendDefensesEnabled",
 		"warAttacksEnabled", "warStateEnabled", "warRemindersEnabled",
-		"eventsEnabled", "announcementsEnabled", "upgradeFinishesEnabled",
-		"monthlySupportEnabled", "reminderTimings", "accountTags",
+		"eventsEnabled", "announcementsEnabled",
+		"monthlySupportEnabled", "reminderTimings",
 	} {
 		if _, exists := preferenceRequest[field]; !exists {
 			t.Fatalf("NotificationPreferencesRequest missing %s", field)
 		}
 	}
-	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions"} {
+	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions", "accountTags", "deviceEnabled", "autoAddVerifiedAccounts", "leagueBattlesEnabled", "upgradeFinishesEnabled"} {
 		if _, exists := preferenceRequest[retired]; exists {
 			t.Fatalf("NotificationPreferencesRequest exposes retired field %s", retired)
 		}

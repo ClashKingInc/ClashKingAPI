@@ -113,7 +113,12 @@ func deleteBookmark(a apptypes.Deps) fiber.Handler {
 		if a.Store == nil || a.Store.SQL == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 		}
-		result, err := a.Store.SQL.Exec(c.UserContext(), `
+		tx, err := a.Store.SQL.Begin(c.UserContext())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback(c.UserContext())
+		result, err := tx.Exec(c.UserContext(), `
 			DELETE FROM user_bookmarks
 			WHERE user_id = $1 AND entity_type = $2 AND tag = $3
 		`, userID, entityType, tag)
@@ -122,6 +127,17 @@ func deleteBookmark(a apptypes.Deps) fiber.Handler {
 		}
 		if result.RowsAffected() == 0 {
 			return apptypes.Error(fiber.StatusNotFound, "Bookmark not found")
+		}
+		if entityType == "player" {
+			if _, err := tx.Exec(c.UserContext(), `
+				DELETE FROM mobile_notification_accounts
+				WHERE user_id = $1 AND player_tag = $2 AND source = 'bookmarked'
+			`, userID, tag); err != nil {
+				return err
+			}
+		}
+		if err := tx.Commit(c.UserContext()); err != nil {
+			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AccountsMessageResponse{Message: "Bookmark deleted"})
 	}
@@ -299,6 +315,22 @@ func sqlAddBookmark(c *fiber.Ctx, a apptypes.Deps, userID, entityType, tag strin
 	defer tx.Rollback(c.UserContext())
 	if _, err := tx.Exec(c.UserContext(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID+":"+entityType); err != nil {
 		return modelsv2.SearchBookmarkItem{}, err
+	}
+	if entityType == "player" {
+		var linked bool
+		if err := tx.QueryRow(c.UserContext(), `
+			SELECT EXISTS (
+				SELECT 1 FROM player_links WHERE user_id = $1 AND tag = $2
+			)
+		`, userID, tag).Scan(&linked); err != nil {
+			return modelsv2.SearchBookmarkItem{}, err
+		}
+		if linked {
+			return modelsv2.SearchBookmarkItem{}, apptypes.Error(
+				fiber.StatusConflict,
+				"Linked player accounts cannot also be bookmarked",
+			)
+		}
 	}
 	var orderIndex int
 	if err := tx.QueryRow(c.UserContext(), `

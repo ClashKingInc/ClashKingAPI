@@ -53,7 +53,7 @@ func registerNotificationDevice(a apptypes.Deps) fiber.Handler {
 		body.Provider = notificationValueOrDefault(body.Provider, "fcm")
 		body.Environment = notificationValueOrDefault(body.Environment, "production")
 		body.AuthorizationStatus = notificationValueOrDefault(body.AuthorizationStatus, "not_determined")
-		if !notificationAllowed(body.Provider, "fcm", "apns") {
+		if !notificationAllowed(body.Provider, "fcm") {
 			return apptypes.Error(fiber.StatusBadRequest, "Unsupported push provider")
 		}
 		if !notificationAllowed(body.Platform, "android", "ios") {
@@ -230,32 +230,25 @@ func getNotificationPreferencesHandler(db notificationPreferencesDB) fiber.Handl
 		}
 		response := defaultNotificationPreferences(deviceID, environment)
 		err = db.QueryRow(c.UserContext(), `
-			SELECT bool_or(enabled)
+			SELECT enabled, legend_attacks_enabled, legend_defenses_enabled,
+				war_attacks_enabled, war_state_enabled, war_reminders_enabled,
+				events_enabled, announcements_enabled, monthly_support_enabled,
+				reminder_timings
 			FROM mobile_push_devices
 			WHERE user_id = $1 AND device_id = $2 AND environment = $3
-			HAVING count(*) > 0
-		`, userID, deviceID, environment).Scan(&response.DeviceEnabled)
+			  AND provider = 'fcm'
+		`, userID, deviceID, environment).Scan(
+			&response.NotificationsEnabled,
+			&response.LegendAttacksEnabled, &response.LegendDefensesEnabled,
+			&response.WarAttacksEnabled, &response.WarStateEnabled,
+			&response.WarRemindersEnabled, &response.EventsEnabled,
+			&response.AnnouncementsEnabled, &response.MonthlySupportEnabled,
+			&response.ReminderTimings,
+		)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apptypes.Error(fiber.StatusNotFound, "Notification device is not registered")
 		}
 		if err != nil {
-			return err
-		}
-		err = db.QueryRow(c.UserContext(), `
-			SELECT league_battles_enabled, war_attacks_enabled,
-				war_state_enabled, war_reminders_enabled, events_enabled,
-				announcements_enabled, upgrade_finishes_enabled,
-				monthly_support_enabled, reminder_timings
-			FROM mobile_notification_preferences
-			WHERE user_id = $1 AND device_id = $2 AND environment = $3
-		`, userID, deviceID, environment).Scan(
-			&response.LeagueBattlesEnabled, &response.WarAttacksEnabled,
-			&response.WarStateEnabled, &response.WarRemindersEnabled,
-			&response.EventsEnabled, &response.AnnouncementsEnabled,
-			&response.UpgradeFinishesEnabled, &response.MonthlySupportEnabled,
-			&response.ReminderTimings,
-		)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
 		response.Accounts, err = queryNotificationAccounts(c.UserContext(), db, userID)
@@ -298,7 +291,6 @@ func putNotificationPreferencesHandler(db notificationPreferencesDB) fiber.Handl
 		if !notificationAllowed(body.Environment, "sandbox", "production") {
 			return apptypes.Error(fiber.StatusBadRequest, "Unsupported push environment")
 		}
-		body.AccountTags = notificationTags(body.AccountTags)
 		body.ReminderTimings, err = notificationReminderTimings(body.ReminderTimings)
 		if err != nil {
 			return err
@@ -312,6 +304,119 @@ func putNotificationPreferencesHandler(db notificationPreferencesDB) fiber.Handl
 		}
 		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
+}
+
+// putNotificationAccount enables or disables notifications for one linked or bookmarked player.
+//
+// @Summary Set player notification preference
+// @Tags Notifications
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param player_tag path string true "Player tag"
+// @Param body body modelsv2.NotificationAccountPreferenceRequest true "Account notification preference"
+// @Success 200 {object} modelsv2.NotificationAccount
+// @Router /v2/notifications/accounts/{player_tag} [put]
+func putNotificationAccount(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID, err := authenticatedNotificationUser(c)
+		if err != nil {
+			return err
+		}
+		var body modelsv2.NotificationAccountPreferenceRequest
+		if err := apptypes.DecodeJSON(c, &body); err != nil {
+			return err
+		}
+		tags := notificationTags([]string{c.Params("player_tag")})
+		if len(tags) != 1 {
+			return apptypes.Error(fiber.StatusBadRequest, "Player tag is required")
+		}
+		if a.Store == nil || a.Store.SQL == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
+		}
+		account, err := setNotificationAccount(c.UserContext(), a.Store.SQL, userID, tags[0], body.Enabled)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, account)
+	}
+}
+
+func setNotificationAccount(ctx context.Context, db notificationPreferencesDB, userID, playerTag string, enabled bool) (modelsv2.NotificationAccount, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return modelsv2.NotificationAccount{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	account := modelsv2.NotificationAccount{PlayerTag: playerTag, Active: false}
+	if !enabled {
+		if _, err := tx.Exec(ctx, `DELETE FROM mobile_notification_accounts WHERE user_id = $1 AND player_tag = $2`, userID, playerTag); err != nil {
+			return modelsv2.NotificationAccount{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return modelsv2.NotificationAccount{}, err
+		}
+		return account, nil
+	}
+
+	var verified, bookmarked bool
+	err = tx.QueryRow(ctx, `
+		SELECT
+			EXISTS (SELECT 1 FROM player_links WHERE user_id = $1 AND tag = $2 AND is_verified = true),
+			EXISTS (SELECT 1 FROM user_bookmarks WHERE user_id = $1 AND entity_type = 'player' AND tag = $2)
+	`, userID, playerTag).Scan(&verified, &bookmarked)
+	if err != nil {
+		return modelsv2.NotificationAccount{}, err
+	}
+	switch {
+	case verified:
+		account.Source = "verified"
+	case bookmarked:
+		account.Source = "bookmarked"
+		var entitlementActive bool
+		var bookmarkLimit int
+		err := tx.QueryRow(ctx, `
+			SELECT active, bookmark_notifications_limit
+			FROM subscription_entitlements
+			WHERE user_id = $1
+			FOR UPDATE
+		`, userID).Scan(&entitlementActive, &bookmarkLimit)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return modelsv2.NotificationAccount{}, apptypes.Error(fiber.StatusPaymentRequired, "A subscription is required for bookmarked account notifications")
+		}
+		if err != nil {
+			return modelsv2.NotificationAccount{}, err
+		}
+		if !entitlementActive || bookmarkLimit <= 0 {
+			return modelsv2.NotificationAccount{}, apptypes.Error(fiber.StatusPaymentRequired, "A subscription is required for bookmarked account notifications")
+		}
+		var activeBookmarks int
+		if err := tx.QueryRow(ctx, `
+			SELECT count(*) FROM mobile_notification_accounts
+			WHERE user_id = $1 AND source = 'bookmarked' AND active = true AND player_tag <> $2
+		`, userID, playerTag).Scan(&activeBookmarks); err != nil {
+			return modelsv2.NotificationAccount{}, err
+		}
+		if activeBookmarks >= bookmarkLimit {
+			return modelsv2.NotificationAccount{}, apptypes.Error(fiber.StatusBadRequest, fmt.Sprintf("At most %d bookmarked accounts can receive notifications", bookmarkLimit))
+		}
+	default:
+		return modelsv2.NotificationAccount{}, apptypes.Error(fiber.StatusBadRequest, "Player is not a verified link or bookmark")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO mobile_notification_accounts (user_id, player_tag, source, active, created_at, updated_at)
+		VALUES ($1, $2, $3, true, now(), now())
+		ON CONFLICT (user_id, player_tag) DO UPDATE SET source = EXCLUDED.source, active = true, updated_at = now()
+	`, userID, playerTag, account.Source); err != nil {
+		return modelsv2.NotificationAccount{}, err
+	}
+	account.Active = true
+	if err := tx.Commit(ctx); err != nil {
+		return modelsv2.NotificationAccount{}, err
+	}
+	return account, nil
 }
 
 func replaceNotificationPreferences(
@@ -328,9 +433,24 @@ func replaceNotificationPreferences(
 
 	deviceResult, err := tx.Exec(ctx, `
 		UPDATE mobile_push_devices
-		SET enabled = $4
+		SET enabled = $4,
+			legend_attacks_enabled = $5,
+			legend_defenses_enabled = $6,
+			war_attacks_enabled = $7,
+			war_state_enabled = $8,
+			war_reminders_enabled = $9,
+			events_enabled = $10,
+			announcements_enabled = $11,
+			monthly_support_enabled = $12,
+			reminder_timings = $13
 		WHERE user_id = $1 AND device_id = $2 AND environment = $3
-	`, userID, body.DeviceID, body.Environment, body.DeviceEnabled)
+		  AND provider = 'fcm'
+	`, userID, body.DeviceID, body.Environment, body.NotificationsEnabled,
+		body.LegendAttacksEnabled, body.LegendDefensesEnabled,
+		body.WarAttacksEnabled, body.WarStateEnabled, body.WarRemindersEnabled,
+		body.EventsEnabled, body.AnnouncementsEnabled, body.MonthlySupportEnabled,
+		body.ReminderTimings,
+	)
 	if err != nil {
 		return modelsv2.NotificationPreferencesResponse{}, err
 	}
@@ -340,137 +460,14 @@ func replaceNotificationPreferences(
 			"Notification device is not registered",
 		)
 	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO mobile_notification_preferences (
-			user_id, device_id, environment, league_battles_enabled,
-			war_attacks_enabled, war_state_enabled, war_reminders_enabled,
-			events_enabled, announcements_enabled, upgrade_finishes_enabled,
-			monthly_support_enabled, reminder_timings
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-		)
-		ON CONFLICT (user_id, device_id, environment)
-		DO UPDATE SET
-			league_battles_enabled = EXCLUDED.league_battles_enabled,
-			war_attacks_enabled = EXCLUDED.war_attacks_enabled,
-			war_state_enabled = EXCLUDED.war_state_enabled,
-			war_reminders_enabled = EXCLUDED.war_reminders_enabled,
-			events_enabled = EXCLUDED.events_enabled,
-			announcements_enabled = EXCLUDED.announcements_enabled,
-			upgrade_finishes_enabled = EXCLUDED.upgrade_finishes_enabled,
-			monthly_support_enabled = EXCLUDED.monthly_support_enabled,
-			reminder_timings = EXCLUDED.reminder_timings
-	`, userID, body.DeviceID, body.Environment, body.LeagueBattlesEnabled,
-		body.WarAttacksEnabled, body.WarStateEnabled, body.WarRemindersEnabled,
-		body.EventsEnabled, body.AnnouncementsEnabled,
-		body.UpgradeFinishesEnabled, body.MonthlySupportEnabled,
-		body.ReminderTimings,
-	); err != nil {
-		return modelsv2.NotificationPreferencesResponse{}, err
-	}
-
-	accounts, err := eligibleNotificationAccounts(ctx, tx, userID, body.AccountTags)
+	accounts, err := queryNotificationAccounts(ctx, tx, userID)
 	if err != nil {
 		return modelsv2.NotificationPreferencesResponse{}, err
-	}
-	if _, err := tx.Exec(ctx, `
-		DELETE FROM mobile_notification_accounts
-		WHERE user_id = $1
-	`, userID); err != nil {
-		return modelsv2.NotificationPreferencesResponse{}, err
-	}
-	if len(accounts) > 0 {
-		tags := make([]string, 0, len(accounts))
-		sources := make([]string, 0, len(accounts))
-		for _, account := range accounts {
-			tags = append(tags, account.PlayerTag)
-			sources = append(sources, account.Source)
-		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO mobile_notification_accounts (user_id, player_tag, source)
-			SELECT $1, input.player_tag, input.source
-			FROM unnest($2::text[], $3::text[]) AS input(player_tag, source)
-		`, userID, tags, sources); err != nil {
-			return modelsv2.NotificationPreferencesResponse{}, err
-		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return modelsv2.NotificationPreferencesResponse{}, err
 	}
 	return notificationPreferencesResponse(body, accounts), nil
-}
-
-func eligibleNotificationAccounts(
-	ctx context.Context,
-	tx pgx.Tx,
-	userID string,
-	tags []string,
-) ([]modelsv2.NotificationAccount, error) {
-	if len(tags) == 0 {
-		return []modelsv2.NotificationAccount{}, nil
-	}
-	rows, err := tx.Query(ctx, `
-		WITH requested AS (
-			SELECT tag, ordinality
-			FROM unnest($2::text[]) WITH ORDINALITY AS requested(tag, ordinality)
-		),
-		verified AS MATERIALIZED (
-			SELECT links.tag
-			FROM player_links AS links
-			JOIN requested ON requested.tag = links.tag
-			WHERE links.user_id = $1 AND links.is_verified = true
-			FOR KEY SHARE OF links
-		),
-		bookmarked AS MATERIALIZED (
-			SELECT bookmarks.tag
-			FROM user_bookmarks AS bookmarks
-			JOIN requested ON requested.tag = bookmarks.tag
-			WHERE bookmarks.user_id = $1
-			  AND bookmarks.entity_type = 'player'
-			FOR KEY SHARE OF bookmarks
-		)
-		SELECT requested.tag,
-			CASE
-				WHEN verified.tag IS NOT NULL THEN 'verified'
-				WHEN bookmarked.tag IS NOT NULL THEN 'bookmarked'
-			END AS source
-		FROM requested
-		LEFT JOIN verified ON verified.tag = requested.tag
-		LEFT JOIN bookmarked ON bookmarked.tag = requested.tag
-		ORDER BY requested.ordinality
-	`, userID, tags)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	accounts := make([]modelsv2.NotificationAccount, 0, len(tags))
-	for rows.Next() {
-		var account modelsv2.NotificationAccount
-		var source *string
-		if err := rows.Scan(&account.PlayerTag, &source); err != nil {
-			return nil, err
-		}
-		if source == nil {
-			return nil, apptypes.Error(
-				fiber.StatusBadRequest,
-				fmt.Sprintf(
-					"Notification account %s is not a verified link or player bookmark",
-					account.PlayerTag,
-				),
-			)
-		}
-		account.Source = *source
-		accounts = append(accounts, account)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(accounts) != len(tags) {
-		return nil, apptypes.Error(fiber.StatusBadRequest, "Invalid notification account selection")
-	}
-	return accounts, nil
 }
 
 func queryNotificationAccounts(
@@ -479,7 +476,7 @@ func queryNotificationAccounts(
 	userID string,
 ) ([]modelsv2.NotificationAccount, error) {
 	rows, err := db.Query(ctx, `
-		SELECT player_tag, source
+		SELECT player_tag, source, active
 		FROM mobile_notification_accounts
 		WHERE user_id = $1
 		ORDER BY player_tag
@@ -491,7 +488,7 @@ func queryNotificationAccounts(
 	accounts := []modelsv2.NotificationAccount{}
 	for rows.Next() {
 		var account modelsv2.NotificationAccount
-		if err := rows.Scan(&account.PlayerTag, &account.Source); err != nil {
+		if err := rows.Scan(&account.PlayerTag, &account.Source, &account.Active); err != nil {
 			return nil, err
 		}
 		accounts = append(accounts, account)
@@ -591,19 +588,19 @@ func notificationPreferencesResponse(
 	accounts []modelsv2.NotificationAccount,
 ) modelsv2.NotificationPreferencesResponse {
 	return modelsv2.NotificationPreferencesResponse{
-		DeviceID:               body.DeviceID,
-		Environment:            body.Environment,
-		DeviceEnabled:          body.DeviceEnabled,
-		LeagueBattlesEnabled:   body.LeagueBattlesEnabled,
-		WarAttacksEnabled:      body.WarAttacksEnabled,
-		WarStateEnabled:        body.WarStateEnabled,
-		WarRemindersEnabled:    body.WarRemindersEnabled,
-		EventsEnabled:          body.EventsEnabled,
-		AnnouncementsEnabled:   body.AnnouncementsEnabled,
-		UpgradeFinishesEnabled: body.UpgradeFinishesEnabled,
-		MonthlySupportEnabled:  body.MonthlySupportEnabled,
-		ReminderTimings:        body.ReminderTimings,
-		Accounts:               accounts,
+		DeviceID:              body.DeviceID,
+		Environment:           body.Environment,
+		NotificationsEnabled:  body.NotificationsEnabled,
+		LegendAttacksEnabled:  body.LegendAttacksEnabled,
+		LegendDefensesEnabled: body.LegendDefensesEnabled,
+		WarAttacksEnabled:     body.WarAttacksEnabled,
+		WarStateEnabled:       body.WarStateEnabled,
+		WarRemindersEnabled:   body.WarRemindersEnabled,
+		EventsEnabled:         body.EventsEnabled,
+		AnnouncementsEnabled:  body.AnnouncementsEnabled,
+		MonthlySupportEnabled: body.MonthlySupportEnabled,
+		ReminderTimings:       body.ReminderTimings,
+		Accounts:              accounts,
 	}
 }
 

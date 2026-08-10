@@ -47,7 +47,7 @@ func TestNotificationTagsNormalizesAndDeduplicates(t *testing.T) {
 
 func TestDefaultNotificationPreferencesUsesStableEmptyLists(t *testing.T) {
 	got := defaultNotificationPreferences("device-1", "sandbox")
-	if got.DeviceID != "device-1" || got.Environment != "sandbox" || got.DeviceEnabled {
+	if got.DeviceID != "device-1" || got.Environment != "sandbox" || got.NotificationsEnabled {
 		t.Fatalf("unexpected defaults: %#v", got)
 	}
 	if got.ReminderTimings == nil || got.Accounts == nil {
@@ -75,7 +75,7 @@ func TestNotificationReminderTimingsValidateAndDeduplicate(t *testing.T) {
 }
 
 type notificationPreferencesTestDB struct {
-	tx *notificationPreferencesTestTx
+	tx pgx.Tx
 }
 
 func (db *notificationPreferencesTestDB) QueryRow(context.Context, string, ...any) pgx.Row {
@@ -99,6 +99,14 @@ type notificationPreferencesTestTx struct {
 	accounts   []modelsv2.NotificationAccount
 	committed  bool
 	rolledBack bool
+}
+
+type notificationPreferencesTestRow struct{ err error }
+
+func (row notificationPreferencesTestRow) Scan(...any) error { return row.err }
+
+func (tx *notificationPreferencesTestTx) QueryRow(context.Context, string, ...any) pgx.Row {
+	return notificationPreferencesTestRow{err: pgx.ErrNoRows}
 }
 
 func (tx *notificationPreferencesTestTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
@@ -146,26 +154,25 @@ func (rows *notificationAccountTestRows) Next() bool {
 func (rows *notificationAccountTestRows) Scan(dest ...any) error {
 	account := rows.accounts[rows.cursor-1]
 	*dest[0].(*string) = account.PlayerTag
-	source := account.Source
-	*dest[1].(**string) = &source
+	*dest[1].(*string) = account.Source
+	*dest[2].(*bool) = account.Active
 	return nil
 }
 
-func TestReplaceNotificationPreferencesIsAtomicAndUsesAuthoritativeAccountSources(t *testing.T) {
+func TestReplaceNotificationPreferencesPreservesPerAccountSelections(t *testing.T) {
 	tx := &notificationPreferencesTestTx{
 		deviceRows: 1,
 		accounts: []modelsv2.NotificationAccount{
-			{PlayerTag: "#VERIFIED", Source: "verified"},
-			{PlayerTag: "#BOOKMARK", Source: "bookmarked"},
+			{PlayerTag: "#VERIFIED", Source: "verified", Active: true},
+			{PlayerTag: "#BOOKMARK", Source: "bookmarked", Active: true},
 		},
 	}
 	body := modelsv2.NotificationPreferencesRequest{
 		DeviceID:             "device-1",
 		Environment:          "production",
-		DeviceEnabled:        false,
+		NotificationsEnabled: true,
 		AnnouncementsEnabled: true,
 		ReminderTimings:      []int{15, 60},
-		AccountTags:          []string{"#VERIFIED", "#BOOKMARK"},
 	}
 
 	response, err := replaceNotificationPreferences(
@@ -178,30 +185,31 @@ func TestReplaceNotificationPreferencesIsAtomicAndUsesAuthoritativeAccountSource
 		t.Fatalf("replaceNotificationPreferences() error = %v", err)
 	}
 	if !tx.committed {
-		t.Fatal("preference and account replacement did not commit")
+		t.Fatal("preference update did not commit")
 	}
 	joinedSQL := strings.Join(tx.execSQL, "\n")
-	for _, required := range []string{
-		"UPDATE mobile_push_devices",
-		"INSERT INTO mobile_notification_preferences",
-		"DELETE FROM mobile_notification_accounts",
-		"INSERT INTO mobile_notification_accounts",
-	} {
+	for _, required := range []string{"UPDATE mobile_push_devices"} {
 		if !strings.Contains(joinedSQL, required) {
 			t.Fatalf("transaction missing %q: %s", required, joinedSQL)
 		}
 	}
-	for _, required := range []string{"player_links", "is_verified = true", "user_bookmarks", "entity_type = 'player'", "FOR KEY SHARE"} {
-		if !strings.Contains(tx.querySQL, required) {
-			t.Fatalf("eligibility query missing %q: %s", required, tx.querySQL)
+	if strings.Contains(joinedSQL, "DELETE FROM mobile_notification_accounts") {
+		t.Fatalf("category save must preserve per-account selections: %s", joinedSQL)
+	}
+	for _, retired := range []string{"mobile_notification_preferences", "mobile_notification_settings"} {
+		if strings.Contains(joinedSQL, retired) {
+			t.Fatalf("preference update still uses retired table %q: %s", retired, joinedSQL)
 		}
+	}
+	if !strings.Contains(tx.querySQL, "SELECT player_tag, source, active") {
+		t.Fatalf("account response query missing: %s", tx.querySQL)
 	}
 	if len(response.Accounts) != 2 ||
 		response.Accounts[0].Source != "verified" ||
 		response.Accounts[1].Source != "bookmarked" {
 		t.Fatalf("unexpected authoritative account response: %#v", response.Accounts)
 	}
-	if response.DeviceEnabled {
+	if !response.NotificationsEnabled {
 		t.Fatal("device master switch must come from mobile_push_devices.enabled")
 	}
 }
@@ -222,5 +230,91 @@ func TestReplaceNotificationPreferencesRejectsUnregisteredDeviceBeforeWritingPre
 	}
 	if len(tx.execSQL) != 1 || !strings.Contains(tx.execSQL[0], "UPDATE mobile_push_devices") {
 		t.Fatalf("unexpected writes after missing device: %#v", tx.execSQL)
+	}
+}
+
+type notificationAccountPreferenceTx struct {
+	pgx.Tx
+	queryRows []func(...any) error
+	queries   []string
+	execSQL   []string
+	committed bool
+}
+
+func (tx *notificationAccountPreferenceTx) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	tx.queries = append(tx.queries, sql)
+	index := len(tx.queries) - 1
+	return notificationAccountPreferenceRow{scan: tx.queryRows[index]}
+}
+
+func (tx *notificationAccountPreferenceTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	tx.execSQL = append(tx.execSQL, sql)
+	return pgconn.NewCommandTag("INSERT 1"), nil
+}
+
+func (tx *notificationAccountPreferenceTx) Commit(context.Context) error {
+	tx.committed = true
+	return nil
+}
+
+func (tx *notificationAccountPreferenceTx) Rollback(context.Context) error { return nil }
+
+type notificationAccountPreferenceRow struct{ scan func(...any) error }
+
+func (row notificationAccountPreferenceRow) Scan(dest ...any) error { return row.scan(dest...) }
+
+func TestSetNotificationAccountEnforcesPaidBookmarkLimit(t *testing.T) {
+	tx := &notificationAccountPreferenceTx{queryRows: []func(...any) error{
+		func(dest ...any) error {
+			*dest[0].(*bool) = false
+			*dest[1].(*bool) = true
+			return nil
+		},
+		func(dest ...any) error {
+			*dest[0].(*bool) = true
+			*dest[1].(*int) = 10
+			return nil
+		},
+		func(dest ...any) error {
+			*dest[0].(*int) = 9
+			return nil
+		},
+	}}
+	account, err := setNotificationAccount(
+		context.Background(),
+		&notificationPreferencesTestDB{tx: tx},
+		"user-1",
+		"#BOOKMARK",
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !account.Active || account.Source != "bookmarked" || !tx.committed {
+		t.Fatalf("unexpected account result: %#v committed=%v", account, tx.committed)
+	}
+	if !strings.Contains(tx.queries[1], "FOR UPDATE") {
+		t.Fatal("bookmark entitlement row must be locked while enforcing the limit")
+	}
+	if len(tx.execSQL) != 1 || !strings.Contains(tx.execSQL[0], "INSERT INTO mobile_notification_accounts") {
+		t.Fatalf("unexpected account writes: %#v", tx.execSQL)
+	}
+}
+
+func TestSetNotificationAccountDisableDeletesSelection(t *testing.T) {
+	tx := &notificationAccountPreferenceTx{}
+	account, err := setNotificationAccount(
+		context.Background(),
+		&notificationPreferencesTestDB{tx: tx},
+		"user-1",
+		"#PLAYER",
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if account.Active || !tx.committed || len(tx.execSQL) != 1 ||
+		!strings.Contains(tx.execSQL[0], "DELETE FROM mobile_notification_accounts") {
+		t.Fatalf("disable result=%#v committed=%v writes=%#v", account, tx.committed, tx.execSQL)
 	}
 }

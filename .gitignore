@@ -9,6 +9,8 @@ node_modules/
 
 # AI files
 .claude/
+.t3/
+t3.json
 .github/*.md
 CLAUDE.md
 CUTOVER_REVIEW.md

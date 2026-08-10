@@ -65,7 +65,7 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 		existing, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
 		user := existing
 		if user == nil {
-			user = &authUser{UserID: generateUserID()}
+			user = &authUser{UserID: generateUserID(), Provider: authProviderEmail}
 		}
 		user.EmailHash = &emailHash
 		user.Username = &pending.Username
@@ -104,10 +104,10 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 		if err != nil || user == nil {
 			return apptypes.Error(fiber.StatusUnauthorized, "User session is no longer valid")
 		}
-		if user.EmailHash != nil {
+		if user.Provider == authProviderEmail {
 			return apptypes.JSON(c, fiber.StatusOK, emailAuthUserInfo(user))
 		}
-		if user.DiscordUserID == nil {
+		if user.Provider != authProviderDiscord {
 			return apptypes.Error(fiber.StatusUnauthorized, "User identity is not configured")
 		}
 		if a.Discord == nil {
@@ -710,24 +710,26 @@ func rotateRefreshTokenInStore(
 }
 
 type authUser struct {
-	UserID        string
-	EmailHash     *string
-	DiscordUserID *string
-	Username      *string
-	PasswordHash  *string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	UserID       string
+	Provider     string
+	EmailHash    *string
+	Username     *string
+	PasswordHash *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
+
+const (
+	authProviderDiscord = "discord"
+	authProviderEmail   = "email"
+)
 
 func (u *authUser) AuthMethods() []string {
 	if u == nil {
 		return nil
 	}
-	if u.EmailHash != nil {
-		return []string{"email"}
-	}
-	if u.DiscordUserID != nil {
-		return []string{"discord"}
+	if u.Provider == authProviderDiscord || u.Provider == authProviderEmail {
+		return []string{u.Provider}
 	}
 	return nil
 }
@@ -781,7 +783,7 @@ func loadDiscordAuthUserInfo(
 	loadAccessToken discordAccessTokenLoader,
 	provider discordProfileProvider,
 ) (modelsv2.AuthUserInfo, error) {
-	if user == nil || user.DiscordUserID == nil {
+	if user == nil || user.Provider != authProviderDiscord {
 		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusUnauthorized, "Discord identity is not configured")
 	}
 	if strings.TrimSpace(deviceID) == "" {
@@ -795,7 +797,7 @@ func loadDiscordAuthUserInfo(
 	if err != nil {
 		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusBadGateway, "Failed to fetch Discord user")
 	}
-	if profile.ID.String() != *user.DiscordUserID {
+	if profile.ID.String() != user.UserID {
 		return modelsv2.AuthUserInfo{}, apptypes.Error(fiber.StatusUnauthorized, "Discord session does not match the authenticated user")
 	}
 	return discordAuthUserInfo(user.UserID, profile), nil
@@ -879,20 +881,21 @@ func revokeRefreshToken(ctx context.Context, a apptypes.Deps, token string) erro
 }
 
 func upsertDiscordUser(ctx context.Context, a apptypes.Deps, discordUser *discord.OAuth2User) (string, error) {
-	existingUser, _ := findUserByDiscordID(ctx, a, discordUser.ID.String())
+	discordUserID := discordUser.ID.String()
+	existingUser, _ := findUserByDiscordID(ctx, a, discordUserID)
 	if existingUser != nil {
 		return existingUser.UserID, nil
 	}
 
-	discordUserID := discordUser.ID.String()
-	user := &authUser{
-		UserID:        generateUserID(),
-		DiscordUserID: &discordUserID,
-	}
+	user := newDiscordAuthUser(discordUserID)
 	if err := upsertAuthUser(ctx, a, user); err != nil {
 		return "", err
 	}
 	return user.UserID, nil
+}
+
+func newDiscordAuthUser(discordUserID string) *authUser {
+	return &authUser{UserID: discordUserID, Provider: authProviderDiscord}
 }
 
 func storeDiscordTokens(ctx context.Context, a apptypes.Deps, userID, deviceID string, token *discord.AccessTokenResponse) error {
@@ -920,7 +923,7 @@ func findUserByEmailHash(ctx context.Context, a apptypes.Deps, emailHash string)
 }
 
 func findUserByDiscordID(ctx context.Context, a apptypes.Deps, discordUserID string) (*authUser, error) {
-	return scanAuthUser(ctx, a, `WHERE discord_user_id = $1`, discordUserID)
+	return scanAuthUser(ctx, a, `WHERE user_id = $1 AND provider = 'discord'`, discordUserID)
 }
 
 func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...any) (*authUser, error) {
@@ -933,8 +936,8 @@ func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...an
 	user := &authUser{}
 	if err := a.Store.SQL.QueryRow(ctx, query, args...).Scan(
 		&user.UserID,
+		&user.Provider,
 		&user.EmailHash,
-		&user.DiscordUserID,
 		&user.Username,
 		&user.PasswordHash,
 		&user.CreatedAt,
@@ -945,7 +948,7 @@ func scanAuthUser(ctx context.Context, a apptypes.Deps, where string, args ...an
 	return user, nil
 }
 
-const authUserSelectColumns = "user_id, email_hash, discord_user_id, username, password_hash, created_at, updated_at"
+const authUserSelectColumns = "user_id, provider, email_hash, username, password_hash, created_at, updated_at"
 
 func upsertAuthUser(ctx context.Context, a apptypes.Deps, user *authUser) error {
 	if err := validateAuthIdentity(user); err != nil {
@@ -967,15 +970,15 @@ type authUserExecutor interface {
 func persistAuthUser(ctx context.Context, store authUserExecutor, user *authUser) error {
 	_, err := store.Exec(ctx, `
 		INSERT INTO auth_users (
-			user_id, email_hash, discord_user_id, username, password_hash, created_at, updated_at
+			user_id, provider, email_hash, username, password_hash, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, now(), now())
 		ON CONFLICT (user_id) DO UPDATE SET
+			provider = EXCLUDED.provider,
 			email_hash = EXCLUDED.email_hash,
-			discord_user_id = EXCLUDED.discord_user_id,
 			username = EXCLUDED.username,
 			password_hash = EXCLUDED.password_hash,
 			updated_at = now()
-	`, user.UserID, user.EmailHash, user.DiscordUserID, user.Username, user.PasswordHash)
+	`, user.UserID, user.Provider, user.EmailHash, user.Username, user.PasswordHash)
 	return err
 }
 
@@ -983,14 +986,17 @@ func validateAuthIdentity(user *authUser) error {
 	if user == nil {
 		return fmt.Errorf("auth user is required")
 	}
-	if user.EmailHash != nil && user.DiscordUserID != nil {
-		return fmt.Errorf("auth user cannot combine email and Discord identities")
-	}
-	if user.EmailHash != nil && (user.Username == nil || user.PasswordHash == nil) {
-		return fmt.Errorf("email auth user requires username and password")
-	}
-	if user.DiscordUserID != nil && (user.Username != nil || user.PasswordHash != nil) {
-		return fmt.Errorf("Discord auth user cannot persist username or password")
+	switch user.Provider {
+	case authProviderEmail:
+		if user.EmailHash == nil || user.Username == nil || user.PasswordHash == nil {
+			return fmt.Errorf("email auth user requires email, username, and password")
+		}
+	case authProviderDiscord:
+		if user.EmailHash != nil || user.Username != nil || user.PasswordHash != nil {
+			return fmt.Errorf("Discord auth user cannot persist email, username, or password")
+		}
+	default:
+		return fmt.Errorf("unsupported auth provider %q", user.Provider)
 	}
 	return nil
 }

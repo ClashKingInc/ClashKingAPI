@@ -121,6 +121,7 @@ func getBans(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param player_tag path string true "Player Tag"
+// @Param body body modelsv2.BanRequest true "Ban details"
 // @Success 200 {object} modelsv2.BanMutationResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
@@ -143,26 +144,28 @@ func addBan(rt apptypes.Deps) apptypes.HandlerFunc {
 			}
 		}
 		existing, err := sqlBan(c, rt, serverID, tag)
-		if err == nil && existing != nil {
+		if err != nil {
+			return err
+		}
+		if existing != nil {
 			editedBy := append(banAnySlice(existing["edited_by"]), map[string]any{"user": body.AddedBy, "previous": map[string]any{"reason": existing["Notes"]}})
 			_, err = rt.Store.SQL.Exec(c.UserContext(), `
 				UPDATE server_bans
 				SET reason = $3,
 					edited_by = $4::jsonb,
-					data = data || $5::jsonb,
+					image = COALESCE(NULLIF($5, ''), image),
 					updated_at = now()
 				WHERE server_id = $1 AND player_tag = $2
-			`, strconv.Itoa(serverID), tag, body.Reason, apptypes.Marshal(editedBy), apptypes.Marshal(map[string]any{"Notes": body.Reason, "edited_by": editedBy}))
+			`, strconv.Itoa(serverID), tag, body.Reason, apptypes.Marshal(editedBy), body.Image)
 			if err != nil {
 				return err
 			}
 			return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "updated", "player_tag": tag, "player_name": playerName, "server_id": serverID})
 		}
-		doc := map[string]any{"VillageTag": tag, "VillageName": playerName, "DateCreated": time.Now().UTC().Format("2006-01-02 15:04:05"), "Notes": body.Reason, "server": serverID, "added_by": body.AddedBy, "image": body.Image}
 		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO server_bans (server_id, player_tag, player_name, reason, added_by, data, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb, now(), now())
-		`, strconv.Itoa(serverID), tag, playerName, body.Reason, body.AddedBy, apptypes.Marshal(doc)); err != nil {
+			INSERT INTO server_bans (server_id, player_tag, player_name, reason, added_by, image, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), now(), now())
+		`, strconv.Itoa(serverID), tag, playerName, body.Reason, body.AddedBy, body.Image); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "created", "player_tag": tag, "player_name": playerName, "server_id": serverID})
@@ -204,7 +207,7 @@ func sqlBans(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string]any, er
 		return nil, apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 	}
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT player_tag, player_name, reason, added_by, edited_by, created_at, data
+		SELECT player_tag, player_name, reason, added_by, edited_by, image, created_at
 		FROM server_bans
 		WHERE server_id = $1
 		ORDER BY created_at DESC
@@ -229,7 +232,7 @@ func sqlBans(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[string]any, er
 
 func sqlBan(c *fiber.Ctx, rt apptypes.Deps, serverID int, tag string) (map[string]any, error) {
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT player_tag, player_name, reason, added_by, edited_by, created_at, data
+		SELECT player_tag, player_name, reason, added_by, edited_by, image, created_at
 		FROM server_bans
 		WHERE server_id = $1 AND player_tag = $2
 		LIMIT 1
@@ -250,19 +253,22 @@ type banScanner interface {
 
 func scanSQLBan(row banScanner, serverID int) (map[string]any, error) {
 	var tag, playerName, reason, addedBy string
-	var editedRaw, dataRaw []byte
+	var editedRaw []byte
+	var image *string
 	var createdAt time.Time
-	if err := row.Scan(&tag, &playerName, &reason, &addedBy, &editedRaw, &createdAt, &dataRaw); err != nil {
+	if err := row.Scan(&tag, &playerName, &reason, &addedBy, &editedRaw, &image, &createdAt); err != nil {
 		return nil, err
 	}
 	item := map[string]any{}
-	_ = json.Unmarshal(dataRaw, &item)
 	item["VillageTag"] = tag
 	item["VillageName"] = playerName
 	item["Notes"] = reason
 	item["server"] = serverID
 	item["added_by"] = addedBy
 	item["DateCreated"] = createdAt.UTC().Format("2006-01-02 15:04:05")
+	if image != nil {
+		item["image"] = *image
+	}
 	var edited []any
 	_ = json.Unmarshal(editedRaw, &edited)
 	item["edited_by"] = edited

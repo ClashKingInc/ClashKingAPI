@@ -13,43 +13,53 @@ import (
 )
 
 type Config struct {
-	COCEmail            string
-	COCPassword         string
-	TimescaleURL        string
-	RedisIP             string
-	RedisPassword       string
-	BunnyAccessKey      string
-	AnalyticsToken      string
-	LinkAPIUser         string
-	LinkAPIPassword     string
-	InternalAPIToken    string
-	Local               bool
-	APIBotToken         string
-	DevUserID           string
-	ClientSecret        string
-	BotToken            string
-	ProxyBaseURL        string
-	EncryptionKey       string
-	SecretKey           string
-	RefreshSecret       string
-	NativeTokenAudience string
-	WebTokenAudience    string
-	WebAllowedOrigins   []string
-	DiscordRedirectURI  string
-	DiscordClientID     string
-	DiscordClientSecret string
-	SentryDSN           string
-	SentryDSNMobile     string
-	SMTPUsername        string
-	SMTPPassword        string
-	SMTPFrom            string
-	SMTPReplyTo         string
-	SMTPServer          string
-	SMTPPort            int
-	SMTPStartTLS        bool
-	SMTPSSLTLS          bool
-	ListenHost          string
-	ListenPort          int
+	COCEmail                     string
+	COCPassword                  string
+	TimescaleURL                 string
+	RedisIP                      string
+	RedisPassword                string
+	BunnyAccessKey               string
+	AnalyticsToken               string
+	LinkAPIUser                  string
+	LinkAPIPassword              string
+	InternalAPIToken             string
+	AIUsageSecret                string
+	Local                        bool
+	APIBotToken                  string
+	DevUserID                    string
+	ClientSecret                 string
+	BotToken                     string
+	ProxyBaseURL                 string
+	EncryptionKey                string
+	SecretKey                    string
+	RefreshSecret                string
+	NativeTokenAudience          string
+	WebTokenAudience             string
+	WebAllowedOrigins            []string
+	DiscordRedirectURI           string
+	DiscordClientID              string
+	DiscordClientSecret          string
+	SentryDSN                    string
+	SentryDSNMobile              string
+	StripeSecretKey              string
+	StripeWebhookSecret          string
+	StripeMonthlyPriceID         string
+	StripeCheckoutSuccessURL     string
+	StripeCheckoutCancelURL      string
+	StripePortalReturnURL        string
+	AIRosterMaxPromptChars       int
+	AIRosterMembershipMaxChanges int
+	RosterRefreshCooldownMinutes int
+	SMTPUsername                 string
+	SMTPPassword                 string
+	SMTPFrom                     string
+	SMTPReplyTo                  string
+	SMTPServer                   string
+	SMTPPort                     int
+	SMTPStartTLS                 bool
+	SMTPSSLTLS                   bool
+	ListenHost                   string
+	ListenPort                   int
 }
 
 func Load() (Config, error) {
@@ -60,47 +70,64 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		COCEmail:            os.Getenv("COC_EMAIL"),
-		COCPassword:         os.Getenv("COC_PASSWORD"),
-		TimescaleURL:        buildTimescaleURL(os.Getenv),
-		RedisIP:             os.Getenv("REDIS_IP"),
-		RedisPassword:       os.Getenv("REDIS_PW"),
-		BunnyAccessKey:      os.Getenv("BUNNY_ACCESS_KEY"),
-		AnalyticsToken:      os.Getenv("API_ANALYTICS_KEY"),
-		LinkAPIUser:         os.Getenv("LINK_API_USER"),
-		LinkAPIPassword:     os.Getenv("LINK_API_PW"),
-		InternalAPIToken:    os.Getenv("INTERNAL_API_TOKEN"),
-		Local:               strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
-		APIBotToken:         os.Getenv("API_BOT_TOKEN"),
-		DevUserID:           os.Getenv("DEV_USER_ID"),
-		ClientSecret:        os.Getenv("CLIENT_SECRET"),
-		BotToken:            os.Getenv("BOT_TOKEN"),
-		ProxyBaseURL:        os.Getenv("PROXY_BASE_URL"),
-		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
-		SecretKey:           os.Getenv("SECRET_KEY"),
-		RefreshSecret:       os.Getenv("REFRESH_SECRET"),
-		NativeTokenAudience: firstNonEmpty(os.Getenv("NATIVE_TOKEN_AUDIENCE"), "clashking-native"),
-		WebTokenAudience:    firstNonEmpty(os.Getenv("WEB_TOKEN_AUDIENCE"), "clashking-web"),
-		WebAllowedOrigins:   splitCSV(os.Getenv("WEB_ALLOWED_ORIGINS")),
-		DiscordRedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
-		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
-		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
-		SentryDSN:           os.Getenv("SENTRY_DSN_API"),
-		SentryDSNMobile:     os.Getenv("APP_SENTRY_DSN"),
-		SMTPUsername:        os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:        os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:            os.Getenv("SMTP_FROM"),
-		SMTPReplyTo:         firstNonEmpty(os.Getenv("SMTP_REPLY_TO"), "noreply@clashk.ing"),
-		SMTPServer:          firstNonEmpty(os.Getenv("SMTP_SERVER"), "smtp.gmail.com"),
-		SMTPPort:            envInt("SMTP_PORT", 587),
-		SMTPStartTLS:        envBool("SMTP_STARTTLS", true),
-		SMTPSSLTLS:          envBool("SMTP_SSL_TLS", false),
+		COCEmail:                     os.Getenv("COC_EMAIL"),
+		COCPassword:                  os.Getenv("COC_PASSWORD"),
+		TimescaleURL:                 buildTimescaleURL(os.Getenv),
+		RedisIP:                      os.Getenv("REDIS_IP"),
+		RedisPassword:                os.Getenv("REDIS_PW"),
+		BunnyAccessKey:               os.Getenv("BUNNY_ACCESS_KEY"),
+		AnalyticsToken:               os.Getenv("API_ANALYTICS_KEY"),
+		LinkAPIUser:                  os.Getenv("LINK_API_USER"),
+		LinkAPIPassword:              os.Getenv("LINK_API_PW"),
+		InternalAPIToken:             os.Getenv("INTERNAL_API_TOKEN"),
+		AIUsageSecret:                os.Getenv("AI_USAGE_SECRET"),
+		Local:                        strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
+		APIBotToken:                  os.Getenv("API_BOT_TOKEN"),
+		DevUserID:                    os.Getenv("DEV_USER_ID"),
+		ClientSecret:                 os.Getenv("CLIENT_SECRET"),
+		BotToken:                     os.Getenv("BOT_TOKEN"),
+		ProxyBaseURL:                 os.Getenv("PROXY_BASE_URL"),
+		EncryptionKey:                os.Getenv("ENCRYPTION_KEY"),
+		SecretKey:                    os.Getenv("SECRET_KEY"),
+		RefreshSecret:                os.Getenv("REFRESH_SECRET"),
+		NativeTokenAudience:          firstNonEmpty(os.Getenv("NATIVE_TOKEN_AUDIENCE"), "clashking-native"),
+		WebTokenAudience:             firstNonEmpty(os.Getenv("WEB_TOKEN_AUDIENCE"), "clashking-web"),
+		WebAllowedOrigins:            splitCSV(os.Getenv("WEB_ALLOWED_ORIGINS")),
+		DiscordRedirectURI:           os.Getenv("DISCORD_REDIRECT_URI"),
+		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
+		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
+		SentryDSN:                    os.Getenv("SENTRY_DSN_API"),
+		SentryDSNMobile:              os.Getenv("APP_SENTRY_DSN"),
+		StripeSecretKey:              os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret:          os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		StripeMonthlyPriceID:         os.Getenv("STRIPE_MONTHLY_PRICE_ID"),
+		StripeCheckoutSuccessURL:     os.Getenv("STRIPE_CHECKOUT_SUCCESS_URL"),
+		StripeCheckoutCancelURL:      os.Getenv("STRIPE_CHECKOUT_CANCEL_URL"),
+		StripePortalReturnURL:        os.Getenv("STRIPE_PORTAL_RETURN_URL"),
+		AIRosterMaxPromptChars:       envInt("AI_ROSTER_MAX_PROMPT_CHARS", 12000),
+		AIRosterMembershipMaxChanges: envInt("AI_ROSTER_MEMBERSHIP_MAX_CHANGES", 1000),
+		RosterRefreshCooldownMinutes: envInt("ROSTER_REFRESH_COOLDOWN_MINUTES", 15),
+		SMTPUsername:                 os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:                 os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:                     os.Getenv("SMTP_FROM"),
+		SMTPReplyTo:                  firstNonEmpty(os.Getenv("SMTP_REPLY_TO"), "noreply@clashk.ing"),
+		SMTPServer:                   firstNonEmpty(os.Getenv("SMTP_SERVER"), "smtp.gmail.com"),
+		SMTPPort:                     envInt("SMTP_PORT", 587),
+		SMTPStartTLS:                 envBool("SMTP_STARTTLS", true),
+		SMTPSSLTLS:                   envBool("SMTP_SSL_TLS", false),
 	}
 	if cfg.Local {
+		if strings.TrimSpace(cfg.AIUsageSecret) == "" {
+			cfg.AIUsageSecret = "clashking-local-ai-metering"
+		}
 		cfg.ListenHost = "127.0.0.1"
 		cfg.ListenPort = 8000
 		if len(cfg.WebAllowedOrigins) == 0 {
-			cfg.WebAllowedOrigins = []string{"http://localhost:3002", "http://localhost:8080"}
+			cfg.WebAllowedOrigins = []string{
+				"https://dev-dash.clashk.ing",
+				"http://localhost:3002", "http://127.0.0.1:3002",
+				"http://localhost:8080", "http://127.0.0.1:8080",
+			}
 		}
 	} else {
 		cfg.ListenHost = "0.0.0.0"
@@ -152,6 +179,9 @@ func (c Config) validate() error {
 		return errors.New("LOCAL=TRUE requires DEV_USER_ID")
 	}
 	if !c.Local {
+		if strings.TrimSpace(c.AIUsageSecret) == "" {
+			return errors.New("AI_USAGE_SECRET is required outside local mode")
+		}
 		if len(c.WebAllowedOrigins) == 0 {
 			return errors.New("WEB_ALLOWED_ORIGINS is required outside local mode")
 		}
@@ -168,6 +198,11 @@ func (c Config) validate() error {
 	}
 	if c.SMTPPort < 1 || c.SMTPPort > 65535 {
 		return errors.New("SMTP_PORT must be between 1 and 65535")
+	}
+	if c.AIRosterMaxPromptChars != 0 && c.AIRosterMaxPromptChars < 1000 ||
+		c.AIRosterMembershipMaxChanges != 0 && (c.AIRosterMembershipMaxChanges < 1 || c.AIRosterMembershipMaxChanges > 1000) ||
+		c.RosterRefreshCooldownMinutes != 0 && c.RosterRefreshCooldownMinutes < 1 {
+		return errors.New("AI roster and roster refresh limits must be positive and within supported minimums")
 	}
 	if c.SMTPStartTLS && c.SMTPSSLTLS {
 		return errors.New("SMTP_STARTTLS and SMTP_SSL_TLS cannot both be enabled")

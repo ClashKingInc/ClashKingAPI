@@ -16,7 +16,7 @@ import (
 
 // clanJoinLeave godoc
 // @Summary Get clan join-leave history
-// @Description Returns join and leave history for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
+// @Description Returns join and leave history for a single clan tag. available and uniquePlayers are all-time totals; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -37,31 +37,9 @@ func clanJoinLeave(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// clanJoinLeaveStats godoc
-// @Summary Get clan join-leave stats
-// @Description Returns join and leave summary stats for a single clan tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
-// @Tags Clan
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param time[after] query string false "Only include events at or after this ISO-8601 time"
-// @Param time[before] query string false "Only include events at or before this ISO-8601 time"
-// @Success 200 {object} modelsv2.JoinLeaveStatsResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/join-leave/stats [get]
-func clanJoinLeaveStats(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		item, err := joinLeaveStatsResponse(c, a, clanFixTag(c.Params("clan_tag")))
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, item)
-	}
-}
-
 // playerJoinLeave godoc
 // @Summary Get player join-leave history
-// @Description Returns join and leave history for a single player tag. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
+// @Description Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -205,41 +183,18 @@ func joinLeaveResponse(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag 
 		return nil, err
 	}
 
-	queryLimit := limit
-	if scope == joinLeaveScopePlayer {
-		queryLimit = 0
-	}
-	events, err := joinLeaveEvents(c, a, scope, tag, window, queryLimit)
+	events, err := joinLeaveEvents(c, a, scope, tag, window, limit)
 	if err != nil {
 		return nil, err
 	}
-	available := len(events)
-	if scope == joinLeaveScopeClan {
-		count, err := joinLeaveAvailable(c, a, scope, tag, window)
-		if err != nil {
-			return nil, err
-		}
-		available = count
-	} else {
-		events = processJoinLeaveEvents(events)
-		available = len(events)
-	}
-	return joinLeaveBuildResponse(events, available, limit, c.BaseURL()), nil
-}
-
-func joinLeaveStatsResponse(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[string]any, error) {
-	if clanTag == "" {
-		return nil, apptypes.Error(http.StatusBadRequest, "clan_tag cannot be empty")
-	}
-	window, err := joinLeaveWindowFromQuery(c)
+	// Summary counts describe all stored history. Time filters only page the
+	// returned items, so these values stay stable while scrolling.
+	countWindow := joinLeaveFullWindow()
+	available, uniquePlayers, err := joinLeaveCounts(c, a, scope, tag, countWindow)
 	if err != nil {
 		return nil, err
 	}
-	events, err := joinLeaveStatsEvents(c, a, clanTag, window)
-	if err != nil {
-		return nil, err
-	}
-	return joinLeaveBuildStatsResponse(clanTag, window, events), nil
+	return joinLeaveBuildResponse(events, available, uniquePlayers, limit, scope, c.BaseURL()), nil
 }
 
 func joinLeaveFullWindow() joinLeaveWindow {
@@ -330,16 +285,16 @@ func joinLeaveEvents(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag st
 	return items, nil
 }
 
-func joinLeaveAvailable(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag string, window joinLeaveWindow) (int, error) {
+func joinLeaveCounts(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag string, window joinLeaveWindow) (int, int, error) {
 	tagColumn := "clan_tag"
 	if scope == joinLeaveScopePlayer {
 		tagColumn = "player_tag"
 	}
-	var count int
+	var count, uniquePlayers int
 	err := a.Store.SQL.QueryRow(
 		c.UserContext(),
 		`
-			SELECT count(*)
+			SELECT count(*), count(DISTINCT player_tag)
 			FROM join_leave_history
 			WHERE `+tagColumn+` = $1
 			  AND "time" >= $2
@@ -348,49 +303,8 @@ func joinLeaveAvailable(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag
 		tag,
 		window.start,
 		window.end,
-	).Scan(&count)
-	return count, err
-}
-
-func joinLeaveStatsEvents(c *fiber.Ctx, a apptypes.Deps, clanTag string, window joinLeaveWindow) ([]mobileJoinLeaveEvent, error) {
-	args := []any{clanTag, window.start, window.end}
-
-	rows, err := a.Store.SQL.Query(
-		c.UserContext(),
-		`
-			SELECT "time", "type", player_tag, player_name
-			FROM join_leave_history
-			WHERE clan_tag = $1
-			  AND "time" >= $2
-			  AND "time" <= $3
-			ORDER BY "time" ASC, player_tag ASC, "type" ASC
-		`,
-		args...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	events := []mobileJoinLeaveEvent{}
-	for rows.Next() {
-		var eventTime time.Time
-		var eventType, playerTag string
-		var playerName pgtype.Text
-		if err := rows.Scan(&eventTime, &eventType, &playerTag, &playerName); err != nil {
-			return nil, err
-		}
-		events = append(events, mobileJoinLeaveEvent{
-			Tag:  playerTag,
-			Name: mobileString(playerName.String),
-			Type: eventType,
-			Time: eventTime,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return events, nil
+	).Scan(&count, &uniquePlayers)
+	return count, uniquePlayers, err
 }
 
 func joinLeaveWindowFromQuery(c *fiber.Ctx) (joinLeaveWindow, error) {
@@ -443,49 +357,55 @@ func v2ParseISO8601QueryTime(c *fiber.Ctx, base string, op string, fallback time
 	return time.Time{}, apptypes.Error(http.StatusBadRequest, base+"["+op+"] must be an ISO-8601 date or timestamp")
 }
 
-func joinLeaveBuildResponse(rows []joinLeaveEventRow, available int, limit int, baseURL string) map[string]any {
+func joinLeaveBuildResponse(rows []joinLeaveEventRow, available int, uniquePlayers int, limit int, scope joinLeaveScope, baseURL string) map[string]any {
 	if limit <= 0 || limit > len(rows) {
 		limit = len(rows)
 	}
 	items := make([]modelsv2.JoinLeaveEvent, 0, limit)
 	for _, row := range rows[:limit] {
-		items = append(items, joinLeaveHistoryItem(row, baseURL))
+		items = append(items, joinLeaveHistoryItem(row, scope == joinLeaveScopePlayer, baseURL))
 	}
-	return map[string]any{
+	response := map[string]any{
 		"items":     items,
 		"available": available,
 	}
+	if scope == joinLeaveScopeClan {
+		response["uniquePlayers"] = uniquePlayers
+	}
+	return response
 }
 
-func joinLeaveHistoryItem(row joinLeaveEventRow, baseURL string) modelsv2.JoinLeaveEvent {
-	return modelsv2.JoinLeaveEvent{
+func joinLeaveHistoryItem(row joinLeaveEventRow, includeClan bool, baseURL string) modelsv2.JoinLeaveEvent {
+	item := modelsv2.JoinLeaveEvent{
 		Time:          row.Time.UTC().Format(time.RFC3339),
 		Type:          row.Type,
 		Tag:           row.PlayerTag,
 		Name:          row.PlayerName,
 		TownHallLevel: row.Townhall,
-		Clan: modelsv2.JoinLeaveClan{
+	}
+	if includeClan {
+		item.Clan = &modelsv2.JoinLeaveClan{
 			Name:  row.ClanName,
 			Tag:   row.ClanTag,
-			Badge: joinLeaveClanBadgePath(baseURL, row.ClanTag),
-		},
+			Badge: joinLeaveClanBadgeURL(baseURL, row.ClanTag),
+		}
 	}
+	return item
 }
 
 func joinLeaveClanObject(tag string, name string, baseURL string) map[string]any {
 	return map[string]any{
 		"name":  name,
 		"tag":   tag,
-		"badge": joinLeaveClanBadgePath(baseURL, tag),
+		"badge": joinLeaveClanBadgeURL(baseURL, tag),
 	}
 }
 
-func joinLeaveClanBadgePath(baseURL string, tag string) string {
+func joinLeaveClanBadgeURL(baseURL string, tag string) string {
 	if tag == "" {
 		return ""
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
-	return baseURL + "/clan/" + url.PathEscape(tag) + "/badge"
+	return strings.TrimRight(baseURL, "/") + "/v2/clan/" + url.PathEscape(tag) + "/badge"
 }
 
 func processJoinLeaveEvents(events []joinLeaveEventRow) []joinLeaveEventRow {
@@ -702,7 +622,7 @@ func joinLeaveSharedClanTotals(leftEvents []joinLeaveEventRow, rightEvents []joi
 			Clan: modelsv2.JoinLeaveClan{
 				Name:  item.name,
 				Tag:   item.tag,
-				Badge: joinLeaveClanBadgePath(baseURL, item.tag),
+				Badge: joinLeaveClanBadgeURL(baseURL, item.tag),
 			},
 			Minutes: item.minutes,
 		})
@@ -730,16 +650,6 @@ func minTime(a time.Time, b time.Time) time.Time {
 	return b
 }
 
-func joinLeaveBuildStatsResponse(clanTag string, window joinLeaveWindow, events []mobileJoinLeaveEvent) map[string]any {
-	return map[string]any{
-		"clan_tag":        clanTag,
-		"timestamp_start": window.startUnix,
-		"timestamp_end":   window.endUnix,
-		"stats":           mobileBuildJoinLeaveStats(events),
-	}
-}
-
 var (
 	_ modelsv2.JoinLeaveResponse
-	_ modelsv2.JoinLeaveStatsResponse
 )

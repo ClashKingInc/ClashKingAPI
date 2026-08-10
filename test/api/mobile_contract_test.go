@@ -58,7 +58,7 @@ func TestMobileInitializationResponseMatchesAppContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected clans bundle map, got %T", response["clans"])
 	}
-	for _, key := range []string{"clan_details", "clan_stats", "war_data", "join_leave_data", "capital_data", "war_log_data", "clan_war_stats", "cwl_data"} {
+	for _, key := range []string{"clan_details", "clan_stats", "war_data", "capital_data", "war_log_data", "clan_war_stats", "cwl_data"} {
 		if _, exists := clans[key]; !exists {
 			t.Fatalf("expected clans bundle to include %q", key)
 		}
@@ -279,9 +279,6 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 				"war_league_infos": []any{nil},
 			},
 		},
-		"join_leave_data": map[string]any{
-			"#CLAN": map[string]any{},
-		},
 		"capital_data": []any{
 			map[string]any{"clan_tag": "#CLAN"},
 		},
@@ -303,21 +300,6 @@ func TestMobileClanBundleContractMatchesAppExpectations(t *testing.T) {
 	}
 	if got := warSummary["war_league_infos"].([]any); len(got) != 0 {
 		t.Fatalf("expected null war_league_infos entries to be filtered, got %d items", len(got))
-	}
-
-	joinLeaveByClan, ok := bundle["join_leave_data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected join_leave_data map, got %T", bundle["join_leave_data"])
-	}
-	joinLeave, ok := joinLeaveByClan["#CLAN"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected join_leave item map, got %T", joinLeaveByClan["#CLAN"])
-	}
-	if _, ok := joinLeave["stats"].(map[string]any); !ok {
-		t.Fatalf("expected join_leave stats map, got %T", joinLeave["stats"])
-	}
-	if _, ok := joinLeave["join_leave_list"].([]any); !ok {
-		t.Fatalf("expected join_leave_list slice, got %T", joinLeave["join_leave_list"])
 	}
 
 	capitalData := bundle["capital_data"].([]any)

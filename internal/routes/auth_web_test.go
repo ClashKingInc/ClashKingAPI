@@ -18,6 +18,12 @@ func TestWebRefreshOnlyInvalidatesRejectedCredentials(t *testing.T) {
 	if !isInvalidWebRefreshCredential(errRefreshTokenConsumed) {
 		t.Fatal("consumed refresh token must invalidate the browser credential")
 	}
+	if shouldClearRejectedWebRefresh(errRefreshTokenConsumed) {
+		t.Fatal("a consumed token response must not expire a concurrently rotated successor cookie")
+	}
+	if !shouldClearRejectedWebRefresh(pgx.ErrNoRows) {
+		t.Fatal("a missing refresh credential must expire the rejected browser cookie")
+	}
 	if isInvalidWebRefreshCredential(errors.New("database unavailable")) {
 		t.Fatal("transient database errors must not invalidate the browser credential")
 	}
@@ -26,7 +32,7 @@ func TestWebRefreshOnlyInvalidatesRejectedCredentials(t *testing.T) {
 func TestWebRefreshCookieIsHostOnlySecureHttpOnlyAndStrict(t *testing.T) {
 	app := fiber.New()
 	app.Get("/cookie", func(c *fiber.Ctx) error {
-		setWebRefreshCookie(c, "refresh-token")
+		setWebRefreshCookie(c, apptypes.Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}}, "refresh-token")
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 
@@ -50,6 +56,91 @@ func TestWebRefreshCookieIsHostOnlySecureHttpOnlyAndStrict(t *testing.T) {
 	}
 	if strings.Contains(lowerCookie, "domain=") {
 		t.Fatalf("cookie is not host-only: %q", cookie)
+	}
+}
+
+func TestWebRefreshCookieUsesNoneOnlyForExplicitAllowedLocalOrigins(t *testing.T) {
+	cfg := apptypes.Config{WebAllowedOrigins: []string{
+		"http://localhost:3002",
+		"http://127.0.0.1:3002",
+		"https://dash.clashk.ing",
+	}}
+	for _, test := range []struct {
+		name   string
+		origin string
+		want   string
+	}{
+		{name: "localhost", origin: "http://localhost:3002", want: "samesite=none"},
+		{name: "loopback", origin: "http://127.0.0.1:3002", want: "samesite=none"},
+		{name: "production", origin: "https://dash.clashk.ing", want: "samesite=strict"},
+		{name: "unlisted localhost", origin: "http://localhost:4000", want: "samesite=strict"},
+		{name: "lookalike", origin: "https://localhost.attacker.example", want: "samesite=strict"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := fiber.New()
+			app.Get("/cookie", func(c *fiber.Ctx) error {
+				setWebRefreshCookie(c, cfg, "refresh-token")
+				return c.SendStatus(fiber.StatusNoContent)
+			})
+			request := httptest.NewRequest(fiber.MethodGet, "/cookie", nil)
+			request.Header.Set(fiber.HeaderOrigin, test.origin)
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			cookie := strings.ToLower(response.Header.Get(fiber.HeaderSetCookie))
+			if !strings.Contains(cookie, test.want) || !strings.Contains(cookie, "secure") || !strings.Contains(cookie, "httponly") {
+				t.Fatalf("cookie = %q, want %q with Secure and HttpOnly", cookie, test.want)
+			}
+		})
+	}
+}
+
+func TestWebRefreshCookieUsesFirstPartyPolicyForLocalDevelopment(t *testing.T) {
+	cfg := apptypes.Config{
+		Local:             true,
+		WebAllowedOrigins: []string{"http://localhost:3002"},
+	}
+	app := fiber.New()
+	app.Get("/cookie", func(c *fiber.Ctx) error {
+		setWebRefreshCookie(c, cfg, "refresh-token")
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	request := httptest.NewRequest(fiber.MethodGet, "/cookie", nil)
+	request.Header.Set(fiber.HeaderOrigin, "http://localhost:3002")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	cookie := strings.ToLower(response.Header.Get(fiber.HeaderSetCookie))
+	for _, required := range []string{"ck_web_refresh=refresh-token", "httponly", "samesite=strict"} {
+		if !strings.Contains(cookie, required) {
+			t.Fatalf("cookie %q does not contain %q", cookie, required)
+		}
+	}
+	if strings.Contains(cookie, "secure") {
+		t.Fatalf("local HTTP cookie must not require Secure: %q", cookie)
+	}
+}
+
+func TestClearedWebRefreshCookieUsesRequestOriginPolicy(t *testing.T) {
+	cfg := apptypes.Config{WebAllowedOrigins: []string{"http://localhost:3002"}}
+	app := fiber.New()
+	app.Get("/cookie", func(c *fiber.Ctx) error {
+		clearWebRefreshCookie(c, cfg)
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	request := httptest.NewRequest(fiber.MethodGet, "/cookie", nil)
+	request.Header.Set(fiber.HeaderOrigin, "http://localhost:3002")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	cookie := strings.ToLower(response.Header.Get(fiber.HeaderSetCookie))
+	for _, required := range []string{"ck_web_refresh=", "max-age=0", "samesite=none", "secure", "httponly"} {
+		if !strings.Contains(cookie, required) {
+			t.Fatalf("cleared cookie %q does not contain %q", cookie, required)
+		}
 	}
 }
 

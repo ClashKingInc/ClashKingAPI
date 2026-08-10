@@ -77,6 +77,32 @@ func TestCORSAllowedWebOriginGetsCredentialedPreflight(t *testing.T) {
 	}
 }
 
+func TestCORSExplicitLocalhostOriginGetsCredentialedRefreshPreflight(t *testing.T) {
+	for _, origin := range []string{"http://localhost:3002", "http://127.0.0.1:3002"} {
+		t.Run(origin, func(t *testing.T) {
+			app := newCORSTestApp(Config{WebAllowedOrigins: []string{origin}})
+			request := httptest.NewRequest(fiber.MethodOptions, "/v2/auth/web/refresh", nil)
+			request.Header.Set(fiber.HeaderOrigin, origin)
+			request.Header.Set(fiber.HeaderAccessControlRequestMethod, fiber.MethodPost)
+			request.Header.Set(fiber.HeaderAccessControlRequestHeaders, "content-type")
+
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			if response.StatusCode != fiber.StatusNoContent {
+				t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != origin {
+				t.Fatalf("allow origin = %q, want %q", got, origin)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowCredentials); got != "true" {
+				t.Fatalf("allow credentials = %q", got)
+			}
+		})
+	}
+}
+
 func TestCORSRejectsUnknownOriginForCredentialedRoute(t *testing.T) {
 	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
 	request := httptest.NewRequest(fiber.MethodOptions, "/v2/auth/web/refresh", nil)

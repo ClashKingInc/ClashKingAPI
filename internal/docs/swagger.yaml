@@ -930,6 +930,123 @@ definitions:
       url:
         type: string
     type: object
+  modelsv2.CWLBonusCalculation:
+    properties:
+      awardCount:
+        type: integer
+      baseAwardCount:
+        type: integer
+      reasons:
+        items:
+          type: string
+        type: array
+      rulesetVersion:
+        type: string
+      status:
+        enum:
+        - ready
+        - incomplete
+        type: string
+    type: object
+  modelsv2.CWLBonusClan:
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.CWLBonusContext:
+    properties:
+      calculation:
+        $ref: '#/definitions/modelsv2.CWLBonusCalculation'
+      clan:
+        $ref: '#/definitions/modelsv2.CWLBonusClan'
+      currentSubmission:
+        $ref: '#/definitions/modelsv2.CWLBonusSubmission'
+      cwlId:
+        type: string
+      finalPlacement:
+        type: integer
+      league:
+        $ref: '#/definitions/modelsv2.CWLBonusLeague'
+      members:
+        items:
+          $ref: '#/definitions/modelsv2.CWLBonusMember'
+        type: array
+      season:
+        type: string
+      warSize:
+        type: integer
+      warsWon:
+        type: integer
+    type: object
+  modelsv2.CWLBonusHistoryItem:
+    properties:
+      actorDiscordId:
+        type: string
+      awardCount:
+        type: integer
+      calculationMode:
+        enum:
+        - official
+        - override
+        type: string
+      clan:
+        $ref: '#/definitions/modelsv2.CWLBonusClan'
+      correctionReason:
+        type: string
+      createdAt:
+        type: string
+      finalPlacement:
+        type: integer
+      id:
+        type: string
+      league:
+        $ref: '#/definitions/modelsv2.CWLBonusLeague'
+      overrideReason:
+        type: string
+      recipientTags:
+        items:
+          type: string
+        type: array
+      recipients:
+        items:
+          $ref: '#/definitions/modelsv2.CWLBonusMember'
+        type: array
+      revision:
+        type: integer
+      season:
+        type: string
+      superseded:
+        type: boolean
+      warSize:
+        type: integer
+      warsWon:
+        type: integer
+    type: object
+  modelsv2.CWLBonusHistoryResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.CWLBonusHistoryItem'
+        type: array
+    type: object
+  modelsv2.CWLBonusLeague:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  modelsv2.CWLBonusMember:
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
+    type: object
   modelsv2.CWLBonusRecipient:
     properties:
       medalCount:
@@ -943,6 +1060,30 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.CWLBonusRecipient'
         type: array
+    type: object
+  modelsv2.CWLBonusSubmission:
+    properties:
+      actorDiscordId:
+        type: string
+      calculationMode:
+        enum:
+        - official
+        - override
+        type: string
+      correctionReason:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      overrideReason:
+        type: string
+      recipientTags:
+        items:
+          type: string
+        type: array
+      revision:
+        type: integer
     type: object
   modelsv2.CWLClan:
     properties:
@@ -1738,6 +1879,17 @@ definitions:
         - family-wide
         type: string
     type: object
+  modelsv2.CurrentDatesResponse:
+    properties:
+      clan-games:
+        type: string
+      legend:
+        type: string
+      raid:
+        type: string
+      season:
+        type: string
+    type: object
   modelsv2.CurrentUserInfo:
     properties:
       account_summary:
@@ -1751,17 +1903,6 @@ definitions:
       user_id:
         type: string
       username:
-        type: string
-    type: object
-  modelsv2.CurrentDatesResponse:
-    properties:
-      clan-games:
-        type: string
-      legend:
-        type: string
-      raid:
-        type: string
-      season:
         type: string
     type: object
   modelsv2.DashboardAccessConfig:
@@ -5486,6 +5627,25 @@ definitions:
       total_weight:
         type: integer
     type: object
+  modelsv2.SubmitCWLBonusAwards:
+    properties:
+      awardCountOverride:
+        type: integer
+      correctionReason:
+        type: string
+      cwlId:
+        type: string
+      expectedRevision:
+        type: integer
+      overrideReason:
+        type: string
+      recipientTags:
+        items:
+          type: string
+        type: array
+      serverId:
+        type: string
+    type: object
   modelsv2.TicketButton:
     properties:
       custom_id:
@@ -5754,6 +5914,11 @@ definitions:
       name:
         type: string
     type: object
+  modelsv2.UserAccountSummary:
+    properties:
+      follower_count:
+        type: integer
+    type: object
   modelsv2.WarAttack:
     properties:
       attackerTag:
@@ -5767,11 +5932,6 @@ definitions:
       order:
         type: integer
       stars:
-        type: integer
-    type: object
-  modelsv2.UserAccountSummary:
-    properties:
-      follower_count:
         type: integer
     type: object
   modelsv2.WarBadgeURLs:
@@ -7608,6 +7768,124 @@ paths:
       summary: List stored CWL seasons for a clan
       tags:
       - CWL
+  /v2/cwl/bonus-awards:
+    post:
+      consumes:
+      - application/json
+      description: Appends an immutable first submission or correction. Every league,
+        standing, rule, count, member name, and eligibility input is recalculated
+        server-side. Idempotency is scoped to the server.
+      parameters:
+      - description: Unique retry key
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Award recipients and optimistic revision
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.SubmitCWLBonusAwards'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusSubmission'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusSubmission'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Save CWL bonus-award recipients
+      tags:
+      - CWL Bonus Awards
+  /v2/cwl/bonus-awards/context:
+    get:
+      description: Recalculates league, war size, final placement, wins, effective
+        rules, official award count, frozen eligible members, and the current immutable
+        submission revision.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: serverId
+        required: true
+        type: string
+      - description: Clan tag
+        in: query
+        name: clanTag
+        required: true
+        type: string
+      - description: CWL season (YYYY-MM)
+        in: query
+        name: season
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusContext'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get CWL bonus-award context
+      tags:
+      - CWL Bonus Awards
+  /v2/cwl/bonus-awards/history:
+    get:
+      description: Returns every immutable revision for exactly one clan or player
+        filter within a server.
+      parameters:
+      - description: Discord server ID
+        in: query
+        name: serverId
+        required: true
+        type: string
+      - description: Clan tag; exactly one of clanTag or playerTag is required
+        in: query
+        name: clanTag
+        type: string
+      - description: Player tag; exactly one of clanTag or playerTag is required
+        in: query
+        name: playerTag
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.CWLBonusHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get CWL bonus-award history
+      tags:
+      - CWL Bonus Awards
   /v2/cwl/league-thresholds:
     get:
       description: Returns the static CWL promotion and demotion thresholds list.

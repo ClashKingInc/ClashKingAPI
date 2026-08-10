@@ -2227,6 +2227,182 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/cwl/bonus-awards": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Appends an immutable first submission or correction. Every league, standing, rule, count, member name, and eligibility input is recalculated server-side. Idempotency is scoped to the server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL Bonus Awards"
+                ],
+                "summary": "Save CWL bonus-award recipients",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Unique retry key",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Award recipients and optimistic revision",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SubmitCWLBonusAwards"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusSubmission"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusSubmission"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/cwl/bonus-awards/context": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Recalculates league, war size, final placement, wins, effective rules, official award count, frozen eligible members, and the current immutable submission revision.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL Bonus Awards"
+                ],
+                "summary": "Get CWL bonus-award context",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "serverId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clanTag",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusContext"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/cwl/bonus-awards/history": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns every immutable revision for exactly one clan or player filter within a server.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CWL Bonus Awards"
+                ],
+                "summary": "Get CWL bonus-award history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Discord server ID",
+                        "name": "serverId",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Clan tag; exactly one of clanTag or playerTag is required",
+                        "name": "clanTag",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player tag; exactly one of clanTag or playerTag is required",
+                        "name": "playerTag",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLBonusHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/cwl/league-thresholds": {
             "get": {
                 "description": "Returns the static CWL promotion and demotion thresholds list.",
@@ -15235,6 +15411,184 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CWLBonusCalculation": {
+            "type": "object",
+            "properties": {
+                "awardCount": {
+                    "type": "integer"
+                },
+                "baseAwardCount": {
+                    "type": "integer"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "rulesetVersion": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "ready",
+                        "incomplete"
+                    ]
+                }
+            }
+        },
+        "modelsv2.CWLBonusClan": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLBonusContext": {
+            "type": "object",
+            "properties": {
+                "calculation": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusCalculation"
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusClan"
+                },
+                "currentSubmission": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusSubmission"
+                },
+                "cwlId": {
+                    "type": "string"
+                },
+                "finalPlacement": {
+                    "type": "integer"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusLeague"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLBonusMember"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "warSize": {
+                    "type": "integer"
+                },
+                "warsWon": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLBonusHistoryItem": {
+            "type": "object",
+            "properties": {
+                "actorDiscordId": {
+                    "type": "string"
+                },
+                "awardCount": {
+                    "type": "integer"
+                },
+                "calculationMode": {
+                    "type": "string",
+                    "enum": [
+                        "official",
+                        "override"
+                    ]
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusClan"
+                },
+                "correctionReason": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "finalPlacement": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "league": {
+                    "$ref": "#/definitions/modelsv2.CWLBonusLeague"
+                },
+                "overrideReason": {
+                    "type": "string"
+                },
+                "recipientTags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "recipients": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLBonusMember"
+                    }
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "superseded": {
+                    "type": "boolean"
+                },
+                "warSize": {
+                    "type": "integer"
+                },
+                "warsWon": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.CWLBonusHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.CWLBonusHistoryItem"
+                    }
+                }
+            }
+        },
+        "modelsv2.CWLBonusLeague": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.CWLBonusMember": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.CWLBonusRecipient": {
             "type": "object",
             "properties": {
@@ -15254,6 +15608,42 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.CWLBonusRecipient"
                     }
+                }
+            }
+        },
+        "modelsv2.CWLBonusSubmission": {
+            "type": "object",
+            "properties": {
+                "actorDiscordId": {
+                    "type": "string"
+                },
+                "calculationMode": {
+                    "type": "string",
+                    "enum": [
+                        "official",
+                        "override"
+                    ]
+                },
+                "correctionReason": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "overrideReason": {
+                    "type": "string"
+                },
+                "recipientTags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "revision": {
+                    "type": "integer"
                 }
             }
         },
@@ -16481,6 +16871,23 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CurrentDatesResponse": {
+            "type": "object",
+            "properties": {
+                "clan-games": {
+                    "type": "string"
+                },
+                "legend": {
+                    "type": "string"
+                },
+                "raid": {
+                    "type": "string"
+                },
+                "season": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.CurrentUserInfo": {
             "type": "object",
             "properties": {
@@ -16500,23 +16907,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.CurrentDatesResponse": {
-            "type": "object",
-            "properties": {
-                "clan-games": {
-                    "type": "string"
-                },
-                "legend": {
-                    "type": "string"
-                },
-                "raid": {
-                    "type": "string"
-                },
-                "season": {
                     "type": "string"
                 }
             }
@@ -22147,6 +22537,35 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.SubmitCWLBonusAwards": {
+            "type": "object",
+            "properties": {
+                "awardCountOverride": {
+                    "type": "integer"
+                },
+                "correctionReason": {
+                    "type": "string"
+                },
+                "cwlId": {
+                    "type": "string"
+                },
+                "expectedRevision": {
+                    "type": "integer"
+                },
+                "overrideReason": {
+                    "type": "string"
+                },
+                "recipientTags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "serverId": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.TicketButton": {
             "type": "object",
             "properties": {
@@ -22554,6 +22973,14 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.UserAccountSummary": {
+            "type": "object",
+            "properties": {
+                "follower_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.WarAttack": {
             "type": "object",
             "properties": {
@@ -22573,14 +23000,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "stars": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.UserAccountSummary": {
-            "type": "object",
-            "properties": {
-                "follower_count": {
                     "type": "integer"
                 }
             }

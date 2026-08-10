@@ -33,7 +33,7 @@ func TestCWLBonusSeasonValidation(t *testing.T) {
 }
 
 func TestCWLBonusSQLUsesFrozenRosterAndReplaceSemantics(t *testing.T) {
-	raw, err := os.ReadFile("cwl_bonus_awards.go")
+	raw, err := os.ReadFile("cwl_bonus_recipients.go")
 	if err != nil {
 		t.Fatal(err)
 	}

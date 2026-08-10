@@ -2,8 +2,11 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +16,132 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
+
+type clanWarLogResponse struct {
+	Items         []clanWarLogItem `json:"items"`
+	IsPrivate     bool             `json:"isPrivate"`
+	Reconstructed bool             `json:"reconstructed"`
+}
+
+type clanWarLogItem struct {
+	Result           string             `json:"result"`
+	EndTime          string             `json:"endTime"`
+	TeamSize         int                `json:"teamSize"`
+	AttacksPerMember int                `json:"attacksPerMember"`
+	Clan             clanWarLogClanSide `json:"clan"`
+	Opponent         clanWarLogClanSide `json:"opponent"`
+}
+
+type clanWarLogClanSide struct {
+	Tag                   string            `json:"tag"`
+	Name                  string            `json:"name"`
+	BadgeURLs             officialBadgeURLs `json:"badgeUrls"`
+	ClanLevel             int               `json:"clanLevel"`
+	Attacks               int               `json:"attacks"`
+	Stars                 int               `json:"stars"`
+	DestructionPercentage float64           `json:"destructionPercentage"`
+}
+
+// clanWarLog godoc
+// @Summary Get a clan war log
+// @Description Returns the official war log when public. Private logs are reconstructed from stored wars with the same item shape and are marked with isPrivate and reconstructed.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Param limit query int false "Maximum wars to return" default(50)
+// @Security ApiKeyAuth
+// @Success 200 {object} clanWarLogResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 401 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Router /v2/clan/{clan_tag}/war-log [get]
+func clanWarLog(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		clanTag := warFixTag(c.Params("clan_tag"))
+		if clanTag == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tag cannot be empty")
+		}
+		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 250)
+		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyBaseURL), "/")
+		upstreamURL := baseURL + "/v1/clans/" + url.PathEscape(clanTag) + "/warlog?limit=" + strconv.Itoa(limit)
+		req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, upstreamURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Accept", "application/json")
+		resp, err := proxyHTTPClient.Do(req)
+		if err != nil {
+			return apptypes.Error(fiber.StatusBadGateway, "Proxy upstream request failed: "+err.Error())
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode == fiber.StatusOK {
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				return err
+			}
+			payload["isPrivate"] = false
+			payload["reconstructed"] = false
+			return apptypes.JSON(c, fiber.StatusOK, payload)
+		}
+		if resp.StatusCode != fiber.StatusForbidden {
+			return c.Status(resp.StatusCode).Send(body)
+		}
+
+		wars, err := sqlClanWars(c, a, clanTag, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC(), []string{"random", "friendly"}, limit)
+		if err != nil {
+			return err
+		}
+		items := make([]clanWarLogItem, 0, len(wars))
+		for _, war := range wars {
+			if war.State != "warEnded" {
+				continue
+			}
+			items = append(items, buildClanWarLogItem(war))
+		}
+		return apptypes.JSON(c, fiber.StatusOK, clanWarLogResponse{
+			Items: items, IsPrivate: true, Reconstructed: true,
+		})
+	}
+}
+
+func buildClanWarLogItem(war officialWarResponse) clanWarLogItem {
+	return clanWarLogItem{
+		Result:           clanWarLogResult(war.Clan, war.Opponent),
+		EndTime:          war.EndTime,
+		TeamSize:         war.TeamSize,
+		AttacksPerMember: valueOrDefault(war.AttacksPerMember, 1),
+		Clan:             buildClanWarLogSide(war.Clan),
+		Opponent:         buildClanWarLogSide(war.Opponent),
+	}
+}
+
+func buildClanWarLogSide(side officialWarClan) clanWarLogClanSide {
+	return clanWarLogClanSide{
+		Tag: side.Tag, Name: side.Name, BadgeURLs: side.BadgeURLs, ClanLevel: side.ClanLevel,
+		Attacks: side.Attacks, Stars: side.Stars, DestructionPercentage: side.DestructionPercentage,
+	}
+}
+
+func clanWarLogResult(clan officialWarClan, opponent officialWarClan) string {
+	if clan.Stars > opponent.Stars || (clan.Stars == opponent.Stars && clan.DestructionPercentage > opponent.DestructionPercentage) {
+		return "win"
+	}
+	if clan.Stars < opponent.Stars || (clan.Stars == opponent.Stars && clan.DestructionPercentage < opponent.DestructionPercentage) {
+		return "lose"
+	}
+	return "tie"
+}
+
+func valueOrDefault(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
 
 // clanWars godoc
 // @Summary Get stored clan wars

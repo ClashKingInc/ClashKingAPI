@@ -90,6 +90,24 @@ definitions:
           type: string
         type: array
     type: object
+  modelsv2.Achievement:
+    properties:
+      asset_url:
+        type: string
+      earned_count:
+        type: integer
+      id:
+        type: string
+      repeatable:
+        type: boolean
+    type: object
+  modelsv2.AchievementsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.Achievement'
+        type: array
+    type: object
   modelsv2.ActiveAnnouncementResponse:
     properties:
       item:
@@ -6206,6 +6224,46 @@ paths:
       summary: List tracked town halls
       tags:
       - Lists
+  /v2/achievements:
+    get:
+      description: Lists every available achievement with its model asset and the
+        authenticated user's earned count.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AchievementsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: List achievements
+      tags:
+      - Achievements
+  /v2/achievements/check:
+    post:
+      description: Checks verified linked players for achievements that can currently
+        be evaluated, awards new matches, and returns the full catalog.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AchievementsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Check achievements
+      tags:
+      - Achievements
   /v2/activity/guild-summary:
     get:
       description: Returns clan and member activity totals for a Discord guild.

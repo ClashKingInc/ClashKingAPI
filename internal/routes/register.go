@@ -33,6 +33,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	}
 
 	app.Get("/v2/clan/:clan_tag/badge", clanBadge(a))
+	app.Get("/v2/achievements", wrap(listAchievements(a)))
+	app.Post("/v2/achievements/check", wrap(checkAchievements(a)))
 
 	// Register the static server path before the generic two-parameter link paths.
 	// Fiber dispatches in registration order, so DELETE/PATCH would otherwise match

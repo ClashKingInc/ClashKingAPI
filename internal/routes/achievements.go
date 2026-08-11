@@ -58,7 +58,13 @@ func checkAchievements(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 
-		for result := range a.Clash.FetchPlayers(ctx, tags) {
+		fetchCtx, cancelFetch := context.WithCancel(ctx)
+		defer cancelFetch()
+		var awardErr error
+		for result := range a.Clash.FetchPlayers(fetchCtx, tags) {
+			if awardErr != nil {
+				continue
+			}
 			if result.Err != nil || result.Player == nil {
 				continue
 			}
@@ -72,9 +78,14 @@ func checkAchievements(a apptypes.Deps) fiber.Handler {
 					VALUES ($1, $2, $3)
 					ON CONFLICT DO NOTHING
 				`, achievementID, apptypes.NormalizeTag(result.Player.Tag), achievementLifetimeOccurrenceKey); err != nil {
-					return err
+					awardErr = err
+					cancelFetch()
+					break
 				}
 			}
+		}
+		if awardErr != nil {
+			return awardErr
 		}
 
 		counts, err := achievementAwardCounts(ctx, a, userID)

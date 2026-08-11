@@ -118,7 +118,7 @@ func playerTagsFromBody(c *fiber.Ctx) ([]string, error) {
 	return tags, nil
 }
 
-// playerDotGet traverses a map[string]any using dot-notation (e.g., "league.name").
+// playerDotGet traverses a map[string]any using dot-notation (e.g., "leagueTier.name").
 func playerDotGet(data map[string]any, path string) any {
 	keys := strings.Split(path, ".")
 	var cur any = data
@@ -160,18 +160,7 @@ func playerStructToMap(v any) map[string]any {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil
 	}
-	if leagueTier, ok := m["leagueTier"].(map[string]any); ok {
-		if clashyLeagueMapPopulated(leagueTier) {
-			m["league"] = mapsClone(leagueTier)
-		} else {
-			delete(m, "leagueTier")
-		}
-	}
 	return m
-}
-
-func clashyLeagueMapPopulated(league map[string]any) bool {
-	return staticReferenceID(league["id"]) != 0 || strings.TrimSpace(staticDataAsString(league["name"])) != ""
 }
 
 // playersSorted returns players sorted by any CoC API attribute.
@@ -180,7 +169,7 @@ func clashyLeagueMapPopulated(league map[string]any) bool {
 // @Tags Player
 // @Accept json
 // @Produce json
-// @Param attribute path string true "Attribute path (dot notation, e.g. trophies or league.name)"
+// @Param attribute path string true "Attribute path (dot notation, e.g. trophies or leagueTier.name)"
 // @Param body body object true "Player tags list"
 // @Success 200 {object} map[string]interface{}
 func playersSorted(a apptypes.Deps) fiber.Handler {

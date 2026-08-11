@@ -13,7 +13,6 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
-	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
@@ -351,7 +350,7 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 				items = append(items, nil)
 				continue
 			}
-			items = append(items, legacyClashyClanResponse(enrichClanLeagueIcons(clan, icons)))
+			items = append(items, enrichClanLeagueIcons(clan, icons))
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
@@ -372,44 +371,8 @@ func clanDetails(a apptypes.Deps) fiber.Handler {
 		if err != nil || clan == nil {
 			return apptypes.Error(fiber.StatusNotFound, "Clan not found")
 		}
-		return apptypes.JSON(c, fiber.StatusOK, legacyClashyClanResponse(enrichClanLeagueIcons(clan, leagueIconLookup(a))))
+		return apptypes.JSON(c, fiber.StatusOK, enrichClanLeagueIcons(clan, leagueIconLookup(a)))
 	}
-}
-
-func legacyClashyClanResponse(clan *clashy.Clan) map[string]any {
-	response := playerStructToMap(clan)
-	if response == nil {
-		return nil
-	}
-	if warLeague, ok := response["warLeague"].(map[string]any); ok && !clashyLeagueMapPopulated(warLeague) {
-		delete(response, "warLeague")
-	}
-
-	memberList, _ := response["memberList"].([]any)
-	if len(memberList) > 0 && staticReferenceID(response["members"]) == 0 {
-		response["members"] = len(memberList)
-	}
-	clanReference := make(map[string]any, 4)
-	for _, key := range []string{"tag", "name", "clanLevel", "badgeUrls"} {
-		if value, ok := response[key]; ok {
-			clanReference[key] = value
-		}
-	}
-	for _, rawMember := range memberList {
-		member, ok := rawMember.(map[string]any)
-		if !ok {
-			continue
-		}
-		if leagueTier, ok := member["leagueTier"].(map[string]any); ok {
-			if clashyLeagueMapPopulated(leagueTier) {
-				member["league"] = mapsClone(leagueTier)
-			}
-			delete(member, "leagueTier")
-		}
-		delete(member, "townHallLevel")
-		member["clan"] = mapsClone(clanReference)
-	}
-	return response
 }
 
 func clanParseIntDefault(raw string, fallback int) int {

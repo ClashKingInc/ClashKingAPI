@@ -6224,26 +6224,6 @@ paths:
       summary: List tracked town halls
       tags:
       - Lists
-  /v2/achievements:
-    get:
-      description: Lists every available achievement with its model asset and the
-        authenticated user's earned count.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/modelsv2.AchievementsResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/modelsv2.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: List achievements
-      tags:
-      - Achievements
   /v2/achievements/check:
     post:
       description: Checks verified linked players for achievements that can currently

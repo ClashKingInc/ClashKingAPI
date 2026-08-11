@@ -41,24 +41,6 @@ var achievementDefinitions = []modelsv2.Achievement{
 	},
 }
 
-// @Summary List achievements
-// @Description Lists every available achievement with its model asset and the authenticated user's earned count.
-// @Tags Achievements
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {object} modelsv2.AchievementsResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
-// @Router /v2/achievements [get]
-func listAchievements(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		counts, err := achievementAwardCounts(c.UserContext(), a, apptypes.UserID(c.UserContext()))
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, achievementCatalog(counts))
-	}
-}
-
 // @Summary Check achievements
 // @Description Checks verified linked players for achievements that can currently be evaluated, awards new matches, and returns the full catalog.
 // @Tags Achievements

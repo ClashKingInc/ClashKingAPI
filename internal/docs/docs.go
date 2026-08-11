@@ -198,37 +198,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/achievements": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Lists every available achievement with its model asset and the authenticated user's earned count.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Achievements"
-                ],
-                "summary": "List achievements",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.AchievementsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/achievements/check": {
             "post": {
                 "security": [

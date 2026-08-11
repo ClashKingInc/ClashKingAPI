@@ -160,7 +160,18 @@ func playerStructToMap(v any) map[string]any {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil
 	}
+	if leagueTier, ok := m["leagueTier"].(map[string]any); ok {
+		if clashyLeagueMapPopulated(leagueTier) {
+			m["league"] = mapsClone(leagueTier)
+		} else {
+			delete(m, "leagueTier")
+		}
+	}
 	return m
+}
+
+func clashyLeagueMapPopulated(league map[string]any) bool {
+	return staticReferenceID(league["id"]) != 0 || strings.TrimSpace(staticDataAsString(league["name"])) != ""
 }
 
 // playersSorted returns players sorted by any CoC API attribute.

@@ -1358,7 +1358,7 @@ func rosterHydrateMember(c *fiber.Ctx, a apptypes.Deps, member map[string]any) {
 		member["current_clan"] = ""
 		member["current_clan_tag"] = ""
 	}
-	if player.LeagueTier != nil {
+	if player.LeagueTier.ID != 0 || player.LeagueTier.Name != "" {
 		member["league_id"] = player.LeagueTier.ID
 		member["league_name"] = player.LeagueTier.Name
 	}

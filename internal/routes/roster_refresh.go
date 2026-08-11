@@ -234,7 +234,7 @@ func refreshRosterPlayers(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID) (in
 		}
 		var leagueID *int
 		var leagueName *string
-		if player.LeagueTier != nil {
+		if player.LeagueTier.ID != 0 || player.LeagueTier.Name != "" {
 			leagueID, leagueName = &player.LeagueTier.ID, &player.LeagueTier.Name
 		}
 		_, err := a.Store.SQL.Exec(c.UserContext(), `

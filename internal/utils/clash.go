@@ -13,21 +13,22 @@ type PlayerResult struct {
 }
 
 type ClashAdapter struct {
-	client         *clashy.Client
-	locationsMu    sync.RWMutex
-	cachedLocation []clashy.Location
+	client             *clashy.Client
+	locationsMu        sync.RWMutex
+	cachedLocation     []clashy.Location
+	staticSections     sync.Map
+	staticTranslations sync.Map
 }
 
 func NewClashAdapter(ctx context.Context, email, password string) (*ClashAdapter, error) {
-	client, err := clashy.NewClient(clashy.ClientConfig{
-		BaseURL:       "https://proxy.clashk.ing/v1",
-		KeyCount:      10,
-		KeyNames:      "test",
-		ThrottleLimit: 500,
-		CacheMaxSize:  10_000,
-		RawJSON:       true,
-		LoadGameData:  clashy.LoadGameData{Default: false},
-	})
+	config := clashy.DefaultClientConfig()
+	config.BaseURL = "https://proxy.clashk.ing/v1"
+	config.KeyCount = 10
+	config.KeyNames = "test"
+	config.ThrottleLimit = 500
+	config.CacheMaxSize = 10_000
+
+	client, err := clashy.NewClient(config)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +46,33 @@ func NormalizeTag(tag string) string {
 
 func (a *ClashAdapter) Client() *clashy.Client { return a.client }
 
+// StaticSection returns a cached, read-only static-data section. Callers must
+// clone items before modifying them for a response.
+func (a *ClashAdapter) StaticSection(name string) []map[string]any {
+	if a == nil || a.client == nil {
+		return nil
+	}
+	if cached, ok := a.staticSections.Load(name); ok {
+		return cached.([]map[string]any)
+	}
+	items := a.client.StaticData().Section(name)
+	cached, _ := a.staticSections.LoadOrStore(name, items)
+	return cached.([]map[string]any)
+}
+
+// StaticTranslation returns a cached, read-only translation entry.
+func (a *ClashAdapter) StaticTranslation(id string) map[string]string {
+	if a == nil || a.client == nil {
+		return nil
+	}
+	if cached, ok := a.staticTranslations.Load(id); ok {
+		return cached.(map[string]string)
+	}
+	translation := a.client.StaticData().Translation(id)
+	cached, _ := a.staticTranslations.LoadOrStore(id, translation)
+	return cached.(map[string]string)
+}
+
 func (a *ClashAdapter) GetPlayer(ctx context.Context, tag string) (*clashy.Player, error) {
 	return a.client.GetPlayer(ctx, NormalizeTag(tag))
 }
@@ -61,7 +89,7 @@ func (a *ClashAdapter) SearchLocations(ctx context.Context) ([]clashy.Location, 
 	}
 	a.locationsMu.RUnlock()
 
-	locations, err := a.client.SearchLocations(ctx, 0, "", "")
+	locations, err := a.client.SearchLocations(ctx, clashy.PageOptions{})
 	if err != nil {
 		return nil, err
 	}

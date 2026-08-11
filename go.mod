@@ -3,7 +3,7 @@ module github.com/ClashKingInc/ClashKingAPI
 go 1.26.5
 
 require (
-	github.com/clashkinginc/clashy.go v0.0.0-20260406132723-846551b0007c
+	github.com/clashkinginc/clashy.go v0.1.13
 	github.com/disgoorg/disgo v0.19.3
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611

@@ -211,7 +211,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		cwlLeagueID := 48000000
-		if clan.WarLeague != nil {
+		if clan.WarLeague.ID != 0 {
 			cwlLeagueID = clan.WarLeague.ID
 		}
 		var locationID, capitalLeagueID any
@@ -221,7 +221,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 		if clan.CapitalLeague != nil {
 			capitalLeagueID = clan.CapitalLeague.ID
 		}
-		badgeToken := serverClanBadgeToken(firstNonEmpty(clan.Badge.Large, clan.Badge.Medium, clan.Badge.Small, clan.Badge.URL))
+		badgeToken := serverClanBadgeToken(firstNonEmpty(clan.Badge.Large, clan.Badge.Medium, clan.Badge.Small, clan.Badge.URL()))
 
 		tx, err := rt.Store.SQL.Begin(c.UserContext())
 		if err != nil {

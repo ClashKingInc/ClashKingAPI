@@ -50,10 +50,9 @@ type categoryMeta struct {
 // @Success 200 {object} map[string]interface{}
 func listCategories(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		raw := a.Clash.Client().StaticData().Raw
 		out := make([]map[string]any, 0, len(categories))
 		for category := range categories {
-			out = append(out, map[string]any{"name": category, "count": len(raw[category])})
+			out = append(out, map[string]any{"name": category, "count": len(a.Clash.StaticSection(category))})
 		}
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"categories": out})
 	}
@@ -169,7 +168,7 @@ func maxLevel(a apptypes.Deps) fiber.Handler {
 // @Success 200 {object} map[string]interface{}
 func appStaticDataBundle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		raw := a.Clash.Client().StaticData().Raw
+		raw := appStaticSections(a)
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
 			"troops_data":          map[string]any{"troops": buildAppTroopsData(raw["troops"])},
 			"heroes_data":          map[string]any{"heroes": buildAppHeroesData(raw["heroes"])},
@@ -203,12 +202,11 @@ func appStaticTranslations(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "Invalid locale '"+locale+"'. Available locales: "+strings.Join(locales, ", "))
 		}
 
-		raw := a.Clash.Client().StaticData().Raw
-		translations := a.Clash.Client().StaticData().Translations
+		raw := appStaticSections(a)
 		tids := collectAppBundleTIDs(raw)
 		pack := make(map[string]string, len(tids))
 		for tid := range tids {
-			if translated := translations[tid][locale]; translated != "" {
+			if translated := a.Clash.StaticTranslation(tid)[locale]; translated != "" {
 				pack[tid] = translated
 			}
 		}
@@ -230,13 +228,13 @@ func filteredItems(a apptypes.Deps, c *fiber.Ctx) ([]map[string]any, error) {
 	if locale != "" && !slices.Contains(locales, locale) {
 		return nil, apptypes.Error(fiber.StatusBadRequest, "Invalid locale '"+locale+"'. Available locales: "+strings.Join(locales, ", "))
 	}
-	rawItems := a.Clash.Client().StaticData().Raw[category]
+	rawItems := a.Clash.StaticSection(category)
 	items := make([]map[string]any, 0, len(rawItems))
 	for _, item := range rawItems {
 		items = append(items, clone(item))
 	}
 	if locale != "" {
-		translate(items, locale, a.Clash.Client().StaticData().Translations)
+		translate(items, locale, a.Clash.StaticTranslation)
 	}
 	name := strings.ToLower(c.Query("name"))
 	village := strings.ToLower(c.Query("village"))
@@ -268,7 +266,7 @@ func findItem(a apptypes.Deps, category, itemID string) (map[string]any, error) 
 	if _, ok := categories[category]; !ok {
 		return nil, apptypes.Error(fiber.StatusNotFound, "Category '"+category+"' not found. Available categories: "+strings.Join(categoryNamesList(), ", "))
 	}
-	items := a.Clash.Client().StaticData().Raw[category]
+	items := a.Clash.StaticSection(category)
 	if id, err := strconv.Atoi(itemID); err == nil {
 		for _, item := range items {
 			if int(asFloat(item["_id"])) == id {
@@ -284,11 +282,11 @@ func findItem(a apptypes.Deps, category, itemID string) (map[string]any, error) 
 	return nil, apptypes.Error(fiber.StatusNotFound, "Item with ID or name '"+itemID+"' not found in category '"+category+"'")
 }
 
-func translate(items []map[string]any, locale string, translations map[string]map[string]string) {
+func translate(items []map[string]any, locale string, translation func(string) map[string]string) {
 	for _, item := range items {
 		tid, _ := item["TID"].(map[string]any)
 		name := staticDataAsString(tid["name"])
-		if translated := translations[name][locale]; translated != "" {
+		if translated := translation(name)[locale]; translated != "" {
 			item["name"] = translated
 		}
 	}
@@ -383,6 +381,24 @@ func buildNamedAppData(items []map[string]any, enrich func(map[string]any)) map[
 		out[name] = item
 	}
 	return out
+}
+
+func appStaticSections(a apptypes.Deps) map[string][]map[string]any {
+	sections := make(map[string][]map[string]any, 9)
+	for _, category := range []string{
+		"buildings",
+		"troops",
+		"heroes",
+		"spells",
+		"pets",
+		"equipment",
+		"war_leagues",
+		"league_tiers",
+		"capital_leagues",
+	} {
+		sections[category] = a.Clash.StaticSection(category)
+	}
+	return sections
 }
 
 func collectAppBundleTIDs(raw map[string][]map[string]any) map[string]struct{} {

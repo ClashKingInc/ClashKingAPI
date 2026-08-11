@@ -11,8 +11,7 @@ func leagueIconLookup(a apptypes.Deps) map[string]*clashy.Icon {
 	if a.Clash == nil || a.Clash.Client() == nil {
 		return nil
 	}
-	raw := a.Clash.Client().StaticData().Raw
-	return buildLeagueIconLookup(raw["war_leagues"], raw["league_tiers"])
+	return buildLeagueIconLookup(a.Clash.StaticSection("war_leagues"), a.Clash.StaticSection("league_tiers"))
 }
 
 func buildLeagueIconLookup(warLeagues []map[string]any, leagueTiers []map[string]any) map[string]*clashy.Icon {
@@ -94,7 +93,7 @@ func mergeLeagueIconMap(existing map[string]any, fallback *clashy.Icon) map[stri
 }
 
 func enrichClanLeagueIcons(clan *clashy.Clan, icons map[string]*clashy.Icon) *clashy.Clan {
-	if clan == nil || clan.WarLeague == nil {
+	if clan == nil || (clan.WarLeague.ID == 0 && strings.TrimSpace(clan.WarLeague.Name) == "") {
 		return clan
 	}
 	clan.WarLeague.Icon = mergeLeagueIcon(clan.WarLeague.Icon, icons[strings.TrimSpace(clan.WarLeague.Name)])

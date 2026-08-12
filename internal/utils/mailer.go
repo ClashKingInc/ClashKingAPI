@@ -16,6 +16,8 @@ import (
 	"net/textproto"
 	"strings"
 	"time"
+
+	"github.com/ClashKingInc/ClashKingAPI/locales"
 )
 
 const authEmailLogoURL = "https://assets.clashk.ing/logos/crown-arrow-dark-bg/ClashKing-1.png"
@@ -34,38 +36,51 @@ type AuthEmail struct {
 	Security    string
 	Subject     string
 	PlainAction string
+	CodeLabel   string
+	Footer      string
+	Locale      string
 }
 
 func NewMailer(cfg Config) *Mailer {
 	return &Mailer{cfg: cfg}
 }
 
-func (m *Mailer) SendVerification(ctx context.Context, recipient, username, code string) error {
-	return m.sendAuthEmail(ctx, recipient, AuthEmail{
-		Subject:     "Your ClashKing verification code",
-		Title:       "Verify your email",
-		Preheader:   "Use this code to finish creating your ClashKing account.",
-		Greeting:    authEmailGreeting(username),
-		Body:        "Enter this code in ClashKing to verify your email address.",
-		Code:        code,
-		Expiry:      "This code expires in 15 minutes.",
-		Security:    "If you did not create a ClashKing account, you can ignore this email.",
-		PlainAction: "Enter this code in the ClashKing app to verify your email address.",
-	})
+func (m *Mailer) SendVerification(ctx context.Context, recipient, username, code, locale string) error {
+	return m.sendAuthEmail(ctx, recipient, localizedAuthEmail(locale, username, code, "verification"))
 }
 
-func (m *Mailer) SendPasswordReset(ctx context.Context, recipient, username, code string) error {
-	return m.sendAuthEmail(ctx, recipient, AuthEmail{
-		Subject:     "Reset your ClashKing password",
-		Title:       "Reset your password",
-		Preheader:   "Use this code to reset your ClashKing password.",
-		Greeting:    authEmailGreeting(username),
-		Body:        "Enter this code in ClashKing to choose a new password.",
+func (m *Mailer) SendPasswordReset(ctx context.Context, recipient, username, code, locale string) error {
+	return m.sendAuthEmail(ctx, recipient, localizedAuthEmail(locale, username, code, "password_reset"))
+}
+
+func localizedAuthEmail(locale, username, code, kind string) AuthEmail {
+	catalog, err := locales.Default()
+	if err != nil {
+		panic(err)
+	}
+	locale = catalog.Resolve(locale)
+	text := func(key string, params map[string]string) string { return catalog.Text(locale, key, params) }
+	greetingKey := "email.common.greeting"
+	params := map[string]string(nil)
+	if username = strings.TrimSpace(username); username != "" {
+		greetingKey = "email.common.greeting_named"
+		params = map[string]string{"name": username}
+	}
+	prefix := "email." + kind + "."
+	return AuthEmail{
+		Subject:     text(prefix+"subject", nil),
+		Title:       text(prefix+"heading", nil),
+		Preheader:   text(prefix+"preheader", nil),
+		Greeting:    text(greetingKey, params),
+		Body:        text(prefix+"body", nil),
 		Code:        code,
-		Expiry:      "This code expires in 1 hour.",
-		Security:    "Your password will not change unless this code is used. If you did not request a reset, you can ignore this email.",
-		PlainAction: "Enter this code in the ClashKing app to choose a new password.",
-	})
+		Expiry:      text(prefix+"expiry", nil),
+		Security:    text(prefix+"security", nil),
+		PlainAction: text(prefix+"plain_action", nil),
+		CodeLabel:   text("email.common.code_label", nil),
+		Footer:      text("email.common.footer", nil),
+		Locale:      locale,
+	}
 }
 
 func (m *Mailer) sendAuthEmail(ctx context.Context, recipient string, content AuthEmail) error {
@@ -89,7 +104,7 @@ func (m *Mailer) sendAuthEmail(ctx context.Context, recipient string, content Au
 	if err != nil {
 		return err
 	}
-	plainBody := fmt.Sprintf("%s\n\n%s\n\n%s\n\nCode: %s\n\n%s\n\n%s\n\nClashKing\n", content.Title, content.Greeting, content.PlainAction, content.Code, content.Expiry, content.Security)
+	plainBody := fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s: %s\n\n%s\n\n%s\n\n%s\n", content.Title, content.Greeting, content.PlainAction, content.CodeLabel, content.Code, content.Expiry, content.Security, content.Footer)
 	message, err := buildMIMEMessage(senderAddress, recipientAddress, replyTo, content.Subject, plainBody, htmlBody)
 	if err != nil {
 		return err
@@ -203,16 +218,8 @@ func renderAuthEmail(content AuthEmail) (string, error) {
 	return output.String(), err
 }
 
-func authEmailGreeting(username string) string {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return "Hello,"
-	}
-	return "Hello " + username + ","
-}
-
 var authEmailTemplate = template.Must(template.New("auth-email").Parse(`<!doctype html>
-<html lang="en">
+<html lang="{{.Locale}}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}}</title></head>
 <body style="margin:0;padding:0;background:#f4f4f4;color:#171719;font-family:Roboto,Arial,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{.Preheader}}</div>
@@ -224,7 +231,7 @@ var authEmailTemplate = template.Must(template.New("auth-email").Parse(`<!doctyp
 <tr><td align="center" style="padding:28px;"><div style="display:inline-block;padding:18px 24px;border:2px solid #bf0000;border-radius:12px;background:#fff6f6;color:#a90000;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;line-height:1;font-weight:800;letter-spacing:8px;">{{.Code}}</div></td></tr>
 <tr><td style="padding:0 28px 16px;font-size:14px;line-height:1.5;color:#55555c;"><p style="margin:0;font-weight:700;">{{.Expiry}}</p></td></tr>
 <tr><td style="padding:0 28px 32px;font-size:14px;line-height:1.55;color:#55555c;"><div style="padding:14px 16px;background:#f2f7fb;border-left:4px solid #026cc2;border-radius:8px;">{{.Security}}</div></td></tr>
-<tr><td style="padding:20px 28px;background:#f7f7f8;border-top:1px solid #e5e5e8;font-size:12px;line-height:1.5;color:#6a6a72;">This is an automated security email from ClashKing. Never share this code with anyone.</td></tr>
+<tr><td style="padding:20px 28px;background:#f7f7f8;border-top:1px solid #e5e5e8;font-size:12px;line-height:1.5;color:#6a6a72;">{{.Footer}}</td></tr>
 </table>
 </td></tr></table>
 </body></html>`))

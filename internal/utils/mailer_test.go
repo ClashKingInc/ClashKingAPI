@@ -39,3 +39,18 @@ func TestBuildMIMEMessageIncludesTextAndHTML(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalizedAuthEmailUsesCatalogAndFallback(t *testing.T) {
+	content := localizedAuthEmail("en-US", "Ada", "123456", "verification")
+	if content.Subject != "Your ClashKing verification code" || content.Greeting != "Hello Ada," {
+		t.Fatalf("unexpected localized verification content: %#v", content)
+	}
+	if content.Footer == "" || content.CodeLabel != "Code" || content.Locale != "en" {
+		t.Fatalf("missing localized common content: %#v", content)
+	}
+
+	fallback := localizedAuthEmail("zz-ZZ", "", "654321", "password_reset")
+	if fallback.Subject != "Reset your ClashKing password" || fallback.Greeting != "Hello," || fallback.Locale != "en" {
+		t.Fatalf("unsupported locale did not fall back to English: %#v", fallback)
+	}
+}

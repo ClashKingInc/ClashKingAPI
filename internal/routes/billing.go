@@ -271,7 +271,7 @@ func createStripeCheckout(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		client := stripe.NewClient(a.Config.StripeSecretKey)
+		client := stripe.NewClient(a.Config.StripeRestrictedKey)
 		response, err := client.V1CheckoutSessions.Create(c.UserContext(), &stripe.CheckoutSessionCreateParams{
 			Mode:                stripe.String("subscription"),
 			Customer:            stripe.String(customerID),
@@ -305,7 +305,7 @@ func createStripePortal(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		if strings.TrimSpace(a.Config.StripeSecretKey) == "" || strings.TrimSpace(a.Config.StripePortalReturnURL) == "" {
+		if strings.TrimSpace(a.Config.StripeRestrictedKey) == "" || strings.TrimSpace(a.Config.StripePortalReturnURL) == "" {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Stripe customer portal is not configured")
 		}
 		var customerID string
@@ -317,7 +317,7 @@ func createStripePortal(a apptypes.Deps) fiber.Handler {
 			}
 			return err
 		}
-		client := stripe.NewClient(a.Config.StripeSecretKey)
+		client := stripe.NewClient(a.Config.StripeRestrictedKey)
 		response, err := client.V1BillingPortalSessions.Create(c.UserContext(), &stripe.BillingPortalSessionCreateParams{
 			Customer:  stripe.String(customerID),
 			ReturnURL: stripe.String(a.Config.StripePortalReturnURL),
@@ -485,7 +485,7 @@ func stripeCustomer(ctx context.Context, a apptypes.Deps, userID string) (string
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", err
 	}
-	client := stripe.NewClient(a.Config.StripeSecretKey)
+	client := stripe.NewClient(a.Config.StripeRestrictedKey)
 	created, err := client.V1Customers.Create(ctx, &stripe.CustomerCreateParams{
 		Metadata: map[string]string{"clashking_user_id": userID},
 	})
@@ -502,7 +502,7 @@ func stripeCustomer(ctx context.Context, a apptypes.Deps, userID string) (string
 }
 
 func stripeCheckoutConfigured(cfg apptypes.Config) error {
-	if strings.TrimSpace(cfg.StripeSecretKey) == "" || strings.TrimSpace(cfg.StripeMonthlyPriceID) == "" ||
+	if strings.TrimSpace(cfg.StripeRestrictedKey) == "" || strings.TrimSpace(cfg.StripeMonthlyPriceID) == "" ||
 		strings.TrimSpace(cfg.StripeCheckoutSuccessURL) == "" || strings.TrimSpace(cfg.StripeCheckoutCancelURL) == "" {
 		return errors.New("Stripe Checkout is not configured")
 	}

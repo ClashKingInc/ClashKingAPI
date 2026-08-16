@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	clashy "github.com/clashkinginc/clashy.go"
@@ -18,9 +19,9 @@ type ClashAdapter struct {
 	cachedLocation []clashy.Location
 }
 
-func NewClashAdapter(ctx context.Context, email, password string) (*ClashAdapter, error) {
+func NewClashAdapter(ctx context.Context, proxyOrigin string) (*ClashAdapter, error) {
 	client, err := clashy.NewClient(clashy.ClientConfig{
-		BaseURL:       "https://proxy.clashk.ing/v1",
+		BaseURL:       strings.TrimRight(proxyOrigin, "/") + "/v1",
 		KeyCount:      10,
 		KeyNames:      "test",
 		ThrottleLimit: 500,

@@ -54,8 +54,8 @@ func New(ctx context.Context) (*App, error) {
 	}
 	logger := utils.InitLogger(cfg)
 	logger.Info("initializing_app")
-	if err := utils.InitEncryption(cfg.EncryptionKey); err != nil {
-		return nil, errors.New("invalid ENCRYPTION_KEY: " + err.Error())
+	if err := utils.InitEncryption(cfg.DataEncryptionKey); err != nil {
+		return nil, errors.New("invalid DATA_ENCRYPTION_KEY: " + err.Error())
 	}
 	if err := utils.Init(cfg); err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func New(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	clashAdapter, err := utils.NewClashAdapter(ctx, cfg.COCEmail, cfg.COCPassword)
+	clashAdapter, err := utils.NewClashAdapter(ctx, cfg.ProxyOrigin)
 	if err != nil {
 		_ = stores.Close(ctx)
 		return nil, err

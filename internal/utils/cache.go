@@ -26,18 +26,18 @@ type CacheAdapter struct {
 	client valkey.Client
 }
 
-// NewCacheAdapter creates a CacheAdapter connected to the configured Valkey/Redis
-// instance. If RedisIP is empty or the connection fails, a no-op adapter is returned
+// NewCacheAdapter creates a CacheAdapter connected to the configured Valkey
+// instance. If ValkeyAddress is empty or the connection fails, a no-op adapter is returned
 // so the rest of the app can continue without caching.
 func NewCacheAdapter(cfg Config) *CacheAdapter {
-	if cfg.RedisIP == "" {
+	if cfg.ValkeyAddress == "" {
 		return &CacheAdapter{}
 	}
 	opts := valkey.ClientOption{
-		InitAddress: []string{cfg.RedisIP},
+		InitAddress: []string{cfg.ValkeyAddress},
 	}
-	if cfg.RedisPassword != "" {
-		opts.Password = cfg.RedisPassword
+	if cfg.ValkeyPassword != "" {
+		opts.Password = cfg.ValkeyPassword
 	}
 	client, err := valkey.NewClient(opts)
 	if err != nil {

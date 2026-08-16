@@ -115,7 +115,7 @@ func (a *Authenticator) parseJWT(token string) (*Claims, error) {
 		token,
 		claims,
 		func(t *jwt.Token) (any, error) {
-			return []byte(a.cfg.SecretKey), nil
+			return []byte(a.cfg.JWTAccessSecret), nil
 		},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)
@@ -159,7 +159,7 @@ func generateAccessToken(cfg Config, userID, deviceID, audience string, lifetime
 			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(lifetime)),
 		},
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.SecretKey))
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.JWTAccessSecret))
 }
 
 func GenerateRefreshToken(cfg Config, userID, deviceID string) (string, error) {
@@ -181,7 +181,7 @@ func generateRefreshToken(cfg Config, userID, deviceID, audience string) (string
 			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(30 * 24 * time.Hour)),
 		},
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.RefreshSecret))
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cfg.JWTRefreshSecret))
 }
 
 func nativeTokenAudience(cfg Config) string {

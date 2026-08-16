@@ -549,7 +549,7 @@ func validateEmail(email string) error {
 
 func hashEmail(a apptypes.Deps, email string) string {
 	normalized := strings.ToLower(strings.TrimSpace(email))
-	sum := sha256.Sum256([]byte(normalized + a.Config.SecretKey))
+	sum := sha256.Sum256([]byte(normalized + a.Config.JWTAccessSecret))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -566,7 +566,7 @@ func generateUserID() string {
 }
 
 func authCodeHash(a apptypes.Deps, emailHash, code string) string {
-	hash := hmac.New(sha256.New, []byte(a.Config.SecretKey))
+	hash := hmac.New(sha256.New, []byte(a.Config.JWTAccessSecret))
 	_, _ = hash.Write([]byte(emailHash))
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(strings.TrimSpace(code)))
@@ -839,7 +839,7 @@ func parseSignedRefreshToken(a apptypes.Deps, token string) (*apptypes.Claims, e
 		token,
 		claims,
 		func(_ *jwt.Token) (any, error) {
-			return []byte(a.Config.RefreshSecret), nil
+			return []byte(a.Config.JWTRefreshSecret), nil
 		},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)

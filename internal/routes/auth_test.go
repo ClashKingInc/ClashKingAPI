@@ -75,8 +75,8 @@ func TestValidateAuthIdentityRejectsDiscordUserWithEmailFields(t *testing.T) {
 }
 
 func TestParseRefreshTokenRejectsUnexpectedAlgorithm(t *testing.T) {
-	cfg := apptypes.Config{RefreshSecret: "refresh-secret"}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, apptypes.Claims{Sub: "user-1"}).SignedString([]byte(cfg.RefreshSecret))
+	cfg := apptypes.Config{JWTRefreshSecret: "refresh-secret"}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, apptypes.Claims{Sub: "user-1"}).SignedString([]byte(cfg.JWTRefreshSecret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestLoadDiscordAuthUserInfoRejectsMissingDeviceIdentity(t *testing.T) {
 func TestPasswordResetCodeHashIsSecretBoundAndOpaque(t *testing.T) {
 	emailHash := "email-hash"
 	code := "123456"
-	deps := apptypes.Deps{Config: apptypes.Config{SecretKey: "server-secret"}}
+	deps := apptypes.Deps{Config: apptypes.Config{JWTAccessSecret: "server-secret"}}
 
 	codeHash := authCodeHash(deps, emailHash, code)
 	if codeHash == code {
@@ -228,7 +228,7 @@ func TestPasswordResetCodeHashIsSecretBoundAndOpaque(t *testing.T) {
 	if codeHash != authCodeHash(deps, emailHash, code) {
 		t.Fatal("password reset code hash is not deterministic")
 	}
-	if codeHash == authCodeHash(apptypes.Deps{Config: apptypes.Config{SecretKey: "different-secret"}}, emailHash, code) {
+	if codeHash == authCodeHash(apptypes.Deps{Config: apptypes.Config{JWTAccessSecret: "different-secret"}}, emailHash, code) {
 		t.Fatal("password reset code hash is not bound to the server secret")
 	}
 	if codeHash == authCodeHash(deps, "different-email-hash", code) {

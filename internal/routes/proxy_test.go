@@ -21,7 +21,7 @@ func TestProxyForwardJoinsBaseAndEscapedPath(t *testing.T) {
 	defer upstream.Close()
 
 	app := fiber.New()
-	deps := apptypes.Deps{Config: apptypes.Config{ProxyBaseURL: upstream.URL + "/"}}
+	deps := apptypes.Deps{Config: apptypes.Config{ProxyOrigin: upstream.URL + "/"}}
 	app.Get("/proxy/v1/*", proxyForward(deps, "/proxy/"))
 
 	request := httptest.NewRequest(http.MethodGet, "/proxy/v1/players/%23PLAYER", nil)

@@ -90,7 +90,7 @@ type discordCurrentApplication struct {
 }
 
 func NewDiscordAdapter(cfg Config) (*DiscordAdapter, error) {
-	client := disgo.New(disgo.NewClient(cfg.BotToken))
+	client := disgo.New(disgo.NewClient(cfg.DiscordBotToken))
 	return &DiscordAdapter{
 		cfg:          cfg,
 		client:       client,

@@ -69,7 +69,7 @@ func registerNotificationDevice(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "SQL store is not configured")
 		}
 
-		ciphertext, err := apptypes.EncryptSecret(body.Token, a.Config.EncryptionKey)
+		ciphertext, err := apptypes.EncryptSecret(body.Token, a.Config.DataEncryptionKey)
 		if err != nil {
 			return err
 		}

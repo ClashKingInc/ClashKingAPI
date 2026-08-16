@@ -330,7 +330,8 @@ func register(a apptypes.Deps) fiber.Handler {
 		if err := insertEmailVerification(c.UserContext(), a, record); err != nil {
 			return err
 		}
-		if err := sendVerificationEmail(c.UserContext(), a, body.Email, body.Username, code); err != nil {
+		locale := requestedAuthLocale(c, body.Locale, "")
+		if err := sendVerificationEmail(c.UserContext(), a, body.Email, body.Username, code, locale); err != nil {
 			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Verification email could not be sent. Please try again.")
 		}
@@ -387,7 +388,8 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 		if err := insertEmailVerification(c.UserContext(), a, pending); err != nil {
 			return err
 		}
-		if err := sendVerificationEmail(c.UserContext(), a, body.Email, pending.Username, code); err != nil {
+		locale := requestedAuthLocale(c, body.Locale, "")
+		if err := sendVerificationEmail(c.UserContext(), a, body.Email, pending.Username, code, locale); err != nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Verification email could not be sent. Please try again.")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthVerificationResponse{
@@ -484,7 +486,9 @@ func forgotPassword(a apptypes.Deps) fiber.Handler {
 			apptypes.Logger().Error("password_reset_record_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
 		}
-		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, authUserName(user), code); err != nil {
+		storedLocale := storedAuthLocale(c.UserContext(), a, user.UserID)
+		locale := requestedAuthLocale(c, body.Locale, storedLocale)
+		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, authUserName(user), code, locale); err != nil {
 			_ = deletePasswordReset(c.UserContext(), a, emailHash, code)
 			apptypes.Logger().Error("password_reset_email_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
@@ -612,24 +616,52 @@ func localCodePtr(a apptypes.Deps, code string) *string {
 	return nil
 }
 
-func sendVerificationEmail(ctx context.Context, a apptypes.Deps, email, username, code string) error {
+func sendVerificationEmail(ctx context.Context, a apptypes.Deps, email, username, code, locale string) error {
 	if a.Mailer == nil {
 		if a.Config.Local {
 			return nil
 		}
 		return fmt.Errorf("mailer is not configured")
 	}
-	return a.Mailer.SendVerification(ctx, strings.TrimSpace(email), username, code)
+	return a.Mailer.SendVerification(ctx, strings.TrimSpace(email), username, code, locale)
 }
 
-func sendPasswordResetEmail(ctx context.Context, a apptypes.Deps, email, username, code string) error {
+func sendPasswordResetEmail(ctx context.Context, a apptypes.Deps, email, username, code, locale string) error {
 	if a.Mailer == nil {
 		if a.Config.Local {
 			return nil
 		}
 		return fmt.Errorf("mailer is not configured")
 	}
-	return a.Mailer.SendPasswordReset(ctx, strings.TrimSpace(email), username, code)
+	return a.Mailer.SendPasswordReset(ctx, strings.TrimSpace(email), username, code, locale)
+}
+
+func requestedAuthLocale(c *fiber.Ctx, explicit, stored string) string {
+	for _, candidate := range []string{explicit, c.Query("locale"), c.Get("X-Locale"), stored, c.Get("Accept-Language")} {
+		candidate = strings.TrimSpace(strings.Split(strings.Split(candidate, ",")[0], ";")[0])
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return "en"
+}
+
+func storedAuthLocale(ctx context.Context, a apptypes.Deps, userID string) string {
+	if a.Store.SQL == nil || strings.TrimSpace(userID) == "" {
+		return ""
+	}
+	var locale string
+	err := a.Store.SQL.QueryRow(ctx, `
+		SELECT locale
+		FROM mobile_push_devices
+		WHERE user_id = $1 AND locale IS NOT NULL AND locale <> ''
+		ORDER BY last_seen_at DESC
+		LIMIT 1
+	`, userID).Scan(&locale)
+	if err != nil {
+		return ""
+	}
+	return locale
 }
 
 func buildAuthResponse(a apptypes.Deps, user modelsv2.AuthUserInfo, deviceID string) (modelsv2.AuthResponse, error) {

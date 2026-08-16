@@ -204,7 +204,7 @@ type RosterAutomation struct {
 	GroupID          *string                  `json:"group_id,omitempty"`
 	ActionType       string                   `json:"action_type"`
 	TriggerType      *string                  `json:"trigger_type,omitempty"`
-	OffsetSeconds    int                      `json:"offset_seconds"`
+	ScheduledAt      time.Time                `json:"scheduled_at"`
 	DiscordChannelID *string                  `json:"discord_channel_id,omitempty"`
 	Options          *RosterAutomationOptions `json:"options,omitempty"`
 	Active           bool                     `json:"active"`
@@ -222,7 +222,7 @@ type RosterAutomationRequest struct {
 	GroupID          *string                  `json:"group_id,omitempty"`
 	ActionType       *string                  `json:"action_type,omitempty"`
 	TriggerType      *string                  `json:"trigger_type,omitempty"`
-	OffsetSeconds    *int                     `json:"offset_seconds,omitempty"`
+	ScheduledAt      *time.Time               `json:"scheduled_at,omitempty"`
 	DiscordChannelID *string                  `json:"discord_channel_id,omitempty"`
 	Options          *RosterAutomationOptions `json:"options,omitempty"`
 	Active           *bool                    `json:"active,omitempty"`

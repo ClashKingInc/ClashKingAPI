@@ -308,8 +308,8 @@ func clanComposition(a apptypes.Deps) fiber.Handler {
 				buckets["townhall"]["unknown"]++
 				buckets["role"][string(member.Role)]++
 				league := "Unranked"
-				if member.League != nil && member.League.Name != "" {
-					league = member.League.Name
+				if member.LeagueTier.Name != "" {
+					league = member.LeagueTier.Name
 				}
 				buckets["league"][league]++
 			}

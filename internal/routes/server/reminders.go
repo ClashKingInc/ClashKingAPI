@@ -165,6 +165,9 @@ func createReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err != nil {
 			return err
 		}
+		if rt.Cache != nil {
+			_ = rt.Cache.PublishTrackingEvent(c.UserContext(), "reminder_config", serverNormalizeTag(body.ClanTag), map[string]any{"type": body.Type, "action": "created", "reminder_id": reminderID})
+		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ReminderOperationResponse{Message: "Reminder created successfully", ReminderID: reminderID, ServerID: serverID})
 	}
 }
@@ -258,6 +261,9 @@ func updateReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Reminder not found")
 		}
+		if rt.Cache != nil {
+			_ = rt.Cache.PublishTrackingEvent(c.UserContext(), "reminder_config", serverAsString(existing["clan"]), map[string]any{"type": existingType, "action": "updated", "reminder_id": id})
+		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ReminderOperationResponse{Message: "Reminder updated successfully", ReminderID: c.Params("reminder_id"), ServerID: serverID})
 	}
 }
@@ -281,12 +287,19 @@ func deleteReminder(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		id := c.Params("reminder_id")
+		existing, err := sqlReminderRow(c, rt, serverID, id)
+		if err != nil {
+			return apptypes.Error(http.StatusNotFound, "Reminder not found")
+		}
 		result, err := rt.Store.SQL.Exec(c.UserContext(), `DELETE FROM reminders WHERE server_id = $1 AND id = $2::uuid`, strconv.Itoa(serverID), id)
 		if err != nil {
 			return err
 		}
 		if result.RowsAffected() == 0 {
 			return apptypes.Error(http.StatusNotFound, "Reminder not found")
+		}
+		if rt.Cache != nil {
+			_ = rt.Cache.PublishTrackingEvent(c.UserContext(), "reminder_config", serverAsString(existing["clan"]), map[string]any{"type": serverAsString(existing["type"]), "action": "deleted", "reminder_id": id})
 		}
 		return apptypes.JSON(c, http.StatusOK, modelsv2.ReminderOperationResponse{Message: "Reminder deleted successfully", ReminderID: c.Params("reminder_id"), ServerID: serverID})
 	}

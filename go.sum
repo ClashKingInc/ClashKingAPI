@@ -2,8 +2,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/andybalholm/brotli v1.2.1 h1:R+f5xP285VArJDRgowrfb9DqL18yVK0gKAW/F+eTWro=
 github.com/andybalholm/brotli v1.2.1/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
-github.com/clashkinginc/clashy.go v0.0.0-20260406132723-846551b0007c h1:X2GUfJ6l+uaLn7+P2hdljxUqpxfoqUWKm/1Ifajs3I4=
-github.com/clashkinginc/clashy.go v0.0.0-20260406132723-846551b0007c/go.mod h1:sI4kNkV/ooRDN49UvH4a1tmdbrkacmLZKgA1ATJYbp8=
+github.com/clashkinginc/clashy.go v0.1.13 h1:qzuYat2eW6HEF0Oy9Iip6Zzy43XuNo+TBb+fLAA7YWw=
+github.com/clashkinginc/clashy.go v0.1.13/go.mod h1:sI4kNkV/ooRDN49UvH4a1tmdbrkacmLZKgA1ATJYbp8=
 github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

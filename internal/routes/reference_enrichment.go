@@ -32,14 +32,13 @@ func newReferenceCatalog(a apptypes.Deps) referenceCatalog {
 	if a.Clash == nil || a.Clash.Client() == nil {
 		return catalog
 	}
-	raw := a.Clash.Client().StaticData().Raw
-	catalog.warLeagues = buildLeagueReferences(raw["war_leagues"], "cwl")
+	catalog.warLeagues = buildLeagueReferences(a.Clash.StaticSection("war_leagues"), "cwl")
 	catalog.warLeagues[cwlUnrankedLeagueID] = modelsv2.LeagueReference{
 		ID: cwlUnrankedLeagueID, Name: "Unranked", IconURL: leagueIconURL("cwl", "Unranked"),
 	}
-	catalog.leagueTiers = buildLeagueReferences(raw["league_tiers"], "league-tier")
-	catalog.builderLeagues = buildLeagueReferences(raw["builder_leagues"], "builder-base")
-	catalog.capitalLeagues = buildLeagueReferences(raw["capital_leagues"], "capital-leagues")
+	catalog.leagueTiers = buildLeagueReferences(a.Clash.StaticSection("league_tiers"), "league-tier")
+	catalog.builderLeagues = buildLeagueReferences(a.Clash.StaticSection("builder_leagues"), "builder-base")
+	catalog.capitalLeagues = buildLeagueReferences(a.Clash.StaticSection("capital_leagues"), "capital-leagues")
 	return catalog
 }
 

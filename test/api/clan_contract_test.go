@@ -32,7 +32,7 @@ func TestBuildLeagueIconLookupUsesStaticDataURLs(t *testing.T) {
 func TestEnrichClanLeagueIconsFillsMissingWarLeagueIcon(t *testing.T) {
 	clan := &clashy.Clan{
 		Tag: "#CLAN",
-		WarLeague: &clashy.BaseLeague{
+		WarLeague: clashy.League{
 			ID:   48000015,
 			Name: "Master League I",
 		},

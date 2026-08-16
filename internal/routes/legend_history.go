@@ -96,7 +96,7 @@ func legendLeagueTiers(a apptypes.Deps) legendLeagueTierLookup {
 	if a.Clash == nil || a.Clash.Client() == nil {
 		return nil
 	}
-	return buildLegendLeagueTierLookup(a.Clash.Client().StaticData().Raw["league_tiers"])
+	return buildLegendLeagueTierLookup(a.Clash.StaticSection("league_tiers"))
 }
 
 func buildLegendLeagueTierLookup(items []map[string]any) legendLeagueTierLookup {

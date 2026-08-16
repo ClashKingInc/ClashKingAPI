@@ -93,7 +93,7 @@ func verifyEmailCode(a apptypes.Deps) fiber.Handler {
 // @Tags App Authentication
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} modelsv2.AuthUserInfo
+// @Success 200 {object} modelsv2.CurrentUserInfo
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Router /v2/me [get]
 // @Router /v2/auth/me [get]
@@ -105,7 +105,7 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusUnauthorized, "User session is no longer valid")
 		}
 		if user.Provider == authProviderEmail {
-			return apptypes.JSON(c, fiber.StatusOK, emailAuthUserInfo(user))
+			return respondCurrentUser(c, a, emailAuthUserInfo(user))
 		}
 		if user.Provider != authProviderDiscord {
 			return apptypes.Error(fiber.StatusUnauthorized, "User identity is not configured")
@@ -125,8 +125,40 @@ func currentUser(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, info)
+		return respondCurrentUser(c, a, info)
 	}
+}
+
+func respondCurrentUser(c *fiber.Ctx, a apptypes.Deps, info modelsv2.AuthUserInfo) error {
+	accountSummary, err := loadUserAccountSummary(c.UserContext(), a.Store.SQL, info.UserID)
+	if err != nil {
+		return err
+	}
+	return apptypes.JSON(c, fiber.StatusOK, modelsv2.CurrentUserInfo{
+		UserID:         info.UserID,
+		Username:       info.Username,
+		AvatarURL:      info.AvatarURL,
+		AuthMethods:    info.AuthMethods,
+		AccountSummary: accountSummary,
+	})
+}
+
+type userAccountSummaryQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func loadUserAccountSummary(ctx context.Context, db userAccountSummaryQuerier, userID string) (modelsv2.UserAccountSummary, error) {
+	var summary modelsv2.UserAccountSummary
+	err := db.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT bookmarks.user_id)
+		FROM player_links AS links
+		JOIN user_bookmarks AS bookmarks
+			ON bookmarks.tag = links.tag
+			AND bookmarks.entity_type = 'player'
+		WHERE links.user_id = $1
+			AND links.is_verified = true
+	`, userID).Scan(&summary.FollowerCount)
+	return summary, err
 }
 
 // discordAuth starts Discord login flow handling.
@@ -298,7 +330,8 @@ func register(a apptypes.Deps) fiber.Handler {
 		if err := insertEmailVerification(c.UserContext(), a, record); err != nil {
 			return err
 		}
-		if err := sendVerificationEmail(c.UserContext(), a, body.Email, body.Username, code); err != nil {
+		locale := requestedAuthLocale(c, body.Locale, "")
+		if err := sendVerificationEmail(c.UserContext(), a, body.Email, body.Username, code, locale); err != nil {
 			_ = deleteEmailVerification(c.UserContext(), a, emailHash)
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Verification email could not be sent. Please try again.")
 		}
@@ -355,7 +388,8 @@ func resendVerification(a apptypes.Deps) fiber.Handler {
 		if err := insertEmailVerification(c.UserContext(), a, pending); err != nil {
 			return err
 		}
-		if err := sendVerificationEmail(c.UserContext(), a, body.Email, pending.Username, code); err != nil {
+		locale := requestedAuthLocale(c, body.Locale, "")
+		if err := sendVerificationEmail(c.UserContext(), a, body.Email, pending.Username, code, locale); err != nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Verification email could not be sent. Please try again.")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthVerificationResponse{
@@ -452,7 +486,9 @@ func forgotPassword(a apptypes.Deps) fiber.Handler {
 			apptypes.Logger().Error("password_reset_record_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
 		}
-		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, authUserName(user), code); err != nil {
+		storedLocale := storedAuthLocale(c.UserContext(), a, user.UserID)
+		locale := requestedAuthLocale(c, body.Locale, storedLocale)
+		if err := sendPasswordResetEmail(c.UserContext(), a, body.Email, authUserName(user), code, locale); err != nil {
 			_ = deletePasswordReset(c.UserContext(), a, emailHash, code)
 			apptypes.Logger().Error("password_reset_email_failed", "error", err, "email_hash", emailHash)
 			return apptypes.JSON(c, fiber.StatusOK, response)
@@ -580,24 +616,52 @@ func localCodePtr(a apptypes.Deps, code string) *string {
 	return nil
 }
 
-func sendVerificationEmail(ctx context.Context, a apptypes.Deps, email, username, code string) error {
+func sendVerificationEmail(ctx context.Context, a apptypes.Deps, email, username, code, locale string) error {
 	if a.Mailer == nil {
 		if a.Config.Local {
 			return nil
 		}
 		return fmt.Errorf("mailer is not configured")
 	}
-	return a.Mailer.SendVerification(ctx, strings.TrimSpace(email), username, code)
+	return a.Mailer.SendVerification(ctx, strings.TrimSpace(email), username, code, locale)
 }
 
-func sendPasswordResetEmail(ctx context.Context, a apptypes.Deps, email, username, code string) error {
+func sendPasswordResetEmail(ctx context.Context, a apptypes.Deps, email, username, code, locale string) error {
 	if a.Mailer == nil {
 		if a.Config.Local {
 			return nil
 		}
 		return fmt.Errorf("mailer is not configured")
 	}
-	return a.Mailer.SendPasswordReset(ctx, strings.TrimSpace(email), username, code)
+	return a.Mailer.SendPasswordReset(ctx, strings.TrimSpace(email), username, code, locale)
+}
+
+func requestedAuthLocale(c *fiber.Ctx, explicit, stored string) string {
+	for _, candidate := range []string{explicit, c.Query("locale"), c.Get("X-Locale"), stored, c.Get("Accept-Language")} {
+		candidate = strings.TrimSpace(strings.Split(strings.Split(candidate, ",")[0], ";")[0])
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return "en"
+}
+
+func storedAuthLocale(ctx context.Context, a apptypes.Deps, userID string) string {
+	if a.Store.SQL == nil || strings.TrimSpace(userID) == "" {
+		return ""
+	}
+	var locale string
+	err := a.Store.SQL.QueryRow(ctx, `
+		SELECT locale
+		FROM mobile_push_devices
+		WHERE user_id = $1 AND locale IS NOT NULL AND locale <> ''
+		ORDER BY last_seen_at DESC
+		LIMIT 1
+	`, userID).Scan(&locale)
+	if err != nil {
+		return ""
+	}
+	return locale
 }
 
 func buildAuthResponse(a apptypes.Deps, user modelsv2.AuthUserInfo, deviceID string) (modelsv2.AuthResponse, error) {

@@ -90,6 +90,24 @@ definitions:
           type: string
         type: array
     type: object
+  modelsv2.Achievement:
+    properties:
+      asset_url:
+        type: string
+      earned_count:
+        type: integer
+      id:
+        type: string
+      repeatable:
+        type: boolean
+    type: object
+  modelsv2.AchievementsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.Achievement'
+        type: array
+    type: object
   modelsv2.ActiveAnnouncementResponse:
     properties:
       item:
@@ -1749,6 +1767,21 @@ definitions:
       season:
         type: string
     type: object
+  modelsv2.CurrentUserInfo:
+    properties:
+      account_summary:
+        $ref: '#/definitions/modelsv2.UserAccountSummary'
+      auth_methods:
+        items:
+          type: string
+        type: array
+      avatar_url:
+        type: string
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
   modelsv2.DashboardAccessConfig:
     properties:
       grants:
@@ -2840,9 +2873,11 @@ definitions:
         type: string
       eventsEnabled:
         type: boolean
-      legendAttacksEnabled:
-        type: boolean
-      legendDefensesEnabled:
+      raidReminderTimings:
+        items:
+          type: integer
+        type: array
+      raidRemindersEnabled:
         type: boolean
       monthlySupportEnabled:
         type: boolean
@@ -2873,9 +2908,11 @@ definitions:
         type: string
       eventsEnabled:
         type: boolean
-      legendAttacksEnabled:
-        type: boolean
-      legendDefensesEnabled:
+      raidReminderTimings:
+        items:
+          type: integer
+        type: array
+      raidRemindersEnabled:
         type: boolean
       monthlySupportEnabled:
         type: boolean
@@ -3695,8 +3732,8 @@ definitions:
         type: integer
       last_triggered_at:
         type: integer
-      offset_seconds:
-        type: integer
+      scheduled_at:
+        type: string
       options:
         $ref: '#/definitions/modelsv2.RosterAutomationOptions'
       roster_id:
@@ -3754,8 +3791,8 @@ definitions:
         type: string
       group_id:
         type: string
-      offset_seconds:
-        type: integer
+      scheduled_at:
+        type: string
       options:
         $ref: '#/definitions/modelsv2.RosterAutomationOptions'
       roster_id:
@@ -5739,6 +5776,11 @@ definitions:
       name:
         type: string
     type: object
+  modelsv2.UserAccountSummary:
+    properties:
+      follower_count:
+        type: integer
+    type: object
   modelsv2.WarAttack:
     properties:
       attackerTag:
@@ -6186,6 +6228,26 @@ paths:
       summary: List tracked town halls
       tags:
       - Lists
+  /v2/achievements/check:
+    post:
+      description: Checks verified linked players for achievements that can currently
+        be evaluated, awards new matches, and returns the full catalog.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.AchievementsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Check achievements
+      tags:
+      - Achievements
   /v2/activity/guild-summary:
     get:
       description: Returns clan and member activity totals for a Discord guild.
@@ -6534,7 +6596,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AuthUserInfo'
+            $ref: '#/definitions/modelsv2.CurrentUserInfo'
         "401":
           description: Unauthorized
           schema:
@@ -9147,7 +9209,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/modelsv2.AuthUserInfo'
+            $ref: '#/definitions/modelsv2.CurrentUserInfo'
         "401":
           description: Unauthorized
           schema:

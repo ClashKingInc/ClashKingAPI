@@ -198,6 +198,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/achievements/check": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Checks verified linked players for achievements that can currently be evaluated, awards new matches, and returns the full catalog.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Achievements"
+                ],
+                "summary": "Check achievements",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.AchievementsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/activity/guild-summary": {
             "get": {
                 "description": "Returns clan and member activity totals for a Discord guild.",
@@ -739,7 +770,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AuthUserInfo"
+                            "$ref": "#/definitions/modelsv2.CurrentUserInfo"
                         }
                     },
                     "401": {
@@ -4695,7 +4726,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.AuthUserInfo"
+                            "$ref": "#/definitions/modelsv2.CurrentUserInfo"
                         }
                     },
                     "401": {
@@ -13953,6 +13984,34 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.Achievement": {
+            "type": "object",
+            "properties": {
+                "asset_url": {
+                    "type": "string"
+                },
+                "earned_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "repeatable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "modelsv2.AchievementsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.Achievement"
+                    }
+                }
+            }
+        },
         "modelsv2.ActiveAnnouncementResponse": {
             "type": "object",
             "properties": {
@@ -16498,6 +16557,29 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.CurrentUserInfo": {
+            "type": "object",
+            "properties": {
+                "account_summary": {
+                    "$ref": "#/definitions/modelsv2.UserAccountSummary"
+                },
+                "auth_methods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "avatar_url": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.DashboardAccessConfig": {
             "type": "object",
             "properties": {
@@ -18152,10 +18234,13 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -18202,10 +18287,13 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -19447,8 +19535,8 @@ const docTemplate = `{
                 "last_triggered_at": {
                     "type": "integer"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
@@ -19537,8 +19625,8 @@ const docTemplate = `{
                 "group_id": {
                     "type": "string"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
@@ -22528,6 +22616,14 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.UserAccountSummary": {
+            "type": "object",
+            "properties": {
+                "follower_count": {
+                    "type": "integer"
                 }
             }
         },

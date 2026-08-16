@@ -18227,10 +18227,13 @@
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -18277,10 +18280,13 @@
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -19522,8 +19528,8 @@
                 "last_triggered_at": {
                     "type": "integer"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
@@ -19612,8 +19618,8 @@
                 "group_id": {
                     "type": "string"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"

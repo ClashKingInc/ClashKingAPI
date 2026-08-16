@@ -597,6 +597,12 @@ func updateRosterGroup(a apptypes.Deps) fiber.Handler {
 		for k, v := range body {
 			updated[k] = v
 		}
+		if _, changed := body["scheduled_at"]; changed {
+			updated["executed"] = false
+			updated["executed_at"] = nil
+			updated["execution_status"] = nil
+			updated["last_missed_at"] = nil
+		}
 		updated["updated_at"] = time.Now().UTC()
 		if err := rosterGroupSave(c, a, updated); err != nil {
 			return err
@@ -1717,10 +1723,14 @@ func rosterGroupGet(c *fiber.Ctx, a apptypes.Deps, groupID string, serverID *int
 
 func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	options, _ := doc["options"].(map[string]any)
-	_, err := a.Store.SQL.Exec(c.UserContext(), `
+	scheduledAt, err := rosterAutomationScheduledAt(doc["scheduled_at"])
+	if err != nil {
+		return err
+	}
+	_, err = a.Store.SQL.Exec(c.UserContext(), `
 		INSERT INTO roster_automation_rules (
 			automation_id, server_id, roster_id, group_id, enabled, trigger_type,
-			action_type, offset_seconds, discord_channel_id, ping_type, executed,
+			action_type, scheduled_at, discord_channel_id, ping_type, executed,
 			executed_at, last_triggered_at, execution_status, last_missed_at,
 			created_at, updated_at
 		)
@@ -1736,7 +1746,7 @@ func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) err
 			enabled = EXCLUDED.enabled,
 			trigger_type = EXCLUDED.trigger_type,
 			action_type = EXCLUDED.action_type,
-			offset_seconds = EXCLUDED.offset_seconds,
+			scheduled_at = EXCLUDED.scheduled_at,
 			discord_channel_id = EXCLUDED.discord_channel_id,
 			ping_type = EXCLUDED.ping_type,
 			executed = EXCLUDED.executed,
@@ -1747,11 +1757,26 @@ func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) err
 			updated_at = EXCLUDED.updated_at
 	`, serverAsString(doc["automation_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["roster_id"]),
 		rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"),
-		rosterOptionalString(doc["trigger_type"]), rosterOptionalString(doc["action_type"]), activityAsInt(doc["offset_seconds"]),
+		rosterOptionalString(doc["trigger_type"]), rosterOptionalString(doc["action_type"]), scheduledAt,
 		rosterOptionalString(doc["discord_channel_id"]), rosterOptionalString(options["ping_type"]),
 		rosterBoolDefault(doc["executed"], false), rosterNullableInt64(doc["executed_at"]), rosterNullableInt64(doc["last_triggered_at"]),
 		rosterOptionalString(doc["execution_status"]), rosterNullableInt64(doc["last_missed_at"]), doc["created_at"], doc["updated_at"])
 	return err
+}
+
+func rosterAutomationScheduledAt(value any) (time.Time, error) {
+	switch typed := value.(type) {
+	case time.Time:
+		if !typed.IsZero() {
+			return typed.UTC(), nil
+		}
+	case string:
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(typed))
+		if err == nil && !parsed.IsZero() {
+			return parsed.UTC(), nil
+		}
+	}
+	return time.Time{}, apptypes.Error(http.StatusBadRequest, "scheduled_at must be an RFC3339 timestamp")
 }
 
 func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterID, groupID string, activeOnly bool) ([]map[string]any, error) {
@@ -1770,7 +1795,7 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT automation_id, server_id, roster_id, group_id, enabled, trigger_type,
-		       action_type, offset_seconds, discord_channel_id, ping_type, executed,
+		       action_type, scheduled_at, discord_channel_id, ping_type, executed,
 		       executed_at, last_triggered_at, execution_status, last_missed_at,
 		       created_at, updated_at
 		FROM roster_automation_rules
@@ -1786,19 +1811,19 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 		var automationID, sid, triggerType, actionType string
 		var roster, group, discordChannel, pingType, executionStatus *string
 		var enabled bool
-		var offsetSeconds int
+		var scheduledAt time.Time
 		var executed bool
 		var executedAt, lastTriggeredAt, lastMissedAt *int64
 		var createdAt, updatedAt time.Time
 		if err := rows.Scan(&automationID, &sid, &roster, &group, &enabled, &triggerType,
-			&actionType, &offsetSeconds, &discordChannel, &pingType, &executed,
+			&actionType, &scheduledAt, &discordChannel, &pingType, &executed,
 			&executedAt, &lastTriggeredAt, &executionStatus, &lastMissedAt,
 			&createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		item := map[string]any{
 			"automation_id": automationID, "server_id": sid, "active": enabled,
-			"trigger_type": triggerType, "action_type": actionType, "offset_seconds": offsetSeconds,
+			"trigger_type": triggerType, "action_type": actionType, "scheduled_at": scheduledAt,
 			"executed": executed, "created_at": createdAt, "updated_at": updatedAt,
 		}
 		rosterPutOptional(item, "roster_id", roster)

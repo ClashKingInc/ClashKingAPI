@@ -2873,9 +2873,11 @@ definitions:
         type: string
       eventsEnabled:
         type: boolean
-      legendAttacksEnabled:
-        type: boolean
-      legendDefensesEnabled:
+      raidReminderTimings:
+        items:
+          type: integer
+        type: array
+      raidRemindersEnabled:
         type: boolean
       monthlySupportEnabled:
         type: boolean
@@ -2906,9 +2908,11 @@ definitions:
         type: string
       eventsEnabled:
         type: boolean
-      legendAttacksEnabled:
-        type: boolean
-      legendDefensesEnabled:
+      raidReminderTimings:
+        items:
+          type: integer
+        type: array
+      raidRemindersEnabled:
         type: boolean
       monthlySupportEnabled:
         type: boolean
@@ -3728,8 +3732,8 @@ definitions:
         type: integer
       last_triggered_at:
         type: integer
-      offset_seconds:
-        type: integer
+      scheduled_at:
+        type: string
       options:
         $ref: '#/definitions/modelsv2.RosterAutomationOptions'
       roster_id:
@@ -3787,8 +3791,8 @@ definitions:
         type: string
       group_id:
         type: string
-      offset_seconds:
-        type: integer
+      scheduled_at:
+        type: string
       options:
         $ref: '#/definitions/modelsv2.RosterAutomationOptions'
       roster_id:

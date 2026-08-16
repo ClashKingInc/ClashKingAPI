@@ -15,7 +15,7 @@ var proxyHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
 func proxyForward(a apptypes.Deps, routePrefix string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyBaseURL), "/")
+		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyOrigin), "/")
 		if baseURL == "" {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Proxy upstream is not configured")
 		}

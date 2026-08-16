@@ -93,7 +93,7 @@ func (m *Mailer) sendAuthEmail(ctx context.Context, recipient string, content Au
 	}
 	senderAddress, err := mail.ParseAddress(m.cfg.SMTPFrom)
 	if err != nil {
-		return fmt.Errorf("invalid SMTP_FROM: %w", err)
+		return fmt.Errorf("invalid SMTP_FROM_ADDRESS: %w", err)
 	}
 	replyTo, err := mail.ParseAddress(m.cfg.SMTPReplyTo)
 	if err != nil {

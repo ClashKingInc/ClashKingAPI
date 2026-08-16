@@ -4,9 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/valkey-io/valkey-go"
 )
+
+const VerifiedPlayerTrackingKey = "tracking:verified_players"
+const trackingEventStreamKey = "tracking:events"
 
 // DiscordMemberCacheEntry is the value stored in Valkey for a guild member identity.
 // The bot is the producer; this API is a read-only consumer.
@@ -26,18 +31,18 @@ type CacheAdapter struct {
 	client valkey.Client
 }
 
-// NewCacheAdapter creates a CacheAdapter connected to the configured Valkey/Redis
-// instance. If RedisIP is empty or the connection fails, a no-op adapter is returned
+// NewCacheAdapter creates a CacheAdapter connected to the configured Valkey
+// instance. If ValkeyAddress is empty or the connection fails, a no-op adapter is returned
 // so the rest of the app can continue without caching.
 func NewCacheAdapter(cfg Config) *CacheAdapter {
-	if cfg.RedisIP == "" {
+	if cfg.ValkeyAddress == "" {
 		return &CacheAdapter{}
 	}
 	opts := valkey.ClientOption{
-		InitAddress: []string{cfg.RedisIP},
+		InitAddress: []string{cfg.ValkeyAddress},
 	}
-	if cfg.RedisPassword != "" {
-		opts.Password = cfg.RedisPassword
+	if cfg.ValkeyPassword != "" {
+		opts.Password = cfg.ValkeyPassword
 	}
 	client, err := valkey.NewClient(opts)
 	if err != nil {
@@ -93,6 +98,42 @@ func (c *CacheAdapter) getLeaderboard(ctx context.Context, key string) ([]byte, 
 		return nil, false
 	}
 	return data, true
+}
+
+// RefreshVerifiedPlayers keeps verified player tags eligible for priority tracking.
+// The score is the tag's expiry time, so tracking workers can enumerate active tags
+// without scanning keys and expired users naturally fall out after seven days.
+func (c *CacheAdapter) RefreshVerifiedPlayers(ctx context.Context, tags []string, ttl time.Duration) error {
+	if c == nil || c.client == nil || len(tags) == 0 {
+		return nil
+	}
+	expiresAt := time.Now().UTC().Add(ttl).Unix()
+	command := c.client.B().Zadd().Key(VerifiedPlayerTrackingKey).ScoreMember()
+	for _, tag := range tags {
+		command = command.ScoreMember(float64(expiresAt), tag)
+	}
+	if err := c.client.Do(ctx, command.Build()).Error(); err != nil {
+		return err
+	}
+	return c.client.Do(ctx, c.client.B().Zremrangebyscore().Key(VerifiedPlayerTrackingKey).
+		Min("-inf").Max(strconv.FormatInt(time.Now().UTC().Unix(), 10)).Build()).Error()
+}
+
+// PublishTrackingEvent tells independent tracking workers that authoritative SQL
+// configuration changed. The worker reloads the referenced scope from Postgres.
+func (c *CacheAdapter) PublishTrackingEvent(ctx context.Context, topic, clanTag string, value map[string]any) error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return c.client.Do(ctx, c.client.B().Xadd().Key(trackingEventStreamKey).Id("*").FieldValue().
+		FieldValue("topic", topic).
+		FieldValue("clan_tag", clanTag).
+		FieldValue("timestamp", time.Now().UTC().Format(time.RFC3339Nano)).
+		FieldValue("value", string(raw)).Build()).Error()
 }
 
 // Close releases the Valkey connection.

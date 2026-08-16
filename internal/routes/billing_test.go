@@ -30,7 +30,7 @@ func TestParseStripeWebhookEvent(t *testing.T) {
 
 func TestStripeCheckoutRequiresAllServerConfiguration(t *testing.T) {
 	configured := apptypes.Config{
-		StripeSecretKey:          "sk_test",
+		StripeRestrictedKey:      "rk_test",
 		StripeMonthlyPriceID:     "price_test",
 		StripeCheckoutSuccessURL: "https://dashboard.clashk.ing/dashboard/settings?checkout=success",
 		StripeCheckoutCancelURL:  "https://dashboard.clashk.ing/dashboard/settings?checkout=cancelled",

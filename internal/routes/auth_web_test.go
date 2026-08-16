@@ -146,7 +146,7 @@ func TestClearedWebRefreshCookieUsesRequestOriginPolicy(t *testing.T) {
 
 func TestWebRefreshParserRejectsNativeRefreshToken(t *testing.T) {
 	cfg := apptypes.Config{
-		RefreshSecret:       "refresh-secret",
+		JWTRefreshSecret:    "refresh-secret",
 		NativeTokenAudience: "native-audience",
 		WebTokenAudience:    "web-audience",
 	}

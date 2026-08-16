@@ -179,10 +179,14 @@ func sortWarsByEndTime(wars []map[string]any) {
 }
 
 const currentWarTimerQuery = `
-	SELECT war_id, clan_tag, opponent_tag, end_time
-	FROM current_war_timers
-	WHERE player_tag = $1
-	  AND end_time > now()
+	SELECT schedule.war_id, schedule.source_clan_tag, schedule.opponent_tag, timer.expires_at
+	FROM player_timers timer
+	JOIN war_schedule schedule ON schedule.schedule_key = timer.event_key
+	WHERE timer.player_tag = $1
+	  AND timer.event_type = 'war'
+	  AND timer.expires_at > now()
+	ORDER BY timer.expires_at
+	LIMIT 1
 `
 
 type currentWarTimerScanner interface {

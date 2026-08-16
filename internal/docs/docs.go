@@ -18234,10 +18234,13 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -18284,10 +18287,13 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
-                "legendAttacksEnabled": {
-                    "type": "boolean"
+                "raidReminderTimings": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
-                "legendDefensesEnabled": {
+                "raidRemindersEnabled": {
                     "type": "boolean"
                 },
                 "monthlySupportEnabled": {
@@ -19529,8 +19535,8 @@ const docTemplate = `{
                 "last_triggered_at": {
                     "type": "integer"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
@@ -19619,8 +19625,8 @@ const docTemplate = `{
                 "group_id": {
                     "type": "string"
                 },
-                "offset_seconds": {
-                    "type": "integer"
+                "scheduled_at": {
+                    "type": "string"
                 },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"

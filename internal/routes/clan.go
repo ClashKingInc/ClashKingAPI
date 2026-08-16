@@ -62,7 +62,7 @@ func clanWarLog(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "clan_tag cannot be empty")
 		}
 		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 250)
-		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyBaseURL), "/")
+		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyOrigin), "/")
 		upstreamURL := baseURL + "/v1/clans/" + url.PathEscape(clanTag) + "/warlog?limit=" + strconv.Itoa(limit)
 		req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, upstreamURL, nil)
 		if err != nil {

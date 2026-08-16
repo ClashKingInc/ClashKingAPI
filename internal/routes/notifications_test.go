@@ -164,7 +164,6 @@ func TestReplaceNotificationPreferencesPreservesPerAccountSelections(t *testing.
 		deviceRows: 1,
 		accounts: []modelsv2.NotificationAccount{
 			{PlayerTag: "#VERIFIED", Source: "verified", Active: true},
-			{PlayerTag: "#BOOKMARK", Source: "bookmarked", Active: true},
 		},
 	}
 	body := modelsv2.NotificationPreferencesRequest{
@@ -204,9 +203,7 @@ func TestReplaceNotificationPreferencesPreservesPerAccountSelections(t *testing.
 	if !strings.Contains(tx.querySQL, "SELECT player_tag, source, active") {
 		t.Fatalf("account response query missing: %s", tx.querySQL)
 	}
-	if len(response.Accounts) != 2 ||
-		response.Accounts[0].Source != "verified" ||
-		response.Accounts[1].Source != "bookmarked" {
+	if len(response.Accounts) != 1 || response.Accounts[0].Source != "verified" {
 		t.Fatalf("unexpected authoritative account response: %#v", response.Accounts)
 	}
 	if !response.NotificationsEnabled {
@@ -263,20 +260,10 @@ type notificationAccountPreferenceRow struct{ scan func(...any) error }
 
 func (row notificationAccountPreferenceRow) Scan(dest ...any) error { return row.scan(dest...) }
 
-func TestSetNotificationAccountEnforcesPaidBookmarkLimit(t *testing.T) {
+func TestSetNotificationAccountAcceptsVerifiedPlayer(t *testing.T) {
 	tx := &notificationAccountPreferenceTx{queryRows: []func(...any) error{
 		func(dest ...any) error {
-			*dest[0].(*bool) = false
-			*dest[1].(*bool) = true
-			return nil
-		},
-		func(dest ...any) error {
 			*dest[0].(*bool) = true
-			*dest[1].(*int) = 10
-			return nil
-		},
-		func(dest ...any) error {
-			*dest[0].(*int) = 9
 			return nil
 		},
 	}}
@@ -284,17 +271,17 @@ func TestSetNotificationAccountEnforcesPaidBookmarkLimit(t *testing.T) {
 		context.Background(),
 		&notificationPreferencesTestDB{tx: tx},
 		"user-1",
-		"#BOOKMARK",
+		"#VERIFIED",
 		true,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !account.Active || account.Source != "bookmarked" || !tx.committed {
+	if !account.Active || account.Source != "verified" || !tx.committed {
 		t.Fatalf("unexpected account result: %#v committed=%v", account, tx.committed)
 	}
-	if !strings.Contains(tx.queries[1], "FOR UPDATE") {
-		t.Fatal("bookmark entitlement row must be locked while enforcing the limit")
+	if len(tx.queries) != 1 || !strings.Contains(tx.queries[0], "player_links") {
+		t.Fatal("notification account must be verified through player_links")
 	}
 	if len(tx.execSQL) != 1 || !strings.Contains(tx.execSQL[0], "INSERT INTO mobile_notification_accounts") {
 		t.Fatalf("unexpected account writes: %#v", tx.execSQL)

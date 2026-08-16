@@ -21,7 +21,7 @@ func (f fakeAuthUserLookup) AuthUserExists(context.Context, string) (bool, error
 
 func TestAuthenticatorRejectsMissingTokenWithUnauthorized(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
-	auth := NewAuthenticator(Config{SecretKey: "secret"}, nil)
+	auth := NewAuthenticator(Config{JWTAccessSecret: "secret"}, nil)
 	app.Get("/private", auth.Wrap(func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	}))
@@ -37,9 +37,9 @@ func TestAuthenticatorRejectsMissingTokenWithUnauthorized(t *testing.T) {
 
 func TestAuthenticatorLocalModeUsesPresentedBearerIdentity(t *testing.T) {
 	cfg := Config{
-		Local:     true,
-		DevUserID: "configured-dev-user",
-		SecretKey: "secret",
+		Local:           true,
+		DevUserID:       "configured-dev-user",
+		JWTAccessSecret: "secret",
 	}
 	token, err := GenerateAccessToken(cfg, "oauth-user", "device-1")
 	if err != nil {
@@ -71,9 +71,9 @@ func TestAuthenticatorLocalModeUsesPresentedBearerIdentity(t *testing.T) {
 
 func TestAuthenticatorLocalModeFallsBackWithoutBearerToken(t *testing.T) {
 	cfg := Config{
-		Local:     true,
-		DevUserID: "configured-dev-user",
-		SecretKey: "secret",
+		Local:           true,
+		DevUserID:       "configured-dev-user",
+		JWTAccessSecret: "secret",
 	}
 	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
 	auth := NewAuthenticator(cfg, nil)
@@ -98,9 +98,9 @@ func TestAuthenticatorLocalModeFallsBackWithoutBearerToken(t *testing.T) {
 
 func TestAuthenticatorLocalModeRejectsInvalidPresentedBearerToken(t *testing.T) {
 	cfg := Config{
-		Local:     true,
-		DevUserID: "configured-dev-user",
-		SecretKey: "secret",
+		Local:           true,
+		DevUserID:       "configured-dev-user",
+		JWTAccessSecret: "secret",
 	}
 	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
 	auth := NewAuthenticator(cfg, nil)
@@ -125,8 +125,8 @@ func TestAuthenticatorLocalModeRejectsInvalidPresentedBearerToken(t *testing.T) 
 }
 
 func TestAuthenticatorRejectsUnexpectedJWTAlgorithm(t *testing.T) {
-	cfg := Config{SecretKey: "secret"}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{Sub: "user-1"}).SignedString([]byte(cfg.SecretKey))
+	cfg := Config{JWTAccessSecret: "secret"}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{Sub: "user-1"}).SignedString([]byte(cfg.JWTAccessSecret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestAuthenticatorRejectsUnexpectedJWTAlgorithm(t *testing.T) {
 }
 
 func TestAccessTokenSurvivesAuthenticatorRestart(t *testing.T) {
-	cfg := Config{SecretKey: "stable-secret"}
+	cfg := Config{JWTAccessSecret: "stable-secret"}
 	token, err := GenerateAccessToken(cfg, "user-1", "device-1")
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -158,7 +158,7 @@ func TestAccessTokenSurvivesAuthenticatorRestart(t *testing.T) {
 }
 
 func TestGenerateRefreshTokenUsesThirtyDayRollingExpiry(t *testing.T) {
-	cfg := Config{RefreshSecret: "refresh-secret"}
+	cfg := Config{JWTRefreshSecret: "refresh-secret"}
 	before := time.Now().UTC()
 	token, err := GenerateRefreshToken(cfg, "user-1", "device-1")
 	if err != nil {
@@ -170,7 +170,7 @@ func TestGenerateRefreshTokenUsesThirtyDayRollingExpiry(t *testing.T) {
 	if _, err := jwt.ParseWithClaims(
 		token,
 		claims,
-		func(*jwt.Token) (any, error) { return []byte(cfg.RefreshSecret), nil },
+		func(*jwt.Token) (any, error) { return []byte(cfg.JWTRefreshSecret), nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	); err != nil {
 		t.Fatalf("parse refresh token: %v", err)
@@ -187,8 +187,8 @@ func TestGenerateRefreshTokenUsesThirtyDayRollingExpiry(t *testing.T) {
 
 func TestNativeAndWebTokensUseSeparateServerSelectedPolicies(t *testing.T) {
 	cfg := Config{
-		SecretKey:           "access-secret",
-		RefreshSecret:       "refresh-secret",
+		JWTAccessSecret:     "access-secret",
+		JWTRefreshSecret:    "refresh-secret",
 		NativeTokenAudience: "native-audience",
 		WebTokenAudience:    "web-audience",
 	}
@@ -201,8 +201,8 @@ func TestNativeAndWebTokensUseSeparateServerSelectedPolicies(t *testing.T) {
 		t.Fatalf("generate web access token: %v", err)
 	}
 
-	nativeClaims := parseAccessClaimsForTest(t, cfg.SecretKey, nativeToken)
-	webClaims := parseAccessClaimsForTest(t, cfg.SecretKey, webToken)
+	nativeClaims := parseAccessClaimsForTest(t, cfg.JWTAccessSecret, nativeToken)
+	webClaims := parseAccessClaimsForTest(t, cfg.JWTAccessSecret, webToken)
 	if !claimsHasAudience(nativeClaims, cfg.NativeTokenAudience) || claimsHasAudience(nativeClaims, cfg.WebTokenAudience) {
 		t.Fatalf("native audience = %#v", nativeClaims.Audience)
 	}
@@ -218,14 +218,14 @@ func TestNativeAndWebTokensUseSeparateServerSelectedPolicies(t *testing.T) {
 }
 
 func TestAuthenticatorRejectsLegacyAccessTokenWithoutAudience(t *testing.T) {
-	cfg := Config{SecretKey: "secret"}
+	cfg := Config{JWTAccessSecret: "secret"}
 	legacy := Claims{
 		Sub: "user-1",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(time.Hour)),
 		},
 	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacy).SignedString([]byte(cfg.SecretKey))
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, legacy).SignedString([]byte(cfg.JWTAccessSecret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -249,7 +249,7 @@ func parseAccessClaimsForTest(t *testing.T, secret, token string) *Claims {
 }
 
 func TestAuthenticatorRejectsAccessTokenAfterUserDeletion(t *testing.T) {
-	cfg := Config{SecretKey: "secret"}
+	cfg := Config{JWTAccessSecret: "secret"}
 	token, err := GenerateAccessToken(cfg, "deleted-user", "device-1")
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -273,7 +273,7 @@ func TestAuthenticatorRejectsAccessTokenAfterUserDeletion(t *testing.T) {
 }
 
 func TestAuthenticatorAllowsAccessTokenForExistingUser(t *testing.T) {
-	cfg := Config{SecretKey: "secret"}
+	cfg := Config{JWTAccessSecret: "secret"}
 	token, err := GenerateAccessToken(cfg, "active-user", "device-1")
 	if err != nil {
 		t.Fatalf("generate token: %v", err)

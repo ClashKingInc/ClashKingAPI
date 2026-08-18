@@ -176,14 +176,13 @@ func mobileInitializationResponse(
 func mobileClanBundleContract(bundle map[string]any) map[string]any {
 	source := mobileMap(bundle)
 	return map[string]any{
-		"clan_details":    mobileMap(source["clan_details"]),
-		"clan_stats":      mobileMap(source["clan_stats"]),
-		"war_data":        mobileWarSummaryList(mobileList(source["war_data"])),
-		"join_leave_data": mobileJoinLeaveByClanContract(source["join_leave_data"]),
-		"capital_data":    mobileCapitalDataContract(source["capital_data"]),
-		"war_log_data":    mobileWarLogDataContract(source["war_log_data"]),
-		"clan_war_stats":  mobileClanWarStatsListContract(mobileList(source["clan_war_stats"])),
-		"cwl_data":        mobileList(source["cwl_data"]),
+		"clan_details":   mobileMap(source["clan_details"]),
+		"clan_stats":     mobileMap(source["clan_stats"]),
+		"war_data":       mobileWarSummaryList(mobileList(source["war_data"])),
+		"capital_data":   mobileCapitalDataContract(source["capital_data"]),
+		"war_log_data":   mobileWarLogDataContract(source["war_log_data"]),
+		"clan_war_stats": mobileClanWarStatsListContract(mobileList(source["clan_war_stats"])),
+		"cwl_data":       mobileList(source["cwl_data"]),
 	}
 }
 
@@ -963,14 +962,13 @@ func mobileExtractClanTags(playersBasic []map[string]any) []string {
 
 func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []string) map[string]any {
 	bundle := map[string]any{
-		"clan_details":    map[string]any{},
-		"clan_stats":      map[string]any{},
-		"war_data":        []any{},
-		"join_leave_data": map[string]any{},
-		"capital_data":    []any{},
-		"war_log_data":    []any{},
-		"clan_war_stats":  []any{},
-		"cwl_data":        []any{},
+		"clan_details":   map[string]any{},
+		"clan_stats":     map[string]any{},
+		"war_data":       []any{},
+		"capital_data":   []any{},
+		"war_log_data":   []any{},
+		"clan_war_stats": []any{},
+		"cwl_data":       []any{},
 	}
 	if len(clanTags) == 0 {
 		return bundle
@@ -984,14 +982,10 @@ func mobileFetchClanBundle(ctx context.Context, a apptypes.Deps, clanTags []stri
 		bundle[key] = value
 	}
 
-	wg.Add(5)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		set("clan_details", mobileFetchClanDetails(ctx, a, clanTags))
-	}()
-	go func() {
-		defer wg.Done()
-		set("join_leave_data", mobileFetchJoinLeaveData(ctx, a, clanTags))
 	}()
 	go func() {
 		defer wg.Done()

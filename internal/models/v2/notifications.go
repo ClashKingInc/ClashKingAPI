@@ -5,7 +5,7 @@ import "time"
 type NotificationDeviceRequest struct {
 	Token               string `json:"token"`
 	DeviceID            string `json:"device_id,omitempty"`
-	Provider            string `json:"provider,omitempty" enums:"fcm,apns"`
+	Provider            string `json:"provider,omitempty" enums:"fcm"`
 	Platform            string `json:"platform" enums:"android,ios"`
 	Environment         string `json:"environment,omitempty" enums:"sandbox,production"`
 	AppVersion          string `json:"app_version,omitempty"`
@@ -24,40 +24,53 @@ type NotificationDeviceResponse struct {
 }
 
 type NotificationPreferencesRequest struct {
-	DeviceID               string   `json:"deviceId,omitempty"`
-	Environment            string   `json:"environment,omitempty" enums:"sandbox,production"`
-	DeviceEnabled          bool     `json:"deviceEnabled"`
-	LeagueBattlesEnabled   bool     `json:"leagueBattlesEnabled"`
-	WarAttacksEnabled      bool     `json:"warAttacksEnabled"`
-	WarStateEnabled        bool     `json:"warStateEnabled"`
-	WarRemindersEnabled    bool     `json:"warRemindersEnabled"`
-	EventsEnabled          bool     `json:"eventsEnabled"`
-	AnnouncementsEnabled   bool     `json:"announcementsEnabled"`
-	UpgradeFinishesEnabled bool     `json:"upgradeFinishesEnabled"`
-	MonthlySupportEnabled  bool     `json:"monthlySupportEnabled"`
-	ReminderTimings        []int    `json:"reminderTimings"`
-	AccountTags            []string `json:"accountTags"`
+	DeviceID              string `json:"deviceId,omitempty"`
+	Environment           string `json:"environment,omitempty" enums:"sandbox,production"`
+	NotificationsEnabled  bool   `json:"notificationsEnabled"`
+	WarAttacksEnabled     bool   `json:"warAttacksEnabled"`
+	WarStateEnabled       bool   `json:"warStateEnabled"`
+	WarRemindersEnabled   bool   `json:"warRemindersEnabled"`
+	RaidRemindersEnabled  bool   `json:"raidRemindersEnabled"`
+	EventsEnabled         bool   `json:"eventsEnabled"`
+	AnnouncementsEnabled  bool   `json:"announcementsEnabled"`
+	MonthlySupportEnabled bool   `json:"monthlySupportEnabled"`
+	ReminderTimings       []int  `json:"reminderTimings"`
+	RaidReminderTimings   []int  `json:"raidReminderTimings"`
+}
+
+type NotificationAccountPreferenceRequest struct {
+	Enabled bool `json:"enabled"`
 }
 
 type NotificationAccount struct {
 	PlayerTag string `json:"playerTag"`
-	Source    string `json:"source" enums:"verified,bookmarked"`
+	Source    string `json:"source" enums:"verified"`
+	Active    bool   `json:"active"`
 }
 
 type NotificationPreferencesResponse struct {
-	DeviceID               string                `json:"deviceId"`
-	Environment            string                `json:"environment"`
-	DeviceEnabled          bool                  `json:"deviceEnabled"`
-	LeagueBattlesEnabled   bool                  `json:"leagueBattlesEnabled"`
-	WarAttacksEnabled      bool                  `json:"warAttacksEnabled"`
-	WarStateEnabled        bool                  `json:"warStateEnabled"`
-	WarRemindersEnabled    bool                  `json:"warRemindersEnabled"`
-	EventsEnabled          bool                  `json:"eventsEnabled"`
-	AnnouncementsEnabled   bool                  `json:"announcementsEnabled"`
-	UpgradeFinishesEnabled bool                  `json:"upgradeFinishesEnabled"`
-	MonthlySupportEnabled  bool                  `json:"monthlySupportEnabled"`
-	ReminderTimings        []int                 `json:"reminderTimings"`
-	Accounts               []NotificationAccount `json:"accounts"`
+	DeviceID              string                `json:"deviceId"`
+	Environment           string                `json:"environment"`
+	NotificationsEnabled  bool                  `json:"notificationsEnabled"`
+	WarAttacksEnabled     bool                  `json:"warAttacksEnabled"`
+	WarStateEnabled       bool                  `json:"warStateEnabled"`
+	WarRemindersEnabled   bool                  `json:"warRemindersEnabled"`
+	RaidRemindersEnabled  bool                  `json:"raidRemindersEnabled"`
+	EventsEnabled         bool                  `json:"eventsEnabled"`
+	AnnouncementsEnabled  bool                  `json:"announcementsEnabled"`
+	MonthlySupportEnabled bool                  `json:"monthlySupportEnabled"`
+	ReminderTimings       []int                 `json:"reminderTimings"`
+	RaidReminderTimings   []int                 `json:"raidReminderTimings"`
+	Accounts              []NotificationAccount `json:"accounts"`
+}
+
+type VerifiedPlayerTrackingRequest struct {
+	PlayerTags []string `json:"player_tags"`
+}
+
+type VerifiedPlayerTrackingResponse struct {
+	PlayerTags []string  `json:"player_tags"`
+	ExpiresAt  time.Time `json:"expires_at"`
 }
 
 type NotificationMessageResponse struct {

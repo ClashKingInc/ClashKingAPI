@@ -59,6 +59,24 @@ func patchBotGuildProfile(a apptypes.Deps) fiber.Handler {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
+		if botProfileUpdateRequiresSubscription(body) && !isBotPrincipal(c) {
+			userID := strings.TrimSpace(apptypes.UserID(c.UserContext()))
+			if userID == "" {
+				return apptypes.Error(fiber.StatusUnauthorized, "Authentication token missing")
+			}
+			var active bool
+			if err := a.Store.SQL.QueryRow(c.UserContext(), `
+				SELECT EXISTS (
+					SELECT 1 FROM subscription_entitlements
+					WHERE user_id = $1 AND active = true
+				)
+			`, userID).Scan(&active); err != nil {
+				return err
+			}
+			if !active {
+				return apptypes.Error(fiber.StatusForbidden, "An active ClashKing subscription is required to change the bot avatar, banner, or bio")
+			}
+		}
 		payload := map[string]any{}
 		if body.ClearName {
 			payload["nick"] = nil
@@ -90,6 +108,11 @@ func patchBotGuildProfile(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusOK, botProfileResponse(serverID, profile))
 	}
+}
+
+func botProfileUpdateRequiresSubscription(body modelsv2.BotGuildProfileUpdate) bool {
+	return body.Avatar != nil || body.Banner != nil || body.Bio != nil ||
+		body.ClearAvatar || body.ClearBanner || body.ClearBio
 }
 
 func addProfileName(payload map[string]any, value *string) error {

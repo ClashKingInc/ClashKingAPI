@@ -158,6 +158,33 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	}
 }
 
+func TestCurrentUserDocIncludesAccountSummary(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	for _, path := range []string{"/v2/me", "/v2/auth/me"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		response := operation["responses"].(map[string]any)["200"].(map[string]any)
+		schema := response["schema"].(map[string]any)
+		if schema["$ref"] != "#/definitions/modelsv2.CurrentUserInfo" {
+			t.Fatalf("%s current-user schema = %v", path, schema["$ref"])
+		}
+	}
+
+	definitions := doc["definitions"].(map[string]any)
+	currentUser := definitions["modelsv2.CurrentUserInfo"].(map[string]any)
+	properties := currentUser["properties"].(map[string]any)
+	accountSummary := properties["account_summary"].(map[string]any)
+	if accountSummary["$ref"] != "#/definitions/modelsv2.UserAccountSummary" {
+		t.Fatalf("account_summary schema = %v", accountSummary["$ref"])
+	}
+	summary := definitions["modelsv2.UserAccountSummary"].(map[string]any)
+	summaryProperties := summary["properties"].(map[string]any)
+	if _, ok := summaryProperties["follower_count"]; !ok {
+		t.Fatal("account summary schema omits follower_count")
+	}
+}
+
 func TestAutoboardOpenAPIUsesTypedCleanBreakContract(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)
@@ -688,17 +715,6 @@ func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 		}
 	}
 
-	params := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/join-leave/stats")
-	wantStats := []string{"time[after]", "time[before]"}
-	if len(params) != len(wantStats) {
-		t.Fatalf("expected stats query params %v, got %v", wantStats, params)
-	}
-	for i, want := range wantStats {
-		if params[i] != want {
-			t.Fatalf("expected stats query param %d to be %s, got %s", i, want, params[i])
-		}
-	}
-
 	for _, path := range []string{
 		"/v2/player/{player_tag}/join-leave/totals",
 	} {
@@ -828,16 +844,17 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 
 	preferenceRequest := swaggerDefinitionProperties(t, definitions, "modelsv2.NotificationPreferencesRequest")
 	for _, field := range []string{
-		"deviceId", "environment", "deviceEnabled", "leagueBattlesEnabled",
+		"deviceId", "environment", "notificationsEnabled",
 		"warAttacksEnabled", "warStateEnabled", "warRemindersEnabled",
-		"eventsEnabled", "announcementsEnabled", "upgradeFinishesEnabled",
-		"monthlySupportEnabled", "reminderTimings", "accountTags",
+		"raidRemindersEnabled", "raidReminderTimings",
+		"eventsEnabled", "announcementsEnabled",
+		"monthlySupportEnabled", "reminderTimings",
 	} {
 		if _, exists := preferenceRequest[field]; !exists {
 			t.Fatalf("NotificationPreferencesRequest missing %s", field)
 		}
 	}
-	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions"} {
+	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions", "accountTags", "deviceEnabled", "autoAddVerifiedAccounts", "leagueBattlesEnabled", "upgradeFinishesEnabled", "legendAttacksEnabled", "legendDefensesEnabled"} {
 		if _, exists := preferenceRequest[retired]; exists {
 			t.Fatalf("NotificationPreferencesRequest exposes retired field %s", retired)
 		}

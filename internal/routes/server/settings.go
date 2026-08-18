@@ -153,52 +153,9 @@ func updateNormalizedServerSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int
 		_, err := tx.Exec(c.UserContext(), fmt.Sprintf(`UPDATE servers SET %s = $2, updated_at = now() WHERE id = $1`, column), serverIDText, value)
 		return err
 	}
-	if body.EmbedColor != nil {
-		if _, err := tx.Exec(c.UserContext(), `UPDATE servers SET embed_color = $2, updated_at = now() WHERE id = $1`, serverIDText, strconv.Itoa(*body.EmbedColor)); err != nil {
-			return err
-		}
-	}
-	values := []struct {
-		column string
-		value  any
-	}{
-		{"nickname_rule", body.NicknameRule},
-		{"non_family_nickname_rule", body.NonFamilyNickname},
-		{"change_nickname", body.ChangeNickname},
-		{"flair_non_family", body.FlairNonFamily},
-		{"auto_eval_nickname", body.AutoEvalNickname},
-		{"autoeval_log_channel_id", body.AutoevalLog},
-		{"autoeval_enabled", body.Autoeval},
-		{"full_whitelist_role_id", body.FullWhitelistRole},
-		{"autoboard_limit", body.AutoboardLimit},
-		{"tied_stats_only", body.Tied},
-		{"family_label", body.FamilyLabel},
-	}
-	for _, item := range values {
-		if item.value == nil {
-			continue
-		}
+	for _, item := range normalizedServerSettingUpdates(body) {
 		if err := set(item.column, item.value); err != nil {
 			return err
-		}
-	}
-	if body.LinkParse != nil {
-		linkValues := []struct {
-			column string
-			value  *bool
-		}{
-			{"link_parse_clan", body.LinkParse.Clan},
-			{"link_parse_army", body.LinkParse.Army},
-			{"link_parse_player", body.LinkParse.Player},
-			{"link_parse_base", body.LinkParse.Base},
-			{"link_parse_show", body.LinkParse.Show},
-		}
-		for _, item := range linkValues {
-			if item.value != nil {
-				if err := set(item.column, *item.value); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	if body.AutoevalTriggers != nil {
@@ -212,6 +169,53 @@ func updateNormalizedServerSettings(c *fiber.Ctx, rt apptypes.Deps, serverID int
 		}
 	}
 	return tx.Commit(c.UserContext())
+}
+
+type serverSettingUpdate struct {
+	column string
+	value  any
+}
+
+func normalizedServerSettingUpdates(body modelsv2.ServerSettingsUpdate) []serverSettingUpdate {
+	updates := make([]serverSettingUpdate, 0, 16)
+	appendString := func(column string, value *string) {
+		if value != nil {
+			updates = append(updates, serverSettingUpdate{column: column, value: *value})
+		}
+	}
+	appendBool := func(column string, value *bool) {
+		if value != nil {
+			updates = append(updates, serverSettingUpdate{column: column, value: *value})
+		}
+	}
+	appendInt := func(column string, value *int) {
+		if value != nil {
+			updates = append(updates, serverSettingUpdate{column: column, value: *value})
+		}
+	}
+
+	if body.EmbedColor != nil {
+		updates = append(updates, serverSettingUpdate{column: "embed_color", value: strconv.Itoa(*body.EmbedColor)})
+	}
+	appendString("nickname_rule", body.NicknameRule)
+	appendString("non_family_nickname_rule", body.NonFamilyNickname)
+	appendBool("change_nickname", body.ChangeNickname)
+	appendBool("flair_non_family", body.FlairNonFamily)
+	appendBool("auto_eval_nickname", body.AutoEvalNickname)
+	appendString("autoeval_log_channel_id", body.AutoevalLog)
+	appendBool("autoeval_enabled", body.Autoeval)
+	appendString("full_whitelist_role_id", body.FullWhitelistRole)
+	appendInt("autoboard_limit", body.AutoboardLimit)
+	appendBool("tied_stats_only", body.Tied)
+	appendString("family_label", body.FamilyLabel)
+	if body.LinkParse != nil {
+		appendBool("link_parse_clan", body.LinkParse.Clan)
+		appendBool("link_parse_army", body.LinkParse.Army)
+		appendBool("link_parse_player", body.LinkParse.Player)
+		appendBool("link_parse_base", body.LinkParse.Base)
+		appendBool("link_parse_show", body.LinkParse.Show)
+	}
+	return updates
 }
 
 func structToUpdateMap(body modelsv2.ServerSettingsUpdate) map[string]any {
@@ -340,7 +344,7 @@ func sqlServerClanDocs(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]map[stri
 		SELECT sc.tag, clan.name, sc.abbreviation, categories.name
 		FROM server_clans sc
 		JOIN basic_clan clan ON clan.tag = sc.tag
-		LEFT JOIN clan_categories categories ON categories.id = sc.category_id
+		LEFT JOIN server_clan_categories categories ON categories.id = sc.category_id
 		WHERE sc.server_id = $1
 		ORDER BY clan.name ASC, sc.tag ASC
 	`, strconv.Itoa(serverID))
@@ -365,7 +369,7 @@ func sqlServerClanDoc(c *fiber.Ctx, rt apptypes.Deps, serverID int, tag string) 
 		SELECT sc.tag, clan.name, sc.abbreviation, categories.name
 		FROM server_clans sc
 		JOIN basic_clan clan ON clan.tag = sc.tag
-		LEFT JOIN clan_categories categories ON categories.id = sc.category_id
+		LEFT JOIN server_clan_categories categories ON categories.id = sc.category_id
 		WHERE sc.server_id = $1 AND sc.tag = $2
 		LIMIT 1
 	`, strconv.Itoa(serverID), tag)

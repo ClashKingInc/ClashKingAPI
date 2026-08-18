@@ -9,6 +9,7 @@ type GiveawayWinner struct {
 	UserID    string  `json:"userId"`
 	Username  *string `json:"username,omitempty"`
 	AvatarURL *string `json:"avatarUrl,omitempty"`
+	InServer  bool    `json:"inServer"`
 	Status    string  `json:"status"`
 	Timestamp *string `json:"timestamp,omitempty"`
 	Reason    *string `json:"reason,omitempty"`

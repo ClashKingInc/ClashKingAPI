@@ -1,8 +1,10 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,7 +45,8 @@ func rosterNormalizeTag(tag string) string {
 	return "#" + tag
 }
 
-// rosterGenID generates a clean short custom ID.
+// rosterGenID generates compact identifiers for legacy non-roster resources
+// such as roster groups and automation rules.
 func rosterGenID() string {
 	return strings.ReplaceAll(uuid.New().String(), "-", "")[:12]
 }
@@ -72,22 +75,22 @@ func createRoster(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		body["server_id"] = serverID
-		body["custom_id"] = rosterGenID()
 		body["created_at"] = time.Now().UTC()
 		body["updated_at"] = time.Now().UTC()
 		if _, ok := body["members"]; !ok {
 			body["members"] = []any{}
 		}
-		if err := rosterSave(c, a, body); err != nil {
+		rosterID, err := rosterSave(c, a, body)
+		if err != nil {
 			return err
 		}
-		created, err := rosterGet(c, a, serverAsString(body["custom_id"]), &serverID)
+		created, err := rosterGet(c, a, rosterID.String(), &serverID)
 		if err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":   "Roster created successfully",
-			"roster_id": body["custom_id"],
+			"roster_id": rosterID,
 			"roster":    sanitize(created),
 		})
 	}
@@ -118,7 +121,7 @@ func getMissingMembers(a apptypes.Deps) fiber.Handler {
 		}
 		filter := rosterFilter{serverID: &serverID}
 		if rosterID != "" {
-			filter.customID = rosterID
+			filter.id = rosterID
 		} else {
 			filter.groupID = groupID
 		}
@@ -157,7 +160,7 @@ func getMissingMembers(a apptypes.Deps) fiber.Handler {
 				}
 			}
 			results = append(results, map[string]any{
-				"roster_id":       roster["custom_id"],
+				"roster_id":       roster["id"],
 				"roster_alias":    roster["alias"],
 				"clan_tag":        clanTag,
 				"missing_members": clanMembers,
@@ -203,7 +206,7 @@ func updateRoster(a apptypes.Deps) fiber.Handler {
 			return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Nothing to update"})
 		}
 		body["updated_at"] = time.Now().UTC()
-		delete(body, "custom_id")
+		delete(body, "id")
 		delete(body, "server_id")
 		updated, err := rosterUpdate(c, a, rosterID, serverID, body)
 		if err != nil {
@@ -263,7 +266,7 @@ func deleteRoster(a apptypes.Deps) fiber.Handler {
 			}
 			doc["members"] = []any{}
 			doc["updated_at"] = time.Now().UTC()
-			if err := rosterSave(c, a, doc); err != nil {
+			if _, err := rosterSave(c, a, doc); err != nil {
 				return err
 			}
 			return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Roster members cleared"})
@@ -312,7 +315,7 @@ func removeRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		doc["members"] = filtered
 		doc["updated_at"] = time.Now().UTC()
-		if err := rosterSave(c, a, doc); err != nil {
+		if _, err := rosterSave(c, a, doc); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member removed from roster"})
@@ -341,7 +344,7 @@ func refreshRosters(a apptypes.Deps) fiber.Handler {
 		groupID := c.Query("group_id")
 		filter := rosterFilter{serverID: &serverID}
 		if rosterID != "" {
-			filter.customID = rosterID
+			filter.id = rosterID
 		} else if groupID != "" {
 			filter.groupID = groupID
 		}
@@ -356,7 +359,7 @@ func refreshRosters(a apptypes.Deps) fiber.Handler {
 			}
 			roster["members"] = rosterMembersAny(members)
 			roster["updated_at"] = time.Now().UTC()
-			if err := rosterSave(c, a, roster); err != nil {
+			if _, err := rosterSave(c, a, roster); err != nil {
 				return err
 			}
 		}
@@ -403,7 +406,7 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		for k, v := range src {
 			cloned[k] = v
 		}
-		cloned["custom_id"] = rosterGenID()
+		delete(cloned, "id")
 		cloned["server_id"] = serverID
 		cloned["created_at"] = time.Now().UTC()
 		cloned["updated_at"] = time.Now().UTC()
@@ -413,10 +416,11 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		if !body.CopyMembers {
 			cloned["members"] = []any{}
 		}
-		if err := rosterSave(c, a, cloned); err != nil {
+		newRosterID, err := rosterSave(c, a, cloned)
+		if err != nil {
 			return err
 		}
-		created, err := rosterGet(c, a, serverAsString(cloned["custom_id"]), &serverID)
+		created, err := rosterGet(c, a, newRosterID.String(), &serverID)
 		if err != nil {
 			return err
 		}
@@ -426,7 +430,7 @@ func cloneRoster(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusCreated, map[string]any{
 			"message":          "Roster cloned successfully",
-			"new_roster_id":    cloned["custom_id"],
+			"new_roster_id":    newRosterID,
 			"new_alias":        cloned["alias"],
 			"target_server_id": rosterServerIDText(serverID),
 			"source_server_id": src["server_id"],
@@ -593,6 +597,12 @@ func updateRosterGroup(a apptypes.Deps) fiber.Handler {
 		for k, v := range body {
 			updated[k] = v
 		}
+		if _, changed := body["scheduled_at"]; changed {
+			updated["executed"] = false
+			updated["executed_at"] = nil
+			updated["execution_status"] = nil
+			updated["last_missed_at"] = nil
+		}
 		updated["updated_at"] = time.Now().UTC()
 		if err := rosterGroupSave(c, a, updated); err != nil {
 			return err
@@ -649,156 +659,6 @@ func deleteRosterGroup(a apptypes.Deps) fiber.Handler {
 			"message":          "Roster group deleted successfully",
 			"affected_rosters": cmd.RowsAffected(),
 		})
-	}
-}
-
-// createRosterSignupCategory godoc
-// @Summary Create roster signup category
-// @Description Creates a new signup category.
-// @Tags Rosters
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id query int true "Discord server ID"
-// @Param body body modelsv2.RosterSignupCategoryRequest true "Signup category"
-// @Success 201 {object} modelsv2.RosterSignupCategoryMutationResponse
-// @Router /v2/roster-signup-category [post]
-func createRosterSignupCategory(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := rosterQueryServerID(c)
-		if err != nil {
-			return err
-		}
-		var body map[string]any
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		body["server_id"] = serverID
-		customID, _ := body["custom_id"].(string)
-		if customID == "" {
-			body["custom_id"] = rosterGenID()
-		}
-		if existing, _ := rosterSignupList(c, a, serverID, serverAsString(body["custom_id"])); len(existing) > 0 {
-			return apptypes.Error(http.StatusBadRequest, "Signup category with this custom_id already exists")
-		}
-		body["created_at"] = time.Now().UTC()
-		body["updated_at"] = time.Now().UTC()
-		if err := rosterSignupSave(c, a, body); err != nil {
-			return err
-		}
-		created, err := rosterSignupList(c, a, serverID, serverAsString(body["custom_id"]))
-		if err != nil {
-			return err
-		}
-		if len(created) == 0 {
-			return apptypes.Error(http.StatusInternalServerError, "Created signup category could not be loaded")
-		}
-		return apptypes.JSON(c, http.StatusCreated, map[string]any{
-			"message":   "Signup category created",
-			"custom_id": body["custom_id"],
-			"category":  sanitize(created[0]),
-		})
-	}
-}
-
-// listRosterSignupCategories godoc
-// @Summary List roster signup categories
-// @Description Returns signup categories for a server.
-// @Tags Rosters
-// @Produce json
-// @Security ApiKeyAuth
-// @Param server_id query int true "Discord server ID"
-// @Success 200 {object} modelsv2.RosterSignupCategoryListResponse
-// @Router /v2/roster-signup-category/list [get]
-func listRosterSignupCategories(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := rosterQueryServerID(c)
-		if err != nil {
-			return err
-		}
-		cats, err := rosterSignupList(c, a, serverID, "")
-		if err != nil {
-			return err
-		}
-		items := sanitize(cats)
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items, "categories": items, "count": len(cats), "server_id": rosterServerIDText(serverID)})
-	}
-}
-
-// updateRosterSignupCategory godoc
-// @Summary Update roster signup category
-// @Description Updates a signup category.
-// @Tags Rosters
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param custom_id path string true "Custom ID"
-// @Param server_id query int true "Discord server ID"
-// @Param body body modelsv2.RosterSignupCategoryRequest true "Signup category fields"
-// @Success 200 {object} modelsv2.RosterSignupCategoryMutationResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/roster-signup-category/{custom_id} [patch]
-func updateRosterSignupCategory(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := rosterQueryServerID(c)
-		if err != nil {
-			return err
-		}
-		customID := c.Params("custom_id")
-		var body map[string]any
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		delete(body, "custom_id")
-		delete(body, "server_id")
-		existing, err := rosterSignupList(c, a, serverID, customID)
-		if err != nil {
-			return err
-		}
-		if len(existing) == 0 {
-			return apptypes.Error(http.StatusNotFound, "Signup category not found")
-		}
-		updated := existing[0]
-		for k, v := range body {
-			updated[k] = v
-		}
-		updated["updated_at"] = time.Now().UTC()
-		if err := rosterSignupSave(c, a, updated); err != nil {
-			return err
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Category updated", "category": sanitize(updated)})
-	}
-}
-
-// deleteRosterSignupCategory godoc
-// @Summary Delete roster signup category
-// @Description Deletes a signup category.
-// @Tags Rosters
-// @Produce json
-// @Security ApiKeyAuth
-// @Param custom_id path string true "Custom ID"
-// @Param server_id query int true "Discord server ID"
-// @Success 200 {object} modelsv2.MessageResponse
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/roster-signup-category/{custom_id} [delete]
-func deleteRosterSignupCategory(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		serverID, err := rosterQueryServerID(c)
-		if err != nil {
-			return err
-		}
-		customID := c.Params("custom_id")
-		cmd, err := a.Store.SQL.Exec(c.UserContext(), `
-			DELETE FROM roster_signup_categories
-			WHERE custom_id = $1 AND server_id = $2
-		`, customID, rosterServerIDText(serverID))
-		if err != nil {
-			return err
-		}
-		if cmd.RowsAffected() == 0 {
-			return apptypes.Error(http.StatusNotFound, "Signup category not found")
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Signup category deleted"})
 	}
 }
 
@@ -862,7 +722,7 @@ func manageRosterMembers(a apptypes.Deps) fiber.Handler {
 			existing["members"] = rosterMembersAny(members)
 		}
 		existing["updated_at"] = time.Now().UTC()
-		if err := rosterSave(c, a, existing); err != nil {
+		if _, err := rosterSave(c, a, existing); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Members updated"})
@@ -914,7 +774,7 @@ func updateRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		doc["members"] = rosterMembersAny(members)
 		doc["updated_at"] = time.Now().UTC()
-		if err := rosterSave(c, a, doc); err != nil {
+		if _, err := rosterSave(c, a, doc); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member updated"})
@@ -960,7 +820,7 @@ func refreshRosterMember(a apptypes.Deps) fiber.Handler {
 		}
 		doc["members"] = rosterMembersAny(members)
 		doc["updated_at"] = time.Now().UTC()
-		if err := rosterSave(c, a, doc); err != nil {
+		if _, err := rosterSave(c, a, doc); err != nil {
 			return err
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"message": "Member refreshed", "member": sanitize(refreshed)})
@@ -1192,13 +1052,25 @@ func getServerClanMembers(a apptypes.Deps) fiber.Handler {
 
 type rosterFilter struct {
 	serverID *int64
-	customID string
+	id       string
 	groupID  string
 	clanTag  string
 }
 
 func rosterServerIDText(serverID int64) string {
 	return strconv.FormatInt(serverID, 10)
+}
+
+func parseRosterUUIDs(values []string) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(values))
+	for _, value := range values {
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return nil, apptypes.Error(http.StatusBadRequest, "invalid roster_id")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func rosterOptionalString(value any) string {
@@ -1267,6 +1139,34 @@ func rosterNullableInt64(value any) *int64 {
 	return &out
 }
 
+func rosterNullableTime(value any) *time.Time {
+	if value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case time.Time:
+		out := typed.UTC()
+		return &out
+	case *time.Time:
+		return typed
+	case int64:
+		out := time.Unix(typed, 0).UTC()
+		return &out
+	case int:
+		out := time.Unix(int64(typed), 0).UTC()
+		return &out
+	case float64:
+		out := time.Unix(int64(typed), 0).UTC()
+		return &out
+	default:
+		parsed, err := time.Parse(time.RFC3339, serverAsString(value))
+		if err != nil {
+			return nil
+		}
+		return &parsed
+	}
+}
+
 func rosterNullableFloat(value any) *float64 {
 	if value == nil || serverAsString(value) == "" {
 		return nil
@@ -1289,19 +1189,6 @@ func rosterNullableFloat(value any) *float64 {
 	return &out
 }
 
-func rosterReplaceOrderedValues(c *fiber.Ctx, tx pgx.Tx, table, column string, rosterID uuid.UUID, value any) error {
-	for position, raw := range rosterAnySlice(value) {
-		item := serverAsString(raw)
-		if item == "" {
-			continue
-		}
-		if _, err := tx.Exec(c.UserContext(), `INSERT INTO `+table+` (roster_id, `+column+`, position) VALUES ($1, $2, $3)`, rosterID, item, position); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func rosterAnySlice(value any) []any {
 	switch typed := value.(type) {
 	case []any:
@@ -1315,6 +1202,36 @@ func rosterAnySlice(value any) []any {
 	default:
 		return []any{}
 	}
+}
+
+func rosterStringSlice(value any) []string {
+	out := []string{}
+	for _, raw := range rosterAnySlice(value) {
+		if item := strings.TrimSpace(serverAsString(raw)); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func rosterSortConfiguration(value any) ([]map[string]string, error) {
+	items := rosterAnySlice(value)
+	if len(items) > 5 {
+		return nil, apptypes.Error(http.StatusBadRequest, "A roster can have at most five sort fields")
+	}
+	out := make([]map[string]string, 0, len(items))
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			return nil, apptypes.Error(http.StatusBadRequest, "Roster sort fields require columnId and direction")
+		}
+		columnID, direction := strings.TrimSpace(serverAsString(item["columnId"])), strings.TrimSpace(serverAsString(item["direction"]))
+		if !regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`).MatchString(columnID) || (direction != "asc" && direction != "desc") {
+			return nil, apptypes.Error(http.StatusBadRequest, "Roster sort fields require a stable columnId and asc or desc direction")
+		}
+		out = append(out, map[string]string{"columnId": columnID, "direction": direction})
+	}
+	return out, nil
 }
 
 func rosterBoolPtrMaybe(value any) *bool {
@@ -1340,48 +1257,12 @@ func rosterBoolDefault(value any, fallback bool) bool {
 	return fallback
 }
 
-func rosterLoadOrderedValues(c *fiber.Ctx, a apptypes.Deps, table, column string, rosterID uuid.UUID) []any {
-	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT `+column+` FROM `+table+` WHERE roster_id = $1 ORDER BY position, `+column, rosterID)
-	if err != nil {
-		return []any{}
-	}
-	defer rows.Close()
-	out := []any{}
-	for rows.Next() {
-		var value string
-		if rows.Scan(&value) == nil {
-			out = append(out, value)
-		}
-	}
-	return out
-}
-
-func rosterLoadGroupCategories(c *fiber.Ctx, a apptypes.Deps, groupID string) []any {
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT category_id FROM roster_group_allowed_signup_categories
-		WHERE group_id = $1 ORDER BY position, category_id
-	`, groupID)
-	if err != nil {
-		return []any{}
-	}
-	defer rows.Close()
-	out := []any{}
-	for rows.Next() {
-		var value string
-		if rows.Scan(&value) == nil {
-			out = append(out, value)
-		}
-	}
-	return out
-}
-
 func rosterLoadMembers(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID) []any {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT tag, name, townhall, hero_levels, discord_user_id, discord_username,
-		       discord_avatar_url, current_clan_name, current_clan_tag,
-		       war_preference, trophies, substitute, signup_group, hitrate,
-		       last_online, current_league, added_at, last_updated, is_in_family,
-		       member_status, error_details
+		SELECT tag, name, townhall, trophies, current_clan_name, current_clan_tag,
+		       league_id, league_name, hero_level_sum, max_percent,
+		       war_preference, discord_user_id, discord_username,
+		       discord_avatar_url, last_online, refreshed_at, signup_answers
 		FROM roster_members WHERE roster_id = $1 ORDER BY position, tag
 	`, rosterID)
 	if err != nil {
@@ -1391,21 +1272,24 @@ func rosterLoadMembers(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID) []any 
 	out := []any{}
 	for rows.Next() {
 		var tag, name string
-		var townhall int
-		var heroLevels, trophies *int
-		var discordUserID, discordUsername, discordAvatarURL, currentClanName, currentClanTag *string
-		var signupGroup, currentLeague, memberStatus, errorDetails *string
-		var warPreference, substitute, isInFamily *bool
-		var hitrate *float64
-		var lastOnline, addedAt, lastUpdated *int64
-		if rows.Scan(&tag, &name, &townhall, &heroLevels, &discordUserID, &discordUsername,
-			&discordAvatarURL, &currentClanName, &currentClanTag, &warPreference, &trophies,
-			&substitute, &signupGroup, &hitrate, &lastOnline, &currentLeague, &addedAt,
-			&lastUpdated, &isInFamily, &memberStatus, &errorDetails) != nil {
+		var townhall, heroLevelSum int
+		var trophies, leagueID *int
+		var currentClanName, currentClanTag, leagueName *string
+		var discordUserID, discordUsername, discordAvatarURL *string
+		var maxPercent *float64
+		var warPreference *bool
+		var lastOnline, refreshedAt *time.Time
+		var answersRaw []byte
+		if rows.Scan(&tag, &name, &townhall, &trophies, &currentClanName, &currentClanTag,
+			&leagueID, &leagueName, &heroLevelSum, &maxPercent,
+			&warPreference, &discordUserID, &discordUsername,
+			&discordAvatarURL, &lastOnline, &refreshedAt, &answersRaw) != nil {
 			continue
 		}
 		item := map[string]any{"tag": tag, "name": name, "townhall": townhall}
-		rosterPutOptional(item, "hero_lvs", heroLevels)
+		var answers any
+		_ = json.Unmarshal(answersRaw, &answers)
+		item["hero_level_sum"], item["answers"] = heroLevelSum, answers
 		rosterPutOptional(item, "discord", discordUserID)
 		rosterPutOptional(item, "discord_username", discordUsername)
 		rosterPutOptional(item, "discord_avatar_url", discordAvatarURL)
@@ -1413,16 +1297,11 @@ func rosterLoadMembers(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID) []any 
 		rosterPutOptional(item, "current_clan_tag", currentClanTag)
 		rosterPutOptional(item, "war_pref", warPreference)
 		rosterPutOptional(item, "trophies", trophies)
-		rosterPutOptional(item, "sub", substitute)
-		rosterPutOptional(item, "signup_group", signupGroup)
-		rosterPutOptional(item, "hitrate", hitrate)
+		rosterPutOptional(item, "league_id", leagueID)
+		rosterPutOptional(item, "league_name", leagueName)
+		rosterPutOptional(item, "max_percent", maxPercent)
 		rosterPutOptional(item, "last_online", lastOnline)
-		rosterPutOptional(item, "current_league", currentLeague)
-		rosterPutOptional(item, "added_at", addedAt)
-		rosterPutOptional(item, "last_updated", lastUpdated)
-		rosterPutOptional(item, "is_in_family", isInFamily)
-		rosterPutOptional(item, "member_status", memberStatus)
-		rosterPutOptional(item, "error_details", errorDetails)
+		rosterPutOptional(item, "refreshed_at", refreshedAt)
 		out = append(out, item)
 	}
 	return out
@@ -1450,6 +1329,10 @@ func rosterPutOptional(target map[string]any, key string, value any) {
 		if typed != nil {
 			target[key] = *typed
 		}
+	case *time.Time:
+		if typed != nil {
+			target[key] = *typed
+		}
 	}
 }
 
@@ -1469,7 +1352,11 @@ func rosterHydrateMember(c *fiber.Ctx, a apptypes.Deps, member map[string]any) {
 	member["name"] = player.Name
 	member["townhall"] = player.TownHall
 	member["trophies"] = player.Trophies
-	member["last_updated"] = time.Now().UTC().Unix()
+	member["hero_level_sum"] = rosterHeroLevelSum(player.Heroes)
+	if maxPercent, maxPercentErr := calculateRosterMaxPercent(player); maxPercentErr == nil {
+		member["max_percent"] = maxPercent
+	}
+	member["refreshed_at"] = time.Now().UTC()
 	if player.Clan != nil {
 		member["current_clan"] = player.Clan.Name
 		member["current_clan_tag"] = player.Clan.Tag
@@ -1477,40 +1364,71 @@ func rosterHydrateMember(c *fiber.Ctx, a apptypes.Deps, member map[string]any) {
 		member["current_clan"] = ""
 		member["current_clan_tag"] = ""
 	}
-	if player.League != nil {
-		member["current_league"] = player.League.Name
-	} else if player.LeagueTier != nil {
-		member["current_league"] = player.LeagueTier.Name
+	if player.LeagueTier.ID != 0 || player.LeagueTier.Name != "" {
+		member["league_id"] = player.LeagueTier.ID
+		member["league_name"] = player.LeagueTier.Name
 	}
 }
 
-func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
-	customID := serverAsString(doc["custom_id"])
+func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) (uuid.UUID, error) {
+	rosterID, err := uuid.Parse(serverAsString(doc["id"]))
+	if err != nil {
+		rosterID, err = uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, err
+		}
+	}
 	serverID := serverAsString(doc["server_id"])
 	groupID := rosterOptionalString(doc["group_id"])
 	clanTag := rosterOptionalString(doc["clan_tag"])
 	alias := rosterOptionalString(doc["alias"])
+	displayColumnIDs := rosterStringSlice(doc["columns"])
+	if len(displayColumnIDs) > 24 {
+		return uuid.Nil, apptypes.Error(http.StatusBadRequest, "A roster can have at most 24 display columns")
+	}
+	for _, columnID := range displayColumnIDs {
+		if !regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`).MatchString(columnID) {
+			return uuid.Nil, apptypes.Error(http.StatusBadRequest, "Roster columns require stable lowercase IDs")
+		}
+	}
+	sortConfiguration, err := rosterSortConfiguration(doc["sort"])
+	if err != nil {
+		return uuid.Nil, err
+	}
+	webhookID, messageID := rosterOptionalString(doc["webhook_id"]), rosterOptionalString(doc["message_id"])
+	if (webhookID == "") != (messageID == "") {
+		return uuid.Nil, apptypes.Error(http.StatusBadRequest, "webhook_id and message_id must be set or cleared together")
+	}
+	if webhookID != "" {
+		if _, err := strconv.ParseUint(webhookID, 10, 64); err != nil {
+			return uuid.Nil, apptypes.Error(http.StatusBadRequest, "webhook_id must be a Discord ID")
+		}
+		if _, err := strconv.ParseUint(messageID, 10, 64); err != nil {
+			return uuid.Nil, apptypes.Error(http.StatusBadRequest, "message_id must be a Discord ID")
+		}
+	}
 	tx, err := a.Store.SQL.Begin(c.UserContext())
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	defer tx.Rollback(c.UserContext())
-	var rosterID uuid.UUID
 	err = tx.QueryRow(c.UserContext(), `
 		INSERT INTO rosters (
-			custom_id, server_id, group_id, clan_tag, alias, description,
-			roster_type, signup_scope, min_townhall, max_townhall, roster_size,
-			min_signups, max_accounts_per_user, townhall_restriction,
-			default_signup_category, image_url, event_start_time,
+			id, server_id, group_id, clan_tag, alias, description,
+			roster_type, signup_scope, min_townhall, max_townhall,
+			min_signups, max_accounts_per_user, display_column_ids, sort_configuration,
+			webhook_id, message_id,
+			image_url, event_start_time,
 			recurrence_days, recurrence_day_of_month, created_at, updated_at
 		)
 		VALUES (
 			$1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, NULLIF($6, ''),
-			$7, $8, $9, $10, $11, $12, $13, NULLIF($14, ''),
-			NULLIF($15, ''), NULLIF($16, ''), $17, $18, $19,
-			COALESCE($20, now()), COALESCE($21, now())
+			$7, $8, $9, $10, $11, $12, $13, $14::jsonb,
+			NULLIF($15, ''), NULLIF($16, ''),
+			NULLIF($17, ''), $18, $19, $20,
+			COALESCE($21, now()), COALESCE($22, now())
 		)
-		ON CONFLICT (custom_id) DO UPDATE SET
+		ON CONFLICT (id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			group_id = EXCLUDED.group_id,
 			clan_tag = EXCLUDED.clan_tag,
@@ -1520,30 +1438,30 @@ func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 			signup_scope = EXCLUDED.signup_scope,
 			min_townhall = EXCLUDED.min_townhall,
 			max_townhall = EXCLUDED.max_townhall,
-			roster_size = EXCLUDED.roster_size,
 			min_signups = EXCLUDED.min_signups,
 			max_accounts_per_user = EXCLUDED.max_accounts_per_user,
-			townhall_restriction = EXCLUDED.townhall_restriction,
-			default_signup_category = EXCLUDED.default_signup_category,
+			display_column_ids = EXCLUDED.display_column_ids,
+			sort_configuration = EXCLUDED.sort_configuration,
+			webhook_id = EXCLUDED.webhook_id,
+			message_id = EXCLUDED.message_id,
 			image_url = EXCLUDED.image_url,
 			event_start_time = EXCLUDED.event_start_time,
 			recurrence_days = EXCLUDED.recurrence_days,
 			recurrence_day_of_month = EXCLUDED.recurrence_day_of_month,
-			updated_at = EXCLUDED.updated_at
+			updated_at = EXCLUDED.updated_at,
+			revision = rosters.revision + 1
 		RETURNING id
-	`, customID, serverID, groupID, clanTag, alias, rosterOptionalString(doc["description"]),
+	`, rosterID, serverID, groupID, clanTag, alias, rosterOptionalString(doc["description"]),
 		rosterStringDefault(doc["roster_type"], "clan"), rosterStringDefault(doc["signup_scope"], "clan-only"),
-		rosterNullableInt(doc["min_th"]), rosterNullableInt(doc["max_th"]), rosterNullableInt(doc["roster_size"]),
-		rosterNullableInt(doc["min_signups"]), rosterNullableInt(doc["max_accounts_per_user"]), rosterOptionalString(doc["th_restriction"]),
-		rosterOptionalString(doc["default_signup_category"]), rosterOptionalString(doc["image"]), rosterNullableInt64(doc["event_start_time"]),
+		rosterNullableInt(doc["min_th"]), rosterNullableInt(doc["max_th"]),
+		rosterNullableInt(doc["min_signups"]), rosterNullableInt(doc["max_accounts_per_user"]), displayColumnIDs, apptypes.Marshal(sortConfiguration),
+		webhookID, messageID, rosterOptionalString(doc["image"]), rosterNullableInt64(doc["event_start_time"]),
 		rosterNullableInt(doc["recurrence_days"]), rosterNullableInt(doc["recurrence_day_of_month"]), doc["created_at"], doc["updated_at"]).Scan(&rosterID)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
-	for _, table := range []string{"roster_members", "roster_allowed_signup_categories", "roster_display_columns", "roster_sort_fields"} {
-		if _, err := tx.Exec(c.UserContext(), `DELETE FROM `+table+` WHERE roster_id = $1`, rosterID); err != nil {
-			return err
-		}
+	if _, err := tx.Exec(c.UserContext(), `DELETE FROM roster_members WHERE roster_id = $1`, rosterID); err != nil {
+		return uuid.Nil, err
 	}
 	for position, member := range rosterMemberList(doc["members"]) {
 		tag := rosterNormalizeTag(serverAsString(member["tag"]))
@@ -1552,40 +1470,41 @@ func rosterSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 		}
 		if _, err := tx.Exec(c.UserContext(), `
 			INSERT INTO roster_members (
-				roster_id, tag, name, townhall, hero_levels, discord_user_id,
-				discord_username, discord_avatar_url, current_clan_name,
-				current_clan_tag, war_preference, trophies, substitute,
-				signup_group, hitrate, last_online, current_league, added_at,
-				last_updated, is_in_family, member_status, error_details, position
+				roster_id, tag, name, townhall, trophies, current_clan_name,
+				current_clan_tag, league_id, league_name, hero_level_sum, max_percent,
+				war_preference, discord_user_id, discord_username,
+				discord_avatar_url, last_online, refreshed_at,
+				signup_answers, position
 			) VALUES (
-				$1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''),
-				NULLIF($9, ''), NULLIF($10, ''), $11, $12, $13, NULLIF($14, ''),
-				$15, $16, NULLIF($17, ''), $18, $19, $20, NULLIF($21, ''), NULLIF($22, ''), $23
+				$1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8,
+				NULLIF($9, ''), $10, $11, $12,
+				NULLIF($13, ''), NULLIF($14, ''), NULLIF($15, ''),
+				$16, $17, $18, $19
 			)
 		`, rosterID, tag, rosterOptionalString(member["name"]), activityAsInt(member["townhall"]),
-			rosterNullableInt(member["hero_lvs"]), rosterOptionalString(member["discord"]), rosterOptionalString(member["discord_username"]),
-			rosterOptionalString(member["discord_avatar_url"]), rosterOptionalString(member["current_clan"]), rosterOptionalString(member["current_clan_tag"]),
-			rosterBoolPtrMaybe(member["war_pref"]), rosterNullableInt(member["trophies"]), rosterBoolPtrMaybe(member["sub"]), rosterOptionalString(member["signup_group"]),
-			rosterNullableFloat(member["hitrate"]), rosterNullableInt64(member["last_online"]), rosterOptionalString(member["current_league"]),
-			rosterNullableInt64(member["added_at"]), rosterNullableInt64(member["last_updated"]), rosterBoolPtrMaybe(member["is_in_family"]),
-			rosterOptionalString(member["member_status"]), rosterOptionalString(member["error_details"]), position); err != nil {
-			return err
+			rosterNullableInt(member["trophies"]), rosterOptionalString(member["current_clan"]), rosterOptionalString(member["current_clan_tag"]),
+			rosterNullableInt(member["league_id"]), rosterOptionalString(member["league_name"]), activityAsInt(member["hero_level_sum"]),
+			rosterNullableFloat(member["max_percent"]), rosterBoolPtrMaybe(member["war_pref"]), rosterOptionalString(member["discord"]), rosterOptionalString(member["discord_username"]),
+			rosterOptionalString(member["discord_avatar_url"]), rosterNullableTime(member["last_online"]),
+			rosterNullableTime(member["refreshed_at"]), rosterAnswersJSON(member["answers"]), position); err != nil {
+			return uuid.Nil, err
 		}
 	}
-	if err := rosterReplaceOrderedValues(c, tx, "roster_allowed_signup_categories", "category_id", rosterID, doc["allowed_signup_categories"]); err != nil {
-		return err
+	if err := tx.Commit(c.UserContext()); err != nil {
+		return uuid.Nil, err
 	}
-	if err := rosterReplaceOrderedValues(c, tx, "roster_display_columns", "column_name", rosterID, doc["columns"]); err != nil {
-		return err
-	}
-	if err := rosterReplaceOrderedValues(c, tx, "roster_sort_fields", "field_name", rosterID, doc["sort"]); err != nil {
-		return err
-	}
-	return tx.Commit(c.UserContext())
+	return rosterID, nil
 }
 
-func rosterGet(c *fiber.Ctx, a apptypes.Deps, customID string, serverID *int64) (map[string]any, error) {
-	filter := rosterFilter{customID: customID, serverID: serverID}
+func rosterAnswersJSON(value any) string {
+	if value == nil {
+		return "{}"
+	}
+	return apptypes.Marshal(value)
+}
+
+func rosterGet(c *fiber.Ctx, a apptypes.Deps, rosterID string, serverID *int64) (map[string]any, error) {
+	filter := rosterFilter{id: rosterID, serverID: serverID}
 	rows, err := rosterList(c, a, filter)
 	if err != nil {
 		return nil, err
@@ -1603,9 +1522,13 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 		args = append(args, rosterServerIDText(*filter.serverID))
 		where = append(where, "server_id = $"+strconv.Itoa(len(args)))
 	}
-	if filter.customID != "" {
-		args = append(args, filter.customID)
-		where = append(where, "custom_id = $"+strconv.Itoa(len(args)))
+	if filter.id != "" {
+		id, err := uuid.Parse(filter.id)
+		if err != nil {
+			return nil, apptypes.Error(http.StatusBadRequest, "invalid roster_id")
+		}
+		args = append(args, id)
+		where = append(where, "id = $"+strconv.Itoa(len(args)))
 	}
 	if filter.groupID != "" {
 		args = append(args, filter.groupID)
@@ -1616,11 +1539,12 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 		where = append(where, "clan_tag = $"+strconv.Itoa(len(args)))
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT id, custom_id, server_id, group_id, clan_tag, alias, description,
-		       roster_type, signup_scope, min_townhall, max_townhall, roster_size,
-		       min_signups, max_accounts_per_user, townhall_restriction,
-		       default_signup_category, image_url, event_start_time,
-		       recurrence_days, recurrence_day_of_month, created_at, updated_at
+		SELECT id, server_id, group_id, clan_tag, alias, description,
+		       roster_type, signup_scope, min_townhall, max_townhall,
+		       min_signups, max_accounts_per_user, display_column_ids, sort_configuration,
+		       webhook_id, message_id,
+		       image_url, event_start_time,
+		       recurrence_days, recurrence_day_of_month, created_at, updated_at, revision
 		FROM rosters
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY updated_at DESC
@@ -1632,26 +1556,30 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 	items := []map[string]any{}
 	for rows.Next() {
 		var rosterID uuid.UUID
-		var customID, serverID, alias, rosterType, signupScope string
-		var groupID, clanTag, description, townhallRestriction, defaultSignupCategory, imageURL *string
-		var minTownhall, maxTownhall, rosterSize, minSignups, maxAccountsPerUser *int
+		var serverID, alias, rosterType, signupScope string
+		var groupID, clanTag, description, imageURL, webhookID, messageID *string
+		var minTownhall, maxTownhall, minSignups, maxAccountsPerUser *int
+		var columns []string
+		var sortRaw []byte
 		var recurrenceDays, recurrenceDayOfMonth *int
 		var eventStartTime *int64
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&rosterID, &customID, &serverID, &groupID, &clanTag, &alias, &description,
-			&rosterType, &signupScope, &minTownhall, &maxTownhall, &rosterSize, &minSignups,
-			&maxAccountsPerUser, &townhallRestriction, &defaultSignupCategory, &imageURL,
-			&eventStartTime, &recurrenceDays, &recurrenceDayOfMonth, &createdAt, &updatedAt); err != nil {
+		var revision int64
+		if err := rows.Scan(&rosterID, &serverID, &groupID, &clanTag, &alias, &description,
+			&rosterType, &signupScope, &minTownhall, &maxTownhall, &minSignups,
+			&maxAccountsPerUser, &columns, &sortRaw, &webhookID, &messageID, &imageURL,
+			&eventStartTime, &recurrenceDays, &recurrenceDayOfMonth, &createdAt, &updatedAt, &revision); err != nil {
 			return nil, err
 		}
+		var sortConfiguration any = []any{}
+		_ = json.Unmarshal(sortRaw, &sortConfiguration)
 		item := map[string]any{
-			"custom_id": customID, "server_id": serverID, "alias": alias,
+			"id": rosterID, "server_id": serverID, "alias": alias,
 			"roster_type": rosterType, "signup_scope": signupScope,
-			"members":                   rosterLoadMembers(c, a, rosterID),
-			"allowed_signup_categories": rosterLoadOrderedValues(c, a, "roster_allowed_signup_categories", "category_id", rosterID),
-			"columns":                   rosterLoadOrderedValues(c, a, "roster_display_columns", "column_name", rosterID),
-			"sort":                      rosterLoadOrderedValues(c, a, "roster_sort_fields", "field_name", rosterID),
-			"created_at":                createdAt, "updated_at": updatedAt,
+			"members":    rosterLoadMembers(c, a, rosterID),
+			"columns":    columns,
+			"sort":       sortConfiguration,
+			"created_at": createdAt, "updated_at": updatedAt, "revision": revision,
 		}
 		if groupID != nil {
 			item["group_id"] = *groupID
@@ -1662,11 +1590,10 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 		rosterPutOptional(item, "description", description)
 		rosterPutOptional(item, "min_th", minTownhall)
 		rosterPutOptional(item, "max_th", maxTownhall)
-		rosterPutOptional(item, "roster_size", rosterSize)
 		rosterPutOptional(item, "min_signups", minSignups)
 		rosterPutOptional(item, "max_accounts_per_user", maxAccountsPerUser)
-		rosterPutOptional(item, "th_restriction", townhallRestriction)
-		rosterPutOptional(item, "default_signup_category", defaultSignupCategory)
+		rosterPutOptional(item, "webhook_id", webhookID)
+		rosterPutOptional(item, "message_id", messageID)
 		rosterPutOptional(item, "image", imageURL)
 		rosterPutOptional(item, "event_start_time", eventStartTime)
 		rosterPutOptional(item, "recurrence_days", recurrenceDays)
@@ -1676,16 +1603,20 @@ func rosterList(c *fiber.Ctx, a apptypes.Deps, filter rosterFilter) ([]map[strin
 	return items, rows.Err()
 }
 
-func rosterDelete(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64) (int64, error) {
+func rosterDelete(c *fiber.Ctx, a apptypes.Deps, rosterID string, serverID int64) (int64, error) {
+	id, err := uuid.Parse(rosterID)
+	if err != nil {
+		return 0, apptypes.Error(http.StatusBadRequest, "invalid roster_id")
+	}
 	tag, err := a.Store.SQL.Exec(c.UserContext(), `
 		DELETE FROM rosters
-		WHERE custom_id = $1 AND server_id = $2
-	`, customID, rosterServerIDText(serverID))
+		WHERE id = $1 AND server_id = $2
+	`, id, rosterServerIDText(serverID))
 	return tag.RowsAffected(), err
 }
 
-func rosterUpdate(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64, patch map[string]any) (map[string]any, error) {
-	doc, err := rosterGet(c, a, customID, &serverID)
+func rosterUpdate(c *fiber.Ctx, a apptypes.Deps, rosterID string, serverID int64, patch map[string]any) (map[string]any, error) {
+	doc, err := rosterGet(c, a, rosterID, &serverID)
 	if err != nil {
 		return nil, err
 	}
@@ -1693,14 +1624,14 @@ func rosterUpdate(c *fiber.Ctx, a apptypes.Deps, customID string, serverID int64
 		doc[k] = v
 	}
 	doc["updated_at"] = time.Now().UTC()
-	delete(doc, "custom_id")
+	delete(doc, "id")
 	delete(doc, "server_id")
-	doc["custom_id"] = customID
+	doc["id"] = rosterID
 	doc["server_id"] = serverID
-	if err := rosterSave(c, a, doc); err != nil {
+	if _, err := rosterSave(c, a, doc); err != nil {
 		return nil, err
 	}
-	return rosterGet(c, a, customID, &serverID)
+	return rosterGet(c, a, rosterID, &serverID)
 }
 
 func rosterGroupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
@@ -1716,33 +1647,21 @@ func rosterGroupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	_, err = tx.Exec(c.UserContext(), `
 		INSERT INTO roster_groups (
 			group_id, server_id, name, alias, description, max_accounts_per_user,
-			roster_size, min_signups, default_signup_category, created_at, updated_at
+			min_signups, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, NULLIF($9, ''), COALESCE($10, now()), COALESCE($11, now()))
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, COALESCE($8, now()), COALESCE($9, now()))
 		ON CONFLICT (group_id) DO UPDATE SET
 			server_id = EXCLUDED.server_id,
 			name = EXCLUDED.name,
 			alias = EXCLUDED.alias,
 			description = EXCLUDED.description,
 			max_accounts_per_user = EXCLUDED.max_accounts_per_user,
-			roster_size = EXCLUDED.roster_size,
 			min_signups = EXCLUDED.min_signups,
-			default_signup_category = EXCLUDED.default_signup_category,
 			updated_at = EXCLUDED.updated_at
 	`, groupID, serverID, name, rosterOptionalString(doc["alias"]), description,
-		rosterNullableInt(doc["max_accounts_per_user"]), rosterNullableInt(doc["roster_size"]),
-		rosterNullableInt(doc["min_signups"]), rosterOptionalString(doc["default_signup_category"]),
-		doc["created_at"], doc["updated_at"])
+		rosterNullableInt(doc["max_accounts_per_user"]), rosterNullableInt(doc["min_signups"]), doc["created_at"], doc["updated_at"])
 	if err != nil {
 		return err
-	}
-	if _, err := tx.Exec(c.UserContext(), `DELETE FROM roster_group_allowed_signup_categories WHERE group_id = $1`, groupID); err != nil {
-		return err
-	}
-	for position, value := range stringSlice(doc["allowed_signup_categories"]) {
-		if _, err := tx.Exec(c.UserContext(), `INSERT INTO roster_group_allowed_signup_categories (group_id, category_id, position) VALUES ($1, $2, $3)`, groupID, value, position); err != nil {
-			return err
-		}
 	}
 	return tx.Commit(c.UserContext())
 }
@@ -1760,7 +1679,7 @@ func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT group_id, server_id, name, alias, description, max_accounts_per_user,
-		       roster_size, min_signups, default_signup_category, created_at, updated_at
+		       min_signups, created_at, updated_at
 		FROM roster_groups
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY created_at DESC
@@ -1772,23 +1691,20 @@ func rosterGroups(c *fiber.Ctx, a apptypes.Deps, serverID *int64, groupID string
 	items := []map[string]any{}
 	for rows.Next() {
 		var gid, sid, name, description string
-		var alias, defaultSignupCategory *string
-		var maxAccountsPerUser, rosterSize, minSignups *int
+		var alias *string
+		var maxAccountsPerUser, minSignups *int
 		var createdAt, updatedAt time.Time
 		if err := rows.Scan(&gid, &sid, &name, &alias, &description, &maxAccountsPerUser,
-			&rosterSize, &minSignups, &defaultSignupCategory, &createdAt, &updatedAt); err != nil {
+			&minSignups, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		item := map[string]any{
 			"group_id": gid, "server_id": sid, "name": name, "description": description,
-			"allowed_signup_categories": rosterLoadGroupCategories(c, a, gid),
-			"created_at":                createdAt, "updated_at": updatedAt,
+			"created_at": createdAt, "updated_at": updatedAt,
 		}
 		rosterPutOptional(item, "alias", alias)
 		rosterPutOptional(item, "max_accounts_per_user", maxAccountsPerUser)
-		rosterPutOptional(item, "roster_size", rosterSize)
 		rosterPutOptional(item, "min_signups", minSignups)
-		rosterPutOptional(item, "default_signup_category", defaultSignupCategory)
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -1805,61 +1721,16 @@ func rosterGroupGet(c *fiber.Ctx, a apptypes.Deps, groupID string, serverID *int
 	return groups[0], nil
 }
 
-func rosterSignupSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
-	_, err := a.Store.SQL.Exec(c.UserContext(), `
-		INSERT INTO roster_signup_categories (custom_id, server_id, name, alias, description, sort_order, created_at, updated_at)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, COALESCE($7, now()), COALESCE($8, now()))
-		ON CONFLICT (custom_id) DO UPDATE SET
-			server_id = EXCLUDED.server_id,
-			name = EXCLUDED.name,
-			alias = EXCLUDED.alias,
-			description = EXCLUDED.description,
-			sort_order = EXCLUDED.sort_order,
-			updated_at = EXCLUDED.updated_at
-	`, serverAsString(doc["custom_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["name"]),
-		rosterOptionalString(doc["alias"]), rosterOptionalString(doc["description"]), activityAsInt(doc["sort_order"]), doc["created_at"], doc["updated_at"])
-	return err
-}
-
-func rosterSignupList(c *fiber.Ctx, a apptypes.Deps, serverID int64, customID string) ([]map[string]any, error) {
-	args := []any{rosterServerIDText(serverID)}
-	where := []string{"server_id = $1"}
-	if customID != "" {
-		args = append(args, customID)
-		where = append(where, "custom_id = $2")
-	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT custom_id, server_id, name, alias, description, sort_order, created_at, updated_at
-		FROM roster_signup_categories
-		WHERE `+strings.Join(where, " AND ")+`
-		ORDER BY sort_order, created_at
-	`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []map[string]any{}
-	for rows.Next() {
-		var cid, sid, name, description string
-		var alias *string
-		var sortOrder int
-		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&cid, &sid, &name, &alias, &description, &sortOrder, &createdAt, &updatedAt); err != nil {
-			return nil, err
-		}
-		item := map[string]any{"custom_id": cid, "server_id": sid, "name": name, "description": description, "sort_order": sortOrder, "created_at": createdAt, "updated_at": updatedAt}
-		rosterPutOptional(item, "alias", alias)
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
 func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) error {
 	options, _ := doc["options"].(map[string]any)
-	_, err := a.Store.SQL.Exec(c.UserContext(), `
+	scheduledAt, err := rosterAutomationScheduledAt(doc["scheduled_at"])
+	if err != nil {
+		return err
+	}
+	_, err = a.Store.SQL.Exec(c.UserContext(), `
 		INSERT INTO roster_automation_rules (
 			automation_id, server_id, roster_id, group_id, enabled, trigger_type,
-			action_type, offset_seconds, discord_channel_id, ping_type, executed,
+			action_type, scheduled_at, discord_channel_id, ping_type, executed,
 			executed_at, last_triggered_at, execution_status, last_missed_at,
 			created_at, updated_at
 		)
@@ -1875,7 +1746,7 @@ func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) err
 			enabled = EXCLUDED.enabled,
 			trigger_type = EXCLUDED.trigger_type,
 			action_type = EXCLUDED.action_type,
-			offset_seconds = EXCLUDED.offset_seconds,
+			scheduled_at = EXCLUDED.scheduled_at,
 			discord_channel_id = EXCLUDED.discord_channel_id,
 			ping_type = EXCLUDED.ping_type,
 			executed = EXCLUDED.executed,
@@ -1886,11 +1757,26 @@ func rosterAutomationSave(c *fiber.Ctx, a apptypes.Deps, doc map[string]any) err
 			updated_at = EXCLUDED.updated_at
 	`, serverAsString(doc["automation_id"]), serverAsString(doc["server_id"]), rosterOptionalString(doc["roster_id"]),
 		rosterOptionalString(doc["group_id"]), !strings.EqualFold(serverAsString(doc["active"]), "false"),
-		rosterOptionalString(doc["trigger_type"]), rosterOptionalString(doc["action_type"]), activityAsInt(doc["offset_seconds"]),
+		rosterOptionalString(doc["trigger_type"]), rosterOptionalString(doc["action_type"]), scheduledAt,
 		rosterOptionalString(doc["discord_channel_id"]), rosterOptionalString(options["ping_type"]),
 		rosterBoolDefault(doc["executed"], false), rosterNullableInt64(doc["executed_at"]), rosterNullableInt64(doc["last_triggered_at"]),
 		rosterOptionalString(doc["execution_status"]), rosterNullableInt64(doc["last_missed_at"]), doc["created_at"], doc["updated_at"])
 	return err
+}
+
+func rosterAutomationScheduledAt(value any) (time.Time, error) {
+	switch typed := value.(type) {
+	case time.Time:
+		if !typed.IsZero() {
+			return typed.UTC(), nil
+		}
+	case string:
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(typed))
+		if err == nil && !parsed.IsZero() {
+			return parsed.UTC(), nil
+		}
+	}
+	return time.Time{}, apptypes.Error(http.StatusBadRequest, "scheduled_at must be an RFC3339 timestamp")
 }
 
 func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterID, groupID string, activeOnly bool) ([]map[string]any, error) {
@@ -1909,7 +1795,7 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT automation_id, server_id, roster_id, group_id, enabled, trigger_type,
-		       action_type, offset_seconds, discord_channel_id, ping_type, executed,
+		       action_type, scheduled_at, discord_channel_id, ping_type, executed,
 		       executed_at, last_triggered_at, execution_status, last_missed_at,
 		       created_at, updated_at
 		FROM roster_automation_rules
@@ -1925,19 +1811,19 @@ func rosterAutomationList(c *fiber.Ctx, a apptypes.Deps, serverID int64, rosterI
 		var automationID, sid, triggerType, actionType string
 		var roster, group, discordChannel, pingType, executionStatus *string
 		var enabled bool
-		var offsetSeconds int
+		var scheduledAt time.Time
 		var executed bool
 		var executedAt, lastTriggeredAt, lastMissedAt *int64
 		var createdAt, updatedAt time.Time
 		if err := rows.Scan(&automationID, &sid, &roster, &group, &enabled, &triggerType,
-			&actionType, &offsetSeconds, &discordChannel, &pingType, &executed,
+			&actionType, &scheduledAt, &discordChannel, &pingType, &executed,
 			&executedAt, &lastTriggeredAt, &executionStatus, &lastMissedAt,
 			&createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		item := map[string]any{
 			"automation_id": automationID, "server_id": sid, "active": enabled,
-			"trigger_type": triggerType, "action_type": actionType, "offset_seconds": offsetSeconds,
+			"trigger_type": triggerType, "action_type": actionType, "scheduled_at": scheduledAt,
 			"executed": executed, "created_at": createdAt, "updated_at": updatedAt,
 		}
 		rosterPutOptional(item, "roster_id", roster)

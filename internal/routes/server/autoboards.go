@@ -121,7 +121,6 @@ type validatedAutoBoardWrite struct {
 	Enabled          bool
 	IntervalMinutes  *int
 	ScheduleKind     *string
-	ScheduleTimezone *string
 	ScheduleTime     *string
 	ScheduleWeekdays []int16
 	ScheduleDay      *int16
@@ -140,7 +139,6 @@ type autoBoardRow struct {
 	Enabled          bool
 	IntervalMinutes  *int
 	ScheduleKind     *string
-	ScheduleTimezone *string
 	ScheduleTime     *string
 	ScheduleWeekdays []int16
 	ScheduleDay      *int16
@@ -364,17 +362,16 @@ func replaceAutoboard(rt apptypes.Deps) apptypes.HandlerFunc {
 				enabled = $9,
 				interval_minutes = $10,
 				schedule_kind = $11,
-				schedule_timezone = $12,
-				schedule_time = $13::time,
-				schedule_weekdays = $14,
-				schedule_day_of_month = $15,
-				next_run_at = $16,
+				schedule_time = $12::time,
+				schedule_weekdays = $13,
+				schedule_day_of_month = $14,
+				next_run_at = $15,
 				last_run_at = NULL,
 				updated_at = now()
 			WHERE server_id = $1 AND id = $2::uuid
 		`, strconv.Itoa(serverID), id, write.BoardType, write.TargetScope, write.DeliveryMode,
 			webhookID, write.ThreadIDText, write.MessageID, write.Enabled, write.IntervalMinutes,
-			write.ScheduleKind, write.ScheduleTimezone, write.ScheduleTime, nullableAutoBoardWeekdays(write.ScheduleWeekdays),
+			write.ScheduleKind, write.ScheduleTime, nullableAutoBoardWeekdays(write.ScheduleWeekdays),
 			write.ScheduleDay, write.NextRunAt); err != nil {
 			return err
 		}
@@ -572,18 +569,12 @@ func normalizeAutoBoardTargets(definition autoBoardDefinition, scope string, inp
 
 func validateAutoBoardSchedule(write *validatedAutoBoardWrite, schedule modelsv2.AutoBoardSchedule, now time.Time) error {
 	kind := strings.TrimSpace(schedule.Kind)
-	timezone := strings.TrimSpace(schedule.Timezone)
-	location, err := time.LoadLocation(timezone)
-	if err != nil {
-		return autoBoardValidationError("schedule.timezone", "must be a valid IANA timezone")
-	}
 	parsedTime, err := time.Parse("15:04", strings.TrimSpace(schedule.TimeOfDay))
 	if err != nil || parsedTime.Format("15:04") != strings.TrimSpace(schedule.TimeOfDay) {
 		return autoBoardValidationError("schedule.timeOfDay", "must use 24-hour HH:MM format")
 	}
 	timeOfDay := parsedTime.Format("15:04")
 	write.ScheduleKind = &kind
-	write.ScheduleTimezone = &timezone
 	write.ScheduleTime = &timeOfDay
 
 	var weekdays []int
@@ -624,7 +615,7 @@ func validateAutoBoardSchedule(write *validatedAutoBoardWrite, schedule modelsv2
 		return autoBoardValidationError("schedule.kind", "must be daily, weekdays, or day_of_month")
 	}
 	if write.Enabled {
-		next := nextAutoBoardScheduleRun(now, location, parsedTime.Hour(), parsedTime.Minute(), kind, weekdays, dayOfMonth)
+		next := nextAutoBoardScheduleRun(now, time.UTC, parsedTime.Hour(), parsedTime.Minute(), kind, weekdays, dayOfMonth)
 		write.NextRunAt = &next
 	}
 	return nil
@@ -710,18 +701,17 @@ func insertAutoBoard(c *fiber.Ctx, tx pgx.Tx, serverID int, webhookID string, wr
 			enabled,
 			interval_minutes,
 			schedule_kind,
-			schedule_timezone,
 			schedule_time,
 			schedule_weekdays,
 			schedule_day_of_month,
 			next_run_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::time, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::time, $12, $13, $14
 		)
 		RETURNING id::text
 	`, strconv.Itoa(serverID), write.BoardType, write.TargetScope, write.DeliveryMode,
 		webhookID, write.ThreadIDText, write.MessageID, write.Enabled, write.IntervalMinutes,
-		write.ScheduleKind, write.ScheduleTimezone, write.ScheduleTime, nullableAutoBoardWeekdays(write.ScheduleWeekdays),
+		write.ScheduleKind, write.ScheduleTime, nullableAutoBoardWeekdays(write.ScheduleWeekdays),
 		write.ScheduleDay, write.NextRunAt).Scan(&id); err != nil {
 		return "", err
 	}
@@ -770,7 +760,6 @@ func sqlAutoboards(c *fiber.Ctx, rt apptypes.Deps, serverID int, id string) ([]a
 			a.enabled,
 			a.interval_minutes,
 			a.schedule_kind,
-			a.schedule_timezone,
 			to_char(a.schedule_time, 'HH24:MI'),
 			a.schedule_weekdays,
 			a.schedule_day_of_month,
@@ -794,7 +783,7 @@ func sqlAutoboards(c *fiber.Ctx, rt apptypes.Deps, serverID int, id string) ([]a
 		if err := rows.Scan(
 			&item.ID, &item.BoardType, &item.TargetScope, &item.Targets, &item.DeliveryMode,
 			&item.WebhookID, &item.ThreadID, &item.MessageID, &item.Enabled, &item.IntervalMinutes,
-			&item.ScheduleKind, &item.ScheduleTimezone, &item.ScheduleTime, &item.ScheduleWeekdays,
+			&item.ScheduleKind, &item.ScheduleTime, &item.ScheduleWeekdays,
 			&item.ScheduleDay, &item.NextRunAt, &item.LastRunAt, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -849,10 +838,9 @@ func autoBoardConfigFromRow(row autoBoardRow, channelIDs map[string]string) mode
 		channelID = &value
 	}
 	var schedule *modelsv2.AutoBoardSchedule
-	if row.ScheduleKind != nil && row.ScheduleTimezone != nil && row.ScheduleTime != nil {
+	if row.ScheduleKind != nil && row.ScheduleTime != nil {
 		schedule = &modelsv2.AutoBoardSchedule{
 			Kind:      *row.ScheduleKind,
-			Timezone:  *row.ScheduleTimezone,
 			TimeOfDay: *row.ScheduleTime,
 			Weekdays:  make([]int, len(row.ScheduleWeekdays)),
 		}

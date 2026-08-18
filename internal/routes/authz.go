@@ -218,7 +218,7 @@ func resolveDashboardAccess(c *fiber.Ctx, a apptypes.Deps, userID, serverID stri
 	}
 
 	var discordUserID string
-	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT COALESCE(discord_user_id, '') FROM auth_users WHERE user_id = $1`, userID).Scan(&discordUserID); err != nil || discordUserID == "" {
+	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT user_id FROM auth_users WHERE user_id = $1 AND provider = 'discord'`, userID).Scan(&discordUserID); err != nil || discordUserID == "" {
 		return entry, nil
 	}
 	guildID, guildErr := strconv.ParseInt(serverID, 10, 64)
@@ -260,7 +260,7 @@ func delegatedDashboardGuilds(c *fiber.Ctx, a apptypes.Deps, userID string, guil
 		return out, nil
 	}
 	var discordUserID string
-	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT COALESCE(discord_user_id, '') FROM auth_users WHERE user_id = $1`, userID).Scan(&discordUserID); err != nil || discordUserID == "" {
+	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT user_id FROM auth_users WHERE user_id = $1 AND provider = 'discord'`, userID).Scan(&discordUserID); err != nil || discordUserID == "" {
 		return out, nil
 	}
 	parsedUserID, err := strconv.ParseInt(discordUserID, 10, 64)

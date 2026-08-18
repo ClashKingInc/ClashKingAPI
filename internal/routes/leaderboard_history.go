@@ -217,15 +217,14 @@ func leaderboardHistoryMetadataFor(
 		return metadata
 	}
 
-	raw := a.Clash.Client().StaticData().Raw
 	switch leaderboardType {
 	case modelsv2.LeaderboardHistoryTypePlayerHomeTrophies:
-		metadata.leagueTiers = leaderboardHistoryStaticLeagues(raw["league_tiers"])
-		if leagues, err := a.Clash.Client().SearchLeagues(ctx, 0, "", ""); err == nil {
+		metadata.leagueTiers = leaderboardHistoryStaticLeagues(a.Clash.StaticSection("league_tiers"))
+		if leagues, err := a.Clash.Client().SearchLeagues(ctx, clashy.PageOptions{}); err == nil {
 			metadata.homeLeagues = leaderboardHistoryOfficialLeagues(leagues)
 		}
 	case modelsv2.LeaderboardHistoryTypePlayerBuilderBaseTrophies:
-		metadata.builderLeagues = leaderboardHistoryStaticLeagues(raw["builder_leagues"])
+		metadata.builderLeagues = leaderboardHistoryStaticLeagues(a.Clash.StaticSection("builder_leagues"))
 	case modelsv2.LeaderboardHistoryTypeClanHomePoints,
 		modelsv2.LeaderboardHistoryTypeClanBuilderBasePoints,
 		modelsv2.LeaderboardHistoryTypeClanCapitalPoints:
@@ -268,7 +267,7 @@ func leaderboardHistoryStaticLeagues(items []map[string]any) map[int]modelsv2.Le
 	return out
 }
 
-func leaderboardHistoryOfficialLeagues(items []clashy.BaseLeague) map[int]modelsv2.LeaderboardHistoryLeagueReference {
+func leaderboardHistoryOfficialLeagues(items []clashy.League) map[int]modelsv2.LeaderboardHistoryLeagueReference {
 	out := make(map[int]modelsv2.LeaderboardHistoryLeagueReference, len(items))
 	for _, item := range items {
 		reference := modelsv2.LeaderboardHistoryLeagueReference{ID: item.ID, Name: item.Name}

@@ -120,7 +120,7 @@ func webVerifyEmailCode(a apptypes.Deps) fiber.Handler {
 		}
 		user, _ := findUserByEmailHash(c.UserContext(), a, emailHash)
 		if user == nil {
-			user = &authUser{UserID: generateUserID()}
+			user = &authUser{UserID: generateUserID(), Provider: authProviderEmail}
 		}
 		user.EmailHash = &emailHash
 		user.Username = &pending.Username
@@ -195,7 +195,7 @@ func webRefreshToken(a apptypes.Deps) fiber.Handler {
 		}
 		claims, err := parseWebRefreshToken(a, oldToken)
 		if err != nil {
-			clearWebRefreshCookie(c)
+			clearWebRefreshCookie(c, a.Config)
 			return err
 		}
 		stored, err := findRefreshToken(c.UserContext(), a, oldToken)
@@ -203,11 +203,11 @@ func webRefreshToken(a apptypes.Deps) fiber.Handler {
 			if !isInvalidWebRefreshCredential(err) {
 				return err
 			}
-			clearWebRefreshCookie(c)
+			clearWebRefreshCookie(c, a.Config)
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid browser session")
 		}
 		if stored.UserID != claims.Sub || time.Now().UTC().After(stored.ExpiresAt) {
-			clearWebRefreshCookie(c)
+			clearWebRefreshCookie(c, a.Config)
 			return apptypes.Error(fiber.StatusUnauthorized, "Invalid browser session")
 		}
 		accessToken, err := apptypes.GenerateWebAccessToken(a.Config, claims.Sub, claims.Device)
@@ -220,18 +220,26 @@ func webRefreshToken(a apptypes.Deps) fiber.Handler {
 		}
 		if err := rotateRefreshToken(c.UserContext(), a, oldToken, newRefreshToken, claims.Sub, claims.Device); err != nil {
 			if isInvalidWebRefreshCredential(err) {
-				clearWebRefreshCookie(c)
+				// A concurrent refresh may already have replaced this one-time cookie.
+				// Expiring it here can delete that valid successor in the browser.
+				if shouldClearRejectedWebRefresh(err) {
+					clearWebRefreshCookie(c, a.Config)
+				}
 				return apptypes.Error(fiber.StatusUnauthorized, "Browser session was already refreshed")
 			}
 			return err
 		}
-		setWebRefreshCookie(c, newRefreshToken)
+		setWebRefreshCookie(c, a.Config, newRefreshToken)
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthWebRefreshResponse{AccessToken: accessToken})
 	}
 }
 
 func isInvalidWebRefreshCredential(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows) || errors.Is(err, errRefreshTokenConsumed)
+}
+
+func shouldClearRejectedWebRefresh(err error) bool {
+	return isInvalidWebRefreshCredential(err) && !errors.Is(err, errRefreshTokenConsumed)
 }
 
 // webLogout revokes and expires the browser refresh cookie.
@@ -243,7 +251,7 @@ func isInvalidWebRefreshCredential(err error) bool {
 func webLogout(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		token := strings.TrimSpace(c.Cookies(webRefreshCookieName))
-		clearWebRefreshCookie(c)
+		clearWebRefreshCookie(c, a.Config)
 		if token != "" {
 			if claims, err := parseWebRefreshToken(a, token); err == nil && claims.Sub != "" {
 				if err := revokeRefreshToken(c.UserContext(), a, token); err != nil {
@@ -267,34 +275,70 @@ func issueWebSession(c *fiber.Ctx, a apptypes.Deps, user modelsv2.AuthUserInfo, 
 	if err := storeRefreshToken(c.UserContext(), a, user.UserID, refreshToken); err != nil {
 		return err
 	}
-	setWebRefreshCookie(c, refreshToken)
+	setWebRefreshCookie(c, a.Config, refreshToken)
 	return apptypes.JSON(c, fiber.StatusOK, modelsv2.AuthWebResponse{AccessToken: accessToken, User: user})
 }
 
-func setWebRefreshCookie(c *fiber.Ctx, token string) {
+func setWebRefreshCookie(c *fiber.Ctx, cfg apptypes.Config, token string) {
+	requestOrigin := c.Get(fiber.HeaderOrigin)
 	c.Cookie(&fiber.Cookie{
 		Name:     webRefreshCookieName,
 		Value:    token,
 		Path:     "/v2/auth/web",
 		Expires:  time.Now().UTC().Add(30 * 24 * time.Hour),
 		MaxAge:   30 * 24 * 60 * 60,
-		Secure:   true,
+		Secure:   webRefreshCookieSecure(cfg, requestOrigin),
 		HTTPOnly: true,
-		SameSite: fiber.CookieSameSiteStrictMode,
+		SameSite: webRefreshCookieSameSite(cfg, requestOrigin),
 	})
 }
 
-func clearWebRefreshCookie(c *fiber.Ctx) {
+func clearWebRefreshCookie(c *fiber.Ctx, cfg apptypes.Config) {
+	requestOrigin := c.Get(fiber.HeaderOrigin)
 	c.Cookie(&fiber.Cookie{
 		Name:     webRefreshCookieName,
 		Value:    "",
 		Path:     "/v2/auth/web",
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
-		Secure:   true,
+		Secure:   webRefreshCookieSecure(cfg, requestOrigin),
 		HTTPOnly: true,
-		SameSite: fiber.CookieSameSiteStrictMode,
+		SameSite: webRefreshCookieSameSite(cfg, requestOrigin),
 	})
+}
+
+func webRefreshCookieSecure(cfg apptypes.Config, requestOrigin string) bool {
+	return !(cfg.Local && isAllowedLoopbackOrigin(cfg, requestOrigin))
+}
+
+func webRefreshCookieSameSite(cfg apptypes.Config, requestOrigin string) string {
+	if !apptypes.IsAllowedWebOrigin(cfg, requestOrigin) {
+		return fiber.CookieSameSiteStrictMode
+	}
+	origin, err := url.Parse(strings.TrimSpace(requestOrigin))
+	if err != nil || origin.Scheme != "http" && origin.Scheme != "https" {
+		return fiber.CookieSameSiteStrictMode
+	}
+	host := strings.ToLower(origin.Hostname())
+	if host == "localhost" || host == "127.0.0.1" {
+		if cfg.Local {
+			return fiber.CookieSameSiteStrictMode
+		}
+		return fiber.CookieSameSiteNoneMode
+	}
+	return fiber.CookieSameSiteStrictMode
+}
+
+func isAllowedLoopbackOrigin(cfg apptypes.Config, requestOrigin string) bool {
+	if !apptypes.IsAllowedWebOrigin(cfg, requestOrigin) {
+		return false
+	}
+	origin, err := url.Parse(strings.TrimSpace(requestOrigin))
+	if err != nil || origin.Scheme != "http" && origin.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(origin.Hostname())
+	return host == "localhost" || host == "127.0.0.1"
 }
 
 func validateWebRedirectURI(cfg apptypes.Config, requestOrigin, rawRedirect string) error {

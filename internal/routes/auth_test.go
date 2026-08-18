@@ -62,22 +62,21 @@ func (tx *fakeRefreshTokenTx) Rollback(context.Context) error {
 	return nil
 }
 
-func TestUpsertAuthUserRejectsCombinedIdentity(t *testing.T) {
+func TestValidateAuthIdentityRejectsDiscordUserWithEmailFields(t *testing.T) {
 	emailHash := "email-hash"
-	discordUserID := "123456789"
 	err := validateAuthIdentity(&authUser{
-		UserID:        "user-1",
-		EmailHash:     &emailHash,
-		DiscordUserID: &discordUserID,
+		UserID:    "123456789",
+		Provider:  authProviderDiscord,
+		EmailHash: &emailHash,
 	})
-	if err == nil || err.Error() != "auth user cannot combine email and Discord identities" {
-		t.Fatalf("expected combined identity rejection, got %v", err)
+	if err == nil || err.Error() != "Discord auth user cannot persist email, username, or password" {
+		t.Fatalf("expected Discord identity rejection, got %v", err)
 	}
 }
 
 func TestParseRefreshTokenRejectsUnexpectedAlgorithm(t *testing.T) {
-	cfg := apptypes.Config{RefreshSecret: "refresh-secret"}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, apptypes.Claims{Sub: "user-1"}).SignedString([]byte(cfg.RefreshSecret))
+	cfg := apptypes.Config{JWTRefreshSecret: "refresh-secret"}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, apptypes.Claims{Sub: "user-1"}).SignedString([]byte(cfg.JWTRefreshSecret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -88,11 +87,10 @@ func TestParseRefreshTokenRejectsUnexpectedAlgorithm(t *testing.T) {
 }
 
 func TestPersistDiscordAuthUserStoresIdentityOnly(t *testing.T) {
-	discordUserID := "123456789"
 	tx := &fakeRefreshTokenTx{}
 	user := &authUser{
-		UserID:        "user-1",
-		DiscordUserID: &discordUserID,
+		UserID:   "123456789",
+		Provider: authProviderDiscord,
 	}
 
 	if err := persistAuthUser(context.Background(), tx, user); err != nil {
@@ -102,15 +100,16 @@ func TestPersistDiscordAuthUserStoresIdentityOnly(t *testing.T) {
 		t.Fatalf("persist exec calls = %d, want 1", len(tx.execCalls))
 	}
 	call := tx.execCalls[0]
-	if !strings.Contains(call.sql, "user_id, email_hash, discord_user_id, username, password_hash, created_at, updated_at") {
+	if !strings.Contains(call.sql, "user_id, provider, email_hash, username, password_hash, created_at, updated_at") {
 		t.Fatalf("unexpected auth user insert query: %s", call.sql)
 	}
-	for _, removed := range []string{"display_name", "verified", "profile", " data"} {
+	for _, removed := range []string{"discord_user_id", "display_name", "verified", "profile", " data"} {
 		if strings.Contains(call.sql, removed) {
 			t.Fatalf("auth user query still references removed column %q: %s", removed, call.sql)
 		}
 	}
-	if call.args[2] != user.DiscordUserID ||
+	if call.args[1] != authProviderDiscord ||
+		call.args[2] != (*string)(nil) ||
 		call.args[3] != (*string)(nil) ||
 		call.args[4] != (*string)(nil) {
 		t.Fatalf("Discord auth user persisted profile or password data: %#v", call.args)
@@ -120,8 +119,8 @@ func TestPersistDiscordAuthUserStoresIdentityOnly(t *testing.T) {
 func TestAuthUserReadsOnlyFinalTypedColumns(t *testing.T) {
 	for _, column := range []string{
 		"user_id",
+		"provider",
 		"email_hash",
-		"discord_user_id",
 		"username",
 		"password_hash",
 		"created_at",
@@ -131,10 +130,17 @@ func TestAuthUserReadsOnlyFinalTypedColumns(t *testing.T) {
 			t.Fatalf("auth user select columns omit %q: %s", column, authUserSelectColumns)
 		}
 	}
-	for _, removed := range []string{"display_name", "verified", "profile", "data"} {
+	for _, removed := range []string{"discord_user_id", "display_name", "verified", "profile", "data"} {
 		if strings.Contains(authUserSelectColumns, removed) {
 			t.Fatalf("auth user select columns still include %q: %s", removed, authUserSelectColumns)
 		}
+	}
+}
+
+func TestNewDiscordAuthUserUsesSnowflakeAsCanonicalID(t *testing.T) {
+	user := newDiscordAuthUser("706149153431879760")
+	if user.UserID != "706149153431879760" || user.Provider != authProviderDiscord {
+		t.Fatalf("unexpected Discord auth identity: %#v", user)
 	}
 }
 
@@ -144,16 +150,69 @@ type fakeDiscordProfileProvider struct {
 	accessToken string
 }
 
+type accountSummaryTestDB struct {
+	query string
+	args  []any
+	count int64
+	err   error
+}
+
+func (db *accountSummaryTestDB) QueryRow(_ context.Context, query string, args ...any) pgx.Row {
+	db.query = query
+	db.args = args
+	return accountSummaryTestRow{count: db.count, err: db.err}
+}
+
+type accountSummaryTestRow struct {
+	count int64
+	err   error
+}
+
+func (row accountSummaryTestRow) Scan(dest ...any) error {
+	if row.err != nil {
+		return row.err
+	}
+	*(dest[0].(*int64)) = row.count
+	return nil
+}
+
+func TestLoadUserAccountSummaryCountsDistinctBookmarkOwnersForVerifiedPlayers(t *testing.T) {
+	db := &accountSummaryTestDB{count: 7}
+	summary, err := loadUserAccountSummary(context.Background(), db, "user-1")
+	if err != nil {
+		t.Fatalf("load account summary: %v", err)
+	}
+	if summary.FollowerCount != 7 {
+		t.Fatalf("follower count = %d, want 7", summary.FollowerCount)
+	}
+	if len(db.args) != 1 || db.args[0] != "user-1" {
+		t.Fatalf("query args = %#v, want current user ID", db.args)
+	}
+	for _, required := range []string{
+		"COUNT(DISTINCT bookmarks.user_id)",
+		"bookmarks.tag = links.tag",
+		"bookmarks.entity_type = 'player'",
+		"links.user_id = $1",
+		"links.is_verified = true",
+	} {
+		if !strings.Contains(db.query, required) {
+			t.Fatalf("account summary query omits %q: %s", required, db.query)
+		}
+	}
+	if strings.Contains(db.query, "hidden") {
+		t.Fatalf("account summary query incorrectly excludes hidden verified accounts: %s", db.query)
+	}
+}
+
 func (p *fakeDiscordProfileProvider) GetCurrentUser(_ context.Context, accessToken string) (*discord.OAuth2User, error) {
 	p.accessToken = accessToken
 	return p.profile, p.err
 }
 
 func TestLoadDiscordAuthUserInfoUsesCurrentDeviceAndLiveProfile(t *testing.T) {
-	discordUserID := "123456789"
 	user := &authUser{
-		UserID:        "user-1",
-		DiscordUserID: &discordUserID,
+		UserID:   "123456789",
+		Provider: authProviderDiscord,
 	}
 	provider := &fakeDiscordProfileProvider{profile: &discord.OAuth2User{
 		User: discord.User{
@@ -189,11 +248,10 @@ func TestLoadDiscordAuthUserInfoUsesCurrentDeviceAndLiveProfile(t *testing.T) {
 }
 
 func TestLoadDiscordAuthUserInfoRejectsMissingDeviceIdentity(t *testing.T) {
-	discordUserID := "123456789"
 	loaderCalled := false
 	_, err := loadDiscordAuthUserInfo(
 		context.Background(),
-		&authUser{UserID: "user-1", DiscordUserID: &discordUserID},
+		&authUser{UserID: "123456789", Provider: authProviderDiscord},
 		"",
 		func(context.Context, string, string) (string, error) {
 			loaderCalled = true
@@ -212,7 +270,7 @@ func TestLoadDiscordAuthUserInfoRejectsMissingDeviceIdentity(t *testing.T) {
 func TestPasswordResetCodeHashIsSecretBoundAndOpaque(t *testing.T) {
 	emailHash := "email-hash"
 	code := "123456"
-	deps := apptypes.Deps{Config: apptypes.Config{SecretKey: "server-secret"}}
+	deps := apptypes.Deps{Config: apptypes.Config{JWTAccessSecret: "server-secret"}}
 
 	codeHash := authCodeHash(deps, emailHash, code)
 	if codeHash == code {
@@ -224,7 +282,7 @@ func TestPasswordResetCodeHashIsSecretBoundAndOpaque(t *testing.T) {
 	if codeHash != authCodeHash(deps, emailHash, code) {
 		t.Fatal("password reset code hash is not deterministic")
 	}
-	if codeHash == authCodeHash(apptypes.Deps{Config: apptypes.Config{SecretKey: "different-secret"}}, emailHash, code) {
+	if codeHash == authCodeHash(apptypes.Deps{Config: apptypes.Config{JWTAccessSecret: "different-secret"}}, emailHash, code) {
 		t.Fatal("password reset code hash is not bound to the server secret")
 	}
 	if codeHash == authCodeHash(deps, "different-email-hash", code) {
@@ -392,15 +450,14 @@ func TestPasswordResetDeletesAllUserRefreshTokens(t *testing.T) {
 }
 
 func TestPrivacySafeUserExportsNoRemovedProfileOrCredentialFields(t *testing.T) {
-	discordUserID := "123456789"
 	user := &authUser{
-		UserID:        "user-1",
-		DiscordUserID: &discordUserID,
-		CreatedAt:     time.Unix(10, 0).UTC(),
-		UpdatedAt:     time.Unix(20, 0).UTC(),
+		UserID:    "123456789",
+		Provider:  authProviderDiscord,
+		CreatedAt: time.Unix(10, 0).UTC(),
+		UpdatedAt: time.Unix(20, 0).UTC(),
 	}
 	export := privacySafeUser(user)
-	if export["user_id"] != user.UserID || export["discord_user_id"] != discordUserID {
+	if export["user_id"] != user.UserID || export["provider"] != authProviderDiscord {
 		t.Fatalf("unexpected safe user export: %#v", export)
 	}
 	for _, removed := range []string{

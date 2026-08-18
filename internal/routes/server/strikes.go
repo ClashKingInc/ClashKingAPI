@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -123,6 +122,7 @@ func getStrikes(rt apptypes.Deps) apptypes.HandlerFunc {
 // @Security ApiKeyAuth
 // @Param server_id path int true "Server ID"
 // @Param player_tag path string true "Player Tag"
+// @Param body body modelsv2.StrikeRequest true "Strike details"
 // @Success 200 {object} modelsv2.StrikeMutationResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
@@ -138,6 +138,10 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 		if err := apptypes.DecodeJSON(c, &body); err != nil {
 			return err
 		}
+		strikeWeight, err := validateStrikeWeight(body.StrikeWeight)
+		if err != nil {
+			return err
+		}
 		playerName := ""
 		if rt.Clash != nil {
 			if player, err := rt.Clash.GetPlayer(c.UserContext(), tag); err == nil && player != nil {
@@ -149,28 +153,15 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		strikeID := strings.ToUpper(randomID(tag, 5))
 		now := time.Now().UTC()
-		doc := map[string]any{
-			"tag":           tag,
-			"date_created":  now.Format("2006-01-02 15:04:05"),
-			"reason":        body.Reason,
-			"server":        serverID,
-			"added_by":      body.AddedBy,
-			"strike_weight": max(1, body.StrikeWeight),
-			"strike_id":     strikeID,
-		}
 		var rolloverAt *time.Time
 		if body.RolloverDays > 0 {
 			value := now.Add(time.Duration(body.RolloverDays) * 24 * time.Hour)
 			rolloverAt = &value
-			doc["rollover_date"] = value.Unix()
-		}
-		if body.Image != "" {
-			doc["image"] = body.Image
 		}
 		if _, err := rt.Store.SQL.Exec(c.UserContext(), `
-			INSERT INTO strikes (id, server_id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-		`, strikeID, strconv.Itoa(serverID), tag, now, body.Reason, body.AddedBy, max(1, body.StrikeWeight), rolloverAt, body.Image, apptypes.Marshal(doc)); err != nil {
+			INSERT INTO strikes (id, server_id, tag, date_created, reason, added_by, strike_weight, rollover_date, image)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''))
+		`, strikeID, strconv.Itoa(serverID), tag, now, body.Reason, body.AddedBy, strikeWeight, rolloverAt, body.Image); err != nil {
 			return err
 		}
 		activeItems, _ := sqlStrikes(c, rt, serverID, tag, false)
@@ -180,6 +171,16 @@ func addStrike(rt apptypes.Deps) apptypes.HandlerFunc {
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"status": "created", "strike_id": strikeID, "player_tag": tag, "player_name": playerName, "server_id": serverID, "total_strikes": len(activeItems), "total_weight": totalWeight})
 	}
+}
+
+func validateStrikeWeight(value int) (int, error) {
+	if value == 0 {
+		return 1, nil
+	}
+	if value < 1 || int64(value) > int64(1<<31-1) {
+		return 0, apptypes.Error(http.StatusBadRequest, "strike_weight must be between 1 and 2147483647")
+	}
+	return value, nil
 }
 
 // deleteStrike godoc
@@ -284,7 +285,7 @@ func strikeItemsFromMaps(items []map[string]any) []modelsv2.StrikeItem {
 
 func sqlStrikes(c *fiber.Ctx, rt apptypes.Deps, serverID int, playerTag string, includeExpired bool) ([]map[string]any, error) {
 	query := `
-		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data
+		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image
 		FROM strikes
 		WHERE server_id = $1
 	`
@@ -315,7 +316,7 @@ func sqlStrikes(c *fiber.Ctx, rt apptypes.Deps, serverID int, playerTag string, 
 
 func sqlStrike(c *fiber.Ctx, rt apptypes.Deps, serverID int, strikeID string) (map[string]any, error) {
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
-		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image, data
+		SELECT id, tag, date_created, reason, added_by, strike_weight, rollover_date, image
 		FROM strikes
 		WHERE server_id = $1 AND id = $2
 		LIMIT 1
@@ -343,12 +344,10 @@ func scanSQLStrike(row strikeScanner, serverID int) (map[string]any, error) {
 	var createdAt time.Time
 	var rolloverAt *time.Time
 	var image *string
-	var raw []byte
-	if err := row.Scan(&id, &tag, &createdAt, &reason, &addedBy, &weight, &rolloverAt, &image, &raw); err != nil {
+	if err := row.Scan(&id, &tag, &createdAt, &reason, &addedBy, &weight, &rolloverAt, &image); err != nil {
 		return nil, err
 	}
 	item := map[string]any{}
-	_ = json.Unmarshal(raw, &item)
 	item["strike_id"] = id
 	item["tag"] = tag
 	item["server"] = serverID

@@ -48,10 +48,12 @@ func TestCurrentWarTimerResponseUsesOnlyRetainedTypedFields(t *testing.T) {
 
 func TestCurrentWarTimerQueryUsesRetainedColumnsAndActivePredicate(t *testing.T) {
 	for _, required := range []string{
-		"SELECT war_id, clan_tag, opponent_tag, end_time",
-		"FROM current_war_timers",
-		"WHERE player_tag = $1",
-		"AND end_time > now()",
+		"SELECT schedule.war_id, schedule.source_clan_tag, schedule.opponent_tag, timer.expires_at",
+		"FROM player_timers timer",
+		"JOIN war_schedule schedule ON schedule.schedule_key = timer.event_key",
+		"WHERE timer.player_tag = $1",
+		"AND timer.event_type = 'war'",
+		"AND timer.expires_at > now()",
 	} {
 		if !strings.Contains(currentWarTimerQuery, required) {
 			t.Fatalf("current-war timer query missing %q", required)

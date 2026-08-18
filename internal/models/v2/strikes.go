@@ -4,7 +4,7 @@ type StrikeRequest struct {
 	Reason       string `json:"reason"`
 	AddedBy      string `json:"added_by"`
 	RolloverDays int    `json:"rollover_days"`
-	StrikeWeight int    `json:"strike_weight"`
+	StrikeWeight int    `json:"strike_weight" minimum:"1" maximum:"2147483647" default:"1"`
 	Image        string `json:"image"`
 }
 

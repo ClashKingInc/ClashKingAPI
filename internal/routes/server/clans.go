@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -210,7 +211,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 		cwlLeagueID := 48000000
-		if clan.WarLeague != nil {
+		if clan.WarLeague.ID != 0 {
 			cwlLeagueID = clan.WarLeague.ID
 		}
 		var locationID, capitalLeagueID any
@@ -220,7 +221,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 		if clan.CapitalLeague != nil {
 			capitalLeagueID = clan.CapitalLeague.ID
 		}
-		badgeToken := serverClanBadgeToken(firstNonEmpty(clan.Badge.Large, clan.Badge.Medium, clan.Badge.Small, clan.Badge.URL))
+		badgeToken := serverClanBadgeToken(firstNonEmpty(clan.Badge.Large, clan.Badge.Medium, clan.Badge.Small, clan.Badge.URL()))
 
 		tx, err := rt.Store.SQL.Begin(c.UserContext())
 		if err != nil {
@@ -343,8 +344,10 @@ func assignClanCategory(ctx context.Context, tx pgx.Tx, serverID, clanTag, name 
 
 	var categoryID string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO clan_categories (server_id, name)
-		VALUES ($1, $2)
+		INSERT INTO server_clan_categories (server_id, name, position)
+		SELECT $1, $2, COALESCE(max(position) + 1, 0)
+		FROM server_clan_categories
+		WHERE server_id = $1
 		ON CONFLICT (server_id, name) DO UPDATE
 		SET name = EXCLUDED.name
 		RETURNING id::text
@@ -364,14 +367,14 @@ func assignClanCategory(ctx context.Context, tx pgx.Tx, serverID, clanTag, name 
 	}
 
 	category, err := scanClanCategory(tx.QueryRow(ctx, `
-		SELECT category.id::text, category.server_id, category.name,
+		SELECT category.id::text, category.server_id, category.name, category.position,
 		       count(clan.tag)::int AS clan_count
-		FROM clan_categories category
+		FROM server_clan_categories category
 		LEFT JOIN server_clans clan
 		       ON clan.server_id = category.server_id
 		      AND clan.category_id = category.id
 		WHERE category.server_id = $1 AND category.id = $2::uuid
-		GROUP BY category.id, category.server_id, category.name
+		GROUP BY category.id, category.server_id, category.name, category.position
 	`, serverID, categoryID))
 	if err != nil {
 		return nil, err
@@ -418,10 +421,10 @@ type serverClanMemberSnapshot struct {
 func sqlServerClanListItems(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]modelsv2.ClanListItem, error) {
 	rows, err := rt.Store.SQL.Query(c.UserContext(), `
 		SELECT sc.tag, clan.name, clan.badge_token, clan.clan_level, clan.member_count,
-		       sc.abbreviation, categories.name
+		       sc.abbreviation, categories.name, sc.added_at
 		FROM server_clans sc
 		JOIN basic_clan clan ON clan.tag = sc.tag
-		LEFT JOIN clan_categories categories ON categories.id = sc.category_id
+		LEFT JOIN server_clan_categories categories ON categories.id = sc.category_id
 		WHERE sc.server_id = $1
 		ORDER BY clan.name ASC, sc.tag ASC
 	`, strconv.Itoa(serverID))
@@ -433,17 +436,18 @@ func sqlServerClanListItems(c *fiber.Ctx, rt apptypes.Deps, serverID int) ([]mod
 	items := make([]modelsv2.ClanListItem, 0)
 	for rows.Next() {
 		var tag, name, badgeToken, abbreviation string
+		var addedAt time.Time
 		var level, memberCount int
 		var category *string
 		if err := rows.Scan(
 			&tag, &name, &badgeToken, &level, &memberCount,
-			&abbreviation, &category,
+			&abbreviation, &category, &addedAt,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, modelsv2.ClanListItem{
 			Tag: tag, Name: name, BadgeURL: serverClanBadgeURL(badgeToken),
-			Level: &level, MemberCount: &memberCount,
+			Level: &level, MemberCount: &memberCount, AddedAt: addedAt,
 			Settings: modelsv2.ClanSettings{
 				Category: category, Abbreviation: &abbreviation,
 			},

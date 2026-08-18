@@ -94,6 +94,9 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 			if _, err := tx.Exec(c.UserContext(), `DELETE FROM player_links WHERE tag = $1`, playerTag); err != nil {
 				return err
 			}
+			if _, err := tx.Exec(c.UserContext(), `DELETE FROM mobile_notification_accounts WHERE user_id = $1 AND player_tag = $2`, previousOwner, playerTag); err != nil {
+				return err
+			}
 			if err := reorderUserAccountsTx(c.UserContext(), tx, previousOwner); err != nil {
 				return err
 			}
@@ -124,6 +127,14 @@ func addAccount(a apptypes.Deps) fiber.Handler {
 		`, player.Tag, userID, orderIndex, verifyOwnership, verifiedAt)
 		if err != nil {
 			return err
+		}
+		if verifyOwnership {
+			if _, err := tx.Exec(c.UserContext(), `
+					DELETE FROM user_bookmarks
+					WHERE user_id = $1 AND entity_type = 'player' AND tag = $2
+				`, userID, player.Tag); err != nil {
+				return err
+			}
 		}
 		if err := tx.Commit(c.UserContext()); err != nil {
 			return err
@@ -311,6 +322,9 @@ func removeAccount(a apptypes.Deps) fiber.Handler {
 			return apptypes.Error(fiber.StatusConflict, "Cannot remove the final verified link while other links remain")
 		}
 		if _, err := tx.Exec(c.UserContext(), `DELETE FROM player_links WHERE user_id = $1 AND tag = $2`, userID, playerTag); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(c.UserContext(), `DELETE FROM mobile_notification_accounts WHERE user_id = $1 AND player_tag = $2`, userID, playerTag); err != nil {
 			return err
 		}
 		if err := reorderUserAccountsTx(c.UserContext(), tx, userID); err != nil {

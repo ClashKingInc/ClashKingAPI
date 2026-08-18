@@ -36,9 +36,10 @@ func privacyExport(a apptypes.Deps) fiber.Handler {
 			{"recent_searches", `SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC`, false},
 			{"legacy_search_settings", `SELECT search, updated_at FROM user_settings WHERE user_id = $1`, false},
 			{"discord_sessions", `SELECT device_id, expires_at, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC`, false},
-			{"notification_settings", `SELECT device_id, environment, league_battles_enabled, war_attacks_enabled, war_state_enabled, war_reminders_enabled, events_enabled, announcements_enabled, upgrade_finishes_enabled, monthly_support_enabled, reminder_timings FROM mobile_notification_preferences WHERE user_id = $1`, true},
-			{"notification_accounts", `SELECT player_tag, source FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag`, true},
-			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, last_seen_at FROM mobile_push_devices WHERE user_id = $1`, true},
+			{"notification_accounts", `SELECT player_tag, source, active, created_at, updated_at FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag`, true},
+			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, reminder_timings, raid_reminder_timings, last_seen_at FROM mobile_push_devices WHERE user_id = $1`, true},
+			{"billing_subscription", `SELECT provider, provider_subscription_id, provider_price_id, status, current_period_end, cancel_at_period_end, created_at, updated_at FROM billing_subscriptions WHERE user_id = $1`, true},
+			{"subscription_entitlements", `SELECT active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd, updated_at FROM subscription_entitlements WHERE user_id = $1`, true},
 		}
 		for _, item := range queries {
 			rows, err := privacyQuery(c.UserContext(), a, item.optional, item.query, userID)
@@ -64,8 +65,11 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 			sql  string
 		}{
 			{"mobile_notification_accounts", `DELETE FROM mobile_notification_accounts WHERE user_id = $1`},
-			{"mobile_notification_preferences", `DELETE FROM mobile_notification_preferences WHERE user_id = $1`},
 			{"mobile_push_devices", `DELETE FROM mobile_push_devices WHERE user_id = $1`},
+			{"billing_webhook_events", `DELETE FROM billing_webhook_events events USING billing_customers customers WHERE customers.user_id = $1 AND events.payload #>> '{data,object,customer}' = customers.stripe_customer_id`},
+			{"subscription_entitlements", `DELETE FROM subscription_entitlements WHERE user_id = $1`},
+			{"billing_subscriptions", `DELETE FROM billing_subscriptions WHERE user_id = $1`},
+			{"billing_customers", `DELETE FROM billing_customers WHERE user_id = $1`},
 			{"user_recent_searches", `DELETE FROM user_recent_searches WHERE user_id = $1`},
 			{"user_bookmarks", `DELETE FROM user_bookmarks WHERE user_id = $1`},
 			{"user_settings", `DELETE FROM user_settings WHERE user_id = $1`},
@@ -95,15 +99,13 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 func privacySafeUser(user *authUser) map[string]any {
 	out := map[string]any{
 		"user_id":      user.UserID,
+		"provider":     user.Provider,
 		"auth_methods": user.AuthMethods(),
 		"created_at":   user.CreatedAt,
 		"updated_at":   user.UpdatedAt,
 	}
 	if user.Username != nil {
 		out["username"] = *user.Username
-	}
-	if user.DiscordUserID != nil {
-		out["discord_user_id"] = *user.DiscordUserID
 	}
 	return out
 }

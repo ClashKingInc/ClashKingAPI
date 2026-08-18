@@ -325,7 +325,7 @@ func TestLeaderboardHistoryMetadataUsesCorrectStaticFamilies(t *testing.T) {
 	builders := leaderboardHistoryStaticLeagues([]map[string]any{{
 		"_id": int32(44000041), "name": "Diamond League", "icon": "league/diamond.png",
 	}})
-	legacy := leaderboardHistoryOfficialLeagues([]clashy.BaseLeague{{
+	legacy := leaderboardHistoryOfficialLeagues([]clashy.League{{
 		ID: 29000022, Name: "Legend League", Icon: &clashy.Icon{Small: "small", Medium: "medium", Tiny: "tiny"},
 	}})
 	if tiers[105000036].Name != "Legend I" || builders[44000041].Name != "Diamond League" {

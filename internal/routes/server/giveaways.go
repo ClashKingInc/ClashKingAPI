@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -611,7 +612,7 @@ func giveawayModel(doc map[string]any, winnerIdentities map[string]giveawayUserI
 		TextAboveEmbed:         asStringOr(doc["text_above_embed"], ""),
 		TextInEmbed:            asStringOr(doc["text_in_embed"], ""),
 		TextOnEnd:              asStringOr(doc["text_on_end"], ""),
-		ImageURL:               stringPtrMaybe(doc["image_url"]),
+		ImageURL:               giveawayPublicImageURL(doc["image_url"]),
 		ProfilePictureRequired: asBool(doc["profile_picture_required"]),
 		COCAccountRequired:     asBool(doc["coc_account_required"]),
 		RolesMode:              asStringOr(doc["roles_mode"], "none"),
@@ -680,9 +681,6 @@ func giveawayWinnerIdentities(c *fiber.Ctx, a apptypes.Deps, serverID int64, doc
 				return
 			}
 			identity := giveawayIdentityFromMember(*member)
-			if identity.Username == nil && identity.AvatarURL == nil {
-				return
-			}
 			mu.Lock()
 			existing := identityMap[userID]
 			if existing.Username == nil {
@@ -728,18 +726,19 @@ func giveawayWinners(value any, winnerIdentities map[string]giveawayUserIdentity
 	out := make([]modelsv2.GiveawayWinner, 0, len(raw))
 	for _, doc := range raw {
 		userID := asStringOr(doc["user_id"], "")
-		identity := winnerIdentities[userID]
-		username := stringPtrMaybe(doc["username"])
-		if username == nil {
-			username = identity.DisplayName
-		}
+		identity, inServer := winnerIdentities[userID]
+		username := identity.DisplayName
 		if username == nil {
 			username = identity.Username
+		}
+		if username == nil {
+			username = stringPtrMaybe(doc["username"])
 		}
 		out = append(out, modelsv2.GiveawayWinner{
 			UserID:    userID,
 			Username:  username,
 			AvatarURL: identity.AvatarURL,
+			InServer:  inServer,
 			Status:    asStringOr(doc["status"], "winner"),
 			Timestamp: stringPtrMaybe(doc["timestamp"]),
 			Reason:    stringPtrMaybe(doc["reason"]),
@@ -912,23 +911,24 @@ func bunnyUploadFile(accessKey, title string, data []byte) (string, error) {
 	if resp.StatusCode >= 300 {
 		return "", fmt.Errorf("BunnyCDN upload failed: status %d", resp.StatusCode)
 	}
-	return fmt.Sprintf("https://cdn.clashk.ing/%s.png", title), nil
+	return strings.TrimPrefix(title, "giveaway_") + ".png", nil
 }
 
-func bunnyDeleteFile(accessKey, imageURL string) error {
-	const prefix = "https://cdn.clashk.ing/"
-	// Also handle legacy cdn.clashking.xyz URLs so old records can still be deleted.
-	const legacyPrefix = "https://cdn.clashking.xyz/"
-	var filePath string
-	switch {
-	case strings.HasPrefix(imageURL, prefix):
-		filePath = imageURL[len(prefix):]
-	case strings.HasPrefix(imageURL, legacyPrefix):
-		filePath = imageURL[len(legacyPrefix):]
-	default:
+func giveawayPublicImageURL(value any) *string {
+	filename := strings.TrimSpace(serverAsString(value))
+	if filename == "" || path.Base(filename) != filename {
 		return nil
 	}
-	deleteURL := fmt.Sprintf("https://storage.bunnycdn.com/clashking-files/%s", filePath)
+	publicURL := "https://cdn.clashk.ing/giveaway_" + filename
+	return &publicURL
+}
+
+func bunnyDeleteFile(accessKey, filename string) error {
+	filename = strings.TrimSpace(filename)
+	if filename == "" || path.Base(filename) != filename {
+		return nil
+	}
+	deleteURL := fmt.Sprintf("https://storage.bunnycdn.com/clashking-files/giveaway_%s", filename)
 	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
 	if err != nil {
 		return err

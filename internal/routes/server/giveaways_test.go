@@ -11,7 +11,7 @@ import (
 type giveawayTestRow struct{}
 
 func (giveawayTestRow) Scan(dest ...any) error {
-	channelID, imageURL, messageID, eventPending := "222", "https://cdn.example/banner.png", "333", "giveaway_start"
+	channelID, imageURL, messageID, eventPending := "222", "giveaway-1.png", "333", "giveaway_start"
 	start := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 	eventPendingAt := start.Add(-time.Minute)
@@ -78,6 +78,39 @@ func TestGiveawayTypedScanAndCamelCaseModel(t *testing.T) {
 	for _, obsolete := range []string{"server_id", "channel_id", "start_time", "entry_count", "winners_list", "created_at"} {
 		if _, found := response[obsolete]; found {
 			t.Errorf("response leaked snake_case field %q: %s", obsolete, encoded)
+		}
+	}
+}
+
+func TestGiveawayWinnersExposeCurrentServerMembership(t *testing.T) {
+	memberName := "Current member"
+	avatarURL := "https://cdn.discordapp.com/avatar.png"
+	winners := giveawayWinners([]any{
+		map[string]any{"user_id": "1", "username": "Stored member", "status": "winner"},
+		map[string]any{"user_id": "2", "username": "Former member", "status": "winner"},
+	}, map[string]giveawayUserIdentity{
+		"1": {DisplayName: &memberName, AvatarURL: &avatarURL},
+	})
+
+	if len(winners) != 2 {
+		t.Fatalf("winner count = %d, want 2", len(winners))
+	}
+	if !winners[0].InServer || winners[0].Username == nil || *winners[0].Username != memberName {
+		t.Fatalf("current member identity = %#v", winners[0])
+	}
+	if winners[1].InServer || winners[1].Username == nil || *winners[1].Username != "Former member" {
+		t.Fatalf("former member identity = %#v", winners[1])
+	}
+}
+
+func TestGiveawayPublicImageURLExpandsCanonicalFilename(t *testing.T) {
+	got := giveawayPublicImageURL("123e4567-e89b-12d3-a456-426614174000.png")
+	if got == nil || *got != "https://cdn.clashk.ing/giveaway_123e4567-e89b-12d3-a456-426614174000.png" {
+		t.Fatalf("giveawayPublicImageURL() = %#v", got)
+	}
+	for _, invalid := range []any{"", "folder/image.png", "https://cdn.clashk.ing/giveaway_image.png"} {
+		if got := giveawayPublicImageURL(invalid); got != nil {
+			t.Errorf("giveawayPublicImageURL(%q) = %q, want nil", invalid, *got)
 		}
 	}
 }

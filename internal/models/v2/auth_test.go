@@ -47,3 +47,18 @@ func TestAuthResponseDoesNotExposeDiscordOAuthCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentUserInfoAlwaysIncludesAccountSummary(t *testing.T) {
+	payload, err := json.Marshal(CurrentUserInfo{
+		UserID:      "user-1",
+		Username:    "User",
+		AvatarURL:   "https://example.com/avatar.png",
+		AuthMethods: []string{"email"},
+	})
+	if err != nil {
+		t.Fatalf("marshal current user info: %v", err)
+	}
+	if !strings.Contains(string(payload), `"account_summary":{"follower_count":0}`) {
+		t.Fatalf("current user response omits zero-value account summary: %s", payload)
+	}
+}

@@ -8,6 +8,7 @@ const (
 	PlayerStatTypeDonated            PlayerStatType = "donated"
 	PlayerStatTypeReceived           PlayerStatType = "received"
 	PlayerStatTypeClanGames          PlayerStatType = "clan_games"
+	PlayerStatTypeSeasonPass         PlayerStatType = "season_pass"
 	PlayerStatTypeCapitalGoldDonated PlayerStatType = "capital_gold_donated"
 )
 

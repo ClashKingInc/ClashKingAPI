@@ -1,16 +1,20 @@
 package modelsv2
 
+import "time"
+
 type GuildInfo struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Icon        *string  `json:"icon"`
-	Owner       bool     `json:"owner"`
-	Permissions string   `json:"permissions"`
-	Role        string   `json:"role"`
-	Features    []string `json:"features"`
-	HasBot      bool     `json:"has_bot"`
-	MemberCount *int     `json:"member_count,omitempty"`
-	Delegated   bool     `json:"delegated"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Icon          *string    `json:"icon"`
+	Owner         bool       `json:"owner"`
+	Permissions   string     `json:"permissions"`
+	Role          string     `json:"role"`
+	Features      []string   `json:"features"`
+	HasBot        bool       `json:"has_bot"`
+	MemberCount   *int       `json:"member_count,omitempty"`
+	Delegated     bool       `json:"delegated"`
+	LastCommandAt *time.Time `json:"last_command_at,omitempty"`
+	Inactive      bool       `json:"inactive"`
 }
 
 type GuildDetails struct {

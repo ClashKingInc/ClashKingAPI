@@ -240,7 +240,7 @@ func testDiscordAPIStatus(a apptypes.Deps) apptypes.HandlerFunc {
 			return err
 		}
 
-		if a.Config.BotToken == "" {
+		if a.Config.DiscordBotToken == "" {
 			return apptypes.JSON(c, http.StatusOK, map[string]any{
 				"status":            "error",
 				"message":           "Bot token not configured",

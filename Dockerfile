@@ -16,7 +16,7 @@ FROM alpine:3.22
 
 LABEL org.opencontainers.image.source=https://github.com/ClashKingInc/ClashKingAPI
 LABEL org.opencontainers.image.description="Image for the ClashKing API"
-LABEL org.opencontainers.image.licenses=MIT
+LABEL org.opencontainers.image.licenses=GPL-3.0-only
 
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S clashking \

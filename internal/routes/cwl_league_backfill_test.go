@@ -2,6 +2,40 @@ package routes
 
 import "testing"
 
+func TestCWLWarSizeAssignmentsUsesConsistentAvailableWars(t *testing.T) {
+	groups := []cwlLeagueBackfillGroup{
+		{cwlID: "missing", roundTags: [][]string{{"#WAR1", "#0"}, {"#WAR2"}}},
+		{cwlID: "present", warSize: 30, roundTags: [][]string{{"#WAR3"}}},
+	}
+	wars := map[string]cwlLeagueBackfillWar{
+		"#WAR1": {tag: "#WAR1", size: 15},
+		"#WAR2": {tag: "#WAR2", size: 15},
+		"#WAR3": {tag: "#WAR3", size: 20},
+	}
+	assignments := cwlWarSizeAssignments(groups, wars)
+	if assignments["missing"] != 15 {
+		t.Fatalf("assignments = %#v", assignments)
+	}
+	if _, exists := assignments["present"]; exists {
+		t.Fatalf("existing war size must not be overwritten: %#v", assignments)
+	}
+}
+
+func TestCWLWarSizeAssignmentsRejectsConflictingWars(t *testing.T) {
+	groups := []cwlLeagueBackfillGroup{
+		{cwlID: "conflict", roundTags: [][]string{{"#WAR1"}, {"#WAR2"}}},
+		{cwlID: "unavailable", roundTags: [][]string{{"#MISSING"}}},
+	}
+	wars := map[string]cwlLeagueBackfillWar{
+		"#WAR1": {tag: "#WAR1", size: 15},
+		"#WAR2": {tag: "#WAR2", size: 30},
+	}
+	assignments := cwlWarSizeAssignments(groups, wars)
+	if len(assignments) != 0 {
+		t.Fatalf("conflicting or unavailable sizes must remain unset: %#v", assignments)
+	}
+}
+
 func TestCWLLeagueAssignmentsUsesShiftedHistoryThenWalksForward(t *testing.T) {
 	groups := []cwlLeagueBackfillGroup{
 		{cwlID: "aug", month: "2025-08", rank: 1, complete: true, clanTags: make([]string, 8)},

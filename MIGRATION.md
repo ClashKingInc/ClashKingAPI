@@ -321,7 +321,6 @@ Once typed models are in place, update all godoc `@Success` annotations:
         settings.go             - ServerSettingsUpdate, ServerSettingsResponse
         strikes.go              - StrikeRequest, StrikeSummaryResponse
         tickets.go              - Ticket panel/button models
-        tracking.go             - TrackingPlayerListRequest
         war.go                  - WarClanTagsBody, WarPlayersBody
         war_responses.go        - CWLThresholdItem, CWLRankingHistoryItem, WarStatsItem, WarSummaryResponse
     routes/

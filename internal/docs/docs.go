@@ -13295,108 +13295,6 @@ const docTemplate = `{
                 "x-http-method": "QUERY"
             }
         },
-        "/v2/tracking/players/add": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Normalizes tags and inserts any not yet tracked into the database.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Tracking"
-                ],
-                "summary": "Add players to tracking",
-                "parameters": [
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.TrackingPlayerListRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.TrackingPlayersResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/tracking/players/remove": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Deletes the given player tags from the tracking database.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Tracking"
-                ],
-                "summary": "Remove players from tracking",
-                "parameters": [
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.TrackingPlayerListRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.TrackingPlayersResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/verify-email-code": {
             "post": {
                 "description": "Confirms a pending email registration by checking the verification code and creates the account session.",
@@ -14223,6 +14121,9 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "locale": {
+                    "type": "string"
+                },
                 "password": {
                     "type": "string"
                 },
@@ -14235,6 +14136,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "email": {
+                    "type": "string"
+                },
+                "locale": {
                     "type": "string"
                 }
             }
@@ -18121,8 +18025,7 @@ const docTemplate = `{
                 "source": {
                     "type": "string",
                     "enum": [
-                        "verified",
-                        "bookmarked"
+                        "verified"
                     ]
                 }
             }
@@ -18234,6 +18137,12 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
+                "monthlySupportEnabled": {
+                    "type": "boolean"
+                },
+                "notificationsEnabled": {
+                    "type": "boolean"
+                },
                 "raidReminderTimings": {
                     "type": "array",
                     "items": {
@@ -18241,12 +18150,6 @@ const docTemplate = `{
                     }
                 },
                 "raidRemindersEnabled": {
-                    "type": "boolean"
-                },
-                "monthlySupportEnabled": {
-                    "type": "boolean"
-                },
-                "notificationsEnabled": {
                     "type": "boolean"
                 },
                 "reminderTimings": {
@@ -18287,6 +18190,12 @@ const docTemplate = `{
                 "eventsEnabled": {
                     "type": "boolean"
                 },
+                "monthlySupportEnabled": {
+                    "type": "boolean"
+                },
+                "notificationsEnabled": {
+                    "type": "boolean"
+                },
                 "raidReminderTimings": {
                     "type": "array",
                     "items": {
@@ -18294,12 +18203,6 @@ const docTemplate = `{
                     }
                 },
                 "raidRemindersEnabled": {
-                    "type": "boolean"
-                },
-                "monthlySupportEnabled": {
-                    "type": "boolean"
-                },
-                "notificationsEnabled": {
                     "type": "boolean"
                 },
                 "reminderTimings": {
@@ -18628,12 +18531,14 @@ const docTemplate = `{
                 "donated",
                 "received",
                 "clan_games",
+                "season_pass",
                 "capital_gold_donated"
             ],
             "x-enum-varnames": [
                 "PlayerStatTypeDonated",
                 "PlayerStatTypeReceived",
                 "PlayerStatTypeClanGames",
+                "PlayerStatTypeSeasonPass",
                 "PlayerStatTypeCapitalGoldDonated"
             ]
         },
@@ -19535,13 +19440,13 @@ const docTemplate = `{
                 "last_triggered_at": {
                     "type": "integer"
                 },
-                "scheduled_at": {
-                    "type": "string"
-                },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
                 },
                 "roster_id": {
+                    "type": "string"
+                },
+                "scheduled_at": {
                     "type": "string"
                 },
                 "server_id": {
@@ -19625,13 +19530,13 @@ const docTemplate = `{
                 "group_id": {
                     "type": "string"
                 },
-                "scheduled_at": {
-                    "type": "string"
-                },
                 "options": {
                     "$ref": "#/definitions/modelsv2.RosterAutomationOptions"
                 },
                 "roster_id": {
+                    "type": "string"
+                },
+                "scheduled_at": {
                     "type": "string"
                 },
                 "trigger_type": {
@@ -22384,43 +22289,6 @@ const docTemplate = `{
                 },
                 "start": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.TrackingPlayerListRequest": {
-            "type": "object",
-            "properties": {
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "modelsv2.TrackingPlayersResponse": {
-            "type": "object",
-            "properties": {
-                "players_added": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "players_already_tracked": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "players_removed": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "status": {
-                    "type": "string"
                 }
             }
         },

@@ -202,8 +202,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Put("/v2/app/announcements/:id", authBot(a, updateAnnouncement(a)))
 	app.Delete("/v2/app/announcements/:id", authBot(a, deleteAnnouncement(a)))
 
-	app.Post("/v2/tracking/players/add", userOrBot(addTrackingPlayers(a)))
-	app.Post("/v2/tracking/players/remove", userOrBot(removeTrackingPlayers(a)))
 	app.Get("/v2/player/:player_tag/join-leave/totals", playerJoinLeaveTotals(a))
 	app.Get("/v2/player/:player_tag/join-leave/shared", playerJoinLeaveShared(a))
 	app.Get("/v2/player/:player_tag/join-leave", playerJoinLeave(a))

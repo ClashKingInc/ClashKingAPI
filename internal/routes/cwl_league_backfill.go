@@ -97,6 +97,7 @@ type cwlLeagueBackfillGroup struct {
 type cwlLeagueBackfillWar struct {
 	tag                 string
 	state               string
+	size                int
 	clanTag             string
 	opponentTag         string
 	clanStars           int
@@ -126,38 +127,44 @@ type cwlSeasonSummary struct {
 }
 
 func ensureCWLLeagueIDs(c *fiber.Ctx, a apptypes.Deps, clanTag string) error {
-	var hasMissing bool
+	var hasMissingLeagueID bool
+	var hasMissingWarSize bool
 	if err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT EXISTS (
-			SELECT 1
-			FROM cwl_groups AS groups
-			JOIN cwl_group_clans AS clans ON clans.cwl_id = groups.cwl_id
-			WHERE clans.clan_tag = $1
-			  AND groups.cwl_league_id IS NULL
-			  AND left(groups.season, 7) < $2
-		)
-	`, clanTag, cwlBackfillEndMonth).Scan(&hasMissing); err != nil {
+		SELECT
+			COALESCE(bool_or(
+				groups.cwl_league_id IS NULL AND left(groups.season, 7) < $2
+			), false),
+			COALESCE(bool_or(groups.war_size IS NULL), false)
+		FROM cwl_groups AS groups
+		JOIN cwl_group_clans AS clans ON clans.cwl_id = groups.cwl_id
+		WHERE clans.clan_tag = $1
+	`, clanTag, cwlBackfillEndMonth).Scan(&hasMissingLeagueID, &hasMissingWarSize); err != nil {
 		return err
 	}
-	if !hasMissing {
+	if !hasMissingLeagueID && !hasMissingWarSize {
 		return nil
 	}
-	var historyJSON []byte
-	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT seasons
-		FROM cwl_league_history
-		WHERE clan_tag = $1
-	`, clanTag).Scan(&historyJSON)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
+
 	history := map[string]int{}
-	if err := json.Unmarshal(historyJSON, &history); err != nil {
-		return err
+	hasLeagueHistory := false
+	if hasMissingLeagueID {
+		var historyJSON []byte
+		err := a.Store.SQL.QueryRow(c.UserContext(), `
+			SELECT seasons
+			FROM cwl_league_history
+			WHERE clan_tag = $1
+		`, clanTag).Scan(&historyJSON)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err == nil {
+			if err := json.Unmarshal(historyJSON, &history); err != nil {
+				return err
+			}
+			hasLeagueHistory = true
+		}
 	}
+
 	groups, err := loadCWLLeagueBackfillGroups(c, a, clanTag)
 	if err != nil {
 		return err
@@ -169,16 +176,24 @@ func ensureCWLLeagueIDs(c *fiber.Ctx, a apptypes.Deps, clanTag string) error {
 	if err != nil {
 		return err
 	}
-	for index := range groups {
-		groups[index].rank, groups[index].complete = calculateCWLLeagueBackfillRank(clanTag, groups[index], wars)
+	leagueAssignments := map[string]int{}
+	if hasLeagueHistory {
+		for index := range groups {
+			groups[index].rank, groups[index].complete = calculateCWLLeagueBackfillRank(clanTag, groups[index], wars)
+		}
+		leagueAssignments = cwlLeagueAssignments(groups, history)
 	}
-	assignments := cwlLeagueAssignments(groups, history)
+	warSizeAssignments := cwlWarSizeAssignments(groups, wars)
+	if len(leagueAssignments) == 0 && len(warSizeAssignments) == 0 && !hasLeagueHistory {
+		return nil
+	}
+
 	tx, err := a.Store.SQL.Begin(c.UserContext())
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(c.UserContext())
-	for cwlID, leagueID := range assignments {
+	for cwlID, leagueID := range leagueAssignments {
 		if _, err := tx.Exec(c.UserContext(), `
 			UPDATE cwl_groups
 			SET cwl_league_id = $1
@@ -187,20 +202,31 @@ func ensureCWLLeagueIDs(c *fiber.Ctx, a apptypes.Deps, clanTag string) error {
 			return err
 		}
 	}
-	var missing int
-	if err := tx.QueryRow(c.UserContext(), `
-		SELECT count(*)
-		FROM cwl_groups AS groups
-		JOIN cwl_group_clans AS clans ON clans.cwl_id = groups.cwl_id
-		WHERE clans.clan_tag = $1
-		  AND groups.cwl_league_id IS NULL
-		  AND left(groups.season, 7) < $2
-	`, clanTag, cwlBackfillEndMonth).Scan(&missing); err != nil {
-		return err
-	}
-	if missing == 0 {
-		if _, err := tx.Exec(c.UserContext(), `DELETE FROM cwl_league_history WHERE clan_tag = $1`, clanTag); err != nil {
+	for cwlID, warSize := range warSizeAssignments {
+		if _, err := tx.Exec(c.UserContext(), `
+			UPDATE cwl_groups
+			SET war_size = $1
+			WHERE cwl_id = $2 AND war_size IS NULL
+		`, warSize, cwlID); err != nil {
 			return err
+		}
+	}
+	if hasLeagueHistory {
+		var missing int
+		if err := tx.QueryRow(c.UserContext(), `
+			SELECT count(*)
+			FROM cwl_groups AS groups
+			JOIN cwl_group_clans AS clans ON clans.cwl_id = groups.cwl_id
+			WHERE clans.clan_tag = $1
+			  AND groups.cwl_league_id IS NULL
+			  AND left(groups.season, 7) < $2
+		`, clanTag, cwlBackfillEndMonth).Scan(&missing); err != nil {
+			return err
+		}
+		if missing == 0 {
+			if _, err := tx.Exec(c.UserContext(), `DELETE FROM cwl_league_history WHERE clan_tag = $1`, clanTag); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit(c.UserContext())
@@ -268,7 +294,7 @@ func loadCWLLeagueBackfillWars(c *fiber.Ctx, a apptypes.Deps, groups []cwlLeague
 		return map[string]cwlLeagueBackfillWar{}, nil
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT war_tag, state, clan_tag, opponent_tag, clan_stars, opponent_stars,
+		SELECT war_tag, state, size, clan_tag, opponent_tag, clan_stars, opponent_stars,
 		       clan_destruction_percentage::float8, opponent_destruction_percentage::float8
 		FROM wars
 		WHERE war_type = 'cwl' AND war_tag = ANY($1)
@@ -281,7 +307,7 @@ func loadCWLLeagueBackfillWars(c *fiber.Ctx, a apptypes.Deps, groups []cwlLeague
 	for rows.Next() {
 		var war cwlLeagueBackfillWar
 		if err := rows.Scan(
-			&war.tag, &war.state, &war.clanTag, &war.opponentTag,
+			&war.tag, &war.state, &war.size, &war.clanTag, &war.opponentTag,
 			&war.clanStars, &war.opponentStars, &war.clanDestruction, &war.opponentDestruction,
 		); err != nil {
 			return nil, err
@@ -289,6 +315,43 @@ func loadCWLLeagueBackfillWars(c *fiber.Ctx, a apptypes.Deps, groups []cwlLeague
 		wars[war.tag] = war
 	}
 	return wars, rows.Err()
+}
+
+func cwlWarSizeAssignments(
+	groups []cwlLeagueBackfillGroup,
+	wars map[string]cwlLeagueBackfillWar,
+) map[string]int {
+	assignments := make(map[string]int)
+	for _, group := range groups {
+		if group.warSize > 0 {
+			continue
+		}
+		warSize := 0
+		consistent := true
+		for _, round := range group.roundTags {
+			for _, tag := range round {
+				war, exists := wars[tag]
+				if !exists || war.size <= 0 {
+					continue
+				}
+				if warSize == 0 {
+					warSize = war.size
+					continue
+				}
+				if warSize != war.size {
+					consistent = false
+					break
+				}
+			}
+			if !consistent {
+				break
+			}
+		}
+		if consistent && warSize > 0 {
+			assignments[group.cwlID] = warSize
+		}
+	}
+	return assignments
 }
 
 func calculateCWLGroupStandings(group cwlLeagueBackfillGroup, wars map[string]cwlLeagueBackfillWar) ([]cwlLeagueStanding, bool) {

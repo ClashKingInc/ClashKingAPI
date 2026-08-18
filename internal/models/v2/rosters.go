@@ -1,5 +1,7 @@
 package modelsv2
 
+import "time"
+
 type RosterMember struct {
 	Name             string         `json:"name"`
 	Tag              string         `json:"tag"`

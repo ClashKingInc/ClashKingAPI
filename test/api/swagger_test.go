@@ -845,8 +845,8 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 	preferenceRequest := swaggerDefinitionProperties(t, definitions, "modelsv2.NotificationPreferencesRequest")
 	for _, field := range []string{
 		"deviceId", "environment", "notificationsEnabled",
-		"legendAttacksEnabled", "legendDefensesEnabled",
 		"warAttacksEnabled", "warStateEnabled", "warRemindersEnabled",
+		"raidRemindersEnabled", "raidReminderTimings",
 		"eventsEnabled", "announcementsEnabled",
 		"monthlySupportEnabled", "reminderTimings",
 	} {
@@ -854,7 +854,7 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 			t.Fatalf("NotificationPreferencesRequest missing %s", field)
 		}
 	}
-	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions", "accountTags", "deviceEnabled", "autoAddVerifiedAccounts", "leagueBattlesEnabled", "upgradeFinishesEnabled"} {
+	for _, retired := range []string{"enabled", "locale", "timezone", "types", "scopes", "subscriptions", "accountTags", "deviceEnabled", "autoAddVerifiedAccounts", "leagueBattlesEnabled", "upgradeFinishesEnabled", "legendAttacksEnabled", "legendDefensesEnabled"} {
 		if _, exists := preferenceRequest[retired]; exists {
 			t.Fatalf("NotificationPreferencesRequest exposes retired field %s", retired)
 		}

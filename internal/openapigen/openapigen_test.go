@@ -3,6 +3,7 @@ package openapigen_test
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ClashKingInc/ClashKingAPI/internal/openapigen"
@@ -29,6 +30,52 @@ func TestGeneratedDocumentsAreCurrentAndValid(t *testing.T) {
 	}
 	if !bytes.Equal(yamlDocument, []byte(embeddedYAML)) {
 		t.Fatal("embedded openapi.yaml is stale; run go generate")
+	}
+
+	scalarDocument, err := openapigen.ScalarAdapter(jsonDocument)
+	if err != nil {
+		t.Fatalf("generate Scalar adapter: %v", err)
+	}
+	embeddedScalar, err := swaggerdocs.BuildScalarDoc()
+	if err != nil {
+		t.Fatalf("read embedded Scalar adapter: %v", err)
+	}
+	if !bytes.Equal(scalarDocument, []byte(embeddedScalar)) {
+		t.Fatal("embedded openapi.scalar.json is stale; run go generate")
+	}
+}
+
+func TestScalarAdapterMakesQueryOperationsVisibleWithoutChangingTheirMeaning(t *testing.T) {
+	jsonDocument, _, err := openapigen.Generate()
+	if err != nil {
+		t.Fatalf("generate OpenAPI documents: %v", err)
+	}
+	adapted, err := openapigen.ScalarAdapter(jsonDocument)
+	if err != nil {
+		t.Fatalf("generate Scalar adapter: %v", err)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(adapted, &doc); err != nil {
+		t.Fatalf("decode Scalar adapter: %v", err)
+	}
+	if doc["openapi"] != "3.2.0" || doc["x-scalar-query-adapter"] != true {
+		t.Fatalf("unexpected Scalar adapter metadata: %v", doc)
+	}
+
+	paths := doc["paths"].(map[string]any)
+	for _, path := range []string{"/v2/home/activity", "/v2/search/clan", "/v2/search/player"} {
+		pathItem := paths[path].(map[string]any)
+		if _, ok := pathItem["query"]; ok {
+			t.Fatalf("Scalar adapter retains invisible QUERY operation for %s", path)
+		}
+		post, ok := pathItem["post"].(map[string]any)
+		if !ok || post["x-http-method"] != "QUERY" {
+			t.Fatalf("Scalar adapter does not mark %s as QUERY: %v", path, pathItem)
+		}
+		if !strings.HasPrefix(post["summary"].(string), "QUERY — ") {
+			t.Fatalf("Scalar adapter summary does not identify QUERY for %s", path)
+		}
 	}
 }
 

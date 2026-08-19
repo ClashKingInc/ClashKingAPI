@@ -53,12 +53,14 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 		}
 		html := string(body)
 		for _, marker := range []string{
-			`id="api-reference"`,
-			`data-url="/openapi.json"`,
+			`id="scalar-loader"`,
+			`url: "\/openapi.json"`,
 			`https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.63.0`,
 			`theme: "none"`,
 			`layout: "modern"`,
 			`customCss: document.getElementById("ck-scalar-theme").textContent`,
+			`customFetch: scalarFetch`,
+			`request = new Request(request, { method: "QUERY" })`,
 			`class="ck-docs-header"`,
 			`class="ck-brand-logo ck-brand-logo--dark"`,
 			`class="ck-brand-logo ck-brand-logo--light"`,

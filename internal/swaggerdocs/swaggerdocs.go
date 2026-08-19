@@ -2,7 +2,9 @@ package swaggerdocs
 
 import (
 	_ "embed"
+	"encoding/json"
 	"html/template"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,6 +23,9 @@ var openAPIJSON []byte
 //go:embed openapi.yaml
 var openAPIYAML []byte
 
+//go:embed openapi.scalar.json
+var openAPIScalarJSON []byte
+
 func BuildDoc() (string, error) {
 	return string(openAPIJSON), nil
 }
@@ -29,8 +34,12 @@ func BuildYAMLDoc() (string, error) {
 	return string(openAPIYAML), nil
 }
 
+func BuildScalarDoc() (string, error) {
+	return string(openAPIScalarJSON), nil
+}
+
 func RegisterRoutes(app *fiber.App) error {
-	scalarHandler := NewScalarHandler("/openapi.json")
+	scalarHandler := NewScalarHandler("/openapi.scalar.json")
 	swaggerHandler := NewUIHandler("/openapi.json")
 
 	app.Get("/", NoStore(func(c *fiber.Ctx) error {
@@ -43,6 +52,10 @@ func RegisterRoutes(app *fiber.App) error {
 	app.Get("/openapi.yaml", NoStore(func(c *fiber.Ctx) error {
 		c.Type("yaml")
 		return c.Send(openAPIYAML)
+	}))
+	app.Get("/openapi.scalar.json", NoStore(func(c *fiber.Ctx) error {
+		c.Type("json")
+		return c.Send(openAPIScalarJSON)
 	}))
 	app.Get("/docs", NoStore(func(c *fiber.Ctx) error {
 		return scalarHandler(c)
@@ -90,6 +103,7 @@ type swaggerUIConfig struct {
 
 type scalarUIConfig struct {
 	URL              string
+	QueryPaths       []string
 	Title            string
 	FontURL          template.URL
 	WordmarkDarkURL  template.URL
@@ -100,6 +114,7 @@ func NewScalarHandler(specURL string) fiber.Handler {
 	index := template.Must(template.New("scalar_index.html").Parse(scalarIndexTemplate))
 	config := scalarUIConfig{
 		URL:              specURL,
+		QueryPaths:       scalarQueryPaths(),
 		Title:            swaggerBaseTitle + " - API Reference",
 		FontURL:          template.URL("https://assets.clashk.ing/fonts/clashking.woff2"),
 		WordmarkDarkURL:  template.URL("https://assets.clashk.ing/logos/clashking-wordmark-dark.svg"),
@@ -109,6 +124,23 @@ func NewScalarHandler(specURL string) fiber.Handler {
 		c.Type("html", "utf-8")
 		return index.Execute(c, config)
 	}
+}
+
+func scalarQueryPaths() []string {
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(openAPIJSON, &doc); err != nil {
+		return nil
+	}
+	paths := make([]string, 0)
+	for path, pathItem := range doc.Paths {
+		if _, ok := pathItem["query"]; ok {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func NewUIHandler(specURL string) fiber.Handler {
@@ -768,19 +800,37 @@ const scalarIndexTemplate = `<!doctype html>
         </span>
       </div>
     </noscript>
-    <script id="api-reference" data-url="{{.URL}}"></script>
+    <script id="scalar-loader"></script>
     <script>
+      const queryPaths = new Set([
+        {{- range .QueryPaths }}
+        "{{ . }}",
+        {{- end }}
+      ]);
+
+      const scalarFetch = (input, init) => {
+        let request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url, window.location.origin);
+        if (request.method.toUpperCase() === "POST" && queryPaths.has(url.pathname)) {
+          request = new Request(request, { method: "QUERY" });
+        }
+        return fetch(request);
+      };
+
       const configuration = {
+        url: "{{.URL}}",
         theme: "none",
         layout: "modern",
         darkMode: true,
         hideDarkModeToggle: false,
         showSidebar: true,
         hideModels: false,
-        hideDownloadButton: false,
+        documentDownloadType: "none",
         hideTestRequestButton: false,
         withDefaultFonts: false,
         defaultOpenAllTags: false,
+        customFetch: scalarFetch,
+        onLoaded: () => document.querySelector(".ck-loading")?.remove(),
         customCss: document.getElementById("ck-scalar-theme").textContent,
         defaultHttpClient: {
           targetKey: "python",
@@ -811,10 +861,9 @@ const scalarIndexTemplate = `<!doctype html>
         },
       };
 
-      const script = document.getElementById("api-reference");
-      script.dataset.configuration = JSON.stringify(configuration);
+      const script = document.getElementById("scalar-loader");
       script.addEventListener("load", () => {
-        document.querySelector(".ck-loading")?.remove();
+        window.Scalar.createApiReference("#app", configuration);
       });
       script.addEventListener("error", () => {
         document.getElementById("app").innerHTML = [

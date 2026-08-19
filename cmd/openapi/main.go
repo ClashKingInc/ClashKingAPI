@@ -13,10 +13,15 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	scalarDocument, err := openapigen.ScalarAdapter(jsonDocument)
+	if err != nil {
+		fatal(err)
+	}
 
 	for path, contents := range map[string][]byte{
-		"internal/swaggerdocs/openapi.json": jsonDocument,
-		"internal/swaggerdocs/openapi.yaml": yamlDocument,
+		"internal/swaggerdocs/openapi.json":        jsonDocument,
+		"internal/swaggerdocs/openapi.yaml":        yamlDocument,
+		"internal/swaggerdocs/openapi.scalar.json": scalarDocument,
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			fatal(fmt.Errorf("create output directory for %s: %w", path, err))

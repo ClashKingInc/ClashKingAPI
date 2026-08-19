@@ -23,7 +23,7 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected %s to return 200, got %d", path, resp.StatusCode)
 		}
-		if !strings.Contains(body, `id="api-reference"`) || !strings.Contains(body, `@scalar/api-reference`) {
+		if !strings.Contains(body, `id="scalar-loader"`) || !strings.Contains(body, `@scalar/api-reference`) {
 			t.Fatalf("expected %s to serve Scalar html", path)
 		}
 		for _, marker := range []string{
@@ -35,6 +35,8 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 			`href="/openapi.json"`,
 			`href="/swagger"`,
 			`href="/swagger">Swagger</a>`,
+			`url: "\/openapi.scalar.json"`,
+			`customFetch: scalarFetch`,
 			`:where(input, textarea, select):focus-visible`,
 			`.open-api-client-button:focus-visible`,
 			`aria-label="Swagger" href="/swagger">Swagger</a>`,

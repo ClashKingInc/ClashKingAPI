@@ -53,6 +53,52 @@ func Generate() ([]byte, []byte, error) {
 	return jsonDocument, yamlDocument, nil
 }
 
+// ScalarAdapter creates a viewer-only document for Scalar, which can parse
+// OpenAPI 3.2 but does not yet render native QUERY operations. The canonical
+// JSON and YAML documents remain unchanged.
+func ScalarAdapter(document []byte) ([]byte, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(document, &doc); err != nil {
+		return nil, fmt.Errorf("decode canonical OpenAPI document: %w", err)
+	}
+
+	paths, _ := doc["paths"].(map[string]any)
+	for path, rawPathItem := range paths {
+		pathItem, _ := rawPathItem.(map[string]any)
+		query, ok := pathItem["query"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := pathItem["post"]; exists {
+			return nil, fmt.Errorf("cannot adapt QUERY %s because POST already exists", path)
+		}
+
+		query["x-http-method"] = "QUERY"
+		if summary := stringValue(query["summary"]); !strings.HasPrefix(summary, "QUERY — ") {
+			query["summary"] = "QUERY — " + summary
+		}
+		note := "**HTTP method:** `QUERY`. Scalar displays this through a POST compatibility view; requests from this page are still sent as QUERY."
+		if description := stringValue(query["description"]); description != "" {
+			query["description"] = note + "\n\n" + description
+		} else {
+			query["description"] = note
+		}
+		pathItem["post"] = query
+		delete(pathItem, "query")
+	}
+	doc["x-scalar-query-adapter"] = true
+
+	adapted, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal Scalar OpenAPI adapter: %w", err)
+	}
+	adapted = append(adapted, '\n')
+	if err := Validate(adapted); err != nil {
+		return nil, fmt.Errorf("validate Scalar OpenAPI adapter: %w", err)
+	}
+	return adapted, nil
+}
+
 func sourceDocument() (map[string]any, error) {
 	docs.SwaggerInfo.Title = APITitle
 	docs.SwaggerInfo.Description = APIDescription

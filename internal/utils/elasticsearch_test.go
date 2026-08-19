@@ -35,13 +35,14 @@ func TestElasticsearchAdapterUsesAPIKeyAndPreservesBasePath(t *testing.T) {
 
 	adapter, err := NewElasticsearchAdapter(Config{
 		ElasticsearchURL: server.URL + "/elastic", ElasticsearchAPIKey: "encoded-key",
+		ElasticsearchPlayersAlias: "  players  ", ElasticsearchClansAlias: "  clans  ",
 	})
 	if err != nil {
 		t.Fatalf("create adapter: %v", err)
 	}
 	defer adapter.Close()
-	if adapter.PlayersAlias != "clashking_players" || adapter.ClansAlias != "clashking_clans" {
-		t.Fatalf("unexpected default aliases: players=%q clans=%q", adapter.PlayersAlias, adapter.ClansAlias)
+	if adapter.PlayersAlias != "players" || adapter.ClansAlias != "clans" {
+		t.Fatalf("unexpected normalized aliases: players=%q clans=%q", adapter.PlayersAlias, adapter.ClansAlias)
 	}
 
 	var response map[string]bool
@@ -79,6 +80,15 @@ func TestElasticsearchNameValidation(t *testing.T) {
 		if validElasticsearchName(invalid) {
 			t.Fatalf("expected %q to be invalid", invalid)
 		}
+	}
+}
+
+func TestNormalizeElasticsearchAliasUsesTrimmedOverrideOrDefault(t *testing.T) {
+	if got := normalizeElasticsearchAlias("  clans-v2  ", "clashking_clans"); got != "clans-v2" {
+		t.Fatalf("normalized override = %q", got)
+	}
+	if got := normalizeElasticsearchAlias("  ", "clashking_clans"); got != "clashking_clans" {
+		t.Fatalf("normalized default = %q", got)
 	}
 }
 

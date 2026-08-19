@@ -42,8 +42,8 @@ func NewElasticsearchAdapter(cfg Config) (*ElasticsearchAdapter, error) {
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		PlayersAlias: firstNonEmpty(cfg.ElasticsearchPlayersAlias, "clashking_players"),
-		ClansAlias:   firstNonEmpty(cfg.ElasticsearchClansAlias, "clashking_clans"),
+		PlayersAlias: normalizeElasticsearchAlias(cfg.ElasticsearchPlayersAlias, "clashking_players"),
+		ClansAlias:   normalizeElasticsearchAlias(cfg.ElasticsearchClansAlias, "clashking_clans"),
 	}, nil
 }
 

@@ -76,8 +76,8 @@ func Load() (Config, error) {
 		ValkeyPassword:               os.Getenv("VALKEY_PASSWORD"),
 		ElasticsearchURL:             normalizeOrigin(os.Getenv("ELASTICSEARCH_URL")),
 		ElasticsearchAPIKey:          strings.TrimSpace(os.Getenv("ELASTICSEARCH_API_KEY")),
-		ElasticsearchPlayersAlias:    firstNonEmpty(os.Getenv("ELASTICSEARCH_PLAYERS_ALIAS"), "clashking_players"),
-		ElasticsearchClansAlias:      firstNonEmpty(os.Getenv("ELASTICSEARCH_CLANS_ALIAS"), "clashking_clans"),
+		ElasticsearchPlayersAlias:    normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_PLAYERS_ALIAS"), "clashking_players"),
+		ElasticsearchClansAlias:      normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_CLANS_ALIAS"), "clashking_clans"),
 		BunnyAccessKey:               os.Getenv("BUNNY_ACCESS_KEY"),
 		AIUsageSecret:                os.Getenv("AI_USAGE_SECRET"),
 		Local:                        strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
@@ -230,6 +230,10 @@ func validElasticsearchName(value string) bool {
 		return false
 	}
 	return true
+}
+
+func normalizeElasticsearchAlias(value, fallback string) string {
+	return strings.TrimSpace(firstNonEmpty(value, fallback))
 }
 
 func firstNonEmpty(values ...string) string {

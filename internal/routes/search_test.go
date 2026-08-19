@@ -176,7 +176,7 @@ func TestPlayerSearchPaginatesWithEncryptedPITCursorAndEnrichesClan(t *testing.T
 	if len(first.Response.Items) != 1 || first.Response.Items[0].Clan == nil || first.Response.Items[0].Clan.Name != "Clash King" {
 		t.Fatalf("unexpected first page: %#v", first.Response)
 	}
-	if first.Response.Items[0].LeagueTier == nil || first.Response.Items[0].LeagueTier.Name != "Legend League" {
+	if first.Response.Items[0].LeagueTier == nil || first.Response.Items[0].LeagueTier.ID != 105000034 || first.Response.Items[0].LeagueTier.Name == "" {
 		t.Fatalf("expected fleshed league tier: %#v", first.Response.Items[0].LeagueTier)
 	}
 	if first.Response.Pagination.NextCursor == nil || !first.Response.Pagination.HasMore {

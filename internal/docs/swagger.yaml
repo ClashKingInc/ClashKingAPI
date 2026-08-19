@@ -4382,27 +4382,151 @@ definitions:
         - clan
         type: string
     type: object
+  modelsv2.SearchClanFilters:
+    properties:
+      clan_level:
+        $ref: '#/definitions/modelsv2.SearchIntegerRange'
+      cwl_league_ids:
+        items:
+          type: integer
+        maxItems: 5
+        type: array
+      location_ids:
+        items:
+          type: integer
+        maxItems: 5
+        type: array
+      members:
+        $ref: '#/definitions/modelsv2.SearchIntegerRange'
+    type: object
+  modelsv2.SearchClanQuery:
+    properties:
+      cursor:
+        type: string
+      filters:
+        $ref: '#/definitions/modelsv2.SearchClanFilters'
+      limit:
+        default: 25
+        maximum: 200
+        minimum: 1
+        type: integer
+      query:
+        maxLength: 100
+        minLength: 2
+        type: string
+    required:
+    - query
+    type: object
   modelsv2.SearchClanResponse:
     properties:
       items:
         items:
           $ref: '#/definitions/modelsv2.SearchClanResult'
         type: array
+      pagination:
+        $ref: '#/definitions/modelsv2.SearchCursorPage'
     type: object
   modelsv2.SearchClanResult:
     properties:
-      level:
+      badge:
+        type: string
+      clanLevel:
         type: integer
-      memberCount:
+      location:
+        $ref: '#/definitions/modelsv2.SearchLocation'
+      members:
         type: integer
       name:
         type: string
       tag:
         type: string
-      type:
-        type: string
       warLeague:
+        $ref: '#/definitions/modelsv2.SearchLeagueReference'
+    type: object
+  modelsv2.SearchCursorPage:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      next_cursor:
         type: string
+    type: object
+  modelsv2.SearchIntegerRange:
+    properties:
+      max:
+        minimum: 0
+        type: integer
+      min:
+        minimum: 0
+        type: integer
+    type: object
+  modelsv2.SearchLeagueReference:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  modelsv2.SearchLocation:
+    properties:
+      countryCode:
+        type: string
+      id:
+        type: integer
+      isCountry:
+        type: boolean
+      localizedName:
+        type: string
+      name:
+        type: string
+    type: object
+  modelsv2.SearchPlayerClan:
+    properties:
+      badge:
+        type: string
+      clanLevel:
+        type: integer
+      name:
+        type: string
+      tag:
+        type: string
+    type: object
+  modelsv2.SearchPlayerFilters:
+    properties:
+      clan_tags:
+        items:
+          type: string
+        maxItems: 100
+        type: array
+      league_ids:
+        items:
+          type: integer
+        maxItems: 5
+        type: array
+      townhall_levels:
+        items:
+          type: integer
+        maxItems: 100
+        type: array
+    type: object
+  modelsv2.SearchPlayerQuery:
+    properties:
+      cursor:
+        type: string
+      filters:
+        $ref: '#/definitions/modelsv2.SearchPlayerFilters'
+      limit:
+        default: 25
+        maximum: 200
+        minimum: 1
+        type: integer
+      query:
+        maxLength: 100
+        minLength: 2
+        type: string
+    required:
+    - query
     type: object
   modelsv2.SearchPlayerReference:
     properties:
@@ -4417,6 +4541,28 @@ definitions:
         items:
           $ref: '#/definitions/modelsv2.SearchPlayerReference'
         type: array
+    type: object
+  modelsv2.SearchPlayerResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/modelsv2.SearchPlayerResult'
+        type: array
+      pagination:
+        $ref: '#/definitions/modelsv2.SearchCursorPage'
+    type: object
+  modelsv2.SearchPlayerResult:
+    properties:
+      clan:
+        $ref: '#/definitions/modelsv2.SearchPlayerClan'
+      leagueTier:
+        $ref: '#/definitions/modelsv2.SearchLeagueReference'
+      name:
+        type: string
+      tag:
+        type: string
+      townHallLevel:
+        type: integer
     type: object
   modelsv2.SearchRecentBadgeURLs:
     properties:
@@ -11047,22 +11193,18 @@ paths:
       tags:
       - Search
   /v2/search/clan:
-    get:
-      description: Returns clans from recent searches, bookmarks, guild-linked clans,
-        and CoC API.
+    post:
+      consumes:
+      - application/json
+      description: Searches the clan Elasticsearch alias by name or exact tag with
+        optional filters and cursor pagination.
       parameters:
-      - description: Search query (clan name or tag)
-        in: query
-        name: query
-        type: string
-      - description: Discord user ID for personalised results
-        in: query
-        name: user_id
-        type: integer
-      - description: Discord guild ID for guild clan filtering
-        in: query
-        name: guild_id
-        type: integer
+      - description: Clan search query
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.SearchClanQuery'
       produces:
       - application/json
       responses:
@@ -11070,9 +11212,58 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/modelsv2.SearchClanResponse'
-      summary: Search for a clan by name or tag
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Search clans
       tags:
       - Search
+      x-http-method: QUERY
+  /v2/search/player:
+    post:
+      consumes:
+      - application/json
+      description: Searches the player Elasticsearch alias by name or exact tag with
+        optional filters and cursor pagination.
+      parameters:
+      - description: Player search query
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/modelsv2.SearchPlayerQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/modelsv2.SearchPlayerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/modelsv2.ErrorResponse'
+      summary: Search players
+      tags:
+      - Search
+      x-http-method: QUERY
   /v2/server/{server_id}/autoboards:
     get:
       description: Returns typed autoboards and resolves each stored webhook back

@@ -206,7 +206,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/player/:player_tag/join-leave/shared", playerJoinLeaveShared(a))
 	app.Get("/v2/player/:player_tag/join-leave", playerJoinLeave(a))
 
-	app.Get("/v2/search/clan", searchClan(a))
+	app.Add(apptypes.MethodQuery, "/v2/search/clan", searchClans(a))
+	app.Add(apptypes.MethodQuery, "/v2/search/player", searchPlayers(a))
 	app.Get("/v2/search/:guild_id/banned-players", authServerParamRead(a, wrap, "guild_id", searchBannedPlayers(a)))
 
 	app.Get("/v2/link/server/:server_id/clan/list", serverRead(serverroutes.GetServerClansBasic(a)))

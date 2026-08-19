@@ -64,14 +64,21 @@ func New(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	searchAdapter, err := utils.NewElasticsearchAdapter(cfg)
+	if err != nil {
+		_ = stores.Close(ctx)
+		return nil, err
+	}
 	clashAdapter, err := utils.NewClashAdapter(ctx, cfg.ProxyOrigin)
 	if err != nil {
+		searchAdapter.Close()
 		_ = stores.Close(ctx)
 		return nil, err
 	}
 	discordAdapter, err := utils.NewDiscordAdapter(cfg)
 	if err != nil {
 		_ = clashAdapter.Close()
+		searchAdapter.Close()
 		_ = stores.Close(ctx)
 		return nil, err
 	}
@@ -83,6 +90,7 @@ func New(ctx context.Context) (*App, error) {
 			Discord:   discordAdapter,
 			Auth:      utils.NewAuthenticator(cfg, stores),
 			Cache:     utils.NewCacheAdapter(cfg),
+			Search:    searchAdapter,
 			Mailer:    utils.NewMailer(cfg),
 			StartedAt: time.Now().UTC(),
 		},
@@ -90,6 +98,7 @@ func New(ctx context.Context) (*App, error) {
 	}
 	server, err := application.buildFiber()
 	if err != nil {
+		_ = application.Shutdown(ctx)
 		return nil, err
 	}
 	application.Server = server
@@ -186,6 +195,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.Cache != nil {
 		a.Cache.Close()
+	}
+	if a.Search != nil {
+		a.Search.Close()
 	}
 	utils.FlushSentry(2 * time.Second)
 	if a.Store != nil {

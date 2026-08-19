@@ -1196,7 +1196,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 
 func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 	paths := swaggerPaths(t, buildSwaggerDoc(t))
-	for _, path := range []string{"/v2/home/activity", "/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"} {
+	for _, path := range []string{"/v2/home/activity", "/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl", "/v2/search/clan", "/v2/search/player"} {
 		operation, ok := paths[path].(map[string]any)
 		if !ok {
 			t.Fatalf("expected path object for %s", path)
@@ -1213,6 +1213,43 @@ func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 			t.Fatalf("expected %s QUERY operation to consume application/json, got %v", path, consumes)
 		}
 	}
+}
+
+func TestSearchOpenAPIUsesCompactTypedContracts(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	definitions := swaggerDefinitions(t, doc)
+
+	clan := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchClanResult")
+	for _, field := range []string{"name", "tag", "badge", "clanLevel", "location", "warLeague", "members"} {
+		if _, ok := clan[field]; !ok {
+			t.Fatalf("clan search result omits %s", field)
+		}
+	}
+	if _, ok := clan["badgeUrls"]; ok {
+		t.Fatal("clan search result exposes badgeUrls instead of compact badge")
+	}
+	assertRef(t, clan["location"], "#/definitions/modelsv2.SearchLocation")
+	assertRef(t, clan["warLeague"], "#/definitions/modelsv2.SearchLeagueReference")
+
+	player := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchPlayerResult")
+	assertRef(t, player["leagueTier"], "#/definitions/modelsv2.SearchLeagueReference")
+	assertRef(t, player["clan"], "#/definitions/modelsv2.SearchPlayerClan")
+	league := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchLeagueReference")
+	if _, ok := league["badge"]; ok {
+		t.Fatal("search league tier exposes an unwanted badge")
+	}
+	playerClan := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchPlayerClan")
+	if _, ok := playerClan["badge"]; !ok {
+		t.Fatal("player clan omits compact badge")
+	}
+
+	clanFilters := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchClanFilters")
+	assertSwaggerMaxItems(t, clanFilters["location_ids"], 5)
+	assertSwaggerMaxItems(t, clanFilters["cwl_league_ids"], 5)
+	playerFilters := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchPlayerFilters")
+	assertSwaggerMaxItems(t, playerFilters["clan_tags"], 100)
+	assertSwaggerMaxItems(t, playerFilters["league_ids"], 5)
+	assertSwaggerMaxItems(t, playerFilters["townhall_levels"], 100)
 }
 
 func TestServerLogAndReminderDestinationOpenAPIContract(t *testing.T) {
@@ -1307,6 +1344,14 @@ func assertRef(t *testing.T, value any, want string) {
 	ref, _ := value.(map[string]any)
 	if ref["$ref"] != want {
 		t.Fatalf("expected ref %s, got %v", want, value)
+	}
+}
+
+func assertSwaggerMaxItems(t *testing.T, value any, want float64) {
+	t.Helper()
+	field, _ := value.(map[string]any)
+	if field["maxItems"] != want {
+		t.Fatalf("expected maxItems %.0f, got %v", want, value)
 	}
 }
 

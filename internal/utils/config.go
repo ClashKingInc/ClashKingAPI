@@ -16,6 +16,10 @@ type Config struct {
 	TimescaleURL                 string
 	ValkeyAddress                string
 	ValkeyPassword               string
+	ElasticsearchURL             string
+	ElasticsearchAPIKey          string
+	ElasticsearchPlayersAlias    string
+	ElasticsearchClansAlias      string
 	BunnyAccessKey               string
 	AIUsageSecret                string
 	Local                        bool
@@ -70,6 +74,10 @@ func Load() (Config, error) {
 		TimescaleURL:                 buildTimescaleURL(os.Getenv),
 		ValkeyAddress:                buildValkeyAddress(os.Getenv),
 		ValkeyPassword:               os.Getenv("VALKEY_PASSWORD"),
+		ElasticsearchURL:             normalizeOrigin(os.Getenv("ELASTICSEARCH_URL")),
+		ElasticsearchAPIKey:          strings.TrimSpace(os.Getenv("ELASTICSEARCH_API_KEY")),
+		ElasticsearchPlayersAlias:    firstNonEmpty(os.Getenv("ELASTICSEARCH_PLAYERS_ALIAS"), "clashking_players"),
+		ElasticsearchClansAlias:      firstNonEmpty(os.Getenv("ELASTICSEARCH_CLANS_ALIAS"), "clashking_clans"),
 		BunnyAccessKey:               os.Getenv("BUNNY_ACCESS_KEY"),
 		AIUsageSecret:                os.Getenv("AI_USAGE_SECRET"),
 		Local:                        strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
@@ -162,6 +170,12 @@ func (c Config) validate() error {
 		return errors.New("LOCAL=TRUE requires DEV_USER_ID")
 	}
 	if !c.Local {
+		if strings.TrimSpace(c.ElasticsearchURL) == "" {
+			return errors.New("ELASTICSEARCH_URL is required outside local mode")
+		}
+		if strings.TrimSpace(c.ElasticsearchAPIKey) == "" {
+			return errors.New("ELASTICSEARCH_API_KEY is required outside local mode")
+		}
 		if strings.TrimSpace(c.ValkeyAddress) == "" {
 			return errors.New("VALKEY_HOST is required outside local mode")
 		}
@@ -193,7 +207,29 @@ func (c Config) validate() error {
 	if c.SMTPStartTLS && c.SMTPSSLTLS {
 		return errors.New("SMTP_STARTTLS and SMTP_SSL_TLS cannot both be enabled")
 	}
+	for key, value := range map[string]string{
+		"ELASTICSEARCH_PLAYERS_ALIAS": c.ElasticsearchPlayersAlias,
+		"ELASTICSEARCH_CLANS_ALIAS":   c.ElasticsearchClansAlias,
+	} {
+		if !validElasticsearchName(value) {
+			return fmt.Errorf("%s contains unsupported characters", key)
+		}
+	}
 	return nil
+}
+
+func validElasticsearchName(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 255 || value == "." || value == ".." || strings.ContainsRune("-_+", rune(value[0])) {
+		return false
+	}
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func firstNonEmpty(values ...string) string {

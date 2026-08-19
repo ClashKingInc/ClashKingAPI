@@ -86,8 +86,8 @@ func isPublicCORSRequest(c *fiber.Ctx) bool {
 	switch method {
 	case fiber.MethodGet, fiber.MethodHead:
 		return !strings.HasPrefix(c.Path(), "/v2/auth/") && !strings.HasPrefix(c.Path(), "/v2/privacy/")
-	case "QUERY":
-		return strings.HasPrefix(c.Path(), "/v2/stats/")
+	case MethodQuery:
+		return strings.HasPrefix(c.Path(), "/v2/stats/") || strings.HasPrefix(c.Path(), "/v2/search/")
 	default:
 		return false
 	}

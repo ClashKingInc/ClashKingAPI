@@ -8,14 +8,61 @@ import (
 )
 
 func newCORSTestApp(cfg Config) *fiber.App {
-	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler})
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler, RequestMethods: APIRequestMethods()})
 	app.Use(CORSMiddleware(cfg))
 	app.Get("/v2/stats/public", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 	app.Get("/v2/player/test", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+	app.Add(MethodQuery, "/v2/search/clan", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+	app.Add(MethodQuery, "/v2/search/player", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 	app.Post("/v2/auth/web/refresh", RequireWebOrigin(cfg), func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 	return app
+}
+
+func TestCORSPublicSearchQueriesRemainWildcard(t *testing.T) {
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://dash.clashk.ing"}})
+	for _, path := range []string{"/v2/search/clan", "/v2/search/player"} {
+		t.Run(path+" preflight", func(t *testing.T) {
+			request := httptest.NewRequest(fiber.MethodOptions, path, nil)
+			request.Header.Set(fiber.HeaderOrigin, "https://unrelated.example")
+			request.Header.Set(fiber.HeaderAccessControlRequestMethod, MethodQuery)
+			request.Header.Set(fiber.HeaderAccessControlRequestHeaders, "content-type")
+
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			if response.StatusCode != fiber.StatusNoContent {
+				t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != "*" {
+				t.Fatalf("allow origin = %q, want wildcard", got)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowCredentials); got != "" {
+				t.Fatalf("public preflight unexpectedly allows credentials: %q", got)
+			}
+		})
+
+		t.Run(path+" request", func(t *testing.T) {
+			request := httptest.NewRequest(MethodQuery, path, nil)
+			request.Header.Set(fiber.HeaderOrigin, "https://unrelated.example")
+
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			if response.StatusCode != fiber.StatusNoContent {
+				t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != "*" {
+				t.Fatalf("allow origin = %q, want wildcard", got)
+			}
+			if got := response.Header.Get(fiber.HeaderAccessControlAllowCredentials); got != "" {
+				t.Fatalf("public response unexpectedly allows credentials: %q", got)
+			}
+		})
+	}
 }
 
 func TestCORSPublicReadsRemainWildcard(t *testing.T) {

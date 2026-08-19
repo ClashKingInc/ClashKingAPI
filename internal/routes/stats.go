@@ -184,7 +184,7 @@ func statsOverview(a apptypes.Deps) fiber.Handler {
 
 // statsArmies godoc
 // @Summary Query ranked army intelligence
-// @Description Uses exact army_share_code + army_items + army_counts identity. QUERY is represented through x-http-method because Swagger 2.0 has no QUERY operation key.
+// @Description Uses exact army_share_code + army_items + army_counts identity.
 // @Tags Stats
 // @Accept json
 // @Produce json

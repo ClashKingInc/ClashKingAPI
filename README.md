@@ -18,7 +18,8 @@ Some routes are public. Routes that read or change account and server data requi
 ## API reference
 
 - [Interactive API reference](https://api.clashk.ing/)
-- [OpenAPI file](https://api.clashk.ing/openapi.json)
+- [OpenAPI JSON](https://api.clashk.ing/openapi.json)
+- [OpenAPI YAML](https://api.clashk.ing/openapi.yaml)
 - [Swagger UI](https://api.clashk.ing/swagger)
 
 The interactive reference shows the available routes, what to send, what comes back, and whether you need to sign in.
@@ -28,7 +29,7 @@ The interactive reference shows the available routes, what to send, what comes b
 - `internal/routes` contains the API routes and their tests.
 - `internal/models` contains the request and response formats.
 - `internal/utils` contains shared setup for the database, cache, authentication, email, and outside services.
-- `internal/docs` contains the generated API description used by the live reference.
+- `internal/docs` is Swaggo's generated input, while `internal/swaggerdocs/openapi.json` and `openapi.yaml` are the OpenAPI 3.2 files served by the API.
 - `locales` contains messages sent to users in supported languages.
 
 ## Using ClashKing data

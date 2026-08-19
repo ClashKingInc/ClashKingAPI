@@ -1,64 +1,35 @@
 package swaggerdocs
 
 import (
-	"encoding/json"
+	_ "embed"
 	"html/template"
-	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
-	"sync"
 
-	docs "github.com/ClashKingInc/ClashKingAPI/internal/docs"
 	"github.com/gofiber/fiber/v2"
-	swaggerFiles "github.com/swaggo/files"
-	"github.com/swaggo/swag"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 const (
 	swaggerBaseTitle       = "ClashKing API"
 	swaggerBaseDescription = "ClashKing Go API documentation. This API is still under active construction, so use it with caution because endpoints and payloads may still change."
-	swaggerVersion         = "1.0"
+	scalarVersion          = "1.63.0"
+	swaggerUIVersion       = "5.32.11"
 )
 
-func ConfigureInfo() {
-	docs.SwaggerInfo.Title = swaggerBaseTitle
-	docs.SwaggerInfo.Description = swaggerBaseDescription
-	docs.SwaggerInfo.Version = swaggerVersion
-	docs.SwaggerInfo.BasePath = "/"
-}
+//go:embed openapi.json
+var openAPIJSON []byte
+
+//go:embed openapi.yaml
+var openAPIYAML []byte
 
 func BuildDoc() (string, error) {
-	raw, err := swag.ReadDoc(docs.SwaggerInfo.InstanceName())
-	if err != nil {
-		return "", err
-	}
+	return string(openAPIJSON), nil
+}
 
-	var doc map[string]any
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		return "", err
-	}
-
-	setSwaggerMetadata(doc)
-	EnsureSecurityDefinition(doc)
-	promoteQueryOperations(doc)
-
-	data, err := json.Marshal(doc)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+func BuildYAMLDoc() (string, error) {
+	return string(openAPIYAML), nil
 }
 
 func RegisterRoutes(app *fiber.App) error {
-	ConfigureInfo()
-
-	doc, err := BuildDoc()
-	if err != nil {
-		return err
-	}
-
 	scalarHandler := NewScalarHandler("/openapi.json")
 	swaggerHandler := NewUIHandler("/openapi.json")
 
@@ -67,7 +38,11 @@ func RegisterRoutes(app *fiber.App) error {
 	}))
 	app.Get("/openapi.json", NoStore(func(c *fiber.Ctx) error {
 		c.Type("json")
-		return c.SendString(doc)
+		return c.Send(openAPIJSON)
+	}))
+	app.Get("/openapi.yaml", NoStore(func(c *fiber.Ctx) error {
+		c.Type("yaml")
+		return c.Send(openAPIYAML)
 	}))
 	app.Get("/docs", NoStore(func(c *fiber.Ctx) error {
 		return scalarHandler(c)
@@ -103,6 +78,9 @@ func NoStore(next fiber.Handler) fiber.Handler {
 
 type swaggerUIConfig struct {
 	URL                  string
+	CSSURL               template.URL
+	BundleURL            template.URL
+	PresetURL            template.URL
 	DocExpansion         string
 	DomID                string
 	DeepLinking          bool
@@ -134,12 +112,12 @@ func NewScalarHandler(specURL string) fiber.Handler {
 }
 
 func NewUIHandler(specURL string) fiber.Handler {
-	var once sync.Once
-	handler := swaggerFiles.NewHandler()
 	index := template.Must(template.New("swagger_index.html").Parse(swaggerIndexTemplate))
-	re := regexp.MustCompile(`^(.*/)([^?].*)?[?|.]*$`)
 	config := swaggerUIConfig{
 		URL:                  specURL,
+		CSSURL:               template.URL("https://cdn.jsdelivr.net/npm/swagger-ui-dist@" + swaggerUIVersion + "/swagger-ui.css"),
+		BundleURL:            template.URL("https://cdn.jsdelivr.net/npm/swagger-ui-dist@" + swaggerUIVersion + "/swagger-ui-bundle.js"),
+		PresetURL:            template.URL("https://cdn.jsdelivr.net/npm/swagger-ui-dist@" + swaggerUIVersion + "/swagger-ui-standalone-preset.js"),
 		DocExpansion:         "list",
 		DomID:                "swagger-ui",
 		DeepLinking:          true,
@@ -148,36 +126,15 @@ func NewUIHandler(specURL string) fiber.Handler {
 	}
 
 	return func(c *fiber.Ctx) error {
-		matches := re.FindStringSubmatch(string(c.Request().URI().Path()))
-		path := ""
-		prefix := "/"
-		if len(matches) > 1 {
-			prefix = matches[1]
-		}
-		if len(matches) > 2 {
-			path = matches[2]
-		}
-
-		once.Do(func() {
-			handler.Prefix = prefix
-		})
-
-		fileExt := filepath.Ext(path)
+		path := strings.TrimPrefix(c.Path(), "/swagger/")
 		switch path {
 		case "":
-			return c.Redirect(filepath.Join(handler.Prefix, "index.html"), fiber.StatusTemporaryRedirect)
+			return c.Redirect("/swagger/index.html", fiber.StatusTemporaryRedirect)
 		case "index.html":
-			c.Type(fileExt[1:], "utf-8")
+			c.Type("html", "utf-8")
 			return index.Execute(c, config)
 		default:
-			fasthttpadaptor.NewFastHTTPHandler(handler)(c.Context())
-			switch fileExt {
-			case ".css":
-				c.Type(fileExt[1:], "utf-8")
-			case ".png", ".js":
-				c.Type(fileExt[1:])
-			}
-			return nil
+			return fiber.ErrNotFound
 		}
 	}
 }
@@ -868,29 +825,11 @@ const scalarIndexTemplate = `<!doctype html>
           "</div>",
         ].join("");
       });
-      script.src = "https://cdn.jsdelivr.net/npm/@scalar/api-reference";
+      script.src = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@` + scalarVersion + `";
     </script>
   </body>
 </html>
 `
-
-func EnsureSecurityDefinition(doc map[string]any) {
-	securityDefinitions, _ := doc["securityDefinitions"].(map[string]any)
-	if securityDefinitions == nil {
-		securityDefinitions = map[string]any{}
-		doc["securityDefinitions"] = securityDefinitions
-	}
-
-	apiKey, _ := securityDefinitions["ApiKeyAuth"].(map[string]any)
-	if apiKey == nil {
-		apiKey = map[string]any{}
-		securityDefinitions["ApiKeyAuth"] = apiKey
-	}
-	apiKey["type"] = "apiKey"
-	apiKey["name"] = "Authorization"
-	apiKey["in"] = "header"
-	apiKey["description"] = "Enter `Bearer <access_token>`."
-}
 
 const swaggerIndexTemplate = `<!DOCTYPE html>
 <html lang="en">
@@ -898,9 +837,7 @@ const swaggerIndexTemplate = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <title>Swagger UI</title>
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,700|Source+Code+Pro:300,600|Titillium+Web:400,600,700" rel="stylesheet">
-  <link rel="stylesheet" type="text/css" href="./swagger-ui.css" >
-  <link rel="icon" type="image/png" href="./favicon-32x32.png" sizes="32x32" />
-  <link rel="icon" type="image/png" href="./favicon-16x16.png" sizes="16x16" />
+  <link rel="stylesheet" type="text/css" href="{{.CSSURL}}" >
   <style>
     html
     {
@@ -938,8 +875,8 @@ const swaggerIndexTemplate = `<!DOCTYPE html>
 
 <div id="swagger-ui"></div>
 
-<script src="./swagger-ui-bundle.js"> </script>
-<script src="./swagger-ui-standalone-preset.js"> </script>
+<script src="{{.BundleURL}}"> </script>
+<script src="{{.PresetURL}}"> </script>
 <script>
 window.onload = function() {
   const tagOrder = [
@@ -1009,19 +946,6 @@ window.onload = function() {
 </html>
 `
 
-func setSwaggerMetadata(doc map[string]any) {
-	info, _ := doc["info"].(map[string]any)
-	if info == nil {
-		info = map[string]any{}
-		doc["info"] = info
-	}
-
-	info["title"] = swaggerBaseTitle
-	info["description"] = swaggerBaseDescription
-	info["version"] = swaggerVersion
-	doc["tags"] = swaggerTags(doc)
-}
-
 func primaryTagOrder() []string {
 	return []string{
 		"Counts",
@@ -1039,90 +963,4 @@ func primaryTagOrder() []string {
 		"Dates",
 		"Lists",
 	}
-}
-
-// promoteQueryOperations preserves QUERY semantics in Swagger 2.0 through a
-// vendor-extension operation. Swag only accepts the standard Swagger verbs,
-// so source annotations use POST as a generation placeholder with
-// x-http-method=QUERY; the served document never advertises those operations
-// as POST.
-func promoteQueryOperations(doc map[string]any) {
-	paths, _ := doc["paths"].(map[string]any)
-	for _, rawPath := range paths {
-		path, _ := rawPath.(map[string]any)
-		post, _ := path["post"].(map[string]any)
-		method, _ := post["x-http-method"].(string)
-		if !strings.EqualFold(method, "QUERY") {
-			continue
-		}
-		post["x-http-method"] = "QUERY"
-		path["x-query"] = post
-		delete(path, "post")
-	}
-}
-
-func swaggerTags(doc map[string]any) []map[string]string {
-	seen := map[string]bool{}
-	out := []map[string]string{}
-	for _, name := range primaryTagOrder() {
-		out = append(out, map[string]string{"name": name})
-		seen[name] = true
-	}
-
-	tags, _ := doc["tags"].([]any)
-	hasOther := false
-	for _, tag := range tags {
-		tagMap, _ := tag.(map[string]any)
-		name, _ := tagMap["name"].(string)
-		if name == "Other" {
-			hasOther = true
-			continue
-		}
-		if name == "" || seen[name] {
-			continue
-		}
-		out = append(out, map[string]string{"name": name})
-		seen[name] = true
-	}
-
-	operationTags := operationTagNames(doc)
-	for _, name := range operationTags {
-		if name == "Other" {
-			hasOther = true
-			continue
-		}
-		if seen[name] {
-			continue
-		}
-		out = append(out, map[string]string{"name": name})
-		seen[name] = true
-	}
-	if hasOther && !seen["Other"] {
-		out = append(out, map[string]string{"name": "Other"})
-	}
-	return out
-}
-
-func operationTagNames(doc map[string]any) []string {
-	paths, _ := doc["paths"].(map[string]any)
-	seen := map[string]bool{}
-	for _, rawPath := range paths {
-		path, _ := rawPath.(map[string]any)
-		for _, method := range []string{"get", "post", "put", "patch", "delete", "options", "head", "x-query"} {
-			operation, _ := path[method].(map[string]any)
-			rawTags, _ := operation["tags"].([]any)
-			for _, rawTag := range rawTags {
-				name, _ := rawTag.(string)
-				if name != "" {
-					seen[name] = true
-				}
-			}
-		}
-	}
-	names := make([]string, 0, len(seen))
-	for name := range seen {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }

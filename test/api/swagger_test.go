@@ -15,16 +15,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func TestEnsureSwaggerSecurityDefinitionAddsAuthorizationScheme(t *testing.T) {
-	doc := map[string]any{}
-
-	swaggerdocs.EnsureSecurityDefinition(doc)
-
-	securityDefinitions, ok := doc["securityDefinitions"].(map[string]any)
+func TestOpenAPIDocumentIncludesAuthorizationScheme(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	components, ok := doc["components"].(map[string]any)
 	if !ok {
-		t.Fatal("expected securityDefinitions to be added")
+		t.Fatal("expected OpenAPI components")
 	}
-	apiKey, ok := securityDefinitions["ApiKeyAuth"].(map[string]any)
+	securitySchemes, ok := components["securitySchemes"].(map[string]any)
+	if !ok {
+		t.Fatal("expected OpenAPI security schemes")
+	}
+	apiKey, ok := securitySchemes["ApiKeyAuth"].(map[string]any)
 	if !ok {
 		t.Fatal("expected ApiKeyAuth definition to be added")
 	}
@@ -54,7 +55,7 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 		for _, marker := range []string{
 			`id="api-reference"`,
 			`data-url="/openapi.json"`,
-			`https://cdn.jsdelivr.net/npm/@scalar/api-reference`,
+			`https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.63.0`,
 			`theme: "none"`,
 			`layout: "modern"`,
 			`customCss: document.getElementById("ck-scalar-theme").textContent`,
@@ -88,22 +89,26 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 	}
 }
 
-func TestSwaggerUIHandlersServeAssetsIndependently(t *testing.T) {
+func TestSwaggerUIHandlerUsesPinnedAssets(t *testing.T) {
 	app := fiber.New()
 	app.Get("/swagger/*", swaggerdocs.NewUIHandler("/openapi.json"))
 
-	for _, path := range []string{
-		"/swagger/index.html",
-		"/swagger/swagger-ui.css",
-		"/swagger/swagger-ui-bundle.js",
+	req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	for _, marker := range []string{
+		"swagger-ui-dist@5.32.11/swagger-ui.css",
+		"swagger-ui-dist@5.32.11/swagger-ui-bundle.js",
+		"swagger-ui-dist@5.32.11/swagger-ui-standalone-preset.js",
 	} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("request %s failed: %v", path, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200 for %s, got %d", path, resp.StatusCode)
+		if !strings.Contains(string(body), marker) {
+			t.Fatalf("expected pinned Swagger UI asset %q", marker)
 		}
 	}
 }
@@ -165,17 +170,17 @@ func TestCurrentUserDocIncludesAccountSummary(t *testing.T) {
 	for _, path := range []string{"/v2/me", "/v2/auth/me"} {
 		operation := paths[path].(map[string]any)["get"].(map[string]any)
 		response := operation["responses"].(map[string]any)["200"].(map[string]any)
-		schema := response["schema"].(map[string]any)
-		if schema["$ref"] != "#/definitions/modelsv2.CurrentUserInfo" {
+		schema := openAPIResponseSchema(t, response)
+		if schema["$ref"] != "#/components/schemas/modelsv2.CurrentUserInfo" {
 			t.Fatalf("%s current-user schema = %v", path, schema["$ref"])
 		}
 	}
 
-	definitions := doc["definitions"].(map[string]any)
+	definitions := swaggerDefinitions(t, doc)
 	currentUser := definitions["modelsv2.CurrentUserInfo"].(map[string]any)
 	properties := currentUser["properties"].(map[string]any)
 	accountSummary := properties["account_summary"].(map[string]any)
-	if accountSummary["$ref"] != "#/definitions/modelsv2.UserAccountSummary" {
+	if accountSummary["$ref"] != "#/components/schemas/modelsv2.UserAccountSummary" {
 		t.Fatalf("account_summary schema = %v", accountSummary["$ref"])
 	}
 	summary := definitions["modelsv2.UserAccountSummary"].(map[string]any)
@@ -208,10 +213,7 @@ func TestAutoboardOpenAPIUsesTypedCleanBreakContract(t *testing.T) {
 		t.Fatal("legacy partial PATCH autoboard operation is still documented")
 	}
 
-	definitions, ok := doc["definitions"].(map[string]any)
-	if !ok {
-		t.Fatal("expected Swagger definitions")
-	}
+	definitions := swaggerDefinitions(t, doc)
 	request, ok := definitions["modelsv2.CreateAutoBoardRequest"].(map[string]any)
 	if !ok {
 		t.Fatal("expected typed create autoboard definition")
@@ -249,9 +251,9 @@ func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 	if _, exists := homePath["post"]; exists {
 		t.Fatal("did not expect POST documentation for the RFC QUERY route")
 	}
-	query, ok := homePath["x-query"].(map[string]any)
-	if !ok || query["x-http-method"] != "QUERY" {
-		t.Fatal("expected x-query QUERY operation for /v2/home/activity")
+	query, ok := homePath["query"].(map[string]any)
+	if !ok {
+		t.Fatal("expected native QUERY operation for /v2/home/activity")
 	}
 	assertTags(t, query, []string{"Activity & Inactivity"})
 
@@ -268,7 +270,7 @@ func TestHomePlatformOpenAPIUsesRFCQueryAndTypedContracts(t *testing.T) {
 	definitions := swaggerDefinitions(t, doc)
 	accountProps := swaggerDefinitionProperties(t, definitions, "modelsv2.AccountsLinkedAccount")
 	lastLogin, exists := accountProps["last_login"].(map[string]any)
-	if !exists || lastLogin["type"] != "string" || lastLogin["format"] != "date-time" || lastLogin["x-nullable"] != true {
+	if !exists || !reflect.DeepEqual(lastLogin["type"], []any{"string", "null"}) || lastLogin["format"] != "date-time" {
 		t.Fatalf("expected nullable date-time AccountsLinkedAccount.last_login, got %v", accountProps["last_login"])
 	}
 	if hidden, exists := accountProps["hidden"].(map[string]any); !exists || hidden["type"] != "boolean" {
@@ -303,8 +305,8 @@ func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
 
 	definitions := swaggerDefinitions(t, doc)
 	groupedProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentGroupedResponse")
-	assertArrayItemsRef(t, groupedProps["players"], "#/definitions/modelsv2.SearchRecentPlayerItem")
-	assertArrayItemsRef(t, groupedProps["clans"], "#/definitions/modelsv2.SearchRecentClanItem")
+	assertArrayItemsRef(t, groupedProps["players"], "#/components/schemas/modelsv2.SearchRecentPlayerItem")
+	assertArrayItemsRef(t, groupedProps["clans"], "#/components/schemas/modelsv2.SearchRecentClanItem")
 
 	playerProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentPlayerItem")
 	for _, field := range []string{"type", "player_tag", "clan_tag"} {
@@ -322,8 +324,8 @@ func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
 			t.Fatalf("expected SearchRecentPlayerItem not to expose clan-only field %s", field)
 		}
 	}
-	assertRef(t, playerProps["clan"], "#/definitions/modelsv2.SearchRecentClan")
-	assertRef(t, playerProps["league"], "#/definitions/modelsv2.SearchRecentLeague")
+	assertRef(t, playerProps["clan"], "#/components/schemas/modelsv2.SearchRecentClan")
+	assertRef(t, playerProps["league"], "#/components/schemas/modelsv2.SearchRecentLeague")
 
 	clanItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentClanItem")
 	for _, field := range []string{"type", "player_tag", "clan_tag", "townHallLevel", "clan", "league"} {
@@ -336,7 +338,7 @@ func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
 			t.Fatalf("expected SearchRecentClanItem to expose %s", field)
 		}
 	}
-	assertRef(t, clanItemProps["badgeUrls"], "#/definitions/modelsv2.SearchRecentBadgeURLs")
+	assertRef(t, clanItemProps["badgeUrls"], "#/components/schemas/modelsv2.SearchRecentBadgeURLs")
 
 	badgeProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentBadgeURLs")
 	if _, exists := badgeProps["large"]; !exists {
@@ -346,9 +348,9 @@ func TestLinksSearchOpenAPICleansRecentAndBookmarkShapes(t *testing.T) {
 		t.Fatal("expected recent badgeUrls schema not to use additionalProperties")
 	}
 	recentClanProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentClan")
-	assertRef(t, recentClanProps["badgeUrls"], "#/definitions/modelsv2.SearchRecentBadgeURLs")
+	assertRef(t, recentClanProps["badgeUrls"], "#/components/schemas/modelsv2.SearchRecentBadgeURLs")
 	leagueProps := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchRecentLeague")
-	assertRef(t, leagueProps["iconUrls"], "#/definitions/modelsv2.SearchRecentLeagueIconURLs")
+	assertRef(t, leagueProps["iconUrls"], "#/components/schemas/modelsv2.SearchRecentLeagueIconURLs")
 
 	for _, name := range []string{"modelsv2.SearchBookmarkRequest", "modelsv2.SearchBookmarkOrderRequest", "modelsv2.SearchBookmarkItem"} {
 		props := swaggerDefinitionProperties(t, definitions, name)
@@ -530,10 +532,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		assertTags(t, operation, []string{"Other"})
 	}
 
-	definitions, ok := doc["definitions"].(map[string]any)
-	if !ok {
-		t.Fatal("expected swagger definitions")
-	}
+	definitions := swaggerDefinitions(t, doc)
 	joinLeaveResponse, ok := definitions["modelsv2.JoinLeaveResponse"].(map[string]any)
 	if !ok {
 		t.Fatal("expected JoinLeaveResponse definition")
@@ -754,7 +753,7 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 	}
 
 	response := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerStatHistoryResponse")
-	assertArrayItemsRef(t, response["items"], "#/definitions/modelsv2.PlayerStatChange")
+	assertArrayItemsRef(t, response["items"], "#/components/schemas/modelsv2.PlayerStatChange")
 
 	item := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerStatChange")
 	for _, field := range []string{
@@ -769,7 +768,7 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 			t.Fatalf("PlayerStatChange missing %s", field)
 		}
 	}
-	if clanTag, ok := item["clanTag"].(map[string]any); !ok || clanTag["x-nullable"] != true {
+	if clanTag, ok := item["clanTag"].(map[string]any); !ok || !isNullableType(clanTag, "string") {
 		t.Fatalf("PlayerStatChange.clanTag must be nullable: %#v", item["clanTag"])
 	}
 	for _, retired := range []string{
@@ -811,12 +810,12 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 	}
 	donationsOperation := paths["/v2/server/{server_id}/leaderboards/donations"].(map[string]any)["get"].(map[string]any)
 	donationsResponses := donationsOperation["responses"].(map[string]any)
-	donationsSchema := donationsResponses["200"].(map[string]any)["schema"]
-	assertRef(t, donationsSchema, "#/definitions/modelsv2.ServerDonationsLeaderboardResponse")
+	donationsSchema := openAPIResponseSchema(t, donationsResponses["200"].(map[string]any))
+	assertRef(t, donationsSchema, "#/components/schemas/modelsv2.ServerDonationsLeaderboardResponse")
 	clanGamesOperation := paths["/v2/server/{server_id}/leaderboards/clan-games"].(map[string]any)["get"].(map[string]any)
 	clanGamesResponses := clanGamesOperation["responses"].(map[string]any)
-	clanGamesSchema := clanGamesResponses["200"].(map[string]any)["schema"]
-	assertRef(t, clanGamesSchema, "#/definitions/modelsv2.ServerClanGamesLeaderboardResponse")
+	clanGamesSchema := openAPIResponseSchema(t, clanGamesResponses["200"].(map[string]any))
+	assertRef(t, clanGamesSchema, "#/components/schemas/modelsv2.ServerClanGamesLeaderboardResponse")
 }
 
 func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *testing.T) {
@@ -832,7 +831,7 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 	category := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerRankingCategory")
 	for _, field := range []string{"points", "globalRank", "locationId", "locationName", "countryCode", "localRank"} {
 		property, exists := category[field].(map[string]any)
-		if !exists || property["x-nullable"] != true {
+		if !exists || !isNullable(property) {
 			t.Fatalf("PlayerRankingCategory.%s must be present and nullable: %#v", field, category[field])
 		}
 	}
@@ -1125,8 +1124,9 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	clanLegendParameters := clanLegendGet["parameters"].([]any)
 	for _, raw := range clanLegendParameters {
 		parameter := raw.(map[string]any)
-		if parameter["name"] == "limit" && parameter["maximum"] != float64(1000) {
-			t.Fatalf("clan Legend limit maximum = %#v, want 1000", parameter["maximum"])
+		schema, _ := parameter["schema"].(map[string]any)
+		if parameter["name"] == "limit" && schema["maximum"] != float64(1000) {
+			t.Fatalf("clan Legend limit maximum = %#v, want 1000", schema["maximum"])
 		}
 	}
 	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
@@ -1204,13 +1204,14 @@ func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 		if _, exists := operation["post"]; exists {
 			t.Fatalf("expected %s not to advertise POST", path)
 		}
-		query, ok := operation["x-query"].(map[string]any)
-		if !ok || query["x-http-method"] != "QUERY" {
-			t.Fatalf("expected %s to contain x-query QUERY operation, got %v", path, operation)
+		query, ok := operation["query"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected %s to contain a native QUERY operation, got %v", path, operation)
 		}
-		consumes, _ := query["consumes"].([]any)
-		if len(consumes) == 0 || consumes[0] != "application/json" {
-			t.Fatalf("expected %s QUERY operation to consume application/json, got %v", path, consumes)
+		requestBody, _ := query["requestBody"].(map[string]any)
+		content, _ := requestBody["content"].(map[string]any)
+		if _, ok := content["application/json"]; !ok {
+			t.Fatalf("expected %s QUERY operation to accept application/json, got %v", path, requestBody)
 		}
 	}
 }
@@ -1228,12 +1229,12 @@ func TestSearchOpenAPIUsesCompactTypedContracts(t *testing.T) {
 	if _, ok := clan["badgeUrls"]; ok {
 		t.Fatal("clan search result exposes badgeUrls instead of compact badge")
 	}
-	assertRef(t, clan["location"], "#/definitions/modelsv2.SearchLocation")
-	assertRef(t, clan["warLeague"], "#/definitions/modelsv2.SearchLeagueReference")
+	assertRef(t, clan["location"], "#/components/schemas/modelsv2.SearchLocation")
+	assertRef(t, clan["warLeague"], "#/components/schemas/modelsv2.SearchLeagueReference")
 
 	player := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchPlayerResult")
-	assertRef(t, player["leagueTier"], "#/definitions/modelsv2.SearchLeagueReference")
-	assertRef(t, player["clan"], "#/definitions/modelsv2.SearchPlayerClan")
+	assertRef(t, player["leagueTier"], "#/components/schemas/modelsv2.SearchLeagueReference")
+	assertRef(t, player["clan"], "#/components/schemas/modelsv2.SearchPlayerClan")
 	league := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchLeagueReference")
 	if _, ok := league["badge"]; ok {
 		t.Fatal("search league tier exposes an unwanted badge")
@@ -1265,7 +1266,7 @@ func TestServerLogAndReminderDestinationOpenAPIContract(t *testing.T) {
 	} {
 		props := swaggerDefinitionProperties(t, definitions, definition)
 		thread, ok := props["thread_id"].(map[string]any)
-		if !ok || thread["type"] != "string" || thread["x-nullable"] != true {
+		if !ok || !isNullableType(thread, "string") {
 			t.Fatalf("expected %s.thread_id to be nullable string, got %v", definition, props["thread_id"])
 		}
 	}
@@ -1274,9 +1275,9 @@ func TestServerLogAndReminderDestinationOpenAPIContract(t *testing.T) {
 	assertEnum(t, channelProps["type"], []any{"category", "text", "news", "forum"})
 
 	paths := swaggerPaths(t, doc)
-	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/logs", "put", "#/definitions/modelsv2.UpdateServerLogsRequest")
-	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders", "post", "#/definitions/modelsv2.CreateReminderRequest")
-	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders/{reminder_id}", "put", "#/definitions/modelsv2.UpdateReminderRequest")
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/logs", "put", "#/components/schemas/modelsv2.UpdateServerLogsRequest")
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders", "post", "#/components/schemas/modelsv2.CreateReminderRequest")
+	assertSwaggerBodyRef(t, paths, "/v2/server/{server_id}/reminders/{reminder_id}", "put", "#/components/schemas/modelsv2.UpdateReminderRequest")
 }
 
 func assertSwaggerBodyRef(t *testing.T, paths map[string]any, path, method, wantRef string) {
@@ -1289,19 +1290,13 @@ func assertSwaggerBodyRef(t *testing.T, paths map[string]any, path, method, want
 	if !ok {
 		t.Fatalf("expected %s %s operation", method, path)
 	}
-	params, _ := operation["parameters"].([]any)
-	for _, raw := range params {
-		param, _ := raw.(map[string]any)
-		if param["in"] != "body" {
-			continue
-		}
-		schema, _ := param["schema"].(map[string]any)
-		if schema["$ref"] != wantRef {
-			t.Fatalf("expected %s %s body ref %s, got %v", method, path, wantRef, schema)
-		}
-		return
+	requestBody, _ := operation["requestBody"].(map[string]any)
+	content, _ := requestBody["content"].(map[string]any)
+	mediaType, _ := content["application/json"].(map[string]any)
+	schema, _ := mediaType["schema"].(map[string]any)
+	if schema["$ref"] != wantRef {
+		t.Fatalf("expected %s %s body ref %s, got %v", method, path, wantRef, schema)
 	}
-	t.Fatalf("expected %s %s body parameter", method, path)
 }
 
 func buildSwaggerDoc(t *testing.T) map[string]any {
@@ -1319,11 +1314,32 @@ func buildSwaggerDoc(t *testing.T) map[string]any {
 
 func swaggerDefinitions(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
-	definitions, ok := doc["definitions"].(map[string]any)
+	components, ok := doc["components"].(map[string]any)
 	if !ok {
-		t.Fatal("expected swagger definitions")
+		t.Fatal("expected OpenAPI components")
 	}
-	return definitions
+	schemas, ok := components["schemas"].(map[string]any)
+	if !ok {
+		t.Fatal("expected OpenAPI component schemas")
+	}
+	return schemas
+}
+
+func openAPIResponseSchema(t *testing.T, response map[string]any) map[string]any {
+	t.Helper()
+	content, ok := response["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response content, got %v", response)
+	}
+	mediaType, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected application/json response, got %v", content)
+	}
+	schema, ok := mediaType["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response schema, got %v", mediaType)
+	}
+	return schema
 }
 
 func swaggerDefinitionProperties(t *testing.T, definitions map[string]any, name string) map[string]any {
@@ -1345,6 +1361,24 @@ func assertRef(t *testing.T, value any, want string) {
 	if ref["$ref"] != want {
 		t.Fatalf("expected ref %s, got %v", want, value)
 	}
+}
+
+func isNullable(schema map[string]any) bool {
+	types, ok := schema["type"].([]any)
+	if !ok {
+		return false
+	}
+	for _, schemaType := range types {
+		if schemaType == "null" {
+			return true
+		}
+	}
+	return false
+}
+
+func isNullableType(schema map[string]any, want string) bool {
+	types, ok := schema["type"].([]any)
+	return ok && reflect.DeepEqual(types, []any{want, "null"})
 }
 
 func assertSwaggerMaxItems(t *testing.T, value any, want float64) {
@@ -1381,7 +1415,8 @@ func assertParameterEnum(t *testing.T, value any, name string, want []any) {
 	for _, raw := range params {
 		param, _ := raw.(map[string]any)
 		if param["name"] == name {
-			if !reflect.DeepEqual(param["enum"], want) {
+			schema, _ := param["schema"].(map[string]any)
+			if !reflect.DeepEqual(schema["enum"], want) {
 				t.Fatalf("expected %s enum %v, got %v", name, want, param)
 			}
 			return

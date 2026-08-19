@@ -13082,7 +13082,7 @@ const docTemplate = `{
         },
         "/v2/stats/armies": {
             "post": {
-                "description": "Uses exact army_share_code + army_items + army_counts identity. QUERY is represented through x-http-method because Swagger 2.0 has no QUERY operation key.",
+                "description": "Uses exact army_share_code + army_items + army_counts identity.",
                 "consumes": [
                     "application/json"
                 ],

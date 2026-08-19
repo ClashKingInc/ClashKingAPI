@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -64,6 +65,26 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 	}
 	if !strings.Contains(body, "SwaggerUIBundle") {
 		t.Fatal("expected /swagger/index.html to serve Swagger UI html")
+	}
+	if !strings.Contains(body, "swagger-ui-dist@5.32.11") {
+		t.Fatal("expected /swagger/index.html to use the pinned OpenAPI 3.2 viewer")
+	}
+
+	resp, body = testDocsRequest(t, app, "/openapi.json")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /openapi.json to return 200, got %d", resp.StatusCode)
+	}
+	var document map[string]any
+	if err := json.Unmarshal([]byte(body), &document); err != nil {
+		t.Fatalf("decode /openapi.json: %v", err)
+	}
+	if document["openapi"] != "3.2.0" {
+		t.Fatalf("expected OpenAPI 3.2.0, got %v", document["openapi"])
+	}
+
+	resp, body = testDocsRequest(t, app, "/openapi.yaml")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(body, "components:") {
+		t.Fatalf("expected /openapi.yaml to serve the generated YAML document")
 	}
 }
 

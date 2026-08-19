@@ -281,6 +281,22 @@ func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
 	}
 }
 
+func TestSearchRoutesUseRFCQueryMethod(t *testing.T) {
+	app := newRegisteredRoutesTestApp()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	for _, path := range []string{"/v2/search/clan", "/v2/search/player"} {
+		if index := registeredRouteIndex(app, apptypes.MethodQuery, path); index < 0 {
+			t.Fatalf("expected %s to be registered with QUERY", path)
+		}
+		for _, method := range []string{fiber.MethodGet, fiber.MethodPost} {
+			if index := registeredRouteIndex(app, method, path); index >= 0 {
+				t.Fatalf("did not expect a %s compatibility route for %s", method, path)
+			}
+		}
+	}
+}
+
 func TestAutoboardsUseCleanBreakRoutes(t *testing.T) {
 	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })

@@ -11,6 +11,7 @@ type Deps struct {
 	Discord   *DiscordAdapter
 	Auth      *Authenticator
 	Cache     *CacheAdapter
+	Search    *ElasticsearchAdapter
 	Mailer    *Mailer
 	StartedAt time.Time
 }

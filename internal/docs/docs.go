@@ -7506,33 +7506,27 @@ const docTemplate = `{
             }
         },
         "/v2/search/clan": {
-            "get": {
-                "description": "Returns clans from recent searches, bookmarks, guild-linked clans, and CoC API.",
+            "post": {
+                "description": "Searches the clan Elasticsearch alias by name or exact tag with optional filters and cursor pagination.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Search"
                 ],
-                "summary": "Search for a clan by name or tag",
+                "summary": "Search clans",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Search query (clan name or tag)",
-                        "name": "query",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord user ID for personalised results",
-                        "name": "user_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Discord guild ID for guild clan filtering",
-                        "name": "guild_id",
-                        "in": "query"
+                        "description": "Clan search query",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchClanQuery"
+                        }
                     }
                 ],
                 "responses": {
@@ -7541,8 +7535,80 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/modelsv2.SearchClanResponse"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
                     }
-                }
+                },
+                "x-http-method": "QUERY"
+            }
+        },
+        "/v2/search/player": {
+            "post": {
+                "description": "Searches the player Elasticsearch alias by name or exact tag with optional filters and cursor pagination.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Search"
+                ],
+                "summary": "Search players",
+                "parameters": [
+                    {
+                        "description": "Player search query",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchPlayerQuery"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchPlayerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                },
+                "x-http-method": "QUERY"
             }
         },
         "/v2/search/{guild_id}/banned-players": {
@@ -20406,6 +20472,56 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.SearchClanFilters": {
+            "type": "object",
+            "properties": {
+                "clan_level": {
+                    "$ref": "#/definitions/modelsv2.SearchIntegerRange"
+                },
+                "cwl_league_ids": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "location_ids": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "members": {
+                    "$ref": "#/definitions/modelsv2.SearchIntegerRange"
+                }
+            }
+        },
+        "modelsv2.SearchClanQuery": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "properties": {
+                "cursor": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/modelsv2.SearchClanFilters"
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 25,
+                    "maximum": 200,
+                    "minimum": 1
+                },
+                "query": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 2
+                }
+            }
+        },
         "modelsv2.SearchClanResponse": {
             "type": "object",
             "properties": {
@@ -20414,16 +20530,25 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.SearchClanResult"
                     }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/modelsv2.SearchCursorPage"
                 }
             }
         },
         "modelsv2.SearchClanResult": {
             "type": "object",
             "properties": {
-                "level": {
+                "badge": {
+                    "type": "string"
+                },
+                "clanLevel": {
                     "type": "integer"
                 },
-                "memberCount": {
+                "location": {
+                    "$ref": "#/definitions/modelsv2.SearchLocation"
+                },
+                "members": {
                     "type": "integer"
                 },
                 "name": {
@@ -20432,11 +20557,134 @@ const docTemplate = `{
                 "tag": {
                     "type": "string"
                 },
-                "type": {
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.SearchLeagueReference"
+                }
+            }
+        },
+        "modelsv2.SearchCursorPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchIntegerRange": {
+            "type": "object",
+            "properties": {
+                "max": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "min": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "modelsv2.SearchLeagueReference": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchLocation": {
+            "type": "object",
+            "properties": {
+                "countryCode": {
                     "type": "string"
                 },
-                "warLeague": {
+                "id": {
+                    "type": "integer"
+                },
+                "isCountry": {
+                    "type": "boolean"
+                },
+                "localizedName": {
                     "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchPlayerClan": {
+            "type": "object",
+            "properties": {
+                "badge": {
+                    "type": "string"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.SearchPlayerFilters": {
+            "type": "object",
+            "properties": {
+                "clan_tags": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "league_ids": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "townhall_levels": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "modelsv2.SearchPlayerQuery": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "properties": {
+                "cursor": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/modelsv2.SearchPlayerFilters"
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 25,
+                    "maximum": 200,
+                    "minimum": 1
+                },
+                "query": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 2
                 }
             }
         },
@@ -20459,6 +20707,40 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.SearchPlayerReference"
                     }
+                }
+            }
+        },
+        "modelsv2.SearchPlayerResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.SearchPlayerResult"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/modelsv2.SearchCursorPage"
+                }
+            }
+        },
+        "modelsv2.SearchPlayerResult": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.SearchPlayerClan"
+                },
+                "leagueTier": {
+                    "$ref": "#/definitions/modelsv2.SearchLeagueReference"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
                 }
             }
         },

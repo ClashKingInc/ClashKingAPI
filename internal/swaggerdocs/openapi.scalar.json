@@ -13186,7 +13186,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "summary": "QUERY — Get Home activity",
+        "summary": "Get Home activity",
         "tags": [
           "Activity \u0026 Inactivity"
         ],
@@ -18502,7 +18502,7 @@
             "description": "Service Unavailable"
           }
         },
-        "summary": "QUERY — Search clans",
+        "summary": "Search clans",
         "tags": [
           "Search"
         ],
@@ -18565,7 +18565,7 @@
             "description": "Service Unavailable"
           }
         },
-        "summary": "QUERY — Search players",
+        "summary": "Search players",
         "tags": [
           "Search"
         ],
@@ -25286,7 +25286,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "QUERY — Query ranked army intelligence",
+        "summary": "Query ranked army intelligence",
         "tags": [
           "Stats"
         ],
@@ -25339,7 +25339,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "QUERY — Query CWL performance",
+        "summary": "Query CWL performance",
         "tags": [
           "Stats"
         ],
@@ -25392,7 +25392,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "QUERY — Query ranked item intelligence",
+        "summary": "Query ranked item intelligence",
         "tags": [
           "Stats"
         ],
@@ -25504,7 +25504,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "QUERY — Query ranked performance",
+        "summary": "Query ranked performance",
         "tags": [
           "Stats"
         ],
@@ -25557,7 +25557,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "QUERY — Query regular-war performance",
+        "summary": "Query regular-war performance",
         "tags": [
           "Stats"
         ],

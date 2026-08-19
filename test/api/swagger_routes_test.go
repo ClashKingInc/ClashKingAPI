@@ -37,6 +37,8 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 			`href="/swagger">Swagger</a>`,
 			`url: "\/openapi.scalar.json"`,
 			`customFetch: scalarFetch`,
+			`const labelScalarQueryMethods = () => {`,
+			`watchScalarQueryLabels();`,
 			`:where(input, textarea, select):focus-visible`,
 			`.open-api-client-button:focus-visible`,
 			`aria-label="Swagger" href="/swagger">Swagger</a>`,

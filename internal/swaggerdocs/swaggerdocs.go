@@ -817,6 +817,68 @@ const scalarIndexTemplate = `<!doctype html>
         return fetch(request);
       };
 
+      const isScalarQueryOperation = (value) => {
+        if (!value) {
+          return false;
+        }
+        return Array.from(queryPaths).some((path) => value.endsWith("POST" + path));
+      };
+
+      const replacePostLabel = (element) => {
+        element.querySelectorAll(".uppercase").forEach((label) => {
+          Array.from(label.childNodes).forEach((node) => {
+            if (node.nodeType === Node.TEXT_NODE && node.data.trim().toUpperCase() === "POST") {
+              node.data = node.data.replace(/POST/i, "QUERY");
+              label.classList.add("scalar-query-method");
+            }
+          });
+        });
+
+        element.querySelectorAll(".sr-only").forEach((label) => {
+          if (/HTTP Method:\s*POST/i.test(label.textContent || "")) {
+            Array.from(label.childNodes).forEach((node) => {
+              if (node.nodeType === Node.TEXT_NODE) {
+                node.data = node.data.replace(/POST/i, "QUERY");
+              }
+            });
+          }
+        });
+      };
+
+      const labelScalarQueryMethods = () => {
+        const app = document.getElementById("app");
+        if (!app) {
+          return;
+        }
+
+        app.querySelectorAll("[data-sidebar-id], [id]").forEach((element) => {
+          const operationID = element.getAttribute("data-sidebar-id") || element.id;
+          if (isScalarQueryOperation(operationID)) {
+            replacePostLabel(element);
+          }
+        });
+
+        app.querySelectorAll(".endpoint").forEach((endpoint) => {
+          const path = endpoint.querySelector(".endpoint-path")?.textContent?.trim();
+          if (queryPaths.has(path)) {
+            replacePostLabel(endpoint);
+          }
+        });
+      };
+
+      let scalarQueryLabelFrame = 0;
+      const watchScalarQueryLabels = () => {
+        labelScalarQueryMethods();
+        const app = document.getElementById("app");
+        if (!app) {
+          return;
+        }
+        new MutationObserver(() => {
+          cancelAnimationFrame(scalarQueryLabelFrame);
+          scalarQueryLabelFrame = requestAnimationFrame(labelScalarQueryMethods);
+        }).observe(app, { childList: true, subtree: true });
+      };
+
       const configuration = {
         url: "{{.URL}}",
         theme: "none",
@@ -830,7 +892,10 @@ const scalarIndexTemplate = `<!doctype html>
         withDefaultFonts: false,
         defaultOpenAllTags: false,
         customFetch: scalarFetch,
-        onLoaded: () => document.querySelector(".ck-loading")?.remove(),
+        onLoaded: () => {
+          document.querySelector(".ck-loading")?.remove();
+          watchScalarQueryLabels();
+        },
         customCss: document.getElementById("ck-scalar-theme").textContent,
         defaultHttpClient: {
           targetKey: "python",

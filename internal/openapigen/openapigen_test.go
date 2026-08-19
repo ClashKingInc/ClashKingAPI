@@ -73,8 +73,8 @@ func TestScalarAdapterMakesQueryOperationsVisibleWithoutChangingTheirMeaning(t *
 		if !ok || post["x-http-method"] != "QUERY" {
 			t.Fatalf("Scalar adapter does not mark %s as QUERY: %v", path, pathItem)
 		}
-		if !strings.HasPrefix(post["summary"].(string), "QUERY — ") {
-			t.Fatalf("Scalar adapter summary does not identify QUERY for %s", path)
+		if strings.HasPrefix(post["summary"].(string), "QUERY — ") {
+			t.Fatalf("Scalar adapter should leave the operation summary unchanged for %s", path)
 		}
 	}
 }

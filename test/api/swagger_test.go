@@ -38,6 +38,8 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 	app := fiber.New()
 	app.Get("/", swaggerdocs.NewScalarHandler("/openapi.json"))
 	app.Get("/docs", swaggerdocs.NewScalarHandler("/openapi.json"))
+	doc := buildSwaggerDoc(t)
+	paths := doc["paths"].(map[string]any)
 
 	for _, path := range []string{"/", "/docs"} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
@@ -61,6 +63,11 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 			`customCss: document.getElementById("ck-scalar-theme").textContent`,
 			`customFetch: scalarFetch`,
 			`request = new Request(request, { method: "QUERY" })`,
+			`const labelScalarQueryMethods = () => {`,
+			`value.endsWith("POST" + path)`,
+			`node.data = node.data.replace(/POST/i, "QUERY")`,
+			`new MutationObserver(() => {`,
+			`watchScalarQueryLabels();`,
 			`class="ck-docs-header"`,
 			`class="ck-brand-logo ck-brand-logo--dark"`,
 			`class="ck-brand-logo ck-brand-logo--light"`,
@@ -87,6 +94,12 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 		}
 		if strings.Contains(html, "Swagger fallback") || strings.Contains(html, "ck-product-label") {
 			t.Fatalf("expected Scalar html for %s to use the simplified documentation header", path)
+		}
+		for operationPath, pathItem := range paths {
+			renderedPath := strings.ReplaceAll(operationPath, "/", `\/`)
+			if _, ok := pathItem.(map[string]any)["query"]; ok && !strings.Contains(html, `"`+renderedPath+`",`) {
+				t.Fatalf("expected Scalar html for %s to discover QUERY operation %s", path, operationPath)
+			}
 		}
 	}
 }

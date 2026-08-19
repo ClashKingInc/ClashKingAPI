@@ -74,9 +74,6 @@ func ScalarAdapter(document []byte) ([]byte, error) {
 		}
 
 		query["x-http-method"] = "QUERY"
-		if summary := stringValue(query["summary"]); !strings.HasPrefix(summary, "QUERY — ") {
-			query["summary"] = "QUERY — " + summary
-		}
 		note := "**HTTP method:** `QUERY`. Scalar displays this through a POST compatibility view; requests from this page are still sent as QUERY."
 		if description := stringValue(query["description"]); description != "" {
 			query["description"] = note + "\n\n" + description

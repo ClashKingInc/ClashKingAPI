@@ -7357,11 +7357,13 @@ paths:
                         schema:
                             properties:
                                 file:
+                                    description: File to upload (max 25 MB)
                                     format: binary
                                     type: string
                             required:
                                 - file
                             type: object
+                required: true
             responses:
                 "200":
                     content:
@@ -12489,11 +12491,13 @@ paths:
                         schema:
                             properties:
                                 file:
+                                    description: Image (max 25 MB)
                                     format: binary
                                     type: string
                             required:
                                 - file
                             type: object
+                required: true
             responses:
                 "200":
                     content:
@@ -13936,19 +13940,26 @@ paths:
                         schema:
                             properties:
                                 channel_id:
+                                    description: Discord channel ID
                                     type: string
                                 end_time:
+                                    description: End time (ISO 8601)
                                     type: string
                                 image:
+                                    description: Giveaway banner image
                                     format: binary
                                     type: string
                                 now:
+                                    description: Start immediately (true/false)
                                     type: string
                                 prize:
+                                    description: Prize description
                                     type: string
                                 start_time:
+                                    description: Start time (ISO 8601)
                                     type: string
                                 winners:
+                                    description: Number of winners
                                     type: integer
                             required:
                                 - channel_id
@@ -13956,6 +13967,7 @@ paths:
                                 - prize
                                 - winners
                             type: object
+                required: true
             responses:
                 "200":
                     content:

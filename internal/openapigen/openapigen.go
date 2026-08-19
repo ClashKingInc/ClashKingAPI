@@ -251,7 +251,9 @@ func convertOperationParameters(value any, consumes []string) ([]any, map[string
 			if name == "" {
 				continue
 			}
-			formProperties[name] = parameterSchema(parameter)
+			property := parameterSchema(parameter)
+			copyKeys(parameter, property, "description")
+			formProperties[name] = property
 			if required, _ := parameter["required"].(bool); required {
 				formRequired = append(formRequired, name)
 			}
@@ -268,6 +270,9 @@ func convertOperationParameters(value any, consumes []string) ([]any, map[string
 		}
 		body = map[string]any{
 			"content": contentWithSchema(consumes, schema),
+		}
+		if len(formRequired) > 0 {
+			body["required"] = true
 		}
 	}
 

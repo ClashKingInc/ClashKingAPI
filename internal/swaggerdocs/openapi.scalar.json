@@ -11316,6 +11316,7 @@
               "schema": {
                 "properties": {
                   "file": {
+                    "description": "File to upload (max 25 MB)",
                     "format": "binary",
                     "type": "string"
                   }
@@ -11326,7 +11327,8 @@
                 "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -19415,6 +19417,7 @@
               "schema": {
                 "properties": {
                   "file": {
+                    "description": "Image (max 25 MB)",
                     "format": "binary",
                     "type": "string"
                   }
@@ -19425,7 +19428,8 @@
                 "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -22120,25 +22124,32 @@
               "schema": {
                 "properties": {
                   "channel_id": {
+                    "description": "Discord channel ID",
                     "type": "string"
                   },
                   "end_time": {
+                    "description": "End time (ISO 8601)",
                     "type": "string"
                   },
                   "image": {
+                    "description": "Giveaway banner image",
                     "format": "binary",
                     "type": "string"
                   },
                   "now": {
+                    "description": "Start immediately (true/false)",
                     "type": "string"
                   },
                   "prize": {
+                    "description": "Prize description",
                     "type": "string"
                   },
                   "start_time": {
+                    "description": "Start time (ISO 8601)",
                     "type": "string"
                   },
                   "winners": {
+                    "description": "Number of winners",
                     "type": "integer"
                   }
                 },
@@ -22151,7 +22162,8 @@
                 "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {

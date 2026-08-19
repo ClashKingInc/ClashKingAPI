@@ -129,11 +129,42 @@ func TestGeneratedDocumentUsesOpenAPI32Contracts(t *testing.T) {
 
 	upload := paths["/v2/cdn/upload"].(map[string]any)["post"].(map[string]any)
 	uploadBody := upload["requestBody"].(map[string]any)
+	if uploadBody["required"] != true {
+		t.Fatalf("required upload request body = %v", uploadBody["required"])
+	}
 	multipart := uploadBody["content"].(map[string]any)["multipart/form-data"].(map[string]any)
 	uploadSchema := multipart["schema"].(map[string]any)
 	file := uploadSchema["properties"].(map[string]any)["file"].(map[string]any)
 	if file["type"] != "string" || file["format"] != "binary" {
 		t.Fatalf("file upload schema = %v", file)
+	}
+	if file["description"] != "File to upload (max 25 MB)" {
+		t.Fatalf("file upload description = %v", file["description"])
+	}
+
+	baseUpload := paths["/v2/server/{server_id}/bases/images"].(map[string]any)["post"].(map[string]any)
+	baseUploadBody := baseUpload["requestBody"].(map[string]any)
+	if baseUploadBody["required"] != true {
+		t.Fatalf("required base image request body = %v", baseUploadBody["required"])
+	}
+	baseMultipart := baseUploadBody["content"].(map[string]any)["multipart/form-data"].(map[string]any)
+	baseFile := baseMultipart["schema"].(map[string]any)["properties"].(map[string]any)["file"].(map[string]any)
+	if baseFile["description"] != "Image (max 25 MB)" {
+		t.Fatalf("base image description = %v", baseFile["description"])
+	}
+
+	giveaway := paths["/v2/server/{server_id}/giveaways"].(map[string]any)["post"].(map[string]any)
+	giveawayBody := giveaway["requestBody"].(map[string]any)
+	if giveawayBody["required"] != true {
+		t.Fatalf("required giveaway request body = %v", giveawayBody["required"])
+	}
+	giveawayMultipart := giveawayBody["content"].(map[string]any)["multipart/form-data"].(map[string]any)
+	giveawayProperties := giveawayMultipart["schema"].(map[string]any)["properties"].(map[string]any)
+	if giveawayProperties["prize"].(map[string]any)["description"] != "Prize description" {
+		t.Fatalf("giveaway prize description = %v", giveawayProperties["prize"])
+	}
+	if giveawayProperties["image"].(map[string]any)["description"] != "Giveaway banner image" {
+		t.Fatalf("giveaway image description = %v", giveawayProperties["image"])
 	}
 
 	components := doc["components"].(map[string]any)

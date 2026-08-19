@@ -92,8 +92,8 @@ type elasticsearchMGetResponse struct {
 
 // searchClans searches the stable clan Elasticsearch alias.
 //
-// Swag only accepts the legacy Swagger 2 method set, so this is generated as
-// POST and promoted to QUERY by swaggerdocs.BuildDoc.
+// Swag only accepts the legacy Swagger 2 method set, so the source annotation
+// uses POST plus x-http-method. The OpenAPI generator emits native QUERY.
 //
 // @Summary Search clans
 // @Description Searches the clan Elasticsearch alias by name or exact tag with optional filters and cursor pagination.

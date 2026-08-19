@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected %s to return 200, got %d", path, resp.StatusCode)
 		}
-		if !strings.Contains(body, `id="api-reference"`) || !strings.Contains(body, `@scalar/api-reference`) {
+		if !strings.Contains(body, `id="scalar-loader"`) || !strings.Contains(body, `@scalar/api-reference`) {
 			t.Fatalf("expected %s to serve Scalar html", path)
 		}
 		for _, marker := range []string{
@@ -34,6 +35,10 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 			`href="/openapi.json"`,
 			`href="/swagger"`,
 			`href="/swagger">Swagger</a>`,
+			`url: "\/openapi.scalar.json"`,
+			`customFetch: scalarFetch`,
+			`const labelScalarQueryMethods = () => {`,
+			`watchScalarQueryLabels();`,
 			`:where(input, textarea, select):focus-visible`,
 			`.open-api-client-button:focus-visible`,
 			`aria-label="Swagger" href="/swagger">Swagger</a>`,
@@ -64,6 +69,26 @@ func TestRegisterSwaggerRoutesServesScalarByDefaultAndSwaggerFallback(t *testing
 	}
 	if !strings.Contains(body, "SwaggerUIBundle") {
 		t.Fatal("expected /swagger/index.html to serve Swagger UI html")
+	}
+	if !strings.Contains(body, "swagger-ui-dist@5.32.11") {
+		t.Fatal("expected /swagger/index.html to use the pinned OpenAPI 3.2 viewer")
+	}
+
+	resp, body = testDocsRequest(t, app, "/openapi.json")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /openapi.json to return 200, got %d", resp.StatusCode)
+	}
+	var document map[string]any
+	if err := json.Unmarshal([]byte(body), &document); err != nil {
+		t.Fatalf("decode /openapi.json: %v", err)
+	}
+	if document["openapi"] != "3.2.0" {
+		t.Fatalf("expected OpenAPI 3.2.0, got %v", document["openapi"])
+	}
+
+	resp, body = testDocsRequest(t, app, "/openapi.yaml")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(body, "components:") {
+		t.Fatalf("expected /openapi.yaml to serve the generated YAML document")
 	}
 }
 

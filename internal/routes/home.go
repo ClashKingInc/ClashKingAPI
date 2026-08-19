@@ -25,8 +25,8 @@ type normalizedHomeActivityMapping struct {
 
 // homeActivity returns the newest activity for explicitly supplied verified players and clans.
 //
-// Swag only accepts the legacy Swagger 2 method set, so this is generated as POST and promoted
-// to QUERY by swaggerdocs.BuildDoc. The registered HTTP method is always RFC QUERY.
+// Swag only accepts the legacy Swagger 2 method set, so the source annotation uses POST plus
+// x-http-method. The OpenAPI generator emits it as a native QUERY operation.
 //
 // @Summary Get Home activity
 // @Description Uses RFC QUERY with a JSON body to return the newest clan membership activity.

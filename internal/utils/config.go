@@ -70,6 +70,11 @@ func Load() (Config, error) {
 
 	landingOrigin := normalizeOrigin(os.Getenv("CLASHKING_LANDING_ORIGIN"))
 	dashboardOrigin := normalizeOrigin(os.Getenv("CLASHKING_DASHBOARD_ORIGIN"))
+	webAllowedOrigins := append(
+		parseOrigins(os.Getenv("WEB_ALLOWED_ORIGINS")),
+		landingOrigin,
+		dashboardOrigin,
+	)
 	cfg := Config{
 		TimescaleURL:                 buildTimescaleURL(os.Getenv),
 		ValkeyAddress:                buildValkeyAddress(os.Getenv),
@@ -92,7 +97,7 @@ func Load() (Config, error) {
 		WebTokenAudience:             firstNonEmpty(os.Getenv("WEB_TOKEN_AUDIENCE"), "clashking-web"),
 		LandingOrigin:                landingOrigin,
 		DashboardOrigin:              dashboardOrigin,
-		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin),
+		WebAllowedOrigins:            nonEmptyStrings(webAllowedOrigins...),
 		DiscordRedirectURI:           appendOriginPath(dashboardOrigin, "/auth/callback"),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
@@ -261,6 +266,17 @@ func nonEmptyStrings(values ...string) []string {
 	for _, value := range values {
 		if value != "" {
 			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func parseOrigins(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if origin := normalizeOrigin(part); origin != "" {
+			result = append(result, origin)
 		}
 	}
 	return result

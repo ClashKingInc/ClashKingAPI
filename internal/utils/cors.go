@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,17 +12,13 @@ const corsMaxAgeSeconds = "3600"
 // CORSMiddleware keeps public read-only data browser-readable while restricting
 // credentials, authorization headers, and browser session mutations to known clients.
 func CORSMiddleware(cfg Config) fiber.Handler {
-	allowed := make(map[string]struct{}, len(cfg.WebAllowedOrigins))
-	for _, origin := range cfg.WebAllowedOrigins {
-		allowed[strings.TrimSuffix(strings.TrimSpace(origin), "/")] = struct{}{}
-	}
 	return func(c *fiber.Ctx) error {
 		origin := strings.TrimSuffix(strings.TrimSpace(c.Get(fiber.HeaderOrigin)), "/")
 		if origin == "" {
 			return c.Next()
 		}
 
-		_, credentialed := allowed[origin]
+		credentialed := IsAllowedWebOrigin(cfg, origin)
 		public := isPublicCORSRequest(c)
 		if !credentialed && !public {
 			if c.Method() == fiber.MethodOptions {
@@ -58,11 +55,35 @@ func IsAllowedWebOrigin(cfg Config, origin string) bool {
 		return false
 	}
 	for _, allowed := range cfg.WebAllowedOrigins {
-		if origin == strings.TrimSuffix(strings.TrimSpace(allowed), "/") {
+		if webOriginMatches(strings.TrimSuffix(strings.TrimSpace(allowed), "/"), origin) {
 			return true
 		}
 	}
 	return false
+}
+
+func webOriginMatches(allowed, origin string) bool {
+	if allowed == origin {
+		return true
+	}
+
+	parts := strings.SplitN(allowed, "://*.", 2)
+	if len(parts) != 2 || strings.ContainsAny(parts[1], "/:?#") {
+		return false
+	}
+	candidate, err := url.Parse(origin)
+	if err != nil ||
+		candidate.Scheme != parts[0] ||
+		candidate.Port() != "" ||
+		candidate.Path != "" ||
+		candidate.RawQuery != "" ||
+		candidate.Fragment != "" ||
+		candidate.User != nil {
+		return false
+	}
+	host := strings.ToLower(candidate.Hostname())
+	suffix := "." + strings.ToLower(parts[1])
+	return strings.HasSuffix(host, suffix) && host != strings.TrimPrefix(suffix, ".")
 }
 
 func RequireWebOrigin(cfg Config) fiber.Handler {

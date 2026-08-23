@@ -80,3 +80,16 @@ func TestBuildValkeyAddressDoesNotAcceptRedisAliases(t *testing.T) {
 		t.Fatalf("buildValkeyAddress() = %q, want empty", got)
 	}
 }
+
+func TestParseOriginsTrimsCommaSeparatedValues(t *testing.T) {
+	got := parseOrigins(" https://app.clashk.ing/, ,https://*.clashkingapp.pages.dev ")
+	want := []string{"https://app.clashk.ing", "https://*.clashkingapp.pages.dev"}
+	if len(got) != len(want) {
+		t.Fatalf("parseOrigins() = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("parseOrigins()[%d] = %q, want %q", index, got[index], want[index])
+		}
+	}
+}

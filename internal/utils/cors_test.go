@@ -124,6 +124,41 @@ func TestCORSAllowedWebOriginGetsCredentialedPreflight(t *testing.T) {
 	}
 }
 
+func TestCORSConfiguredPreviewOriginPatternGetsCredentialedPreflight(t *testing.T) {
+	app := newCORSTestApp(Config{WebAllowedOrigins: []string{"https://*.clashkingapp.pages.dev"}})
+	request := httptest.NewRequest(fiber.MethodOptions, "/v2/auth/web/refresh", nil)
+	request.Header.Set(fiber.HeaderOrigin, "https://2b9347a7.clashkingapp.pages.dev")
+	request.Header.Set(fiber.HeaderAccessControlRequestMethod, fiber.MethodPost)
+	request.Header.Set(fiber.HeaderAccessControlRequestHeaders, "content-type")
+
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if response.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusNoContent)
+	}
+	if got := response.Header.Get(fiber.HeaderAccessControlAllowOrigin); got != "https://2b9347a7.clashkingapp.pages.dev" {
+		t.Fatalf("allow origin = %q", got)
+	}
+	if got := response.Header.Get(fiber.HeaderAccessControlAllowCredentials); got != "true" {
+		t.Fatalf("allow credentials = %q", got)
+	}
+}
+
+func TestCORSPreviewOriginPatternRejectsApexAndLookalikes(t *testing.T) {
+	cfg := Config{WebAllowedOrigins: []string{"https://*.clashkingapp.pages.dev"}}
+	for _, origin := range []string{
+		"https://clashkingapp.pages.dev",
+		"https://clashkingapp.pages.dev.attacker.example",
+		"http://preview.clashkingapp.pages.dev",
+	} {
+		if IsAllowedWebOrigin(cfg, origin) {
+			t.Fatalf("origin %q unexpectedly matched preview pattern", origin)
+		}
+	}
+}
+
 func TestCORSExplicitLocalhostOriginGetsCredentialedRefreshPreflight(t *testing.T) {
 	for _, origin := range []string{"http://localhost:3002", "http://127.0.0.1:3002"} {
 		t.Run(origin, func(t *testing.T) {

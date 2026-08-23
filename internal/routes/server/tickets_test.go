@@ -1,10 +1,37 @@
 package server
 
 import (
+	"encoding/json"
 	"testing"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 )
+
+func TestDecodeEmbedJSONPreservesLargeIntegers(t *testing.T) {
+	decoded, ok := decodeEmbedJSON([]byte(`{"application_id":9007199254740993}`)).(map[string]any)
+	if !ok {
+		t.Fatalf("expected an object, got %#v", decoded)
+	}
+	applicationID, ok := decoded["application_id"].(json.Number)
+	if !ok || applicationID.String() != "9007199254740993" {
+		t.Fatalf("expected the large integer to remain exact, got %#v", decoded["application_id"])
+	}
+
+	if got := decodeEmbedJSON(nil); got != nil {
+		t.Fatalf("expected empty JSON to return nil, got %#v", got)
+	}
+	if got := decodeEmbedJSON([]byte(`{"invalid"`)); got != nil {
+		t.Fatalf("expected invalid JSON to return nil, got %#v", got)
+	}
+}
+
+func TestTicketEmbedFromMapPreservesPayload(t *testing.T) {
+	payload := map[string]any{"content": "welcome", "application_id": json.Number("9007199254740993")}
+	got := ticketEmbedFromMap(payload)
+	if got["content"] != "welcome" || got["application_id"] != json.Number("9007199254740993") {
+		t.Fatalf("expected payload to be returned unchanged, got %#v", got)
+	}
+}
 
 func TestNormalizeApproveMessagesKeepsOnlyFirstNamedMessage(t *testing.T) {
 	got := normalizeApproveMessages([]modelsv2.ApproveMessage{

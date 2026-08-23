@@ -88,8 +88,8 @@ type UpdateApproveMessagesRequest struct {
 }
 
 type ServerEmbed struct {
-	Name string       `json:"name"`
-	Data DiscordEmbed `json:"data"`
+	Name string         `json:"name"`
+	Data map[string]any `json:"data"`
 }
 
 type ServerEmbedsResponse struct {
@@ -98,8 +98,8 @@ type ServerEmbedsResponse struct {
 }
 
 type UpsertEmbedRequest struct {
-	Name string       `json:"name"`
-	Data DiscordEmbed `json:"data"`
+	Name string         `json:"name"`
+	Data map[string]any `json:"data"`
 }
 
 type CreatePanelRequest struct {

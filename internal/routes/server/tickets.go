@@ -119,7 +119,7 @@ func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[strin
 	return items, rows.Err()
 }
 
-func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data modelsv2.DiscordEmbed) error {
+func ticketEmbedSave(c *fiber.Ctx, a apptypes.Deps, serverID int64, name string, data map[string]any) error {
 	_, err := a.Store.SQL.Exec(c.UserContext(), `
 		INSERT INTO server_custom_embeds (server_id, name, data, created_at, updated_at)
 		VALUES ($1, $2, $3::jsonb, now(), now())
@@ -601,7 +601,7 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
 		for _, d := range docs {
 			if _, ok := d["name"].(string); ok {
-				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: ticketEmbedFromMap(mapMaybe(d["data"]))})
+				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: mapMaybe(d["data"])})
 			}
 		}
 		sort.Slice(items, func(i, j int) bool {
@@ -782,33 +782,6 @@ func ticketIntMap(value any) map[string]int {
 		out[key] = asIntWithDefault(item, 0)
 	}
 	return out
-}
-
-func ticketEmbedFromMap(value map[string]any) modelsv2.DiscordEmbed {
-	embed := modelsv2.DiscordEmbed{
-		Title:       stringPtrMaybe(value["title"]),
-		Description: stringPtrMaybe(value["description"]),
-		URL:         stringPtrMaybe(value["url"]),
-		Timestamp:   stringPtrMaybe(value["timestamp"]),
-		Color:       intPtrMaybe(value["color"]),
-	}
-	if footer := mapMaybe(value["footer"]); len(footer) > 0 {
-		embed.Footer = &modelsv2.DiscordEmbedFooter{Text: serverAsString(footer["text"]), IconURL: stringPtrMaybe(footer["icon_url"])}
-	}
-	if image := mapMaybe(value["image"]); len(image) > 0 {
-		embed.Image = &modelsv2.DiscordEmbedMedia{URL: serverAsString(image["url"])}
-	}
-	if thumbnail := mapMaybe(value["thumbnail"]); len(thumbnail) > 0 {
-		embed.Thumbnail = &modelsv2.DiscordEmbedMedia{URL: serverAsString(thumbnail["url"])}
-	}
-	if author := mapMaybe(value["author"]); len(author) > 0 {
-		embed.Author = &modelsv2.DiscordEmbedAuthor{Name: serverAsString(author["name"]), URL: stringPtrMaybe(author["url"]), IconURL: stringPtrMaybe(author["icon_url"])}
-	}
-	for _, raw := range anySlice(value["fields"]) {
-		field := mapMaybe(raw)
-		embed.Fields = append(embed.Fields, modelsv2.DiscordEmbedField{Name: serverAsString(field["name"]), Value: serverAsString(field["value"]), Inline: asBool(field["inline"])})
-	}
-	return embed
 }
 
 func ticketApproveMessages(value any) []modelsv2.ApproveMessage {

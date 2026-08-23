@@ -1907,61 +1907,6 @@ components:
                         - forum
                     type: string
             type: object
-        modelsv2.DiscordEmbed:
-            properties:
-                author:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbedAuthor'
-                color:
-                    type: integer
-                description:
-                    type: string
-                fields:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.DiscordEmbedField'
-                    type: array
-                footer:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbedFooter'
-                image:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbedMedia'
-                thumbnail:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbedMedia'
-                timestamp:
-                    type: string
-                title:
-                    type: string
-                url:
-                    type: string
-            type: object
-        modelsv2.DiscordEmbedAuthor:
-            properties:
-                icon_url:
-                    type: string
-                name:
-                    type: string
-                url:
-                    type: string
-            type: object
-        modelsv2.DiscordEmbedField:
-            properties:
-                inline:
-                    type: boolean
-                name:
-                    type: string
-                value:
-                    type: string
-            type: object
-        modelsv2.DiscordEmbedFooter:
-            properties:
-                icon_url:
-                    type: string
-                text:
-                    type: string
-            type: object
-        modelsv2.DiscordEmbedMedia:
-            properties:
-                url:
-                    type: string
-            type: object
         modelsv2.DiscordEmoji:
             properties:
                 animated:
@@ -4805,7 +4750,8 @@ components:
         modelsv2.ServerEmbed:
             properties:
                 data:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbed'
+                    additionalProperties: {}
+                    type: object
                 name:
                     type: string
             type: object
@@ -5927,7 +5873,8 @@ components:
         modelsv2.UpsertEmbedRequest:
             properties:
                 data:
-                    $ref: '#/components/schemas/modelsv2.DiscordEmbed'
+                    additionalProperties: {}
+                    type: object
                 name:
                     type: string
             type: object

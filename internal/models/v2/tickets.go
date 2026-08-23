@@ -1,5 +1,10 @@
 package modelsv2
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
 type TicketButton struct {
 	CustomID string        `json:"custom_id"`
 	Label    string        `json:"label"`
@@ -88,8 +93,8 @@ type UpdateApproveMessagesRequest struct {
 }
 
 type ServerEmbed struct {
-	Name string       `json:"name"`
-	Data DiscordEmbed `json:"data"`
+	Name string         `json:"name"`
+	Data map[string]any `json:"data"`
 }
 
 type ServerEmbedsResponse struct {
@@ -98,8 +103,15 @@ type ServerEmbedsResponse struct {
 }
 
 type UpsertEmbedRequest struct {
-	Name string       `json:"name"`
-	Data DiscordEmbed `json:"data"`
+	Name string         `json:"name"`
+	Data map[string]any `json:"data"`
+}
+
+func (r *UpsertEmbedRequest) UnmarshalJSON(data []byte) error {
+	type requestAlias UpsertEmbedRequest
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	return decoder.Decode((*requestAlias)(r))
 }
 
 type CreatePanelRequest struct {

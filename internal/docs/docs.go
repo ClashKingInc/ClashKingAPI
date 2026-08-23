@@ -16714,91 +16714,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.DiscordEmbed": {
-            "type": "object",
-            "properties": {
-                "author": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbedAuthor"
-                },
-                "color": {
-                    "type": "integer"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "fields": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.DiscordEmbedField"
-                    }
-                },
-                "footer": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbedFooter"
-                },
-                "image": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbedMedia"
-                },
-                "thumbnail": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbedMedia"
-                },
-                "timestamp": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.DiscordEmbedAuthor": {
-            "type": "object",
-            "properties": {
-                "icon_url": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.DiscordEmbedField": {
-            "type": "object",
-            "properties": {
-                "inline": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.DiscordEmbedFooter": {
-            "type": "object",
-            "properties": {
-                "icon_url": {
-                    "type": "string"
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.DiscordEmbedMedia": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.DiscordEmoji": {
             "type": "object",
             "properties": {
@@ -21076,7 +20991,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbed"
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "name": {
                     "type": "string"
@@ -22762,7 +22678,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/modelsv2.DiscordEmbed"
+                    "type": "object",
+                    "additionalProperties": {}
                 },
                 "name": {
                     "type": "string"

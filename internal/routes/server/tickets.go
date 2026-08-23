@@ -115,7 +115,7 @@ func ticketEmbedList(c *fiber.Ctx, a apptypes.Deps, serverID int64) ([]map[strin
 		if err := rows.Scan(&name, &dataRaw, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
-		item := map[string]any{"name": name, "data": mapMaybe(decodeEmbedJSON(dataRaw)), "created_at": createdAt, "updated_at": updatedAt}
+		item := map[string]any{"name": name, "data": decodeEmbedJSON(dataRaw), "created_at": createdAt, "updated_at": updatedAt}
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -603,7 +603,7 @@ func getServerEmbeds(a apptypes.Deps) fiber.Handler {
 		items := make([]modelsv2.ServerEmbed, 0, len(docs))
 		for _, d := range docs {
 			if _, ok := d["name"].(string); ok {
-				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: ticketEmbedFromMap(mapMaybe(d["data"]))})
+				items = append(items, modelsv2.ServerEmbed{Name: serverAsString(d["name"]), Data: ticketEmbedPayload(d["data"])})
 			}
 		}
 		sort.Slice(items, func(i, j int) bool {
@@ -799,8 +799,12 @@ func decodeEmbedJSON(raw []byte) any {
 	return out
 }
 
-func ticketEmbedFromMap(value map[string]any) map[string]any {
-	return value
+func ticketEmbedPayload(value any) map[string]any {
+	payload, ok := value.(map[string]any)
+	if !ok {
+		return map[string]any{}
+	}
+	return payload
 }
 
 func ticketApproveMessages(value any) []modelsv2.ApproveMessage {

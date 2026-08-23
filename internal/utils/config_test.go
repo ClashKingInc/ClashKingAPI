@@ -93,3 +93,47 @@ func TestParseOriginsTrimsCommaSeparatedValues(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadIncludesConfiguredWebOrigins(t *testing.T) {
+	values := map[string]string{
+		"LOCAL":                           "TRUE",
+		"DEV_USER_ID":                     "test-user",
+		"TIMESCALE_HOST":                  "timescale",
+		"TIMESCALE_USERNAME":              "test",
+		"TIMESCALE_PASSWORD":              "test",
+		"TIMESCALE_DATABASE":              "test",
+		"DATA_ENCRYPTION_KEY":             "test-key",
+		"JWT_ACCESS_SECRET":               "test-access",
+		"JWT_REFRESH_SECRET":              "test-refresh",
+		"DISCORD_BOT_TOKEN":               "test-bot",
+		"DISCORD_CLIENT_ID":               "test-client",
+		"DISCORD_CLIENT_SECRET":           "test-client-secret",
+		"API_BOT_TOKEN":                   "test-api-token",
+		"CLASHKING_PROXY_INTERNAL_ORIGIN": "https://proxy.internal",
+		"CLASHKING_LANDING_ORIGIN":        "https://clashk.ing",
+		"CLASHKING_DASHBOARD_ORIGIN":      "https://dash.clashk.ing",
+		"WEB_ALLOWED_ORIGINS":             "https://app.clashk.ing, https://*.clashkingapp.pages.dev/",
+	}
+	for key, value := range values {
+		t.Setenv(key, value)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	want := []string{
+		"https://app.clashk.ing",
+		"https://*.clashkingapp.pages.dev",
+		"https://clashk.ing",
+		"https://dash.clashk.ing",
+	}
+	if len(cfg.WebAllowedOrigins) != len(want) {
+		t.Fatalf("WebAllowedOrigins = %#v, want %#v", cfg.WebAllowedOrigins, want)
+	}
+	for index := range want {
+		if cfg.WebAllowedOrigins[index] != want[index] {
+			t.Fatalf("WebAllowedOrigins[%d] = %q, want %q", index, cfg.WebAllowedOrigins[index], want[index])
+		}
+	}
+}

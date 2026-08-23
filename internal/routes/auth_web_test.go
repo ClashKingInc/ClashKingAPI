@@ -36,7 +36,9 @@ func TestWebRefreshCookieIsHostOnlySecureHttpOnlyAndStrict(t *testing.T) {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 
-	response, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/cookie", nil))
+	request := httptest.NewRequest(fiber.MethodGet, "/cookie", nil)
+	request.Host = "api.clashk.ing"
+	response, err := app.Test(request)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -64,6 +66,7 @@ func TestWebRefreshCookieUsesNoneOnlyForExplicitAllowedLocalOrigins(t *testing.T
 		"http://localhost:3002",
 		"http://127.0.0.1:3002",
 		"https://dash.clashk.ing",
+		"https://*.clashkingapp.pages.dev",
 	}}
 	for _, test := range []struct {
 		name   string
@@ -73,6 +76,7 @@ func TestWebRefreshCookieUsesNoneOnlyForExplicitAllowedLocalOrigins(t *testing.T
 		{name: "localhost", origin: "http://localhost:3002", want: "samesite=none"},
 		{name: "loopback", origin: "http://127.0.0.1:3002", want: "samesite=none"},
 		{name: "production", origin: "https://dash.clashk.ing", want: "samesite=strict"},
+		{name: "pages preview", origin: "https://2b9347a7.clashkingapp.pages.dev", want: "samesite=none"},
 		{name: "unlisted localhost", origin: "http://localhost:4000", want: "samesite=strict"},
 		{name: "lookalike", origin: "https://localhost.attacker.example", want: "samesite=strict"},
 	} {
@@ -83,6 +87,7 @@ func TestWebRefreshCookieUsesNoneOnlyForExplicitAllowedLocalOrigins(t *testing.T
 				return c.SendStatus(fiber.StatusNoContent)
 			})
 			request := httptest.NewRequest(fiber.MethodGet, "/cookie", nil)
+			request.Host = "api.clashk.ing"
 			request.Header.Set(fiber.HeaderOrigin, test.origin)
 			response, err := app.Test(request)
 			if err != nil {

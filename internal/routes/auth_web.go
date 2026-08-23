@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/net/publicsuffix"
 )
 
 const webRefreshCookieName = "ck_web_refresh"
@@ -289,7 +290,7 @@ func setWebRefreshCookie(c *fiber.Ctx, cfg apptypes.Config, token string) {
 		MaxAge:   30 * 24 * 60 * 60,
 		Secure:   webRefreshCookieSecure(cfg, requestOrigin),
 		HTTPOnly: true,
-		SameSite: webRefreshCookieSameSite(cfg, requestOrigin),
+		SameSite: webRefreshCookieSameSite(cfg, requestOrigin, c.Hostname()),
 	})
 }
 
@@ -303,7 +304,7 @@ func clearWebRefreshCookie(c *fiber.Ctx, cfg apptypes.Config) {
 		MaxAge:   -1,
 		Secure:   webRefreshCookieSecure(cfg, requestOrigin),
 		HTTPOnly: true,
-		SameSite: webRefreshCookieSameSite(cfg, requestOrigin),
+		SameSite: webRefreshCookieSameSite(cfg, requestOrigin, c.Hostname()),
 	})
 }
 
@@ -311,7 +312,7 @@ func webRefreshCookieSecure(cfg apptypes.Config, requestOrigin string) bool {
 	return !(cfg.Local && isAllowedLoopbackOrigin(cfg, requestOrigin))
 }
 
-func webRefreshCookieSameSite(cfg apptypes.Config, requestOrigin string) string {
+func webRefreshCookieSameSite(cfg apptypes.Config, requestOrigin, requestHost string) string {
 	if !apptypes.IsAllowedWebOrigin(cfg, requestOrigin) {
 		return fiber.CookieSameSiteStrictMode
 	}
@@ -326,7 +327,13 @@ func webRefreshCookieSameSite(cfg apptypes.Config, requestOrigin string) string 
 		}
 		return fiber.CookieSameSiteNoneMode
 	}
-	return fiber.CookieSameSiteStrictMode
+	originSite, originErr := publicsuffix.EffectiveTLDPlusOne(host)
+	requestURL, requestErr := url.Parse("https://" + strings.TrimSpace(requestHost))
+	requestSite, siteErr := publicsuffix.EffectiveTLDPlusOne(strings.ToLower(requestURL.Hostname()))
+	if originErr == nil && requestErr == nil && siteErr == nil && originSite == requestSite {
+		return fiber.CookieSameSiteStrictMode
+	}
+	return fiber.CookieSameSiteNoneMode
 }
 
 func isAllowedLoopbackOrigin(cfg apptypes.Config, requestOrigin string) bool {

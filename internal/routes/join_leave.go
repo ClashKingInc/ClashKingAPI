@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -83,7 +82,7 @@ func playerJoinLeaveTotals(a apptypes.Deps) fiber.Handler {
 		}
 		events = processJoinLeaveEvents(events)
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
-			"items": joinLeaveClanTotals(events, window, c.BaseURL()),
+			"items": joinLeaveClanTotals(events, window),
 		})
 	}
 }
@@ -121,7 +120,7 @@ func playerJoinLeaveShared(a apptypes.Deps) fiber.Handler {
 		playerEvents = processJoinLeaveEvents(playerEvents)
 		otherEvents = processJoinLeaveEvents(otherEvents)
 		return apptypes.JSON(c, fiber.StatusOK, map[string]any{
-			"items": joinLeaveSharedClanTotals(playerEvents, otherEvents, window, c.BaseURL()),
+			"items": joinLeaveSharedClanTotals(playerEvents, otherEvents, window),
 		})
 	}
 }
@@ -194,7 +193,7 @@ func joinLeaveResponse(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag 
 	if err != nil {
 		return nil, err
 	}
-	return joinLeaveBuildResponse(events, available, uniquePlayers, limit, scope, c.BaseURL()), nil
+	return joinLeaveBuildResponse(events, available, uniquePlayers, limit, scope), nil
 }
 
 func joinLeaveFullWindow() joinLeaveWindow {
@@ -357,13 +356,13 @@ func v2ParseISO8601QueryTime(c *fiber.Ctx, base string, op string, fallback time
 	return time.Time{}, apptypes.Error(http.StatusBadRequest, base+"["+op+"] must be an ISO-8601 date or timestamp")
 }
 
-func joinLeaveBuildResponse(rows []joinLeaveEventRow, available int, uniquePlayers int, limit int, scope joinLeaveScope, baseURL string) map[string]any {
+func joinLeaveBuildResponse(rows []joinLeaveEventRow, available int, uniquePlayers int, limit int, scope joinLeaveScope) map[string]any {
 	if limit <= 0 || limit > len(rows) {
 		limit = len(rows)
 	}
 	items := make([]modelsv2.JoinLeaveEvent, 0, limit)
 	for _, row := range rows[:limit] {
-		items = append(items, joinLeaveHistoryItem(row, scope == joinLeaveScopePlayer, baseURL))
+		items = append(items, joinLeaveHistoryItem(row, scope == joinLeaveScopePlayer))
 	}
 	response := map[string]any{
 		"items":     items,
@@ -375,7 +374,7 @@ func joinLeaveBuildResponse(rows []joinLeaveEventRow, available int, uniquePlaye
 	return response
 }
 
-func joinLeaveHistoryItem(row joinLeaveEventRow, includeClan bool, baseURL string) modelsv2.JoinLeaveEvent {
+func joinLeaveHistoryItem(row joinLeaveEventRow, includeClan bool) modelsv2.JoinLeaveEvent {
 	item := modelsv2.JoinLeaveEvent{
 		Time:          row.Time.UTC().Format(time.RFC3339),
 		Type:          row.Type,
@@ -385,27 +384,18 @@ func joinLeaveHistoryItem(row joinLeaveEventRow, includeClan bool, baseURL strin
 	}
 	if includeClan {
 		item.Clan = &modelsv2.JoinLeaveClan{
-			Name:  row.ClanName,
-			Tag:   row.ClanTag,
-			Badge: joinLeaveClanBadgeURL(baseURL, row.ClanTag),
+			Name: row.ClanName,
+			Tag:  row.ClanTag,
 		}
 	}
 	return item
 }
 
-func joinLeaveClanObject(tag string, name string, baseURL string) map[string]any {
+func joinLeaveClanObject(tag string, name string) map[string]any {
 	return map[string]any{
-		"name":  name,
-		"tag":   tag,
-		"badge": joinLeaveClanBadgeURL(baseURL, tag),
+		"name": name,
+		"tag":  tag,
 	}
-}
-
-func joinLeaveClanBadgeURL(baseURL string, tag string) string {
-	if tag == "" {
-		return ""
-	}
-	return strings.TrimRight(baseURL, "/") + "/v2/clan/" + url.PathEscape(tag) + "/badge"
 }
 
 func processJoinLeaveEvents(events []joinLeaveEventRow) []joinLeaveEventRow {
@@ -486,7 +476,7 @@ func nextJoinEvent(events []joinLeaveEventRow) (joinLeaveEventRow, bool) {
 	return joinLeaveEventRow{}, false
 }
 
-func joinLeaveClanTotals(events []joinLeaveEventRow, window joinLeaveWindow, baseURL string) []map[string]any {
+func joinLeaveClanTotals(events []joinLeaveEventRow, window joinLeaveWindow) []map[string]any {
 	totals := map[string]*joinLeaveClanTotal{}
 	for _, event := range events {
 		if event.Type == "join" {
@@ -499,7 +489,7 @@ func joinLeaveClanTotals(events []joinLeaveEventRow, window joinLeaveWindow, bas
 	out := make([]map[string]any, 0, len(totals))
 	for _, item := range totals {
 		out = append(out, map[string]any{
-			"clan":    joinLeaveClanObject(item.tag, item.name, baseURL),
+			"clan":    joinLeaveClanObject(item.tag, item.name),
 			"visits":  item.visits,
 			"minutes": item.minutes,
 		})
@@ -591,7 +581,7 @@ func joinLeaveIntervalFromEvent(event joinLeaveEventRow, start time.Time, end ti
 	}
 }
 
-func joinLeaveSharedClanTotals(leftEvents []joinLeaveEventRow, rightEvents []joinLeaveEventRow, window joinLeaveWindow, baseURL string) []modelsv2.JoinLeaveSharedClanTotal {
+func joinLeaveSharedClanTotals(leftEvents []joinLeaveEventRow, rightEvents []joinLeaveEventRow, window joinLeaveWindow) []modelsv2.JoinLeaveSharedClanTotal {
 	leftIntervals := joinLeaveClanIntervals(leftEvents, window)
 	rightIntervals := joinLeaveClanIntervals(rightEvents, window)
 	totals := map[string]*joinLeaveSharedTotal{}
@@ -620,9 +610,8 @@ func joinLeaveSharedClanTotals(leftEvents []joinLeaveEventRow, rightEvents []joi
 	for _, item := range totals {
 		out = append(out, modelsv2.JoinLeaveSharedClanTotal{
 			Clan: modelsv2.JoinLeaveClan{
-				Name:  item.name,
-				Tag:   item.tag,
-				Badge: joinLeaveClanBadgeURL(baseURL, item.tag),
+				Name: item.name,
+				Tag:  item.tag,
 			},
 			Minutes: item.minutes,
 		})

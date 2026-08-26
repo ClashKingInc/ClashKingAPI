@@ -32,7 +32,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 		return authServerQueryWrite(a, wrap, handler)
 	}
 
-	app.Get("/v2/clan/:clan_tag/badge", clanBadge(a))
 	app.Post("/v2/achievements/check", wrap(checkAchievements(a)))
 
 	// Register the static server path before the generic two-parameter link paths.

@@ -130,6 +130,7 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/battlelogs/items/league/:league_id/hitrate",
 		"/v2/battlelogs/items/top200/usage",
 		"/v2/battlelogs/items/top200/hitrate",
+		"/v2/clan/:clan_tag/badge",
 		"/global/war/townhall/:townhall_level/hitrate/weekly",
 		"/global/war/completed/daily",
 		"/war/:clan_tag/previous",

@@ -3705,9 +3705,6 @@
       },
       "modelsv2.JoinLeaveClan": {
         "properties": {
-          "badge": {
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
@@ -11226,59 +11223,6 @@
         "summary": "Upload a file to the ClashKing CDN",
         "tags": [
           "Other"
-        ]
-      }
-    },
-    "/v2/clan/{clan_tag}/badge": {
-      "get": {
-        "description": "Returns the clan badge image as a PNG.",
-        "parameters": [
-          {
-            "description": "Clan tag",
-            "in": "path",
-            "name": "clan_tag",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "image/png": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "image/png": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "500": {
-            "content": {
-              "image/png": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get clan badge image",
-        "tags": [
-          "Clan"
         ]
       }
     },

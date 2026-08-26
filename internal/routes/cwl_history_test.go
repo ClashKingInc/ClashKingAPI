@@ -162,13 +162,9 @@ func TestCWLQueriesUseFinalTypedSchema(t *testing.T) {
 		"LEFT JOIN cwl_standings AS s ON s.cwl_id = gc.cwl_id AND s.clan_tag = gc.clan_tag",
 		"FROM cwl_standings", "ORDER BY global_rank NULLS LAST, group_rank NULLS LAST, clan_tag",
 		"JOIN wars AS w ON w.war_tag = round_tags.war_tag",
-		"JOIN war_members AS member",
-		"member.player_tag = $2",
-		"LEFT JOIN war_attacks AS attack",
-		"GREATEST(lineup.attacks_per_member - attack_counts.attack_count, 0)",
-		"RANK() OVER (PARTITION BY clan_tag ORDER BY stars DESC)",
-		"RANK() OVER (ORDER BY stars DESC)",
-		"group_state.state = 'ended'",
+		"sqlArchiveWarsContext(c.UserContext(), a, warIDs)",
+		"for _, attack := range member.Attacks",
+		"strings.ToLower(state) != \"ended\"",
 	} {
 		if !strings.Contains(string(warSource), required) {
 			t.Errorf("typed CWL reader missing %q", required)

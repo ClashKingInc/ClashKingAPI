@@ -62,26 +62,4 @@ func TestStatsQueriesAgainstTimescale(t *testing.T) {
 		t.Fatal("expected no attributed sample when battle month has no matching ranked membership")
 	}
 
-	warWindow := statsTimeWindow{
-		start:        time.Date(2023, 3, 1, 0, 0, 0, 0, time.UTC),
-		endExclusive: time.Date(2023, 4, 10, 0, 0, 0, 0, time.UTC),
-	}
-	warMetrics, err := loadStatsPerformance(ctx, pool, statsWarSourceSQL, []string{
-		"event_time >= $1", "event_time < $2", "war_type = 'random'", "townhall_level = opponent_townhall_level",
-	}, []any{warWindow.start, warWindow.endExclusive})
-	if err != nil {
-		t.Fatalf("war query failed: %v", err)
-	}
-	if !warMetrics.Available {
-		t.Fatal("expected seeded regular-war metrics")
-	}
-	cwlMetrics, err := loadStatsPerformance(ctx, pool, statsCWLSourceSQL, []string{
-		"event_time >= $1", "event_time < $2", "townhall_level = opponent_townhall_level",
-	}, []any{warWindow.start, warWindow.endExclusive})
-	if err != nil {
-		t.Fatalf("CWL query failed: %v", err)
-	}
-	if !cwlMetrics.Available {
-		t.Fatal("expected seeded CWL metrics")
-	}
 }

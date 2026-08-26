@@ -1,15 +1,18 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -369,23 +372,9 @@ func computeRosterMetricWithParameters(c *fiber.Ctx, a apptypes.Deps, rosterID u
 	args := []any{rosterID}
 	switch metricID {
 	case "war.hit_rate", "war.hit_rate.30d":
-		query = `
-			SELECT m.tag, 100.0 * avg((a.stars = 3)::int)
-			FROM roster_members m LEFT JOIN war_attacks a
-			  ON a.attacker_tag = m.tag AND a.war_end_time >= now() - $2::int * interval '1 day'
-			WHERE m.roster_id = $1 GROUP BY m.tag
-		`
-		args = append(args, rosterMetricIntParameter(parameters, "windowDays", 30))
+		return computeRosterWarMetric(c, a, rosterID, metricID, rosterMetricIntParameter(parameters, "windowDays", 30))
 	case "cwl.stars", "cwl.stars.current":
-		query = `
-			SELECT m.tag, COALESCE(sum(a.stars), 0)::double precision
-			FROM roster_members m LEFT JOIN war_attacks a
-			  ON a.attacker_tag = m.tag AND a.war_type = 'cwl'
-			 AND a.war_end_time >= date_trunc('month', now()) - $2::int * interval '1 month'
-			 AND a.war_end_time < date_trunc('month', now()) + (1 - $2::int) * interval '1 month'
-			WHERE m.roster_id = $1 GROUP BY m.tag
-		`
-		args = append(args, rosterMetricIntParameter(parameters, "seasonOffset", 0))
+		return computeRosterWarMetric(c, a, rosterID, metricID, rosterMetricIntParameter(parameters, "seasonOffset", 0))
 	case "trophies.delta", "trophies.delta.7d":
 		query = `
 			SELECT m.tag,
@@ -398,21 +387,7 @@ func computeRosterMetricWithParameters(c *fiber.Ctx, a apptypes.Deps, rosterID u
 		`
 		args = append(args, rosterMetricIntParameter(parameters, "windowDays", 7))
 	case "benchmark.th_hit_rate_delta", "benchmark.th_hit_rate_delta.30d":
-		query = `
-			WITH rates AS (
-				SELECT attacker_tag, attacker_townhall, 100.0 * avg((stars = 3)::int) AS rate
-				FROM war_attacks WHERE war_end_time >= now() - $2::int * interval '1 day'
-				GROUP BY attacker_tag, attacker_townhall
-			), benchmarks AS (
-				SELECT attacker_townhall, avg(rate) AS rate FROM rates GROUP BY attacker_townhall
-			)
-			SELECT m.tag, rates.rate - benchmarks.rate
-			FROM roster_members m
-			LEFT JOIN rates ON rates.attacker_tag = m.tag
-			LEFT JOIN benchmarks ON benchmarks.attacker_townhall = rates.attacker_townhall
-			WHERE m.roster_id = $1
-		`
-		args = append(args, rosterMetricIntParameter(parameters, "windowDays", 30))
+		return computeRosterWarMetric(c, a, rosterID, metricID, rosterMetricIntParameter(parameters, "windowDays", 30))
 	default:
 		return map[string]any{}, nil
 	}
@@ -435,4 +410,155 @@ func computeRosterMetricWithParameters(c *fiber.Ctx, a apptypes.Deps, rosterID u
 		}
 	}
 	return values, rows.Err()
+}
+
+type rosterWarTotals struct {
+	attacks, triples, stars int
+	townhall                int
+}
+
+func computeRosterWarMetric(c *fiber.Ctx, a apptypes.Deps, rosterID uuid.UUID, metricID string, parameter int) (map[string]any, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT tag FROM roster_members WHERE roster_id = $1`, rosterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tags []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	start, end := time.Now().UTC().AddDate(0, 0, -parameter), time.Now().UTC()
+	if metricID == "cwl.stars" || metricID == "cwl.stars.current" {
+		end = time.Date(end.Year(), end.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1-parameter, 0)
+		start = end.AddDate(0, -1, 0)
+	}
+	attacks, _, err := sqlAttacksForPlayersContext(c.UserContext(), a, tags, start, end)
+	if err != nil {
+		return nil, err
+	}
+	byPlayer := map[string]*rosterWarTotals{}
+	for _, attack := range attacks {
+		if (metricID == "cwl.stars" || metricID == "cwl.stars.current") && attack.WarType != "cwl" {
+			continue
+		}
+		value := byPlayer[attack.AttackerTag]
+		if value == nil {
+			value = &rosterWarTotals{townhall: attack.AttackerTownhall}
+			byPlayer[attack.AttackerTag] = value
+		}
+		value.attacks++
+		value.stars += attack.Stars
+		if attack.Stars == 3 {
+			value.triples++
+		}
+	}
+	byTownhall := map[int]*rosterWarTotals{}
+	if metricID == "benchmark.th_hit_rate_delta" || metricID == "benchmark.th_hit_rate_delta.30d" {
+		byTownhall, err = loadRosterTownhallBenchmarks(c.UserContext(), a, start, end)
+		if err != nil {
+			return nil, err
+		}
+	}
+	values := make(map[string]any, len(tags))
+	for _, tag := range tags {
+		value := byPlayer[tag]
+		if value == nil {
+			values[tag] = nil
+			continue
+		}
+		switch metricID {
+		case "cwl.stars", "cwl.stars.current":
+			values[tag] = float64(value.stars)
+		case "benchmark.th_hit_rate_delta", "benchmark.th_hit_rate_delta.30d":
+			benchmark := byTownhall[value.townhall]
+			if benchmark == nil || benchmark.attacks == 0 {
+				values[tag] = nil
+				continue
+			}
+			values[tag] = 100*float64(value.triples)/float64(value.attacks) - 100*float64(benchmark.triples)/float64(benchmark.attacks)
+		default:
+			values[tag] = 100 * float64(value.triples) / float64(value.attacks)
+		}
+	}
+	return values, nil
+}
+
+func loadRosterTownhallBenchmarks(ctx context.Context, a apptypes.Deps, start, end time.Time) (map[int]*rosterWarTotals, error) {
+	result := map[int]*rosterWarTotals{}
+	rows, err := a.Store.SQL.Query(ctx, `SELECT stats #> '{attacks,byDayTypeMatchup}' FROM war_archive_packs WHERE status = 'uploaded' AND last_end_time >= $1 AND first_end_time <= $2`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		var dailyMatchups map[string]wararchive.AttackAggregate
+		if err := json.Unmarshal(raw, &dailyMatchups); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		for key, aggregate := range dailyMatchups {
+			parts := strings.Split(key, "|")
+			if len(parts) != 4 {
+				continue
+			}
+			day, parseErr := time.Parse("2006-01-02", parts[0])
+			if parseErr != nil || day.Before(start) || day.After(end) {
+				continue
+			}
+			townhall, _ := strconv.Atoi(parts[2])
+			value := result[townhall]
+			if value == nil {
+				value = &rosterWarTotals{townhall: townhall}
+				result[townhall] = value
+			}
+			value.attacks += aggregate.Attacks
+			value.triples += aggregate.Triples
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	pending, err := a.Store.SQL.Query(ctx, `SELECT payload FROM war_archive_pending WHERE end_time >= $1 AND end_time <= $2`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer pending.Close()
+	for pending.Next() {
+		var raw []byte
+		if err := pending.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var war wararchive.War
+		if err := json.Unmarshal(raw, &war); err != nil {
+			return nil, err
+		}
+		for _, attack := range wararchive.Attacks("", war) {
+			value := result[attack.AttackerTownhall]
+			if value == nil {
+				value = &rosterWarTotals{townhall: attack.AttackerTownhall}
+				result[attack.AttackerTownhall] = value
+			}
+			value.attacks++
+			if attack.Stars == 3 {
+				value.triples++
+			}
+		}
+	}
+	if err := pending.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

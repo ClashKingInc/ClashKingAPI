@@ -138,66 +138,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/list/seasons": {
-            "get": {
-                "description": "Returns recent season identifiers in YYYY-MM format.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Lists"
-                ],
-                "summary": "List recent seasons",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Number of previous months to include",
-                        "name": "last",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/list/townhalls": {
-            "get": {
-                "description": "Returns distinct current town hall levels from tracked players.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Lists"
-                ],
-                "summary": "List tracked town halls",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "integer"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/achievements/check": {
             "post": {
                 "security": [
@@ -17789,9 +17729,6 @@ const docTemplate = `{
         "modelsv2.LeagueReference": {
             "type": "object",
             "properties": {
-                "iconUrl": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "integer"
                 },

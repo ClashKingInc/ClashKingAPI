@@ -9,6 +9,7 @@ import (
 
 	serverroutes "github.com/ClashKingInc/ClashKingAPI/internal/routes/server"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -167,30 +168,43 @@ func warStatsLegacy(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT attacker_tag, count(*)::int, sum(stars)::int, sum(destruction_percentage)::float8
-			FROM war_attacks
-			WHERE attacker_tag = ANY($1)
-			GROUP BY attacker_tag
-		`, tags)
+		wars, err := a.Store.WarArchive.LoadForPlayers(c.UserContext(), a.Store.SQL, tags, time.Unix(0, 0).UTC(), time.Now().UTC())
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var tag string
-			var attacks, stars int
-			var destruction float64
-			if err := rows.Scan(&tag, &attacks, &stars, &destruction); err != nil {
-				return err
+		type totals struct{ attacks, stars, destruction, triples int }
+		byPlayer := map[string]*totals{}
+		wanted := map[string]struct{}{}
+		for _, tag := range tags {
+			wanted[tag] = struct{}{}
+		}
+		for warID, war := range wars {
+			for _, attack := range wararchive.Attacks(warID, war) {
+				if _, exists := wanted[attack.AttackerTag]; !exists {
+					continue
+				}
+				value := byPlayer[attack.AttackerTag]
+				if value == nil {
+					value = &totals{}
+					byPlayer[attack.AttackerTag] = value
+				}
+				value.attacks++
+				value.stars += attack.Stars
+				value.destruction += attack.DestructionPercentage
+				if attack.Stars == 3 {
+					value.triples++
+				}
 			}
+		}
+		items := make([]map[string]any, 0, len(byPlayer))
+		for tag, value := range byPlayer {
 			items = append(items, map[string]any{
 				"name": names[tag],
 				"tag":  tag,
 				"hit_rates": []map[string]any{{
-					"type": "All", "value": "All", "total_attacks": attacks,
-					"total_stars": stars, "total_destruction": destruction, "three_stars": 0, "hitrate": 0,
+					"type": "All", "value": "All", "total_attacks": value.attacks,
+					"total_stars": value.stars, "total_destruction": value.destruction,
+					"three_stars": value.triples, "hitrate": rate(value.triples, value.attacks),
 				}},
 				"defense_rates": []map[string]any{},
 			})

@@ -20,6 +20,7 @@ type Config struct {
 	ElasticsearchAPIKey          string
 	ElasticsearchPlayersAlias    string
 	ElasticsearchClansAlias      string
+	WarArchiveOrigin             string
 	BunnyAccessKey               string
 	AIUsageSecret                string
 	Local                        bool
@@ -78,6 +79,7 @@ func Load() (Config, error) {
 		ElasticsearchAPIKey:          strings.TrimSpace(os.Getenv("ELASTICSEARCH_API_KEY")),
 		ElasticsearchPlayersAlias:    normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_PLAYERS_ALIAS"), "clashking_players"),
 		ElasticsearchClansAlias:      normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_CLANS_ALIAS"), "clashking_clans"),
+		WarArchiveOrigin:             normalizeOrigin(firstNonEmpty(os.Getenv("WAR_ARCHIVE_ORIGIN"), "https://wars.clashk.ing")),
 		BunnyAccessKey:               os.Getenv("BUNNY_ACCESS_KEY"),
 		AIUsageSecret:                os.Getenv("AI_USAGE_SECRET"),
 		Local:                        strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),

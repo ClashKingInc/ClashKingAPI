@@ -308,7 +308,7 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Param limit query int false "Result limit, max 500"
-// @Param type query string false "Change type"
+// @Param type query string false "Change type name or ID (1-12)"
 // @Success 200 {object} modelsv2.PlayerChangesResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -319,39 +319,104 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 		if tag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "player_tag is required")
 		}
-		limit := clamp(queryInt(c, "limit", 100), 1, 500)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT event_time, player_tag, clan_tag, townhall_level, change_type, previous_value, current_value
-			FROM player_change_history
-			WHERE player_tag = $1 AND ($2 = '' OR change_type = $2)
-			ORDER BY event_time DESC
-			LIMIT $3
-		`, tag, c.Query("type"), limit)
+		changeTypes, err := parsePlayerChangeTypeFilter(c.Query("type"))
+		if err != nil {
+			return apptypes.Error(fiber.StatusBadRequest, err.Error())
+		}
+		response, err := queryPlayerChanges(c.UserContext(), a.Store.SQL, tag, changeTypes, clamp(queryInt(c, "limit", 100), 1, 500))
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var eventTime time.Time
-			var playerTag, clanTag, changeType string
-			var townhall int
-			var previousRaw, currentRaw []byte
-			if err := rows.Scan(&eventTime, &playerTag, &clanTag, &townhall, &changeType, &previousRaw, &currentRaw); err != nil {
-				return err
-			}
-			items = append(items, map[string]any{
-				"time":           eventTime,
-				"player_tag":     playerTag,
-				"clan_tag":       clanTag,
-				"townhall_level": townhall,
-				"type":           changeType,
-				"previous":       jsonValue(previousRaw, nil),
-				"current":        jsonValue(currentRaw, nil),
-			})
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"tag": tag, "items": items, "count": len(items)})
+		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
+}
+
+type playerChangesDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+const playerChangesQuery = `
+	SELECT event_time, player_tag, townhall_level, change_type, item_id, previous_value, current_value
+	FROM player_change_history
+	WHERE player_tag = $1
+	ORDER BY event_time DESC
+	LIMIT $2
+`
+
+const playerChangesByTypeQuery = `
+	SELECT event_time, player_tag, townhall_level, change_type, item_id, previous_value, current_value
+	FROM player_change_history
+	WHERE player_tag = $1 AND change_type = ANY($2::smallint[])
+	ORDER BY event_time DESC
+	LIMIT $3
+`
+
+var playerChangeTypeNames = map[int16]string{
+	1: "troop_level", 2: "super_troop_boost", 3: "hero_level", 4: "spell_level",
+	5: "pet_level", 6: "equipment_level", 7: "town_hall_level", 8: "best_trophies",
+	9: "best_builder_base_trophies", 10: "exp_level", 11: "war_preference", 12: "name",
+}
+
+var playerChangeTypeFilters = map[string][]int16{
+	"troop_level": {1}, "trooplevel": {1}, "troops": {1, 2},
+	"super_troop_boost": {2}, "supertroopboost": {2},
+	"hero_level": {3}, "herolevel": {3}, "heroes": {3},
+	"spell_level": {4}, "spelllevel": {4}, "spells": {4},
+	"pet_level": {5}, "petlevel": {5}, "pets": {5},
+	"equipment_level": {6}, "equipmentlevel": {6}, "heroequipment": {6},
+	"town_hall_level": {7}, "townhalllevel": {7},
+	"best_trophies": {8}, "besttrophies": {8},
+	"best_builder_base_trophies": {9}, "bestbuilderbasetrophies": {9}, "bestversustrophies": {9},
+	"exp_level": {10}, "explevel": {10},
+	"war_preference": {11}, "warpreference": {11},
+	"name": {12},
+}
+
+func parsePlayerChangeTypeFilter(value string) ([]int16, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	if id, err := strconv.ParseInt(value, 10, 16); err == nil {
+		if _, ok := playerChangeTypeNames[int16(id)]; ok {
+			return []int16{int16(id)}, nil
+		}
+		return nil, errors.New("type must be a change type name or ID from 1 to 12")
+	}
+	normalized := strings.ToLower(strings.ReplaceAll(value, "-", "_"))
+	if ids, ok := playerChangeTypeFilters[normalized]; ok {
+		return ids, nil
+	}
+	return nil, errors.New("type must be a change type name or ID from 1 to 12")
+}
+
+func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, changeTypes []int16, limit int) (modelsv2.PlayerChangesResponse, error) {
+	query := playerChangesQuery
+	args := []any{tag, limit}
+	if len(changeTypes) != 0 {
+		query = playerChangesByTypeQuery
+		args = []any{tag, changeTypes, limit}
+	}
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil {
+		return modelsv2.PlayerChangesResponse{}, err
+	}
+	defer rows.Close()
+
+	response := modelsv2.PlayerChangesResponse{Tag: tag, Items: []modelsv2.PlayerChangeRecord{}}
+	for rows.Next() {
+		var item modelsv2.PlayerChangeRecord
+		if err := rows.Scan(&item.Time, &item.PlayerTag, &item.TownhallLevel, &item.TypeID, &item.ItemID, &item.Previous, &item.Current); err != nil {
+			return modelsv2.PlayerChangesResponse{}, err
+		}
+		item.Type = playerChangeTypeNames[item.TypeID]
+		response.Items = append(response.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return modelsv2.PlayerChangesResponse{}, err
+	}
+	response.Count = len(response.Items)
+	return response, nil
 }
 
 // leaderboardLeague godoc

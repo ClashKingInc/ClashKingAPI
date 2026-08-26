@@ -141,21 +141,15 @@ type PlayerRankedGroupResponse struct {
 	Count        int            `json:"count,omitempty"`
 }
 
-type PlayerChangeValue struct {
-	Name  string `json:"name,omitempty"`
-	Level int    `json:"level,omitempty"`
-	Value string `json:"value,omitempty"`
-	Tag   string `json:"tag,omitempty"`
-}
-
 type PlayerChangeRecord struct {
-	Time          time.Time         `json:"time"`
-	PlayerTag     string            `json:"player_tag"`
-	ClanTag       string            `json:"clan_tag"`
-	TownhallLevel int               `json:"townhall_level"`
-	Type          string            `json:"type"`
-	Previous      PlayerChangeValue `json:"previous"`
-	Current       PlayerChangeValue `json:"current"`
+	Time          time.Time `json:"time"`
+	PlayerTag     string    `json:"player_tag"`
+	TownhallLevel *int16    `json:"townhall_level" extensions:"x-nullable"`
+	TypeID        int16     `json:"type_id" minimum:"1" maximum:"12"`
+	Type          string    `json:"type" enums:"troop_level,super_troop_boost,hero_level,spell_level,pet_level,equipment_level,town_hall_level,best_trophies,best_builder_base_trophies,exp_level,war_preference,name"`
+	ItemID        *int16    `json:"item_id" extensions:"x-nullable"`
+	Previous      string    `json:"previous"`
+	Current       string    `json:"current"`
 }
 
 type PlayerChangesResponse struct {

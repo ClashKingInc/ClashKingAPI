@@ -4441,43 +4441,51 @@
       },
       "modelsv2.PlayerChangeRecord": {
         "properties": {
-          "clan_tag": {
+          "current": {
             "type": "string"
           },
-          "current": {
-            "$ref": "#/components/schemas/modelsv2.PlayerChangeValue"
+          "item_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "player_tag": {
             "type": "string"
           },
           "previous": {
-            "$ref": "#/components/schemas/modelsv2.PlayerChangeValue"
+            "type": "string"
           },
           "time": {
             "type": "string"
           },
           "townhall_level": {
-            "type": "integer"
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "type": {
+            "enum": [
+              "troop_level",
+              "super_troop_boost",
+              "hero_level",
+              "spell_level",
+              "pet_level",
+              "equipment_level",
+              "town_hall_level",
+              "best_trophies",
+              "best_builder_base_trophies",
+              "exp_level",
+              "war_preference",
+              "name"
+            ],
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.PlayerChangeValue": {
-        "properties": {
-          "level": {
+          },
+          "type_id": {
+            "maximum": 12,
+            "minimum": 1,
             "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -15316,7 +15324,7 @@
             }
           },
           {
-            "description": "Change type",
+            "description": "Change type name or ID (1-12)",
             "in": "query",
             "name": "type",
             "schema": {

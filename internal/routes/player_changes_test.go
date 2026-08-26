@@ -229,16 +229,21 @@ func TestPlayerChangeValuesCastsEveryValueKind(t *testing.T) {
 
 func TestPlayerChangesRejectsInvalidTypeBeforeDatabaseAccess(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
-	app.Get("/v2/player/:player_tag/changes", playerChanges(apptypes.Deps{}))
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/player/%23ABC/changes?type=unknown", nil))
-	if err != nil {
-		t.Fatalf("player changes request: %v", err)
-	}
-	if response.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", response.StatusCode)
-	}
-	var body modelsv2.ErrorResponse
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatalf("decode error response: %v", err)
+	app.Get("/v2/player/:player_tag/history/changes", playerChanges(apptypes.Deps{}))
+	for _, path := range []string{
+		"/v2/player/%23ABC/history/changes",
+		"/v2/player/%23ABC/history/changes?type=unknown",
+	} {
+		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil {
+			t.Fatalf("player changes request: %v", err)
+		}
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("path %s status = %d, want 400", path, response.StatusCode)
+		}
+		var body modelsv2.ErrorResponse
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
 	}
 }

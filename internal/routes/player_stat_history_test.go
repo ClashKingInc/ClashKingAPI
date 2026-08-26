@@ -113,13 +113,13 @@ func TestPlayerStatHistoryQueryUsesTypedPositiveDeltaSchema(t *testing.T) {
 func TestPlayerStatHistoryRejectsInvalidQueryBeforeDatabaseAccess(t *testing.T) {
 	handler := playerStatHistoryHandler(nil)
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
-	app.Get("/v2/player/:player_tag/stat-history", handler)
+	app.Get("/v2/player/:player_tag/history/stats", handler)
 
 	for _, path := range []string{
-		"/v2/player/%23ABC/stat-history?timestamp_start=bad",
-		"/v2/player/%23ABC/stat-history?timestamp_start=20&timestamp_end=10",
-		"/v2/player/%23ABC/stat-history?stat_type=gold",
-		"/v2/player/%23ABC/stat-history?limit=0",
+		"/v2/player/%23ABC/history/stats?timestamp_start=bad",
+		"/v2/player/%23ABC/history/stats?timestamp_start=20&timestamp_end=10",
+		"/v2/player/%23ABC/history/stats?stat_type=gold",
+		"/v2/player/%23ABC/history/stats?limit=0",
 	} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response, err := app.Test(request)
@@ -135,12 +135,12 @@ func TestPlayerStatHistoryRejectsInvalidQueryBeforeDatabaseAccess(t *testing.T) 
 func TestPlayerStatHistoryAcceptsEveryTypedFilter(t *testing.T) {
 	handler := playerStatHistoryHandler(nil)
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
-	app.Get("/v2/player/:player_tag/stat-history", handler)
+	app.Get("/v2/player/:player_tag/history/stats", handler)
 
 	for _, statType := range []string{"donated", "received", "clan_games", "capital_gold_donated"} {
 		request := httptest.NewRequest(
 			http.MethodGet,
-			"/v2/player/%23ABC/stat-history?stat_type="+statType,
+			"/v2/player/%23ABC/history/stats?stat_type="+statType,
 			nil,
 		)
 		response, err := app.Test(request)
@@ -169,11 +169,11 @@ func TestPlayerStatHistoryReturnsTypedChangesAndUsesIndexedFilterQuery(t *testin
 		},
 	}
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
-	app.Get("/v2/player/:player_tag/stat-history", playerStatHistoryHandler(db))
+	app.Get("/v2/player/:player_tag/history/stats", playerStatHistoryHandler(db))
 
 	response, err := app.Test(httptest.NewRequest(
 		http.MethodGet,
-		"/v2/player/P0Y/stat-history?timestamp_start=100&timestamp_end=200&stat_type=donated&limit=25",
+		"/v2/player/P0Y/history/stats?timestamp_start=100&timestamp_end=200&stat_type=donated&limit=25",
 		nil,
 	))
 	if err != nil {

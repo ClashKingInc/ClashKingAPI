@@ -59,7 +59,7 @@ type playerStatHistoryDB interface {
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @Router /v2/player/{player_tag}/stat-history [get]
+// @Router /v2/player/{player_tag}/history/stats [get]
 func playerStatHistory(a apptypes.Deps) fiber.Handler {
 	var db playerStatHistoryDB
 	if a.Store != nil {

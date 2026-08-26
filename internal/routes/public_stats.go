@@ -302,17 +302,17 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 }
 
 // playerChanges godoc
-// @Summary Get player changes
-// @Description Returns stored player profile changes such as upgrades.
+// @Summary Get player change history
+// @Description Returns stored player profile changes of the requested type.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Param limit query int false "Result limit, max 500"
-// @Param type query string false "Change type name or ID (1-12)"
+// @Param type query string true "Change type" Enums(troop_level,super_troop_boost,hero_level,spell_level,pet_level,equipment_level,townhall_level,best_trophies,best_builder_base_trophies,exp_level,war_preference,name)
 // @Success 200 {object} modelsv2.PlayerChangesResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/player/{player_tag}/changes [get]
+// @Router /v2/player/{player_tag}/history/changes [get]
 func playerChanges(a apptypes.Deps) fiber.Handler {
 	itemCatalog := buildPlayerChangeItemCatalog(a.Clash)
 	return func(c *fiber.Ctx) error {
@@ -320,7 +320,11 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 		if tag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "player_tag is required")
 		}
-		changeTypes, err := parsePlayerChangeTypeFilter(c.Query("type"))
+		typeFilter := strings.TrimSpace(c.Query("type"))
+		if typeFilter == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "type is required")
+		}
+		changeTypes, err := parsePlayerChangeTypeFilter(typeFilter)
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, err.Error())
 		}

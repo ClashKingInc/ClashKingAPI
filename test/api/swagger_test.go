@@ -450,6 +450,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/legends/players/day/{day}",
 		"/v2/legends/players/season/{season}",
 		"/v2/player/{player_tag}/extended",
+		"/v2/player/{player_tag}/changes",
+		"/v2/player/{player_tag}/stat-history",
 		"/v2/players",
 		"/v2/players/extended",
 		"/v2/players/legend-days",
@@ -498,7 +500,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/player/{player_tag}/join-leave",
 		"/v2/player/{player_tag}/join-leave/totals",
 		"/v2/player/{player_tag}/join-leave/shared",
-		"/v2/player/{player_tag}/stat-history",
+		"/v2/player/{player_tag}/history/stats",
 		"/v2/links/{id}/searches",
 		"/v2/links/{id}/{playerTag}",
 		"/builderbaseleagues",
@@ -761,7 +763,7 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 	paths := swaggerPaths(t, doc)
 	definitions := swaggerDefinitions(t, doc)
 
-	path := "/v2/player/{player_tag}/stat-history"
+	path := "/v2/player/{player_tag}/history/stats"
 	operation := paths[path].(map[string]any)["get"].(map[string]any)
 	assertParameterEnum(
 		t,
@@ -839,6 +841,29 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 	clanGamesResponses := clanGamesOperation["responses"].(map[string]any)
 	clanGamesSchema := openAPIResponseSchema(t, clanGamesResponses["200"].(map[string]any))
 	assertRef(t, clanGamesSchema, "#/components/schemas/modelsv2.ServerClanGamesLeaderboardResponse")
+}
+
+func TestPlayerChangeHistoryOpenAPIRequiresTypedFilter(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	operation := paths["/v2/player/{player_tag}/history/changes"].(map[string]any)["get"].(map[string]any)
+	params := operation["parameters"].([]any)
+
+	assertRequiredParameter(t, params, "type", "query")
+	assertParameterEnum(t, params, "type", []any{
+		"troop_level",
+		"super_troop_boost",
+		"hero_level",
+		"spell_level",
+		"pet_level",
+		"equipment_level",
+		"townhall_level",
+		"best_trophies",
+		"best_builder_base_trophies",
+		"exp_level",
+		"war_preference",
+		"name",
+	})
 }
 
 func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *testing.T) {
@@ -992,7 +1017,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/legends/history/{season}",
 		"/v2/player/{player_tag}/ranked/{season}/battlelog",
 		"/v2/player/{player_tag}/ranked/{season}/group",
-		"/v2/player/{player_tag}/changes",
+		"/v2/player/{player_tag}/history/changes",
 		"/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}",
 		"/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}",
 		"/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}",

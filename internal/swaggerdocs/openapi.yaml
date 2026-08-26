@@ -9784,48 +9784,6 @@ paths:
             summary: Get player battlelog history
             tags:
                 - Player
-    /v2/player/{player_tag}/changes:
-        get:
-            description: Returns stored player profile changes such as upgrades.
-            parameters:
-                - description: Player tag
-                  in: path
-                  name: player_tag
-                  required: true
-                  schema:
-                    type: string
-                - description: Result limit, max 500
-                  in: query
-                  name: limit
-                  schema:
-                    type: integer
-                - description: Change type name or ID (1-12)
-                  in: query
-                  name: type
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.PlayerChangesResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Get player changes
-            tags:
-                - Player
     /v2/player/{player_tag}/cwl/history:
         get:
             description: Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.
@@ -9852,6 +9810,125 @@ paths:
             summary: CWL group history for a player
             tags:
                 - War
+    /v2/player/{player_tag}/history/changes:
+        get:
+            description: Returns stored player profile changes of the requested type.
+            parameters:
+                - description: Player tag
+                  in: path
+                  name: player_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Result limit, max 500
+                  in: query
+                  name: limit
+                  schema:
+                    type: integer
+                - description: Change type
+                  in: query
+                  name: type
+                  required: true
+                  schema:
+                    enum:
+                        - troop_level
+                        - super_troop_boost
+                        - hero_level
+                        - spell_level
+                        - pet_level
+                        - equipment_level
+                        - townhall_level
+                        - best_trophies
+                        - best_builder_base_trophies
+                        - exp_level
+                        - war_preference
+                        - name
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.PlayerChangesResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Internal Server Error
+            summary: Get player change history
+            tags:
+                - Player
+    /v2/player/{player_tag}/history/stats:
+        get:
+            description: Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.
+            parameters:
+                - description: Player tag
+                  in: path
+                  name: player_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Inclusive start Unix timestamp. Defaults to all history.
+                  in: query
+                  name: timestamp_start
+                  schema:
+                    type: integer
+                - description: Exclusive end Unix timestamp.
+                  in: query
+                  name: timestamp_end
+                  schema:
+                    type: integer
+                - description: Typed stat filter.
+                  in: query
+                  name: stat_type
+                  schema:
+                    enum:
+                        - donated
+                        - received
+                        - clan_games
+                        - capital_gold_donated
+                    type: string
+                - description: Maximum number of changes. Default and max 500.
+                  in: query
+                  name: limit
+                  schema:
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.PlayerStatHistoryResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Internal Server Error
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            summary: Get player stat changes
+            tags:
+                - Player
     /v2/player/{player_tag}/join-leave:
         get:
             description: Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
@@ -10166,69 +10243,6 @@ paths:
                                 $ref: '#/components/schemas/modelsv2.ErrorResponse'
                     description: Internal Server Error
             summary: Get current player rankings
-            tags:
-                - Player
-    /v2/player/{player_tag}/stat-history:
-        get:
-            description: Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.
-            parameters:
-                - description: Player tag
-                  in: path
-                  name: player_tag
-                  required: true
-                  schema:
-                    type: string
-                - description: Inclusive start Unix timestamp. Defaults to all history.
-                  in: query
-                  name: timestamp_start
-                  schema:
-                    type: integer
-                - description: Exclusive end Unix timestamp.
-                  in: query
-                  name: timestamp_end
-                  schema:
-                    type: integer
-                - description: Typed stat filter.
-                  in: query
-                  name: stat_type
-                  schema:
-                    enum:
-                        - donated
-                        - received
-                        - clan_games
-                        - capital_gold_donated
-                    type: string
-                - description: Maximum number of changes. Default and max 500.
-                  in: query
-                  name: limit
-                  schema:
-                    type: integer
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.PlayerStatHistoryResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-                "503":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Service Unavailable
-            summary: Get player stat changes
             tags:
                 - Player
     /v2/player/{player_tag}/war/attacks:

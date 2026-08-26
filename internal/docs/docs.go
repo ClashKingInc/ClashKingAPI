@@ -4893,59 +4893,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/player/{player_tag}/changes": {
-            "get": {
-                "description": "Returns stored player profile changes such as upgrades.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get player changes",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Result limit, max 500",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Change type name or ID (1-12)",
-                        "name": "type",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerChangesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/player/{player_tag}/cwl/history": {
             "get": {
                 "description": "Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.",
@@ -4974,6 +4921,151 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/history/changes": {
+            "get": {
+                "description": "Returns stored player profile changes of the requested type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player change history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "troop_level",
+                            "super_troop_boost",
+                            "hero_level",
+                            "spell_level",
+                            "pet_level",
+                            "equipment_level",
+                            "townhall_level",
+                            "best_trophies",
+                            "best_builder_base_trophies",
+                            "exp_level",
+                            "war_preference",
+                            "name"
+                        ],
+                        "type": "string",
+                        "description": "Change type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerChangesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/history/stats": {
+            "get": {
+                "description": "Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Get player stat changes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Inclusive start Unix timestamp. Defaults to all history.",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exclusive end Unix timestamp.",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "donated",
+                            "received",
+                            "clan_games",
+                            "capital_gold_donated"
+                        ],
+                        "type": "string",
+                        "description": "Typed stat filter.",
+                        "name": "stat_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of changes. Default and max 500.",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerStatHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -5371,83 +5463,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/player/{player_tag}/stat-history": {
-            "get": {
-                "description": "Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Player"
-                ],
-                "summary": "Get player stat changes",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Player tag",
-                        "name": "player_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Inclusive start Unix timestamp. Defaults to all history.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Exclusive end Unix timestamp.",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "donated",
-                            "received",
-                            "clan_games",
-                            "capital_gold_donated"
-                        ],
-                        "type": "string",
-                        "description": "Typed stat filter.",
-                        "name": "stat_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of changes. Default and max 500.",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerStatHistoryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }

@@ -69,7 +69,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/legends/history/:season", legendSeasonHistory(a))
 	app.Get("/v2/player/:player_tag/ranked/:season/battlelog", playerRankedBattlelog(a))
 	app.Get("/v2/player/:player_tag/ranked/:season/group", playerRankedGroup(a))
-	app.Get("/v2/player/:player_tag/changes", playerChanges(a))
+	app.Get("/v2/player/:player_tag/history/changes", playerChanges(a))
 	app.Get("/v2/player/:player_tag/leaderboard-history/:leaderboard_type", playerLeaderboardHistory(a))
 	app.Get("/v2/clan/:clan_tag/leaderboard-history/:leaderboard_type", clanLeaderboardHistory(a))
 	app.Get("/v2/leaderboard/history/:leaderboard_type/:location_id/:date", leaderboardSnapshotHistory(a))
@@ -349,7 +349,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/war/clans/warhits", clanWarhits(a))
 	app.Get("/v2/player/:player_tag/war/attacks", playerWarAttacks(a))
 	app.Get("/v2/player/:player_tag/war/stats", playerWarStats(a))
-	app.Get("/v2/player/:player_tag/stat-history", playerStatHistory(a))
+	app.Get("/v2/player/:player_tag/history/stats", playerStatHistory(a))
 	app.Get("/v2/player/:player_tag/cwl/history", cwlPlayerHistory(a))
 
 	app.Get("/v2/exports/war/cwl-summary", wrap(exportCWLSummary(a)))

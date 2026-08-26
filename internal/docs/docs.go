@@ -18119,22 +18119,25 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.PlayerChangeItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.PlayerChangeRecord": {
             "type": "object",
             "properties": {
-                "current": {
-                    "type": "string"
+                "current": {},
+                "item": {
+                    "$ref": "#/definitions/modelsv2.PlayerChangeItem"
                 },
-                "item_id": {
-                    "type": "integer",
-                    "x-nullable": true
-                },
-                "player_tag": {
-                    "type": "string"
-                },
-                "previous": {
-                    "type": "string"
-                },
+                "previous": {},
                 "time": {
                     "type": "string"
                 },
@@ -18158,11 +18161,6 @@ const docTemplate = `{
                         "war_preference",
                         "name"
                     ]
-                },
-                "type_id": {
-                    "type": "integer",
-                    "maximum": 12,
-                    "minimum": 1
                 }
             }
         },
@@ -18177,9 +18175,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.PlayerChangeRecord"
                     }
-                },
-                "tag": {
-                    "type": "string"
                 }
             }
         },

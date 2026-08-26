@@ -314,6 +314,7 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/changes [get]
 func playerChanges(a apptypes.Deps) fiber.Handler {
+	itemCatalog := buildPlayerChangeItemCatalog(a.Clash)
 	return func(c *fiber.Ctx) error {
 		tag := playerNormalizeTag(c.Params("player_tag"))
 		if tag == "" {
@@ -323,7 +324,7 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, err.Error())
 		}
-		response, err := queryPlayerChanges(c.UserContext(), a.Store.SQL, tag, changeTypes, clamp(queryInt(c, "limit", 100), 1, 500))
+		response, err := queryPlayerChanges(c.UserContext(), a.Store.SQL, tag, changeTypes, clamp(queryInt(c, "limit", 100), 1, 500), itemCatalog)
 		if err != nil {
 			return err
 		}
@@ -336,7 +337,7 @@ type playerChangesDB interface {
 }
 
 const playerChangesQuery = `
-	SELECT event_time, player_tag, townhall_level, change_type, item_id, previous_value, current_value
+	SELECT event_time, townhall_level, change_type, item_id, previous_value, current_value
 	FROM player_change_history
 	WHERE player_tag = $1
 	ORDER BY event_time DESC
@@ -344,7 +345,7 @@ const playerChangesQuery = `
 `
 
 const playerChangesByTypeQuery = `
-	SELECT event_time, player_tag, townhall_level, change_type, item_id, previous_value, current_value
+	SELECT event_time, townhall_level, change_type, item_id, previous_value, current_value
 	FROM player_change_history
 	WHERE player_tag = $1 AND change_type = ANY($2::smallint[])
 	ORDER BY event_time DESC
@@ -355,6 +356,52 @@ var playerChangeTypeNames = map[int16]string{
 	1: "troop_level", 2: "super_troop_boost", 3: "hero_level", 4: "spell_level",
 	5: "pet_level", 6: "equipment_level", 7: "town_hall_level", 8: "best_trophies",
 	9: "best_builder_base_trophies", 10: "exp_level", 11: "war_preference", 12: "name",
+}
+
+type playerChangeItemKey struct {
+	changeType int16
+	itemID     int16
+}
+
+type playerChangeStaticSection struct {
+	name       string
+	baseID     int64
+	changeType int16
+}
+
+var playerChangeStaticSections = []playerChangeStaticSection{
+	{name: "troops", baseID: 4_000_000, changeType: 1},
+	{name: "heroes", baseID: 28_000_000, changeType: 3},
+	{name: "spells", baseID: 26_000_000, changeType: 4},
+	{name: "pets", baseID: 73_000_000, changeType: 5},
+	{name: "equipment", baseID: 90_000_000, changeType: 6},
+}
+
+func buildPlayerChangeItemCatalog(clash *apptypes.ClashAdapter) map[playerChangeItemKey]modelsv2.PlayerChangeItem {
+	if clash == nil {
+		return map[playerChangeItemKey]modelsv2.PlayerChangeItem{}
+	}
+	return playerChangeItemCatalogFromSections(clash.StaticSection)
+}
+
+func playerChangeItemCatalogFromSections(sectionItems func(string) []map[string]any) map[playerChangeItemKey]modelsv2.PlayerChangeItem {
+	catalog := map[playerChangeItemKey]modelsv2.PlayerChangeItem{}
+	for _, section := range playerChangeStaticSections {
+		for _, raw := range sectionItems(section.name) {
+			fullID := int64(asFloat(raw["_id"]))
+			relativeID := fullID - section.baseID
+			name := staticDataAsString(raw["name"])
+			if relativeID < 0 || relativeID > 32_767 || name == "" {
+				continue
+			}
+			item := modelsv2.PlayerChangeItem{Name: name, ID: int(relativeID)}
+			catalog[playerChangeItemKey{changeType: section.changeType, itemID: int16(relativeID)}] = item
+			if section.changeType == 1 && raw["super_troop"] != nil {
+				catalog[playerChangeItemKey{changeType: 2, itemID: int16(relativeID)}] = item
+			}
+		}
+	}
+	return catalog
 }
 
 var playerChangeTypeFilters = map[string][]int16{
@@ -390,7 +437,7 @@ func parsePlayerChangeTypeFilter(value string) ([]int16, error) {
 	return nil, errors.New("type must be a change type name or ID from 1 to 12")
 }
 
-func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, changeTypes []int16, limit int) (modelsv2.PlayerChangesResponse, error) {
+func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, changeTypes []int16, limit int, itemCatalog map[playerChangeItemKey]modelsv2.PlayerChangeItem) (modelsv2.PlayerChangesResponse, error) {
 	query := playerChangesQuery
 	args := []any{tag, limit}
 	if len(changeTypes) != 0 {
@@ -403,13 +450,33 @@ func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, cha
 	}
 	defer rows.Close()
 
-	response := modelsv2.PlayerChangesResponse{Tag: tag, Items: []modelsv2.PlayerChangeRecord{}}
+	response := modelsv2.PlayerChangesResponse{Items: []modelsv2.PlayerChangeRecord{}}
 	for rows.Next() {
 		var item modelsv2.PlayerChangeRecord
-		if err := rows.Scan(&item.Time, &item.PlayerTag, &item.TownhallLevel, &item.TypeID, &item.ItemID, &item.Previous, &item.Current); err != nil {
+		var typeID int16
+		var itemID *int16
+		var previous, current string
+		if err := rows.Scan(&item.Time, &item.TownhallLevel, &typeID, &itemID, &previous, &current); err != nil {
 			return modelsv2.PlayerChangesResponse{}, err
 		}
-		item.Type = playerChangeTypeNames[item.TypeID]
+		item.Type = playerChangeTypeNames[typeID]
+		if item.Type == "" {
+			return modelsv2.PlayerChangesResponse{}, errors.New("unknown player change type")
+		}
+		if itemID != nil {
+			resolved, ok := itemCatalog[playerChangeItemKey{changeType: typeID, itemID: *itemID}]
+			if !ok {
+				resolved = modelsv2.PlayerChangeItem{Name: "Unknown", ID: int(*itemID)}
+			}
+			item.Item = &resolved
+		}
+		if typeID != 2 {
+			var err error
+			item.Previous, item.Current, err = playerChangeValues(typeID, previous, current)
+			if err != nil {
+				return modelsv2.PlayerChangesResponse{}, err
+			}
+		}
 		response.Items = append(response.Items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -417,6 +484,37 @@ func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, cha
 	}
 	response.Count = len(response.Items)
 	return response, nil
+}
+
+func playerChangeValues(typeID int16, previous, current string) (any, any, error) {
+	switch typeID {
+	case 11:
+		mapped := func(value string) (string, bool) {
+			switch value {
+			case "0":
+				return "out", true
+			case "1":
+				return "in", true
+			default:
+				return "", false
+			}
+		}
+		previousValue, previousOK := mapped(previous)
+		currentValue, currentOK := mapped(current)
+		if !previousOK || !currentOK {
+			return nil, nil, errors.New("invalid war preference change value")
+		}
+		return previousValue, currentValue, nil
+	case 12:
+		return previous, current, nil
+	default:
+		previousValue, previousErr := strconv.ParseInt(previous, 10, 64)
+		currentValue, currentErr := strconv.ParseInt(current, 10, 64)
+		if previousErr != nil || currentErr != nil {
+			return nil, nil, errors.New("invalid numeric player change value")
+		}
+		return previousValue, currentValue, nil
+	}
 }
 
 // leaderboardLeague godoc

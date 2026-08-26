@@ -4439,23 +4439,24 @@
         },
         "type": "object"
       },
+      "modelsv2.PlayerChangeItem": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "modelsv2.PlayerChangeRecord": {
         "properties": {
-          "current": {
-            "type": "string"
+          "current": {},
+          "item": {
+            "$ref": "#/components/schemas/modelsv2.PlayerChangeItem"
           },
-          "item_id": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "player_tag": {
-            "type": "string"
-          },
-          "previous": {
-            "type": "string"
-          },
+          "previous": {},
           "time": {
             "type": "string"
           },
@@ -4481,11 +4482,6 @@
               "name"
             ],
             "type": "string"
-          },
-          "type_id": {
-            "maximum": 12,
-            "minimum": 1,
-            "type": "integer"
           }
         },
         "type": "object"
@@ -4500,9 +4496,6 @@
               "$ref": "#/components/schemas/modelsv2.PlayerChangeRecord"
             },
             "type": "array"
-          },
-          "tag": {
-            "type": "string"
           }
         },
         "type": "object"

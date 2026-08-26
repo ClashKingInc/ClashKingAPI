@@ -18154,7 +18154,7 @@ const docTemplate = `{
                         "spell_level",
                         "pet_level",
                         "equipment_level",
-                        "town_hall_level",
+                        "townhall_level",
                         "best_trophies",
                         "best_builder_base_trophies",
                         "exp_level",

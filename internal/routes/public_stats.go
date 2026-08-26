@@ -354,7 +354,7 @@ const playerChangesByTypeQuery = `
 
 var playerChangeTypeNames = map[int16]string{
 	1: "troop_level", 2: "super_troop_boost", 3: "hero_level", 4: "spell_level",
-	5: "pet_level", 6: "equipment_level", 7: "town_hall_level", 8: "best_trophies",
+	5: "pet_level", 6: "equipment_level", 7: "townhall_level", 8: "best_trophies",
 	9: "best_builder_base_trophies", 10: "exp_level", 11: "war_preference", 12: "name",
 }
 
@@ -411,7 +411,7 @@ var playerChangeTypeFilters = map[string][]int16{
 	"spell_level": {4}, "spelllevel": {4}, "spells": {4},
 	"pet_level": {5}, "petlevel": {5}, "pets": {5},
 	"equipment_level": {6}, "equipmentlevel": {6}, "heroequipment": {6},
-	"town_hall_level": {7}, "townhalllevel": {7},
+	"townhall_level": {7}, "town_hall_level": {7}, "townhalllevel": {7},
 	"best_trophies": {8}, "besttrophies": {8},
 	"best_builder_base_trophies": {9}, "bestbuilderbasetrophies": {9}, "bestversustrophies": {9},
 	"exp_level": {10}, "explevel": {10},

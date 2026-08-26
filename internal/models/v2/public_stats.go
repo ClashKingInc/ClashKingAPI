@@ -144,7 +144,7 @@ type PlayerRankedGroupResponse struct {
 type PlayerChangeRecord struct {
 	Time          time.Time         `json:"time"`
 	TownhallLevel *int16            `json:"townhall_level" extensions:"x-nullable"`
-	Type          string            `json:"type" enums:"troop_level,super_troop_boost,hero_level,spell_level,pet_level,equipment_level,town_hall_level,best_trophies,best_builder_base_trophies,exp_level,war_preference,name"`
+	Type          string            `json:"type" enums:"troop_level,super_troop_boost,hero_level,spell_level,pet_level,equipment_level,townhall_level,best_trophies,best_builder_base_trophies,exp_level,war_preference,name"`
 	Item          *PlayerChangeItem `json:"item,omitempty"`
 	Previous      any               `json:"previous,omitempty"`
 	Current       any               `json:"current,omitempty"`

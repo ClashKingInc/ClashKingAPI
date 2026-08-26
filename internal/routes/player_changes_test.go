@@ -87,12 +87,17 @@ func TestPlayerChangesQueriesUseNormalizedSchema(t *testing.T) {
 }
 
 func TestParsePlayerChangeTypeFilter(t *testing.T) {
+	if playerChangeTypeNames[7] != "townhall_level" {
+		t.Fatalf("town hall type name = %q", playerChangeTypeNames[7])
+	}
 	tests := map[string][]int16{
 		"":                           nil,
 		"1":                          {1},
 		"troop_level":                {1},
 		"troops":                     {1, 2},
 		"heroEquipment":              {6},
+		"townhall_level":             {7},
+		"town_hall_level":            {7},
 		"bestVersusTrophies":         {9},
 		"best_builder_base_trophies": {9},
 		"warPreference":              {11},

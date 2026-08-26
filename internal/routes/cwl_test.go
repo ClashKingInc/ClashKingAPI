@@ -55,7 +55,7 @@ func TestStoredCWLResponseIncludesWarLeague(t *testing.T) {
 		Season: "2026-07",
 		State:  "ended",
 		WarLeague: &modelsv2.LeagueReference{
-			ID: 48000018, Name: "Champion League I", IconURL: "https://example.com/champion.png",
+			ID: 48000018, Name: "Champion League I",
 		},
 		Clans:  []modelsv2.CWLStoredGroupClan{},
 		Rounds: []modelsv2.CWLGroupRound{},
@@ -70,6 +70,9 @@ func TestStoredCWLResponseIncludesWarLeague(t *testing.T) {
 	warLeague, ok := payload["warLeague"].(map[string]any)
 	if !ok || warLeague["id"] != float64(48000018) || warLeague["name"] != "Champion League I" {
 		t.Fatalf("warLeague = %#v", payload["warLeague"])
+	}
+	if _, exists := warLeague["iconUrl"]; exists {
+		t.Fatalf("warLeague unexpectedly includes iconUrl: %#v", warLeague)
 	}
 }
 

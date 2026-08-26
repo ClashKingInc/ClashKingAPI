@@ -62,6 +62,11 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 			`layout: "modern"`,
 			`customCss: document.getElementById("ck-scalar-theme").textContent`,
 			`customFetch: scalarFetch`,
+			`tagsSorter: (a, b) => {`,
+			`const tagName = (value) =>`,
+			`"Player",`,
+			`"CWL",`,
+			`"Links",`,
 			`request = new Request(request, { method: "QUERY" })`,
 			`const labelScalarQueryMethods = () => {`,
 			`value.endsWith("POST" + path)`,
@@ -501,8 +506,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/war/{clanTag}/basic",
 		"/cwl/{clanTag}/group",
 		"/cwl/{clanTag}/{season}",
-		"/list/townhalls",
-		"/list/seasons",
 		"/v2/cdn/upload",
 		"/v2/exports/war/cwl-summary",
 		"/v2/exports/war/player-stats",
@@ -535,8 +538,9 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		assertTags(t, operation, []string{"War"})
 	}
 	for _, path := range []string{"/list/townhalls", "/list/seasons"} {
-		operation := paths[path].(map[string]any)["get"].(map[string]any)
-		assertTags(t, operation, []string{"Lists"})
+		if _, exists := paths[path]; exists {
+			t.Fatalf("expected removed legacy list path %s to be absent", path)
+		}
 	}
 	for _, path := range []string{"/v2/cdn/upload", "/v2/exports/war/cwl-summary", "/v2/exports/war/player-stats", "/v2/guild/{server_id}", "/v2/guilds"} {
 		method := "get"
@@ -1176,7 +1180,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	if !ok {
 		t.Fatal("expected swagger tags list")
 	}
-	want := []string{"Counts", "Stats", "Player", "Clan", "War", "Battlelogs", "Leaderboard", "Rankings", "Global", "Search", "Links", "Tracking", "Dates", "Lists"}
+	want := []string{"Player", "Clan", "War", "CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links"}
 	if len(tags) < len(want) {
 		t.Fatalf("expected at least %d tags, got %d", len(want), len(tags))
 	}
@@ -1189,7 +1193,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	for _, raw := range tags {
 		tag, _ := raw.(map[string]any)
 		switch tag["name"] {
-		case "Auth", "Legacy Bot", "Legacy Links", "Legacy War", "Legacy Rankings", "Legacy Lists", "CDN", "Exports", "Guild", "Guilds", "Internal", "Tracking Endpoints", "Static Data":
+		case "Battlelogs", "Rankings", "Lists", "Auth", "Legacy Bot", "Legacy Links", "Legacy War", "Legacy Rankings", "Legacy Lists", "CDN", "Exports", "Guild", "Guilds", "Internal", "Tracking Endpoints", "Static Data":
 			t.Fatalf("expected swagger tags not to include %s", tag["name"])
 		}
 	}

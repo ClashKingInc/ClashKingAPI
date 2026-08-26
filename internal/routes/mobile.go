@@ -849,10 +849,11 @@ func mobileFetchPlayerWarTimerClansBatch(ctx context.Context, a apptypes.Deps, p
 
 	out := make(map[string][]string, len(playerTags))
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT attacker_tag, attacking_clan_tag
-		FROM war_attacks
-		WHERE attacker_tag = ANY($1)
-		GROUP BY attacker_tag, attacking_clan_tag
+		SELECT timer.player_tag, schedule.source_clan_tag
+		FROM player_timers AS timer
+		JOIN war_schedule AS schedule ON schedule.schedule_key = timer.event_key
+		WHERE timer.event_type = 'war' AND timer.expires_at > now() AND timer.player_tag = ANY($1)
+		GROUP BY timer.player_tag, schedule.source_clan_tag
 	`, playerTags)
 	if err != nil {
 		return out
@@ -1578,10 +1579,10 @@ func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, query mobileWarQuer
 	}
 	if len(query.PlayerTags) > 0 {
 		args = append(args, query.PlayerTags)
-		where = append(where, `EXISTS (
-			SELECT 1 FROM war_members
-			WHERE war_members.war_id = wars.war_id
-				AND player_tag = ANY($`+strconv.Itoa(len(args))+`)
+		where = append(where, `war_id IN (
+			SELECT unnest(history.war_ids)
+			FROM player_war_history AS history
+			WHERE history.player_tag = ANY($`+strconv.Itoa(len(args))+`)
 		)`)
 	}
 	limitSQL := ""
@@ -1590,7 +1591,7 @@ func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, query mobileWarQuer
 		limitSQL = " LIMIT $" + strconv.Itoa(len(args))
 	}
 	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
+		SELECT war_id::text, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
 			war_type, state, battle_modifier, war_tag, clan_name, opponent_name, clan_badge_token,
 			opponent_badge_token, clan_level, opponent_clan_level, clan_attacks, opponent_attacks,
 			clan_stars, opponent_stars, clan_destruction_percentage::float8, opponent_destruction_percentage::float8
@@ -1616,17 +1617,17 @@ func mobileFindWarDocs(ctx context.Context, a apptypes.Deps, query mobileWarQuer
 	if len(wars) == 0 {
 		return nil
 	}
-	members, err := sqlWarMembersContext(ctx, a, warIDs)
-	if err != nil {
-		return nil
-	}
-	attacks, err := sqlWarAttacksContext(ctx, a, warIDs)
+	archived, err := sqlArchiveWarsContext(ctx, a, warIDs)
 	if err != nil {
 		return nil
 	}
 	out := make([]map[string]any, 0, len(wars))
 	for _, war := range wars {
-		encoded, err := json.Marshal(buildOfficialWar(war, members[war.WarID], attacks[war.WarID]))
+		archiveWar, exists := archived[war.WarID]
+		if !exists {
+			continue
+		}
+		encoded, err := json.Marshal(buildOfficialArchiveWar(archiveWar, war.ClanTag))
 		if err != nil {
 			continue
 		}

@@ -104,6 +104,7 @@ type swaggerUIConfig struct {
 type scalarUIConfig struct {
 	URL              string
 	QueryPaths       []string
+	TagOrder         []string
 	Title            string
 	FontURL          template.URL
 	WordmarkDarkURL  template.URL
@@ -115,6 +116,7 @@ func NewScalarHandler(specURL string) fiber.Handler {
 	config := scalarUIConfig{
 		URL:              specURL,
 		QueryPaths:       scalarQueryPaths(),
+		TagOrder:         primaryTagOrder(),
 		Title:            swaggerBaseTitle + " - API Reference",
 		FontURL:          template.URL("https://assets.clashk.ing/fonts/clashking.woff2"),
 		WordmarkDarkURL:  template.URL("https://assets.clashk.ing/logos/clashking-wordmark-dark.svg"),
@@ -891,6 +893,22 @@ const scalarIndexTemplate = `<!doctype html>
         hideTestRequestButton: false,
         withDefaultFonts: false,
         defaultOpenAllTags: false,
+        tagsSorter: (a, b) => {
+          const tagOrder = [
+            {{- range .TagOrder }}
+            "{{ . }}",
+            {{- end }}
+          ];
+          const tagName = (value) => typeof value === "string" ? value : (value?.name || value?.title || "");
+          const left = tagName(a);
+          const right = tagName(b);
+          const leftIndex = tagOrder.indexOf(left);
+          const rightIndex = tagOrder.indexOf(right);
+          if (leftIndex !== -1 || rightIndex !== -1) {
+            return (leftIndex === -1 ? tagOrder.length : leftIndex) - (rightIndex === -1 ? tagOrder.length : rightIndex);
+          }
+          return left.localeCompare(right);
+        },
         customFetch: scalarFetch,
         onLoaded: () => {
           document.querySelector(".ck-loading")?.remove();
@@ -1062,19 +1080,15 @@ window.onload = function() {
 
 func primaryTagOrder() []string {
 	return []string{
-		"Counts",
-		"Stats",
 		"Player",
 		"Clan",
 		"War",
-		"Battlelogs",
+		"CWL",
 		"Leaderboard",
-		"Rankings",
-		"Global",
+		"Counts",
+		"Stats",
 		"Search",
-		"Links",
-		"Tracking",
 		"Dates",
-		"Lists",
+		"Links",
 	}
 }

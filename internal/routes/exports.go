@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
@@ -280,60 +280,62 @@ func excelFloat(v any) float64 {
 }
 
 func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[string]any, []map[string]any, error) {
-	var season, clanName string
+	var latest time.Time
+	var clanName string
 	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT to_char(max(war_end_time), 'YYYY-MM'), COALESCE((SELECT name FROM basic_clan WHERE tag = $1), $1)
-		FROM war_attacks
-		WHERE attacking_clan_tag = $1 AND war_type = 'cwl'
-	`, clanTag).Scan(&season, &clanName)
-	if err != nil || season == "" {
+		SELECT max(end_time), COALESCE((SELECT name FROM basic_clan WHERE tag = $1), $1)
+		FROM wars
+		WHERE (clan_tag = $1 OR opponent_tag = $1) AND war_type = 'cwl'
+	`, clanTag).Scan(&latest, &clanName)
+	if err != nil || latest.IsZero() {
 		return nil, nil, err
 	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT attacker_tag,
-				COALESCE((SELECT name FROM basic_player WHERE tag = attacker_tag), attacker_tag) AS name,
-			max(attacker_townhall),
-			count(*),
-			sum(stars),
-			sum(destruction_percentage)
-		FROM war_attacks
-		WHERE attacking_clan_tag = $1 AND war_type = 'cwl' AND to_char(war_end_time, 'YYYY-MM') = $2
-		GROUP BY attacker_tag
-		ORDER BY sum(stars) DESC, sum(destruction_percentage) DESC
-	`, clanTag, season)
+	monthStart := time.Date(latest.Year(), latest.Month(), 1, 0, 0, 0, 0, time.UTC)
+	wars, err := sqlClanWars(c, a, clanTag, monthStart, monthStart.AddDate(0, 1, 0), []string{"cwl"}, 100)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
-	members := []map[string]any{}
+	type totals struct {
+		name                                  string
+		townhall, attacks, stars, destruction int
+	}
+	byPlayer := map[string]*totals{}
 	totalStars := 0
 	totalAttacks := 0
 	totalDestruction := 0
-	for rows.Next() {
-		var tag, name string
-		var townhall, attacks, stars, destruction int
-		if err := rows.Scan(&tag, &name, &townhall, &attacks, &stars, &destruction); err != nil {
-			return nil, nil, err
+	for _, war := range wars {
+		for _, member := range war.Clan.Members {
+			if len(member.Attacks) == 0 {
+				continue
+			}
+			value := byPlayer[member.Tag]
+			if value == nil {
+				value = &totals{name: member.Name, townhall: member.TownhallLevel}
+				byPlayer[member.Tag] = value
+			}
+			value.townhall = max(value.townhall, member.TownhallLevel)
+			for _, attack := range member.Attacks {
+				value.attacks++
+				value.stars += attack.Stars
+				value.destruction += attack.DestructionPercentage
+				totalStars += attack.Stars
+				totalAttacks++
+				totalDestruction += attack.DestructionPercentage
+			}
 		}
-		totalStars += stars
-		totalAttacks += attacks
-		totalDestruction += destruction
+	}
+	members := make([]map[string]any, 0, len(byPlayer))
+	for tag, value := range byPlayer {
 		members = append(members, map[string]any{
-			"tag":               tag,
-			"name":              name,
-			"town_hall":         townhall,
-			"total_attacks":     attacks,
-			"total_stars":       stars,
-			"total_destruction": destruction,
+			"tag": tag, "name": value.name, "town_hall": value.townhall,
+			"total_attacks": value.attacks, "total_stars": value.stars, "total_destruction": value.destruction,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
+	sort.Slice(members, func(i, j int) bool { return excelInt(members[i]["total_stars"]) > excelInt(members[j]["total_stars"]) })
 	return map[string]any{
 		"clan_tag":    clanTag,
 		"clan_name":   clanName,
-		"season":      season,
+		"season":      latest.Format("2006-01"),
 		"league":      "Unknown",
 		"stars":       totalStars,
 		"attacks":     totalAttacks,
@@ -342,53 +344,30 @@ func sqlExportCWLSummary(c *fiber.Ctx, a apptypes.Deps, clanTag string) (map[str
 }
 
 func sqlExportPlayerWarHits(c *fiber.Ctx, a apptypes.Deps, playerTag string, start float64, end float64, limit int) ([]map[string]any, error) {
-	query := `
-			SELECT e.war_end_time, e.attacking_clan_tag, e.attacker_tag,
-				COALESCE(p.name, e.attacker_tag), e.attacker_townhall,
-				e.defender_tag, e.defender_townhall, e.stars, e.destruction_percentage, e.attack_order
-			FROM war_attacks e
-			LEFT JOIN basic_player p ON p.tag = e.attacker_tag
-		WHERE e.attacker_tag = $1
-	`
-	args := []any{playerTag}
+	startTime := time.Unix(0, 0).UTC()
+	endTime := time.Unix(9999999999, 0).UTC()
 	if start > 0 {
-		query += ` AND e.war_end_time >= to_timestamp($` + strconv.Itoa(len(args)+1) + `)`
-		args = append(args, start)
+		startTime = time.Unix(int64(start), 0).UTC()
 	}
 	if end > 0 {
-		query += ` AND e.war_end_time <= to_timestamp($` + strconv.Itoa(len(args)+1) + `)`
-		args = append(args, end)
+		endTime = time.Unix(int64(end), 0).UTC()
 	}
-	query += ` ORDER BY e.war_end_time DESC`
-	if limit > 0 {
-		query += ` LIMIT $` + strconv.Itoa(len(args)+1)
-		args = append(args, limit)
-	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+	attacks, _, err := sqlAttacksForPlayersContext(c.UserContext(), a, []string{playerTag}, startTime, endTime)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	hits := []map[string]any{}
-	for rows.Next() {
-		var warDate time.Time
-		var clanTag, attackerTag, name, defenderTag string
-		var attackerTH, defenderTH, stars, destruction, attackOrder int
-		if err := rows.Scan(&warDate, &clanTag, &attackerTag, &name, &attackerTH, &defenderTag, &defenderTH, &stars, &destruction, &attackOrder); err != nil {
-			return nil, err
-		}
+	sort.Slice(attacks, func(i, j int) bool { return attacks[i].WarEndTime.After(attacks[j].WarEndTime) })
+	if limit > 0 && len(attacks) > limit {
+		attacks = attacks[:limit]
+	}
+	hits := make([]map[string]any, 0, len(attacks))
+	for _, attack := range attacks {
 		hits = append(hits, map[string]any{
-			"war_date":               warDate.Format(time.RFC3339),
-			"clan_tag":               clanTag,
-			"tag":                    attackerTag,
-			"name":                   name,
-			"town_hall":              attackerTH,
-			"defender_tag":           defenderTag,
-			"defender_town_hall":     defenderTH,
-			"stars":                  stars,
-			"destruction_percentage": destruction,
-			"attack_order":           attackOrder,
+			"war_date": attack.WarEndTime.Format(time.RFC3339), "clan_tag": attack.AttackingClanTag,
+			"tag": attack.AttackerTag, "name": attack.AttackerName, "town_hall": attack.AttackerTownhall,
+			"defender_tag": attack.DefenderTag, "defender_town_hall": attack.DefenderTownhall,
+			"stars": attack.Stars, "destruction_percentage": attack.DestructionPercentage, "attack_order": attack.AttackOrder,
 		})
 	}
-	return hits, rows.Err()
+	return hits, nil
 }

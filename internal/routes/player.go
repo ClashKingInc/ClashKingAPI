@@ -11,6 +11,7 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -32,28 +33,29 @@ func playerWarAttacks(a apptypes.Deps) fiber.Handler {
 		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
 		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
 		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 500)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT war_id, war_end_time, war_type, war_size, attacking_clan_tag, defending_clan_tag,
-				attacker_tag, attacker_name, defender_tag, defender_name, attacker_townhall, defender_townhall,
-				attacker_map_position, defender_map_position, stars, destruction_percentage, duration, attack_order,
-				battle_modifier
-			FROM war_attacks
-			WHERE (attacker_tag = $1 OR defender_tag = $1)
-				AND war_end_time >= $2
-				AND war_end_time <= $3
-			ORDER BY war_end_time DESC, attack_order
-			LIMIT $4
-		`, tag, start, end, limit)
+		wars, err := sqlWarsForPlayersContext(c.UserContext(), a, []string{tag}, start, end)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			attack, err := scanSQLWarAttack(rows)
-			if err != nil {
-				return err
+		var attacks []sqlWarAttackRow
+		for warID, war := range wars {
+			for _, attack := range wararchive.Attacks(warID, war) {
+				if attack.AttackerTag == tag || attack.DefenderTag == tag {
+					attacks = append(attacks, sqlWarAttackFromArchive(attack))
+				}
 			}
+		}
+		sort.Slice(attacks, func(i, j int) bool {
+			if attacks[i].WarEndTime.Equal(attacks[j].WarEndTime) {
+				return attacks[i].AttackOrder > attacks[j].AttackOrder
+			}
+			return attacks[i].WarEndTime.After(attacks[j].WarEndTime)
+		})
+		if len(attacks) > limit {
+			attacks = attacks[:limit]
+		}
+		items := make([]map[string]any, 0, len(attacks))
+		for _, attack := range attacks {
 			items = append(items, sqlWarAttackMap(attack, tag))
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})

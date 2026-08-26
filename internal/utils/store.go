@@ -3,13 +3,16 @@ package utils
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Store struct {
-	SQL *pgxpool.Pool
+	SQL        *pgxpool.Pool
+	WarArchive *wararchive.Reader
 }
 
 func (s *Store) AuthUserExists(ctx context.Context, userID string) (bool, error) {
@@ -35,7 +38,12 @@ func NewStore(ctx context.Context, cfg Config) (*Store, error) {
 		sqlPool.Close()
 		return nil, err
 	}
-	return &Store{SQL: sqlPool}, nil
+	archive, err := wararchive.NewReader(cfg.WarArchiveOrigin, &http.Client{Timeout: 15 * time.Second}, 12)
+	if err != nil {
+		sqlPool.Close()
+		return nil, err
+	}
+	return &Store{SQL: sqlPool, WarArchive: archive}, nil
 }
 
 func (s *Store) RefreshAPIMaterializedViews(ctx context.Context) error {

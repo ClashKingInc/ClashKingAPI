@@ -2618,8 +2618,6 @@ components:
             type: object
         modelsv2.LeagueReference:
             properties:
-                iconUrl:
-                    type: string
                 id:
                     type: integer
                 name:
@@ -6303,48 +6301,6 @@ paths:
             summary: Get global ClashKing counts
             tags:
                 - Global
-    /list/seasons:
-        get:
-            description: Returns recent season identifiers in YYYY-MM format.
-            parameters:
-                - description: Number of previous months to include
-                  in: query
-                  name: last
-                  schema:
-                    type: integer
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                items:
-                                    type: string
-                                type: array
-                    description: OK
-            summary: List recent seasons
-            tags:
-                - Lists
-    /list/townhalls:
-        get:
-            description: Returns distinct current town hall levels from tracked players.
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                items:
-                                    type: integer
-                                type: array
-                    description: OK
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: List tracked town halls
-            tags:
-                - Lists
     /v2/achievements/check:
         post:
             description: Checks verified linked players for achievements that can currently be evaluated, awards new matches, and returns the full catalog.
@@ -16284,20 +16240,16 @@ paths:
             tags:
                 - War
 tags:
-    - name: Counts
-    - name: Stats
     - name: Player
     - name: Clan
     - name: War
-    - name: Battlelogs
+    - name: CWL
     - name: Leaderboard
-    - name: Rankings
-    - name: Global
+    - name: Counts
+    - name: Stats
     - name: Search
-    - name: Links
-    - name: Tracking
     - name: Dates
-    - name: Lists
+    - name: Links
     - name: Achievements
     - name: Activity & Inactivity
     - name: App Authentication
@@ -16305,12 +16257,12 @@ tags:
     - name: Bases Bot Integration
     - name: Billing
     - name: Bot Profile
-    - name: CWL
     - name: Clan Categories
     - name: Configuration
     - name: Dashboard
     - name: Dashboard Access
     - name: Enums
+    - name: Global
     - name: Mobile App
     - name: Notifications
     - name: Public Rosters

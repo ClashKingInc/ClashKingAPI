@@ -15,6 +15,7 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
@@ -48,46 +49,116 @@ func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		query := `
-			SELECT date_trunc('week', war_end_time)::date AS week, war_type,
-				count(*)::int AS attacks,
-				count(*) FILTER (WHERE stars = 3)::int AS triples,
-				avg(stars)::float8 AS avg_stars,
-				avg(destruction_percentage)::float8 AS avg_destruction
-			FROM war_attacks
-			WHERE attacker_townhall = $1
-				AND war_end_time >= $2
-				AND war_end_time <= $3
-				AND war_type = ANY($4)
-		`
-		args := []any{townhall, start, end, types}
-		if sameTownhall {
-			query += ` AND defender_townhall = attacker_townhall`
-		}
-		query += ` GROUP BY week, war_type ORDER BY week, war_type`
-		rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+		rows, err := a.Store.SQL.Query(c.UserContext(), `
+			SELECT stats #> '{attacks,byWeekTypeMatchup}'
+			FROM war_archive_packs
+			WHERE status = 'uploaded' AND last_end_time >= $1 AND first_end_time <= $2
+		`, start, end)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
-		items := []map[string]any{}
+		type aggregate struct {
+			attacks, triples, stars int
+			destruction             int64
+		}
+		grouped := map[string]*aggregate{}
+		allowedTypes := map[string]struct{}{}
+		for _, warType := range types {
+			allowedTypes[warType] = struct{}{}
+		}
 		for rows.Next() {
-			var week time.Time
-			var warType string
-			var attacks, triples int
-			var avgStars, avgDestruction float64
-			if err := rows.Scan(&week, &warType, &attacks, &triples, &avgStars, &avgDestruction); err != nil {
+			var raw []byte
+			if err := rows.Scan(&raw); err != nil {
 				return err
 			}
+			var weeklyMatchups map[string]wararchive.AttackAggregate
+			if err := json.Unmarshal(raw, &weeklyMatchups); err != nil {
+				return err
+			}
+			for key, value := range weeklyMatchups {
+				parts := strings.Split(key, "|")
+				if len(parts) != 4 || parts[2] != strconv.Itoa(townhall) {
+					continue
+				}
+				if _, exists := allowedTypes[parts[1]]; !exists {
+					continue
+				}
+				if sameTownhall && parts[3] != parts[2] {
+					continue
+				}
+				groupKey := parts[0] + "|" + parts[1]
+				current := grouped[groupKey]
+				if current == nil {
+					current = &aggregate{}
+					grouped[groupKey] = current
+				}
+				current.attacks += value.Attacks
+				current.triples += value.Triples
+				current.stars += value.Stars
+				current.destruction += value.DestructionPercent
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		pending, err := a.Store.SQL.Query(c.UserContext(), `SELECT payload FROM war_archive_pending WHERE end_time >= $1 AND end_time <= $2`, start, end)
+		if err != nil {
+			return err
+		}
+		defer pending.Close()
+		for pending.Next() {
+			var raw []byte
+			if err := pending.Scan(&raw); err != nil {
+				return err
+			}
+			var war wararchive.War
+			if err := json.Unmarshal(raw, &war); err != nil {
+				return err
+			}
+			if _, exists := allowedTypes[war.Type]; !exists {
+				continue
+			}
+			week := war.EndTime.UTC().AddDate(0, 0, -int(war.EndTime.UTC().Weekday()+6)%7).Format("2006-01-02")
+			groupKey := week + "|" + war.Type
+			for _, attack := range wararchive.Attacks("", war) {
+				if attack.AttackerTownhall != townhall || (sameTownhall && attack.DefenderTownhall != townhall) {
+					continue
+				}
+				current := grouped[groupKey]
+				if current == nil {
+					current = &aggregate{}
+					grouped[groupKey] = current
+				}
+				current.attacks++
+				current.stars += attack.Stars
+				current.destruction += int64(attack.DestructionPercentage)
+				if attack.Stars == 3 {
+					current.triples++
+				}
+			}
+		}
+		if err := pending.Err(); err != nil {
+			return err
+		}
+		keys := make([]string, 0, len(grouped))
+		for key := range grouped {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		items := make([]map[string]any, 0, len(keys))
+		for _, key := range keys {
+			parts := strings.Split(key, "|")
+			value := grouped[key]
 			items = append(items, map[string]any{
-				"week":               week.Format("2006-01-02"),
-				"warType":            warType,
+				"week":               parts[0],
+				"warType":            parts[1],
 				"townhallLevel":      townhall,
-				"attacks":            attacks,
-				"triples":            triples,
-				"hitrate":            rate(triples, attacks),
-				"averageStars":       round2(avgStars),
-				"averageDestruction": round2(avgDestruction),
+				"attacks":            value.attacks,
+				"triples":            value.triples,
+				"hitrate":            rate(value.triples, value.attacks),
+				"averageStars":       round2(float64(value.stars) / float64(value.attacks)),
+				"averageDestruction": round2(float64(value.destruction) / float64(value.attacks)),
 			})
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
@@ -556,194 +627,187 @@ func scanCWLPlayerHistorySeed(row cwlHistoryScanner) (cwlPlayerHistorySeed, erro
 	return seed, nil
 }
 
-const cwlPlayerWarFactsSelect = `
-	WITH round_tags AS (
-		SELECT round_data.round_number::integer AS round_number, war_tag.value AS war_tag
-		FROM cwl_groups AS g
-		CROSS JOIN LATERAL jsonb_array_elements(g.rounds)
-			WITH ORDINALITY AS round_data(value, round_number)
-		CROSS JOIN LATERAL jsonb_array_elements_text(
-			COALESCE(round_data.value -> 'warTags', '[]'::jsonb)
-		) AS war_tag(value)
-		WHERE g.cwl_id = $1
-		  AND war_tag.value <> ''
-		  AND war_tag.value <> '#0'
-	),
-	group_wars AS (
-		SELECT DISTINCT ON (w.war_id)
-		       round_tags.round_number, w.war_id, w.war_tag, w.end_time,
-		       w.clan_tag, w.opponent_tag, w.clan_name, w.opponent_name,
-		       w.size, w.attacks_per_member
-		FROM round_tags
-		JOIN wars AS w ON w.war_tag = round_tags.war_tag
-		WHERE w.war_type = 'cwl' AND w.state = 'warEnded'
-		ORDER BY w.war_id, round_tags.round_number
-	),
-	player_lineups AS (
-		SELECT group_wars.*
-		FROM group_wars
-		JOIN war_members AS member
-		  ON member.war_id = group_wars.war_id
-		 AND member.war_end_time = group_wars.end_time
-		 AND member.clan_tag = $3
-		 AND member.player_tag = $2
-	),
-	attack_counts AS (
-		SELECT lineup.war_id, COUNT(attack.attacker_tag)::integer AS attack_count
-		FROM player_lineups AS lineup
-		LEFT JOIN war_attacks AS attack
-		  ON attack.war_id = lineup.war_id
-		 AND attack.war_end_time = lineup.end_time
-		 AND attack.attacker_tag = $2
-		GROUP BY lineup.war_id
-	)
-	SELECT lineup.round_number, lineup.war_tag,
-	       CASE WHEN lineup.clan_tag = $3 THEN lineup.opponent_tag ELSE lineup.clan_tag END AS opponent_tag,
-	       CASE WHEN lineup.clan_tag = $3 THEN lineup.opponent_name ELSE lineup.clan_name END AS opponent_name,
-	       attack.defender_tag, attack.defender_name, attack.defender_townhall,
-	       attack.defender_map_position, attack.stars, attack.destruction_percentage,
-	       attack.attack_order, attack.duration, lineup.size,
-	       GREATEST(lineup.attacks_per_member - attack_counts.attack_count, 0) AS missed_attacks
-	FROM player_lineups AS lineup
-	JOIN attack_counts ON attack_counts.war_id = lineup.war_id
-	LEFT JOIN war_attacks AS attack
-	  ON attack.war_id = lineup.war_id
-	 AND attack.war_end_time = lineup.end_time
-	 AND attack.attacker_tag = $2
-	ORDER BY lineup.round_number, attack.attack_order NULLS LAST
-`
-
 func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) ([]modelsv2.CWLPlayerHistoryAttack, int, *int, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerWarFactsSelect, cwlID, playerTag, clanTag)
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		WITH round_tags AS (
+			SELECT round_data.round_number::integer AS round_number, war_tag.value AS war_tag
+			FROM cwl_groups AS g
+			CROSS JOIN LATERAL jsonb_array_elements(g.rounds) WITH ORDINALITY AS round_data(value, round_number)
+			CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(round_data.value -> 'warTags', '[]'::jsonb)) AS war_tag(value)
+			WHERE g.cwl_id = $1 AND war_tag.value <> '' AND war_tag.value <> '#0'
+		)
+		SELECT DISTINCT ON (w.war_id) round_tags.round_number, w.war_id::text
+		FROM round_tags JOIN wars AS w ON w.war_tag = round_tags.war_tag
+		WHERE w.war_type = 'cwl' AND lower(w.state) IN ('warended', 'ended')
+		ORDER BY w.war_id, round_tags.round_number
+	`, cwlID)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	defer rows.Close()
+	rounds := map[string]int{}
+	var warIDs []string
+	for rows.Next() {
+		var round int
+		var warID string
+		if err := rows.Scan(&round, &warID); err != nil {
+			return nil, 0, nil, err
+		}
+		rounds[warID] = round
+		warIDs = append(warIDs, warID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, nil, err
+	}
+	wars, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
+	if err != nil {
+		return nil, 0, nil, err
+	}
 	attacks := make([]modelsv2.CWLPlayerHistoryAttack, 0)
 	missedAttacks := 0
 	var actualWarSize *int
 	warSizeConflict := false
-	for rows.Next() {
-		var round, size, missed int
-		var warTag, opponentTag, opponentName string
-		var defenderTag, defenderName pgtype.Text
-		var defenderTownHall, defenderMapPosition, stars, destruction, order, duration pgtype.Int4
-		if err := rows.Scan(
-			&round, &warTag, &opponentTag, &opponentName,
-			&defenderTag, &defenderName, &defenderTownHall, &defenderMapPosition,
-			&stars, &destruction, &order, &duration, &size, &missed,
-		); err != nil {
-			return nil, 0, nil, err
+	for warID, war := range wars {
+		var own, opponent *wararchive.Clan
+		if war.Clan.Tag == clanTag {
+			own, opponent = &war.Clan, &war.Opponent
+		} else if war.Opponent.Tag == clanTag {
+			own, opponent = &war.Opponent, &war.Clan
+		} else {
+			continue
+		}
+		var member *wararchive.Member
+		for index := range own.Members {
+			if own.Members[index].Tag == playerTag {
+				member = &own.Members[index]
+				break
+			}
+		}
+		if member == nil {
+			continue
 		}
 		if !warSizeConflict {
 			if actualWarSize == nil {
-				value := size
+				value := war.TeamSize
 				actualWarSize = &value
-			} else if *actualWarSize != size {
+			} else if *actualWarSize != war.TeamSize {
 				actualWarSize = nil
 				warSizeConflict = true
 			}
 		}
-		missedAttacks += missed
-		if !defenderTag.Valid {
-			continue
+		missedAttacks += max(0, war.AttacksPerMember-len(member.Attacks))
+		defenders := map[string]wararchive.Member{}
+		for _, defender := range opponent.Members {
+			defenders[defender.Tag] = defender
 		}
-		attacks = append(attacks, modelsv2.CWLPlayerHistoryAttack{
-			WarTag: warTag, Round: round,
-			Opponent: modelsv2.CWLPlayerHistoryAttackOpponent{Tag: opponentTag, Name: opponentName},
-			Defender: modelsv2.CWLPlayerHistoryAttackDefender{
-				Tag: defenderTag.String, Name: defenderName.String,
-				TownHallLevel: int(defenderTownHall.Int32), MapPosition: int(defenderMapPosition.Int32),
-			},
-			Stars: int(stars.Int32), DestructionPercentage: int(destruction.Int32),
-			Order: int(order.Int32), Duration: int(duration.Int32),
-		})
+		for _, attack := range member.Attacks {
+			defender := defenders[attack.DefenderTag]
+			attacks = append(attacks, modelsv2.CWLPlayerHistoryAttack{
+				WarTag: war.WarTag, Round: rounds[warID],
+				Opponent: modelsv2.CWLPlayerHistoryAttackOpponent{Tag: opponent.Tag, Name: opponent.Name},
+				Defender: modelsv2.CWLPlayerHistoryAttackDefender{Tag: defender.Tag, Name: defender.Name, TownHallLevel: defender.TownhallLevel, MapPosition: defender.MapPosition},
+				Stars:    attack.Stars, DestructionPercentage: attack.DestructionPercentage, Order: attack.Order, Duration: attack.Duration,
+			})
+		}
 	}
-	return attacks, missedAttacks, actualWarSize, rows.Err()
+	sort.Slice(attacks, func(i, j int) bool {
+		if attacks[i].Round == attacks[j].Round {
+			return attacks[i].Order < attacks[j].Order
+		}
+		return attacks[i].Round < attacks[j].Round
+	})
+	return attacks, missedAttacks, actualWarSize, nil
 }
 
-const cwlPlayerPlacementSelect = `
-	WITH group_state AS (
-		SELECT state, rounds
-		FROM cwl_groups
-		WHERE cwl_id = $1
-	),
-	round_tags AS (
-		SELECT war_tag.value AS war_tag
-		FROM group_state
-		CROSS JOIN LATERAL jsonb_array_elements(group_state.rounds) AS round_data(value)
-		CROSS JOIN LATERAL jsonb_array_elements_text(
-			COALESCE(round_data.value -> 'warTags', '[]'::jsonb)
-		) AS war_tag(value)
-		WHERE war_tag.value <> '' AND war_tag.value <> '#0'
-	),
-	group_wars AS (
-		SELECT DISTINCT ON (w.war_id)
-		       w.war_id, w.end_time, w.clan_attacks + w.opponent_attacks AS expected_attack_rows
-		FROM round_tags
-		JOIN wars AS w ON w.war_tag = round_tags.war_tag
-		WHERE w.war_type = 'cwl' AND w.state = 'warEnded'
-		ORDER BY w.war_id
-	),
-	completeness AS (
-		SELECT group_state.state = 'ended'
-		       AND (SELECT COUNT(DISTINCT war_tag) FROM round_tags)
-		           = (SELECT COUNT(*) FROM group_wars)
-		       AND (SELECT COALESCE(SUM(expected_attack_rows), 0) FROM group_wars)
-		           = (
-		               SELECT COUNT(*)
-		               FROM group_wars
-		               JOIN war_attacks AS stored_attack
-		                 ON stored_attack.war_id = group_wars.war_id
-		                AND stored_attack.war_end_time = group_wars.end_time
-		           ) AS complete
-		FROM group_state
-	),
-	lineups AS (
-		SELECT DISTINCT member.war_id, member.war_end_time, member.clan_tag, member.player_tag
-		FROM group_wars
-		JOIN war_members AS member
-		  ON member.war_id = group_wars.war_id
-		 AND member.war_end_time = group_wars.end_time
-		JOIN cwl_group_members AS roster
-		  ON roster.cwl_id = $1
-		 AND roster.clan_tag = member.clan_tag
-		 AND roster.tag = member.player_tag
-	),
-	player_stars AS (
-		SELECT lineups.clan_tag, lineups.player_tag,
-		       COALESCE(SUM(attack.stars), 0)::integer AS stars
-		FROM lineups
-		LEFT JOIN war_attacks AS attack
-		  ON attack.war_id = lineups.war_id
-		 AND attack.war_end_time = lineups.war_end_time
-		 AND attack.attacker_tag = lineups.player_tag
-		GROUP BY lineups.clan_tag, lineups.player_tag
-	),
-	ranked AS (
-		SELECT clan_tag, player_tag,
-		       RANK() OVER (PARTITION BY clan_tag ORDER BY stars DESC)::integer AS clan_rank,
-		       RANK() OVER (ORDER BY stars DESC)::integer AS group_rank
-		FROM player_stars
-	)
-	SELECT ranked.clan_rank, ranked.group_rank
-	FROM ranked
-	CROSS JOIN completeness
-	WHERE completeness.complete
-	  AND ranked.player_tag = $2
-	  AND ranked.clan_tag = $3
-`
-
 func cwlPlayerEarnedStarsPlacement(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) (*modelsv2.CWLPlayerAttackPlacement, error) {
-	var placement modelsv2.CWLPlayerAttackPlacement
-	err := a.Store.SQL.QueryRow(c.UserContext(), cwlPlayerPlacementSelect, cwlID, playerTag, clanTag).Scan(&placement.Clan, &placement.Group)
-	if err != nil {
+	var state string
+	var roundsJSON []byte
+	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT state, rounds FROM cwl_groups WHERE cwl_id = $1`, cwlID).Scan(&state, &roundsJSON); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &placement, nil
+	if strings.ToLower(state) != "ended" {
+		return nil, nil
+	}
+	var warTags []string
+	for _, round := range cwlRounds(roundsJSON) {
+		for _, tag := range round.WarTags {
+			if tag != "" && tag != "#0" {
+				warTags = append(warTags, tag)
+			}
+		}
+	}
+	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT DISTINCT war_id::text FROM wars WHERE war_type = 'cwl' AND war_tag = ANY($1)`, warTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var warIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		warIDs = append(warIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(warIDs) != len(warTags) {
+		return nil, nil
+	}
+	wars, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
+	if err != nil {
+		return nil, err
+	}
+	type entry struct {
+		clan, player string
+		stars        int
+	}
+	stars := map[string]*entry{}
+	for _, war := range wars {
+		for _, clan := range []wararchive.Clan{war.Clan, war.Opponent} {
+			for _, member := range clan.Members {
+				key := clan.Tag + "\x00" + member.Tag
+				value := stars[key]
+				if value == nil {
+					value = &entry{clan: clan.Tag, player: member.Tag}
+					stars[key] = value
+				}
+				for _, attack := range member.Attacks {
+					value.stars += attack.Stars
+				}
+			}
+		}
+	}
+	entries := make([]*entry, 0, len(stars))
+	for _, value := range stars {
+		entries = append(entries, value)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].stars > entries[j].stars })
+	groupRank, clanRank := 0, 0
+	lastGroupStars, lastClanStars := -1, -1
+	groupPosition, clanPosition := 0, 0
+	for _, value := range entries {
+		groupPosition++
+		if value.stars != lastGroupStars {
+			groupRank = groupPosition
+			lastGroupStars = value.stars
+		}
+		if value.clan == clanTag {
+			clanPosition++
+			if value.stars != lastClanStars {
+				clanRank = clanPosition
+				lastClanStars = value.stars
+			}
+		}
+		if value.clan == clanTag && value.player == playerTag {
+			return &modelsv2.CWLPlayerAttackPlacement{Clan: clanRank, Group: groupRank}, nil
+		}
+	}
+	return nil, nil
 }
 
 type cwlHistoryScanner interface {

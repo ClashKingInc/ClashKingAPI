@@ -2,8 +2,6 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -13,7 +11,6 @@ import (
 	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/sync/errgroup"
 )
 
 const clashBadgeBaseURL = "https://api-assets.clashofclans.com/badges"
@@ -132,7 +129,7 @@ type officialWarAttack struct {
 
 func sqlClanWars(c *fiber.Ctx, a apptypes.Deps, clanTag string, start time.Time, end time.Time, types []string, limit int) ([]officialWarResponse, error) {
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
+		SELECT war_id::text, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
 			war_type, state, battle_modifier, war_tag, clan_name, opponent_name, clan_badge_token,
 			opponent_badge_token, clan_level, opponent_clan_level, clan_attacks, opponent_attacks,
 			clan_stars, opponent_stars, clan_destruction_percentage::float8, opponent_destruction_percentage::float8
@@ -161,17 +158,17 @@ func sqlClanWars(c *fiber.Ctx, a apptypes.Deps, clanTag string, start time.Time,
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	members, err := sqlWarMembers(c, a, warIDs)
-	if err != nil {
-		return nil, err
-	}
-	attacks, err := sqlWarAttacks(c, a, warIDs)
+	archived, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]officialWarResponse, 0, len(wars))
 	for _, war := range wars {
-		items = append(items, buildOfficialWar(war, members[war.WarID], attacks[war.WarID]))
+		value, exists := archived[war.WarID]
+		if !exists {
+			continue
+		}
+		items = append(items, buildOfficialArchiveWar(value, clanTag))
 	}
 	return items, nil
 }
@@ -228,29 +225,23 @@ func sqlWarMembers(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[string][
 
 func sqlWarMembersContext(ctx context.Context, a apptypes.Deps, warIDs []string) (map[string][]sqlWarMemberRow, error) {
 	out := map[string][]sqlWarMemberRow{}
-	if len(warIDs) == 0 {
-		return out, nil
-	}
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT war_id, clan_tag, opponent_tag, player_tag, player_name, townhall_level, map_position
-		FROM war_members
-		WHERE war_id = ANY($1)
-	`, warIDs)
+	wars, err := sqlArchiveWarsContext(ctx, a, warIDs)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var member sqlWarMemberRow
-		if err := rows.Scan(
-			&member.WarID, &member.ClanTag, &member.OpponentTag, &member.PlayerTag, &member.PlayerName,
-			&member.Townhall, &member.MapPosition,
-		); err != nil {
-			return nil, err
+	for warID, war := range wars {
+		for _, side := range []struct{ clan, opponent wararchive.Clan }{{war.Clan, war.Opponent}, {war.Opponent, war.Clan}} {
+			for _, member := range side.clan.Members {
+				out[warID] = append(out[warID], sqlWarMemberRow{
+					WarID: warID, ClanTag: side.clan.Tag, OpponentTag: side.opponent.Tag,
+					PlayerTag: member.Tag, PlayerName: member.Name, Townhall: member.TownhallLevel,
+					MapPosition: member.MapPosition, ExpectedAttacks: war.AttacksPerMember,
+					AttackCount: len(member.Attacks), MissedAttacks: max(0, war.AttacksPerMember-len(member.Attacks)),
+				})
+			}
 		}
-		out[member.WarID] = append(out[member.WarID], member)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func sqlWarMissedAttacks(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[string][]sqlWarMemberRow, error) {
@@ -258,28 +249,18 @@ func sqlWarMissedAttacks(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[st
 	if len(warIDs) == 0 {
 		return out, nil
 	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT war_id, clan_tag, opponent_tag, player_tag, player_name, townhall_level, map_position,
-			expected_attacks, attack_count, missed_attacks
-		FROM war_missed_attacks
-		WHERE war_id = ANY($1)
-		ORDER BY war_id, clan_tag, map_position
-	`, warIDs)
+	members, err := sqlWarMembersContext(c.UserContext(), a, warIDs)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var member sqlWarMemberRow
-		if err := rows.Scan(
-			&member.WarID, &member.ClanTag, &member.OpponentTag, &member.PlayerTag, &member.PlayerName,
-			&member.Townhall, &member.MapPosition, &member.ExpectedAttacks, &member.AttackCount, &member.MissedAttacks,
-		); err != nil {
-			return nil, err
+	for warID, values := range members {
+		for _, member := range values {
+			if member.MissedAttacks > 0 {
+				out[warID] = append(out[warID], member)
+			}
 		}
-		out[member.WarID] = append(out[member.WarID], member)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func sqlWarAttacks(c *fiber.Ctx, a apptypes.Deps, warIDs []string) (map[string][]sqlWarAttackRow, error) {
@@ -291,32 +272,49 @@ func sqlWarAttacksContext(ctx context.Context, a apptypes.Deps, warIDs []string)
 	if len(warIDs) == 0 {
 		return out, nil
 	}
-	rows, err := a.Store.SQL.Query(ctx, `
-		SELECT war_id, war_end_time, war_type, war_size, attacking_clan_tag, defending_clan_tag,
-			attacker_tag, attacker_name, defender_tag, defender_name, attacker_townhall, defender_townhall,
-			attacker_map_position, defender_map_position, stars, destruction_percentage, duration, attack_order,
-			battle_modifier
-		FROM war_attacks
-		WHERE war_id = ANY($1)
-		ORDER BY war_id, attack_order
-	`, warIDs)
+	wars, err := sqlArchiveWarsContext(ctx, a, warIDs)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		attack, err := scanSQLWarAttack(rows)
-		if err != nil {
-			return nil, err
+	for warID, war := range wars {
+		for _, attack := range wararchive.Attacks(warID, war) {
+			out[warID] = append(out[warID], sqlWarAttackFromArchive(attack))
 		}
-		out[attack.WarID] = append(out[attack.WarID], attack)
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+func sqlArchiveWarsContext(ctx context.Context, a apptypes.Deps, warIDs []string) (map[string]wararchive.War, error) {
+	return a.Store.WarArchive.LoadIDs(ctx, a.Store.SQL, warIDs)
+}
+
+func sqlWarsForPlayersContext(ctx context.Context, a apptypes.Deps, playerTags []string, start, end time.Time) (map[string]wararchive.War, error) {
+	return a.Store.WarArchive.LoadForPlayers(ctx, a.Store.SQL, playerTags, start, end)
+}
+
+func sqlAttacksForPlayersContext(ctx context.Context, a apptypes.Deps, playerTags []string, start, end time.Time) ([]sqlWarAttackRow, map[string]wararchive.War, error) {
+	wars, err := sqlWarsForPlayersContext(ctx, a, playerTags, start, end)
+	if err != nil {
+		return nil, nil, err
+	}
+	wanted := make(map[string]struct{}, len(playerTags))
+	for _, tag := range playerTags {
+		wanted[tag] = struct{}{}
+	}
+	var attacks []sqlWarAttackRow
+	for warID, war := range wars {
+		for _, attack := range wararchive.Attacks(warID, war) {
+			if _, exists := wanted[attack.AttackerTag]; exists {
+				attacks = append(attacks, sqlWarAttackFromArchive(attack))
+			}
+		}
+	}
+	return attacks, wars, nil
 }
 
 func buildOfficialWar(war sqlWarRow, members []sqlWarMemberRow, attacks []sqlWarAttackRow) officialWarResponse {
 	item := officialWarResponse{
-		State:                war.State,
+		State:                officialWarState(war.State),
 		TeamSize:             war.Size,
 		BattleModifier:       &war.BattleModifier,
 		PreparationStartTime: clashTime(war.PrepTime),
@@ -337,6 +335,103 @@ func buildOfficialWar(war sqlWarRow, members []sqlWarMemberRow, attacks []sqlWar
 		item.AttacksPerMember = &war.AttacksPerMember
 	}
 	return item
+}
+
+func buildOfficialArchiveWar(war wararchive.War, clanTag string) officialWarResponse {
+	if war.Opponent.Tag == clanTag && war.Clan.Tag != clanTag {
+		war.Clan, war.Opponent = war.Opponent, war.Clan
+	}
+	item := officialWarResponse{
+		State: officialWarState(war.State), TeamSize: war.TeamSize, PreparationStartTime: clashTime(war.PreparationStartTime),
+		EndTime: clashTime(war.EndTime), Clan: officialArchiveClan(war.Clan, war.Opponent),
+		Opponent: officialArchiveClan(war.Opponent, war.Clan),
+	}
+	modifier := war.BattleModifier
+	item.BattleModifier = &modifier
+	if war.StartTime != nil {
+		value := clashTime(*war.StartTime)
+		item.StartTime = &value
+		if war.Type == "cwl" {
+			item.WarStartTime = &value
+		}
+	}
+	if war.Type == "cwl" {
+		if war.WarTag != "" {
+			item.Tag = &war.WarTag
+		}
+	} else {
+		item.AttacksPerMember = &war.AttacksPerMember
+	}
+	return item
+}
+
+func officialWarState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "notinwar":
+		return "notInWar"
+	case "preparation":
+		return "preparation"
+	case "inwar":
+		return "inWar"
+	case "ended", "warended":
+		return "warEnded"
+	default:
+		return value
+	}
+}
+
+func officialArchiveClan(clan, opponent wararchive.Clan) officialWarClan {
+	result := officialWarClan{
+		Tag: clan.Tag, Name: clan.Name, BadgeURLs: officialBadgeURLsFromToken(clan.BadgeToken),
+		ClanLevel: clan.ClanLevel, Attacks: clan.Attacks, Stars: clan.Stars,
+		DestructionPercentage: clan.DestructionPercentage,
+		Members:               make([]officialWarMember, 0, len(clan.Members)),
+	}
+	opponentAttacks := make(map[string][]officialWarAttack)
+	for _, member := range opponent.Members {
+		for _, attack := range member.Attacks {
+			opponentAttacks[attack.DefenderTag] = append(opponentAttacks[attack.DefenderTag], officialWarAttack{
+				AttackerTag: member.Tag, DefenderTag: attack.DefenderTag, Stars: attack.Stars,
+				DestructionPercentage: attack.DestructionPercentage, Order: attack.Order, Duration: attack.Duration,
+			})
+		}
+	}
+	for _, member := range clan.Members {
+		value := officialWarMember{
+			Tag: member.Tag, Name: member.Name, TownhallLevel: member.TownhallLevel, MapPosition: member.MapPosition,
+			Attacks: make([]officialWarAttack, 0, len(member.Attacks)),
+		}
+		for _, attack := range member.Attacks {
+			value.Attacks = append(value.Attacks, officialWarAttack{
+				AttackerTag: member.Tag, DefenderTag: attack.DefenderTag, Stars: attack.Stars,
+				DestructionPercentage: attack.DestructionPercentage, Order: attack.Order, Duration: attack.Duration,
+			})
+		}
+		defenses := opponentAttacks[member.Tag]
+		count := len(defenses)
+		value.OpponentAttacks = &count
+		for index := range defenses {
+			if betterAttack(defenses[index], value.BestOpponentAttack) {
+				candidate := defenses[index]
+				value.BestOpponentAttack = &candidate
+			}
+		}
+		result.Members = append(result.Members, value)
+	}
+	return result
+}
+
+func sqlWarAttackFromArchive(attack wararchive.AttackFact) sqlWarAttackRow {
+	return sqlWarAttackRow{
+		WarID: attack.WarID, WarEndTime: attack.WarEndTime, WarType: attack.WarType, WarSize: attack.WarSize,
+		AttackingClanTag: attack.AttackingClanTag, DefendingClanTag: attack.DefendingClanTag,
+		AttackerTag: attack.AttackerTag, AttackerName: attack.AttackerName,
+		DefenderTag: attack.DefenderTag, DefenderName: attack.DefenderName,
+		AttackerTownhall: attack.AttackerTownhall, DefenderTownhall: attack.DefenderTownhall,
+		AttackerMapPosition: attack.AttackerMapPosition, DefenderMapPosition: attack.DefenderMapPosition,
+		Stars: attack.Stars, DestructionPercentage: attack.DestructionPercentage,
+		Duration: attack.Duration, AttackOrder: attack.AttackOrder, BattleModifier: attack.BattleModifier,
+	}
 }
 
 func buildWarClan(war sqlWarRow, side string, members []sqlWarMemberRow, attacks []sqlWarAttackRow) officialWarClan {
@@ -466,109 +561,47 @@ func betterAttack(candidate officialWarAttack, best *officialWarAttack) bool {
 	return candidate.Order < best.Order
 }
 
-const playerWarStatsArchiveQuery = `
-	SELECT war.war_id, war.war_type,
-	       war.archive_pack_id, war.archive_offset, war.archive_compressed_bytes,
-	       pending.payload
-	FROM player_war_history AS history
-	CROSS JOIN LATERAL unnest(history.war_ids) AS player_war(war_id)
-	JOIN wars AS war ON war.war_id = player_war.war_id
-	LEFT JOIN war_archive_pending AS pending
-	  ON pending.war_id = war.war_id AND pending.end_time = war.end_time
-	WHERE history.player_tag = $1
-	  AND war.end_time >= $2
-	  AND war.end_time <= $3
-	ORDER BY war.end_time DESC
-`
-
-type playerWarStatsArchiveRow struct {
-	warID   int32
-	warType string
-	locator wararchive.Locator
-	pending json.RawMessage
-}
-
-type playerWarStatsWar struct {
-	warType string
-	war     wararchive.War
-}
-
-type playerWarArchiveReader interface {
-	Read(context.Context, wararchive.Locator, json.RawMessage) (wararchive.War, error)
-}
-
 func sqlPlayerWarStats(c *fiber.Ctx, a apptypes.Deps, playerTag string, start time.Time, end time.Time) (map[string]any, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), playerWarStatsArchiveQuery, playerTag, start, end)
+	attacks, wars, err := sqlAttacksForPlayersContext(c.UserContext(), a, []string{playerTag}, start, end)
 	if err != nil {
 		return nil, err
 	}
-	archiveRows := make([]playerWarStatsArchiveRow, 0)
-	for rows.Next() {
-		var item playerWarStatsArchiveRow
-		var packID, offset pgtype.Int8
-		var compressedBytes pgtype.Int4
-		var pending []byte
-		if err := rows.Scan(&item.warID, &item.warType, &packID, &offset, &compressedBytes, &pending); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		if packID.Valid {
-			item.locator.PackID = packID.Int64
-		}
-		if offset.Valid {
-			item.locator.Offset = offset.Int64
-		}
-		if compressedBytes.Valid {
-			item.locator.CompressedBytes = int(compressedBytes.Int32)
-		}
-		item.pending = json.RawMessage(pending)
-		archiveRows = append(archiveRows, item)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, err
-	}
-	rows.Close()
-
-	reader := wararchive.NewReader(a.Config.WarArchiveOrigin, nil)
-	wars, err := loadPlayerWarStatsWars(c.UserContext(), reader, archiveRows)
-	if err != nil {
-		return nil, err
-	}
-	return playerWarStatsResponse(playerTag, start, end, wars), nil
-}
-
-func loadPlayerWarStatsWars(ctx context.Context, reader playerWarArchiveReader, rows []playerWarStatsArchiveRow) ([]playerWarStatsWar, error) {
-	items := make([]playerWarStatsWar, len(rows))
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(8)
-	for index := range rows {
-		index := index
-		group.Go(func() error {
-			row := rows[index]
-			war, err := reader.Read(groupCtx, row.locator, row.pending)
-			if err != nil {
-				return fmt.Errorf("read archived war %d: %w", row.warID, err)
-			}
-			items[index] = playerWarStatsWar{warType: row.warType, war: war}
-			return nil
-		})
-	}
-	if err := group.Wait(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-func playerWarStatsResponse(playerTag string, start time.Time, end time.Time, wars []playerWarStatsWar) map[string]any {
 	buckets := map[string]*warStatsBucket{
 		"all":      {},
 		"random":   {},
 		"friendly": {},
 		"cwl":      {},
 	}
-	for _, item := range wars {
-		addArchivedPlayerWarStats(buckets, playerTag, item.warType, item.war)
+	for _, war := range wars {
+		participated := false
+		for _, clan := range []wararchive.Clan{war.Clan, war.Opponent} {
+			for _, member := range clan.Members {
+				if member.Tag == playerTag {
+					participated = true
+					break
+				}
+			}
+		}
+		if !participated {
+			continue
+		}
+		for _, key := range []string{"all", war.Type} {
+			bucket := buckets[key]
+			if bucket == nil {
+				continue
+			}
+			bucket.Wars++
+			bucket.ExpectedAttacks += war.AttacksPerMember
+		}
+	}
+	for _, attack := range attacks {
+		for _, key := range []string{"all", attack.WarType} {
+			bucket := buckets[key]
+			if bucket == nil {
+				continue
+			}
+			bucket.addAttack(attack.Stars, attack.DestructionPercentage, attack.Duration, attack.AttackerTownhall, attack.DefenderTownhall)
+		}
 	}
 	return map[string]any{
 		"playerTag":      playerTag,
@@ -578,50 +611,7 @@ func playerWarStatsResponse(playerTag string, start time.Time, end time.Time, wa
 		"random":         buckets["random"].Map(),
 		"friendly":       buckets["friendly"].Map(),
 		"cwl":            buckets["cwl"].Map(),
-	}
-}
-
-func addArchivedPlayerWarStats(buckets map[string]*warStatsBucket, playerTag string, warType string, war wararchive.War) {
-	member, opponents, ok := archivedWarPlayer(playerTag, war)
-	if !ok {
-		return
-	}
-	expectedAttacks := war.AttacksPerMember
-	if expectedAttacks <= 0 {
-		expectedAttacks = 1
-	}
-	keys := []string{"all", warType}
-	for _, key := range keys {
-		if bucket := buckets[key]; bucket != nil {
-			bucket.Wars++
-			bucket.ExpectedAttacks += expectedAttacks
-		}
-	}
-	defenderTownhalls := make(map[string]int, len(opponents.Members))
-	for _, opponent := range opponents.Members {
-		defenderTownhalls[opponent.Tag] = opponent.TownhallLevel
-	}
-	for _, attack := range member.Attacks {
-		for _, key := range keys {
-			if bucket := buckets[key]; bucket != nil {
-				bucket.addAttack(attack.Stars, attack.DestructionPercentage, attack.Duration, member.TownhallLevel, defenderTownhalls[attack.DefenderTag])
-			}
-		}
-	}
-}
-
-func archivedWarPlayer(playerTag string, war wararchive.War) (wararchive.Member, wararchive.Clan, bool) {
-	for _, member := range war.Clan.Members {
-		if member.Tag == playerTag {
-			return member, war.Opponent, true
-		}
-	}
-	for _, member := range war.Opponent.Members {
-		if member.Tag == playerTag {
-			return member, war.Clan, true
-		}
-	}
-	return wararchive.Member{}, wararchive.Clan{}, false
+	}, nil
 }
 
 type warStatsBucket struct {

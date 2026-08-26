@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 )
@@ -182,46 +184,75 @@ func getServerWarLeaderboard(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT attacker_tag, count(*)::bigint, COALESCE(sum(stars), 0)::bigint,
-			       COALESCE(avg(stars), 0)::float8, COALESCE(avg(destruction_percentage), 0)::float8
-			FROM war_attacks
-			WHERE attacker_tag = ANY($1)
-			  AND war_type <> 'friendly'
-			GROUP BY attacker_tag
-			ORDER BY sum(stars) DESC, count(*) DESC
-			LIMIT $2
-		`, playerTags, limit)
+		wars, err := a.Store.WarArchive.LoadForPlayers(c.UserContext(), a.Store.SQL, playerTags, time.Unix(0, 0).UTC(), time.Now().UTC())
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		items := []map[string]any{}
-		rank := 1
-		for rows.Next() {
-			var tag string
-			var attacks, stars int64
-			var avgStars, avgDest float64
-			if err := rows.Scan(&tag, &attacks, &stars, &avgStars, &avgDest); err != nil {
-				return err
+		type totals struct{ attacks, stars, destruction, triples int64 }
+		byPlayer := make(map[string]*totals, len(playerTags))
+		wanted := make(map[string]struct{}, len(playerTags))
+		for _, tag := range playerTags {
+			wanted[tag] = struct{}{}
+		}
+		for warID, war := range wars {
+			if war.Type == "friendly" {
+				continue
+			}
+			for _, attack := range wararchive.Attacks(warID, war) {
+				if _, exists := wanted[attack.AttackerTag]; !exists {
+					continue
+				}
+				value := byPlayer[attack.AttackerTag]
+				if value == nil {
+					value = &totals{}
+					byPlayer[attack.AttackerTag] = value
+				}
+				value.attacks++
+				value.stars += int64(attack.Stars)
+				value.destruction += int64(attack.DestructionPercentage)
+				if attack.Stars == 3 {
+					value.triples++
+				}
+			}
+		}
+		tags := make([]string, 0, len(byPlayer))
+		for tag := range byPlayer {
+			tags = append(tags, tag)
+		}
+		sort.Slice(tags, func(i, j int) bool {
+			left, right := byPlayer[tags[i]], byPlayer[tags[j]]
+			if left.stars == right.stars {
+				return left.attacks > right.attacks
+			}
+			return left.stars > right.stars
+		})
+		if len(tags) > limit {
+			tags = tags[:limit]
+		}
+		items := make([]map[string]any, 0, len(tags))
+		for index, tag := range tags {
+			value := byPlayer[tag]
+			avgStars, avgDest := 0.0, 0.0
+			if value.attacks > 0 {
+				avgStars = float64(value.stars) / float64(value.attacks)
+				avgDest = float64(value.destruction) / float64(value.attacks)
 			}
 			clanTag, clanName := lbClanFromPlayer(info[tag], clanNameMap)
 			items = append(items, map[string]any{
-				"rank":                   rank,
+				"rank":                   index + 1,
 				"player_tag":             tag,
 				"player_name":            asStringOr(info[tag]["name"], "Unknown"),
 				"townhall_level":         info[tag]["townhall"],
 				"clan_tag":               clanTag,
 				"clan_name":              clanName,
-				"total_attacks":          attacks,
-				"total_stars":            stars,
+				"total_attacks":          value.attacks,
+				"total_stars":            value.stars,
 				"average_stars":          lbRound(avgStars, 2),
 				"average_destruction":    lbRound(avgDest, 2),
-				"three_star_attacks":     nil,
-				"three_star_rate":        nil,
+				"three_star_attacks":     value.triples,
+				"three_star_rate":        lbRound(float64(value.triples)*100/float64(value.attacks), 2),
 				"destruction_percentage": lbRound(avgDest, 2),
 			})
-			rank++
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"server_id": serverID, "items": items, "total": len(items)})
 	}

@@ -20,6 +20,7 @@ type Config struct {
 	ElasticsearchAPIKey          string
 	ElasticsearchPlayersAlias    string
 	ElasticsearchClansAlias      string
+	WarArchiveOrigin             string
 	BunnyAccessKey               string
 	AIUsageSecret                string
 	Local                        bool
@@ -27,7 +28,6 @@ type Config struct {
 	DevUserID                    string
 	DiscordBotToken              string
 	ProxyOrigin                  string
-	WarArchiveOrigin             string
 	DataEncryptionKey            string
 	JWTAccessSecret              string
 	JWTRefreshSecret             string
@@ -79,6 +79,7 @@ func Load() (Config, error) {
 		ElasticsearchAPIKey:          strings.TrimSpace(os.Getenv("ELASTICSEARCH_API_KEY")),
 		ElasticsearchPlayersAlias:    normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_PLAYERS_ALIAS"), "clashking_players"),
 		ElasticsearchClansAlias:      normalizeElasticsearchAlias(os.Getenv("ELASTICSEARCH_CLANS_ALIAS"), "clashking_clans"),
+		WarArchiveOrigin:             normalizeOrigin(firstNonEmpty(os.Getenv("WAR_ARCHIVE_ORIGIN"), "https://wars.clashk.ing")),
 		BunnyAccessKey:               os.Getenv("BUNNY_ACCESS_KEY"),
 		AIUsageSecret:                os.Getenv("AI_USAGE_SECRET"),
 		Local:                        strings.EqualFold(os.Getenv("LOCAL"), "TRUE"),
@@ -86,7 +87,6 @@ func Load() (Config, error) {
 		DevUserID:                    os.Getenv("DEV_USER_ID"),
 		DiscordBotToken:              os.Getenv("DISCORD_BOT_TOKEN"),
 		ProxyOrigin:                  normalizeOrigin(os.Getenv("CLASHKING_PROXY_INTERNAL_ORIGIN")),
-		WarArchiveOrigin:             normalizeOrigin(firstNonEmpty(os.Getenv("WAR_ARCHIVE_ORIGIN"), "https://wars.clashk.ing")),
 		DataEncryptionKey:            os.Getenv("DATA_ENCRYPTION_KEY"),
 		JWTAccessSecret:              os.Getenv("JWT_ACCESS_SECRET"),
 		JWTRefreshSecret:             os.Getenv("JWT_REFRESH_SECRET"),

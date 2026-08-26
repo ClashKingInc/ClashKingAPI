@@ -18,7 +18,7 @@ const (
 	cwlLowestLeagueID        = 48000001
 	cwlHighestLeagueID       = 48000022
 	cwlDirectHistoryEndMonth = "2025-08"
-	cwlBackfillEndMonth      = "2026-08"
+	cwlBackfillEndMonth      = "2026-09"
 )
 
 type cwlLeagueRule struct {
@@ -374,7 +374,7 @@ func calculateCWLGroupStandings(group cwlLeagueBackfillGroup, wars map[string]cw
 	}
 	for tag := range expected {
 		war, ok := wars[tag]
-		if !ok || (war.state != "warEnded" && war.state != "ended") {
+		if !ok || officialWarState(war.state) != "warEnded" {
 			complete = false
 			continue
 		}

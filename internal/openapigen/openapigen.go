@@ -571,16 +571,8 @@ func rewriteRef(value any) any {
 
 func orderedTags(doc map[string]any) []any {
 	primary := []string{
-		"Counts", "Stats", "Player", "Clan", "War", "Battlelogs", "Leaderboard", "Rankings",
-		"Global", "Search", "Links", "Tracking", "Dates", "Lists",
+		"Player", "Clan", "War", "CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links",
 	}
-	seen := map[string]bool{}
-	result := make([]any, 0, len(primary)+1)
-	for _, name := range primary {
-		result = append(result, map[string]any{"name": name})
-		seen[name] = true
-	}
-
 	operationTags := map[string]bool{}
 	paths, _ := doc["paths"].(map[string]any)
 	for _, rawPath := range paths {
@@ -596,6 +588,15 @@ func orderedTags(doc map[string]any) []any {
 		}
 	}
 
+	seen := map[string]bool{}
+	result := make([]any, 0, len(operationTags))
+	for _, name := range primary {
+		if operationTags[name] {
+			result = append(result, map[string]any{"name": name})
+			seen[name] = true
+		}
+	}
+
 	extra := make([]string, 0, len(operationTags))
 	for name := range operationTags {
 		if name != "Other" && !seen[name] {
@@ -606,7 +607,9 @@ func orderedTags(doc map[string]any) []any {
 	for _, name := range extra {
 		result = append(result, map[string]any{"name": name})
 	}
-	result = append(result, map[string]any{"name": "Other"})
+	if operationTags["Other"] {
+		result = append(result, map[string]any{"name": "Other"})
+	}
 	return result
 }
 

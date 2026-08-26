@@ -97,7 +97,7 @@ func TestCalculateCWLLeagueBackfillRank(t *testing.T) {
 	}
 	rank, complete := calculateCWLLeagueBackfillRank("#A", group, map[string]cwlLeagueBackfillWar{
 		"#WAR": {
-			tag: "#WAR", state: "warEnded", clanTag: "#A", opponentTag: "#B",
+			tag: "#WAR", state: "warended", clanTag: "#A", opponentTag: "#B",
 			clanStars: 30, opponentStars: 29, clanDestruction: 90, opponentDestruction: 99,
 		},
 	})
@@ -191,14 +191,18 @@ func TestIncompleteAugustLeavesForwardSeasonsUnassigned(t *testing.T) {
 	}
 }
 
-func TestBackfillStopsBeforeAugust2026(t *testing.T) {
+func TestBackfillIncludesAugustAndStopsBeforeSeptember2026(t *testing.T) {
 	groups := []cwlLeagueBackfillGroup{
-		{cwlID: "jul", month: "2026-07", leagueID: 48000017, rank: 1, complete: true, clanTags: make([]string, 8)},
-		{cwlID: "aug", month: "2026-08", clanTags: make([]string, 8)},
+		{cwlID: "jul", season: "2026-07", month: "2026-07", leagueID: 48000017, rank: 1, complete: true, clanTags: make([]string, 8)},
+		{cwlID: "aug", season: "2026-08", month: "2026-08", rank: 1, complete: true, clanTags: make([]string, 8)},
+		{cwlID: "sep", season: "2026-09", month: "2026-09", clanTags: make([]string, 8)},
 	}
 	assignments := cwlLeagueAssignments(groups, map[string]int{})
-	if _, exists := assignments["aug"]; exists {
-		t.Fatalf("August 2026 should not be assigned: %#v", assignments)
+	if assignments["aug"] != 48000018 {
+		t.Fatalf("August 2026 assignment = %d, want 48000018", assignments["aug"])
+	}
+	if _, exists := assignments["sep"]; exists {
+		t.Fatalf("September 2026 should remain unassigned: %#v", assignments)
 	}
 }
 

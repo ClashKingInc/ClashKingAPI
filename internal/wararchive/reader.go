@@ -2,150 +2,242 @@ package wararchive
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/klauspost/compress/zstd"
 )
 
-const (
-	DefaultOrigin      = "https://wars.clashk.ing"
-	defaultReadTimeout = 15 * time.Second
-	maxCompressedFrame = 16 * 1024 * 1024
-)
-
-// dictionary is the canonical war archive dictionary maintained by DevKit.
-//
-//go:embed war-json.zdict
-var dictionary []byte
-
-// War is the canonical payload stored in a single compressed archive frame.
-type War struct {
-	WarTag               string    `json:"warTag,omitempty"`
-	State                string    `json:"state"`
-	TeamSize             int       `json:"teamSize"`
-	AttacksPerMember     int       `json:"attacksPerMember"`
-	PreparationStartTime time.Time `json:"preparationStartTime"`
-	StartTime            time.Time `json:"startTime"`
-	EndTime              time.Time `json:"endTime"`
-	BattleModifier       string    `json:"battleModifier"`
-	Clan                 Clan      `json:"clan"`
-	Opponent             Clan      `json:"opponent"`
-}
-
-type Clan struct {
-	Tag                   string   `json:"tag"`
-	Name                  string   `json:"name"`
-	BadgeToken            string   `json:"badgeToken"`
-	ClanLevel             int      `json:"clanLevel"`
-	Attacks               int      `json:"attacks"`
-	Stars                 int      `json:"stars"`
-	DestructionPercentage float64  `json:"destructionPercentage"`
-	Members               []Member `json:"members"`
-}
-
-type Member struct {
-	Tag           string   `json:"tag"`
-	Name          string   `json:"name"`
-	TownhallLevel int      `json:"townhallLevel"`
-	MapPosition   int      `json:"mapPosition"`
-	Attacks       []Attack `json:"attacks"`
-}
-
-type Attack struct {
-	DefenderTag           string `json:"defenderTag"`
-	Stars                 int    `json:"stars"`
-	DestructionPercentage int    `json:"destructionPercentage"`
-	Duration              int    `json:"duration"`
-	Order                 int    `json:"order"`
-}
-
-type Locator struct {
-	PackID          int64
-	Offset          int64
-	CompressedBytes int
-}
-
-type HTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 type Reader struct {
-	origin string
-	http   HTTPDoer
+	origin      string
+	client      *http.Client
+	concurrency int
+	decoders    sync.Pool
 }
 
-func NewReader(origin string, client HTTPDoer) *Reader {
+func (r *Reader) LoadIDs(ctx context.Context, pool *pgxpool.Pool, warIDs []string) (map[string]War, error) {
+	if len(warIDs) == 0 {
+		return map[string]War{}, nil
+	}
+	numericIDs := make([]int32, 0, len(warIDs))
+	for _, warID := range warIDs {
+		value, err := strconv.ParseInt(warID, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid war ID %q: %w", warID, err)
+		}
+		numericIDs = append(numericIDs, int32(value))
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT w.war_id::text, w.archive_pack_id, w.archive_offset, w.archive_compressed_bytes, p.payload
+		FROM wars AS w
+		LEFT JOIN war_archive_pending AS p ON p.war_id = w.war_id AND p.end_time = w.end_time
+		WHERE w.war_id = ANY($1::integer[])
+	`, numericIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	refs := make([]Ref, 0, len(warIDs))
+	for rows.Next() {
+		var ref Ref
+		if err := rows.Scan(&ref.WarID, &ref.PackID, &ref.Offset, &ref.CompressedBytes, &ref.Pending); err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return r.Load(ctx, refs)
+}
+
+func (r *Reader) LoadForPlayers(ctx context.Context, pool *pgxpool.Pool, playerTags []string, start, end time.Time) (map[string]War, error) {
+	if len(playerTags) == 0 {
+		return map[string]War{}, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT w.war_id::text
+		FROM player_war_history AS history
+		CROSS JOIN LATERAL unnest(history.war_ids) AS history_war_id
+		JOIN wars AS w ON w.war_id = history_war_id
+		WHERE history.player_tag = ANY($1)
+		  AND history.period_start >= date_trunc('quarter', $2::timestamptz)::date
+		  AND history.period_start <= date_trunc('quarter', $3::timestamptz)::date
+		  AND w.end_time >= $2 AND w.end_time <= $3
+	`, playerTags, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var warIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		warIDs = append(warIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return r.LoadIDs(ctx, pool, warIDs)
+}
+
+func NewReader(origin string, client *http.Client, concurrency int) (*Reader, error) {
 	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
-	if origin == "" {
-		origin = DefaultOrigin
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("invalid war archive origin %q", origin)
 	}
 	if client == nil {
-		client = &http.Client{Timeout: defaultReadTimeout}
+		client = http.DefaultClient
 	}
-	return &Reader{origin: origin, http: client}
+	if concurrency <= 0 {
+		concurrency = 12
+	}
+	reader := &Reader{origin: origin, client: client, concurrency: concurrency}
+	reader.decoders.New = func() any {
+		decoder, decoderErr := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderDicts(dictionary))
+		if decoderErr != nil {
+			panic(decoderErr)
+		}
+		return decoder
+	}
+	return reader, nil
 }
 
-// Read returns an uncompressed pending payload when present, otherwise it
-// fetches exactly one compressed frame from the immutable archive pack.
-func (r *Reader) Read(ctx context.Context, locator Locator, pending json.RawMessage) (War, error) {
-	if len(pending) > 0 && string(pending) != "null" {
-		return decodeWar(pending)
+func (r *Reader) Load(ctx context.Context, refs []Ref) (map[string]War, error) {
+	result := make(map[string]War, len(refs))
+	remote := make([]Ref, 0, len(refs))
+	for _, ref := range refs {
+		if len(ref.Pending) != 0 {
+			var war War
+			if err := json.Unmarshal(ref.Pending, &war); err != nil {
+				return nil, fmt.Errorf("decode pending war %s: %w", ref.WarID, err)
+			}
+			result[ref.WarID] = war
+			continue
+		}
+		if ref.PackID == nil || ref.Offset == nil || ref.CompressedBytes == nil {
+			return nil, fmt.Errorf("war %s has neither pending data nor an archive locator", ref.WarID)
+		}
+		remote = append(remote, ref)
 	}
-	if locator.PackID <= 0 || locator.Offset < 0 || locator.CompressedBytes <= 0 || locator.CompressedBytes > maxCompressedFrame {
-		return War{}, fmt.Errorf("invalid war archive locator: pack=%d offset=%d bytes=%d", locator.PackID, locator.Offset, locator.CompressedBytes)
+	if len(remote) == 0 {
+		return result, nil
 	}
 
-	objectURL := fmt.Sprintf("%s/packs/%06d.pack", r.origin, locator.PackID)
-	if _, err := url.ParseRequestURI(objectURL); err != nil {
-		return War{}, fmt.Errorf("invalid war archive URL: %w", err)
+	type response struct {
+		id  string
+		war War
+		err error
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, objectURL, nil)
+	jobs := make(chan Ref)
+	responses := make(chan response, len(remote))
+	workers := min(r.concurrency, len(remote))
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ref := range jobs {
+				war, err := r.loadOne(ctx, ref)
+				responses <- response{id: ref.WarID, war: war, err: err}
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for _, ref := range remote {
+			select {
+			case jobs <- ref:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		wg.Wait()
+		close(responses)
+	}()
+	for response := range responses {
+		if response.err != nil {
+			return nil, response.err
+		}
+		result[response.id] = response.war
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (r *Reader) loadOne(ctx context.Context, ref Ref) (War, error) {
+	start := *ref.Offset
+	end := start + int64(*ref.CompressedBytes) - 1
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/packs/%06d.pack", r.origin, *ref.PackID), nil)
 	if err != nil {
 		return War{}, err
 	}
-	end := locator.Offset + int64(locator.CompressedBytes) - 1
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", locator.Offset, end))
-	req.Header.Set("Accept-Encoding", "identity")
-
-	resp, err := r.http.Do(req)
+	request.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+	response, err := r.client.Do(request)
 	if err != nil {
-		return War{}, fmt.Errorf("fetch war archive frame: %w", err)
+		return War{}, fmt.Errorf("read archived war %s: %w", ref.WarID, err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent {
-		return War{}, fmt.Errorf("war archive returned status %d, expected 206", resp.StatusCode)
+	defer response.Body.Close()
+	var frame []byte
+	switch response.StatusCode {
+	case http.StatusPartialContent:
+		frame, err = io.ReadAll(io.LimitReader(response.Body, int64(*ref.CompressedBytes)+1))
+	case http.StatusOK:
+		var object []byte
+		object, err = io.ReadAll(response.Body)
+		if err == nil {
+			if start < 0 || end >= int64(len(object)) {
+				return War{}, fmt.Errorf("archive object for war %s is shorter than its SQL locator", ref.WarID)
+			}
+			frame = object[start : end+1]
+		}
+	default:
+		return War{}, fmt.Errorf("read archived war %s: HTTP %d", ref.WarID, response.StatusCode)
 	}
-	frame, err := io.ReadAll(io.LimitReader(resp.Body, int64(locator.CompressedBytes)+1))
 	if err != nil {
-		return War{}, fmt.Errorf("read war archive frame: %w", err)
+		return War{}, err
 	}
-	if len(frame) != locator.CompressedBytes {
-		return War{}, fmt.Errorf("war archive frame length is %d, expected %d", len(frame), locator.CompressedBytes)
+	if len(frame) != *ref.CompressedBytes {
+		return War{}, fmt.Errorf("read archived war %s: got %d bytes, expected %d", ref.WarID, len(frame), *ref.CompressedBytes)
 	}
-
-	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderDicts(dictionary))
-	if err != nil {
-		return War{}, fmt.Errorf("initialize war archive decoder: %w", err)
-	}
-	defer decoder.Close()
+	decoder := r.decoders.Get().(*zstd.Decoder)
 	raw, err := decoder.DecodeAll(frame, nil)
+	r.decoders.Put(decoder)
 	if err != nil {
-		return War{}, fmt.Errorf("decompress war archive frame: %w", err)
+		return War{}, fmt.Errorf("decompress archived war %s: %w", ref.WarID, err)
 	}
-	return decodeWar(raw)
-}
-
-func decodeWar(raw []byte) (War, error) {
 	var war War
 	if err := json.Unmarshal(raw, &war); err != nil {
-		return War{}, fmt.Errorf("decode war archive payload: %w", err)
+		return War{}, fmt.Errorf("decode archived war %s: %w", ref.WarID, err)
+	}
+	if war.Clan.Tag == "" || war.Opponent.Tag == "" || war.EndTime.IsZero() {
+		return War{}, errors.New("archived war is missing required reconstruction fields")
 	}
 	return war, nil
+}
+
+func SortedIDs(values map[string]War) []string {
+	result := make([]string, 0, len(values))
+	for id := range values {
+		result = append(result, id)
+	}
+	sort.Strings(result)
+	return result
 }

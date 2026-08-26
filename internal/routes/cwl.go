@@ -211,7 +211,7 @@ func loadStoredCWLWars(c *fiber.Ctx, a apptypes.Deps, rounds [][]string, season 
 		return map[string]cwlStoredWarResponse{}, nil
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT war_id, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
+		SELECT war_id::text, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
 		       war_type, state, battle_modifier, war_tag, clan_name, opponent_name, clan_badge_token,
 		       opponent_badge_token, clan_level, opponent_clan_level, clan_attacks, opponent_attacks,
 		       clan_stars, opponent_stars, clan_destruction_percentage::float8, opponent_destruction_percentage::float8
@@ -235,11 +235,7 @@ func loadStoredCWLWars(c *fiber.Ctx, a apptypes.Deps, rounds [][]string, season 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	members, err := sqlWarMembers(c, a, warIDs)
-	if err != nil {
-		return nil, err
-	}
-	attacks, err := sqlWarAttacks(c, a, warIDs)
+	archived, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +244,11 @@ func loadStoredCWLWars(c *fiber.Ctx, a apptypes.Deps, rounds [][]string, season 
 		if war.WarTag == nil {
 			continue
 		}
-		item := buildOfficialWar(war, members[war.WarID], attacks[war.WarID])
+		value, exists := archived[war.WarID]
+		if !exists {
+			continue
+		}
+		item := buildOfficialArchiveWar(value, war.ClanTag)
 		item.BattleModifier = nil
 		byTag[*war.WarTag] = cwlStoredWarResponse{officialWarResponse: item, Season: season}
 	}

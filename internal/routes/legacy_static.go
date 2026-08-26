@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -68,60 +67,6 @@ func builderBaseLeagues() fiber.Handler {
 			results = append(results, copyItem)
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": results})
-	}
-}
-
-// listTownhalls godoc
-// @Summary List tracked town halls
-// @Description Returns distinct current town hall levels from tracked players.
-// @Tags Lists
-// @Produce json
-// @Success 200 {array} int
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /list/townhalls [get]
-func listTownhalls(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT DISTINCT townhall_level FROM basic_player ORDER BY townhall_level`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		out := []int{}
-		for rows.Next() {
-			var level int
-			if err := rows.Scan(&level); err != nil {
-				return err
-			}
-			out = append(out, level)
-		}
-		return apptypes.JSON(c, http.StatusOK, out)
-	}
-}
-
-// listSeasons godoc
-// @Summary List recent seasons
-// @Description Returns recent season identifiers in YYYY-MM format.
-// @Tags Lists
-// @Produce json
-// @Param last query int false "Number of previous months to include"
-// @Success 200 {array} string
-// @Router /list/seasons [get]
-func listSeasons() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		last, _ := strconv.Atoi(c.Query("last", "12"))
-		if last > 1000 {
-			last = 1000
-		}
-		if last < 0 {
-			last = 12
-		}
-		now := time.Now().UTC()
-		results := make([]string, 0, last+1)
-		for i := 0; i <= last; i++ {
-			t := now.AddDate(0, -i, 0)
-			results = append(results, fmt.Sprintf("%04d-%02d", t.Year(), int(t.Month())))
-		}
-		return apptypes.JSON(c, http.StatusOK, results)
 	}
 }
 

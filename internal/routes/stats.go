@@ -12,6 +12,7 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -164,15 +165,11 @@ func statsOverview(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		war, err := loadStatsPerformance(c.UserContext(), a.Store.SQL, statsWarSourceSQL, []string{
-			"event_time >= $1", "event_time < $2", "war_type = 'random'", "townhall_level = opponent_townhall_level",
-		}, []any{window.start, window.endExclusive})
+		war, _, err := loadWarArchiveStats(c.UserContext(), a, "random", window, nil, nil, true, nil, nil)
 		if err != nil {
 			return err
 		}
-		cwl, err := loadStatsPerformance(c.UserContext(), a.Store.SQL, statsCWLSourceSQL, []string{
-			"event_time >= $1", "event_time < $2", "townhall_level = opponent_townhall_level",
-		}, []any{window.start, window.endExclusive})
+		cwl, _, err := loadWarArchiveStats(c.UserContext(), a, "cwl", window, nil, nil, true, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -313,12 +310,8 @@ func statsWar(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		where, args, err := statsWarWhere(request.TownhallLevel, request.OpponentTownhallLevel, request.EqualTownhalls, window)
-		if err != nil {
-			return err
-		}
-		where = append(where, "war_type = 'random'")
-		metrics, err := loadStatsPerformance(c.UserContext(), a.Store.SQL, statsWarSourceSQL, where, args)
+		equal := request.EqualTownhalls == nil || *request.EqualTownhalls
+		metrics, _, err := loadWarArchiveStats(c.UserContext(), a, "random", window, request.TownhallLevel, request.OpponentTownhallLevel, equal, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -348,16 +341,11 @@ func statsCWL(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		where, args, err := statsWarWhere(request.TownhallLevel, request.OpponentTownhallLevel, request.EqualTownhalls, window)
-		if err != nil {
-			return err
-		}
+		equal := request.EqualTownhalls == nil || *request.EqualTownhalls
 		if request.CWLLeagueID != nil {
 			if *request.CWLLeagueID <= 0 {
 				return apptypes.Error(http.StatusBadRequest, "cwl_league_id must be greater than 0")
 			}
-			args = append(args, *request.CWLLeagueID)
-			where = append(where, fmt.Sprintf("cwl_league_id = $%d", len(args)))
 		}
 		if len(request.Seasons) > 0 {
 			for _, season := range request.Seasons {
@@ -365,14 +353,8 @@ func statsCWL(a apptypes.Deps) fiber.Handler {
 					return apptypes.Error(http.StatusBadRequest, "seasons must use YYYY-MM")
 				}
 			}
-			args = append(args, request.Seasons)
-			where = append(where, fmt.Sprintf("season = ANY($%d::text[])", len(args)))
 		}
-		metrics, err := loadStatsPerformance(c.UserContext(), a.Store.SQL, statsCWLSourceSQL, where, args)
-		if err != nil {
-			return err
-		}
-		breakdowns, err := loadStatsBreakdowns(c.UserContext(), a.Store.SQL, statsCWLSourceSQL, where, args, "season")
+		metrics, breakdowns, err := loadWarArchiveStats(c.UserContext(), a, "cwl", window, request.TownhallLevel, request.OpponentTownhallLevel, equal, request.CWLLeagueID, request.Seasons)
 		if err != nil {
 			return err
 		}
@@ -397,39 +379,290 @@ const statsRankedSourceSQL = `(
 	WHERE b.attack = true AND lower(b.battle_type) IN ('ranked', 'legend')
 ) stats_source`
 
-const statsWarSourceSQL = `(
-	SELECT war_end_time AS event_time, stars::int AS stars,
-		destruction_percentage::float8 AS destruction_percentage,
-		attacker_townhall::int AS townhall_level, defender_townhall::int AS opponent_townhall_level,
-		war_type
-	FROM war_attacks
-) stats_source`
-
-const statsCWLSourceSQL = `(
-	SELECT a.war_end_time AS event_time, a.stars::int AS stars,
-		a.destruction_percentage::float8 AS destruction_percentage,
-		a.attacker_townhall::int AS townhall_level, a.defender_townhall::int AS opponent_townhall_level,
-		to_char(a.war_end_time AT TIME ZONE 'UTC', 'YYYY-MM') AS season,
-		league.cwl_league_id
-	FROM war_attacks a
-	LEFT JOIN LATERAL (
-		SELECT g.cwl_league_id
-		FROM cwl_groups AS g
-		JOIN cwl_group_clans AS gc ON gc.cwl_id = g.cwl_id
-		WHERE g.season = to_char(a.war_end_time AT TIME ZONE 'UTC', 'YYYY-MM')
-			AND gc.clan_tag IN (a.attacking_clan_tag, a.defending_clan_tag)
-		ORDER BY g.cwl_id DESC
-		LIMIT 1
-	) league ON true
-	WHERE a.war_type = 'cwl'
-) stats_source`
-
 func decodeStatsQueryJSON(c *fiber.Ctx, out any) error {
 	contentType := strings.ToLower(strings.TrimSpace(c.Get(fiber.HeaderContentType)))
 	if !strings.HasPrefix(contentType, fiber.MIMEApplicationJSON) {
 		return apptypes.Error(http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 	}
 	return apptypes.DecodeJSON(c, out)
+}
+
+type archiveStatsAggregate struct {
+	attacks, stars, zero, one, two, three int64
+	destruction                           int64
+}
+
+func (a *archiveStatsAggregate) add(value wararchive.AttackAggregate) {
+	a.attacks += int64(value.Attacks)
+	a.stars += int64(value.Stars)
+	a.zero += int64(value.ZeroStars)
+	a.one += int64(value.OneStars)
+	a.two += int64(value.TwoStars)
+	a.three += int64(value.Triples)
+	a.destruction += value.DestructionPercent
+}
+
+func (a archiveStatsAggregate) metrics() modelsv2.StatsMetrics {
+	result := modelsv2.StatsMetrics{SampleSize: a.attacks, Daily: []modelsv2.StatsDailyPoint{}, Available: a.attacks > 0}
+	if a.attacks == 0 {
+		return result
+	}
+	result.AverageStars = float64(a.stars) / float64(a.attacks)
+	result.AverageDestruction = float64(a.destruction) / float64(a.attacks)
+	result.ZeroStarRate = float64(a.zero) / float64(a.attacks)
+	result.OneStarRate = float64(a.one) / float64(a.attacks)
+	result.TwoStarRate = float64(a.two) / float64(a.attacks)
+	result.ThreeStarRate = float64(a.three) / float64(a.attacks)
+	return result
+}
+
+func loadWarArchiveStats(ctx context.Context, a apptypes.Deps, warType string, window statsTimeWindow, townhall, opponentTownhall *int, equal bool, leagueID *int, seasons []string) (modelsv2.StatsMetrics, []modelsv2.StatsBreakdown, error) {
+	for name, value := range map[string]*int{"townhall_level": townhall, "opponent_townhall_level": opponentTownhall} {
+		if value != nil && *value <= 0 {
+			return modelsv2.StatsMetrics{}, nil, apptypes.Error(http.StatusBadRequest, name+" must be greater than 0")
+		}
+	}
+	if leagueID != nil {
+		return loadWarArchiveStatsByLeague(ctx, a, warType, window, townhall, opponentTownhall, equal, *leagueID, seasons)
+	}
+	rows, err := a.Store.SQL.Query(ctx, `SELECT stats #> '{attacks,byDayTypeMatchup}' FROM war_archive_packs WHERE status = 'uploaded' AND last_end_time >= $1 AND first_end_time < $2`, window.start, window.endExclusive)
+	if err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	defer rows.Close()
+	daily := map[string]*archiveStatsAggregate{}
+	seasonSet := map[string]struct{}{}
+	for _, season := range seasons {
+		seasonSet[season] = struct{}{}
+	}
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return modelsv2.StatsMetrics{}, nil, err
+		}
+		var dailyMatchups map[string]wararchive.AttackAggregate
+		if err := json.Unmarshal(raw, &dailyMatchups); err != nil {
+			return modelsv2.StatsMetrics{}, nil, err
+		}
+		for key, value := range dailyMatchups {
+			parts := strings.Split(key, "|")
+			if len(parts) != 4 || parts[1] != warType {
+				continue
+			}
+			day, err := time.Parse("2006-01-02", parts[0])
+			if err != nil || day.Before(window.start) || !day.Before(window.endExclusive) {
+				continue
+			}
+			if len(seasonSet) > 0 {
+				if _, exists := seasonSet[parts[0][:7]]; !exists {
+					continue
+				}
+			}
+			attackerTH, _ := strconv.Atoi(parts[2])
+			defenderTH, _ := strconv.Atoi(parts[3])
+			if townhall != nil && attackerTH != *townhall {
+				continue
+			}
+			if opponentTownhall != nil && defenderTH != *opponentTownhall {
+				continue
+			}
+			if equal && attackerTH != defenderTH {
+				continue
+			}
+			current := daily[parts[0]]
+			if current == nil {
+				current = &archiveStatsAggregate{}
+				daily[parts[0]] = current
+			}
+			current.add(value)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	if err := addPendingWarArchiveStats(ctx, a, daily, warType, window, townhall, opponentTownhall, equal, seasonSet); err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	return archiveStatsResult(daily), archiveStatsSeasonBreakdowns(daily), nil
+}
+
+func addPendingWarArchiveStats(ctx context.Context, a apptypes.Deps, daily map[string]*archiveStatsAggregate, warType string, window statsTimeWindow, townhall, opponentTownhall *int, equal bool, seasons map[string]struct{}) error {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT payload FROM war_archive_pending
+		WHERE end_time >= $1 AND end_time < $2
+	`, window.start, window.endExclusive)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return err
+		}
+		var war wararchive.War
+		if err := json.Unmarshal(raw, &war); err != nil {
+			return err
+		}
+		if war.Type != warType {
+			continue
+		}
+		day := war.EndTime.UTC().Format("2006-01-02")
+		if len(seasons) > 0 {
+			if _, exists := seasons[day[:7]]; !exists {
+				continue
+			}
+		}
+		for _, attack := range wararchive.Attacks("", war) {
+			if townhall != nil && attack.AttackerTownhall != *townhall {
+				continue
+			}
+			if opponentTownhall != nil && attack.DefenderTownhall != *opponentTownhall {
+				continue
+			}
+			if equal && attack.AttackerTownhall != attack.DefenderTownhall {
+				continue
+			}
+			value := wararchive.AttackAggregate{Attacks: 1, Stars: attack.Stars, DestructionPercent: int64(attack.DestructionPercentage), DurationSeconds: int64(attack.Duration)}
+			switch attack.Stars {
+			case 3:
+				value.Triples = 1
+			case 2:
+				value.TwoStars = 1
+			case 1:
+				value.OneStars = 1
+			default:
+				value.ZeroStars = 1
+			}
+			current := daily[day]
+			if current == nil {
+				current = &archiveStatsAggregate{}
+				daily[day] = current
+			}
+			current.add(value)
+		}
+	}
+	return rows.Err()
+}
+
+func loadWarArchiveStatsByLeague(ctx context.Context, a apptypes.Deps, warType string, window statsTimeWindow, townhall, opponentTownhall *int, equal bool, leagueID int, seasons []string) (modelsv2.StatsMetrics, []modelsv2.StatsBreakdown, error) {
+	rows, err := a.Store.SQL.Query(ctx, `
+		SELECT DISTINCT w.war_id::text
+		FROM wars AS w
+		WHERE w.war_type = $1 AND w.end_time >= $2 AND w.end_time < $3
+		  AND (cardinality($5::text[]) = 0 OR to_char(w.end_time AT TIME ZONE 'UTC', 'YYYY-MM') = ANY($5))
+		  AND EXISTS (
+			SELECT 1 FROM cwl_groups AS g JOIN cwl_group_clans AS gc ON gc.cwl_id = g.cwl_id
+			WHERE g.cwl_league_id = $4 AND g.season = to_char(w.end_time AT TIME ZONE 'UTC', 'YYYY-MM')
+			  AND gc.clan_tag IN (w.clan_tag, w.opponent_tag)
+		  )
+	`, warType, window.start, window.endExclusive, leagueID, seasons)
+	if err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return modelsv2.StatsMetrics{}, nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	wars, err := a.Store.WarArchive.LoadIDs(ctx, a.Store.SQL, ids)
+	if err != nil {
+		return modelsv2.StatsMetrics{}, nil, err
+	}
+	daily := map[string]*archiveStatsAggregate{}
+	for id, war := range wars {
+		for _, attack := range wararchive.Attacks(id, war) {
+			if townhall != nil && attack.AttackerTownhall != *townhall {
+				continue
+			}
+			if opponentTownhall != nil && attack.DefenderTownhall != *opponentTownhall {
+				continue
+			}
+			if equal && attack.AttackerTownhall != attack.DefenderTownhall {
+				continue
+			}
+			value := wararchive.AttackAggregate{Attacks: 1, Stars: attack.Stars, DestructionPercent: int64(attack.DestructionPercentage)}
+			switch attack.Stars {
+			case 3:
+				value.Triples = 1
+			case 2:
+				value.TwoStars = 1
+			case 1:
+				value.OneStars = 1
+			default:
+				value.ZeroStars = 1
+			}
+			day := attack.WarEndTime.UTC().Format("2006-01-02")
+			current := daily[day]
+			if current == nil {
+				current = &archiveStatsAggregate{}
+				daily[day] = current
+			}
+			current.add(value)
+		}
+	}
+	return archiveStatsResult(daily), archiveStatsSeasonBreakdowns(daily), nil
+}
+
+func archiveStatsResult(daily map[string]*archiveStatsAggregate) modelsv2.StatsMetrics {
+	var total archiveStatsAggregate
+	keys := make([]string, 0, len(daily))
+	for key := range daily {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := daily[key]
+		total.attacks += value.attacks
+		total.stars += value.stars
+		total.zero += value.zero
+		total.one += value.one
+		total.two += value.two
+		total.three += value.three
+		total.destruction += value.destruction
+	}
+	result := total.metrics()
+	for _, key := range keys {
+		value := daily[key].metrics()
+		result.Daily = append(result.Daily, modelsv2.StatsDailyPoint{Date: key, SampleSize: value.SampleSize, AverageStars: value.AverageStars, AverageDestruction: value.AverageDestruction, ZeroStarRate: value.ZeroStarRate, OneStarRate: value.OneStarRate, TwoStarRate: value.TwoStarRate, ThreeStarRate: value.ThreeStarRate})
+	}
+	return result
+}
+
+func archiveStatsSeasonBreakdowns(daily map[string]*archiveStatsAggregate) []modelsv2.StatsBreakdown {
+	bySeason := map[string]*archiveStatsAggregate{}
+	for day, value := range daily {
+		season := day[:7]
+		current := bySeason[season]
+		if current == nil {
+			current = &archiveStatsAggregate{}
+			bySeason[season] = current
+		}
+		current.attacks += value.attacks
+		current.stars += value.stars
+		current.zero += value.zero
+		current.one += value.one
+		current.two += value.two
+		current.three += value.three
+		current.destruction += value.destruction
+	}
+	keys := make([]string, 0, len(bySeason))
+	for key := range bySeason {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]modelsv2.StatsBreakdown, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, modelsv2.StatsBreakdown{Key: key, Metrics: bySeason[key].metrics()})
+	}
+	return result
 }
 
 func loadGlobalCounts(ctx context.Context, pool *pgxpool.Pool) (modelsv2.GlobalCountsResponse, error) {

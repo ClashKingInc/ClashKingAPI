@@ -361,8 +361,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 func registerCompatibilityRoutes(app *fiber.App, a apptypes.Deps) {
 	app.Get("/global/counts", globalCounts(a))
 	app.Get("/builderbaseleagues", builderBaseLeagues())
-	app.Get("/list/townhalls", listTownhalls(a))
-	app.Get("/list/seasons", listSeasons())
 
 	app.Get("/war/:clanTag/previous", warPreviousAtTime(a))
 	app.Get("/war/:clanTag/basic", warBasic(a))

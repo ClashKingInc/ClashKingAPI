@@ -393,6 +393,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/donations",
 		"/permalink/{clan_tag}",
 		"/v2/clan/{clan_tag}/ranking",
+		"/v2/clan/{clan_tag}/badge",
 		"/clan/{clan_tag}/badge",
 		"/clan/{clan_tag}/basic",
 		"/clan/{clan_tag}/wars",
@@ -493,7 +494,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/player/{player_tag}/join-leave/totals",
 		"/v2/player/{player_tag}/join-leave/shared",
 		"/v2/player/{player_tag}/stat-history",
-		"/v2/clan/{clan_tag}/badge",
 		"/v2/links/{id}/searches",
 		"/v2/links/{id}/{playerTag}",
 		"/builderbaseleagues",
@@ -712,6 +712,10 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)
+	joinLeaveClan := swaggerDefinitionProperties(t, swaggerDefinitions(t, doc), "modelsv2.JoinLeaveClan")
+	if _, exists := joinLeaveClan["badge"]; exists {
+		t.Fatal("join-leave clan schema must not expose a badge")
+	}
 
 	wantHistory := []string{"limit", "time[after]", "time[before]"}
 	for _, path := range []string{
@@ -1010,7 +1014,6 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/clan/{clan_tag}/changes",
 		"/v2/clan/{clan_tag}/rankings",
 		"/v2/clan/{clan_tag}/basic",
-		"/v2/clan/{clan_tag}/badge",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected public stats path %s in swagger", path)

@@ -1610,47 +1610,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/badge": {
-            "get": {
-                "description": "Returns the clan badge image as a PNG.",
-                "produces": [
-                    "image/png"
-                ],
-                "tags": [
-                    "Clan"
-                ],
-                "summary": "Get clan badge image",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/clan/{clan_tag}/basic": {
             "get": {
                 "description": "Returns tracked basic clan data for a clan tag.",
@@ -17487,9 +17446,6 @@ const docTemplate = `{
         "modelsv2.JoinLeaveClan": {
             "type": "object",
             "properties": {
-                "badge": {
-                    "type": "string"
-                },
                 "name": {
                     "type": "string"
                 },

@@ -12,9 +12,8 @@ type JoinLeaveEvent struct {
 
 // JoinLeaveClan describes a clan attached to a join-leave event or total.
 type JoinLeaveClan struct {
-	Name  string `json:"name"`
-	Tag   string `json:"tag"`
-	Badge string `json:"badge"`
+	Name string `json:"name"`
+	Tag  string `json:"tag"`
 }
 
 // JoinLeaveClanTotal is the total time a player spent in a clan.

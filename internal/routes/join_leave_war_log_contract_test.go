@@ -14,8 +14,7 @@ func TestJoinLeaveBuildResponseShapesClanAndPlayerItems(t *testing.T) {
 		Type: "join", ClanTag: "#CLAN", ClanName: "Clan",
 		PlayerTag: "#PLAYER", PlayerName: "Player", Townhall: 17,
 	}
-	const baseURL = "https://dev-api.clashk.ing"
-	clan := joinLeaveBuildResponse([]joinLeaveEventRow{row}, 4438, 927, 50, joinLeaveScopeClan, baseURL)
+	clan := joinLeaveBuildResponse([]joinLeaveEventRow{row}, 4438, 927, 50, joinLeaveScopeClan)
 	if clan["available"] != 4438 || clan["uniquePlayers"] != 927 {
 		t.Fatalf("unexpected clan totals: %#v", clan)
 	}
@@ -24,7 +23,7 @@ func TestJoinLeaveBuildResponseShapesClanAndPlayerItems(t *testing.T) {
 		t.Fatal("clan history items must not repeat clan metadata")
 	}
 
-	player := joinLeaveBuildResponse([]joinLeaveEventRow{row}, 12, 1, 50, joinLeaveScopePlayer, baseURL)
+	player := joinLeaveBuildResponse([]joinLeaveEventRow{row}, 12, 1, 50, joinLeaveScopePlayer)
 	if _, exists := player["uniquePlayers"]; exists {
 		t.Fatal("player history must not expose the clan-only uniquePlayers summary")
 	}
@@ -32,8 +31,16 @@ func TestJoinLeaveBuildResponseShapesClanAndPlayerItems(t *testing.T) {
 	if playerItem.Clan == nil || playerItem.Clan.Tag != "#CLAN" {
 		t.Fatalf("player history must retain clan metadata: %#v", playerItem.Clan)
 	}
-	if playerItem.Clan.Badge != "https://dev-api.clashk.ing/v2/clan/%23CLAN/badge" {
-		t.Fatalf("player history must use the v2 clan badge endpoint: %q", playerItem.Clan.Badge)
+	encodedPlayer, err := json.Marshal(playerItem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var playerJSON map[string]any
+	if err := json.Unmarshal(encodedPlayer, &playerJSON); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := playerJSON["clan"].(map[string]any)["badge"]; exists {
+		t.Fatalf("player history must not include a clan badge: %s", encodedPlayer)
 	}
 
 	leave := row
@@ -42,11 +49,10 @@ func TestJoinLeaveBuildResponseShapesClanAndPlayerItems(t *testing.T) {
 	totals := joinLeaveClanTotals(
 		[]joinLeaveEventRow{row, leave},
 		joinLeaveWindow{start: row.Time, end: leave.Time},
-		baseURL,
 	)
 	totalClan := totals[0]["clan"].(map[string]any)
-	if totalClan["badge"] != "https://dev-api.clashk.ing/v2/clan/%23CLAN/badge" {
-		t.Fatalf("player clan totals must use the v2 clan badge endpoint: %#v", totalClan)
+	if _, exists := totalClan["badge"]; exists {
+		t.Fatalf("player clan totals must not include a badge: %#v", totalClan)
 	}
 }
 

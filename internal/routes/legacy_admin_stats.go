@@ -1,75 +1,15 @@
 package routes
 
 import (
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	serverroutes "github.com/ClashKingInc/ClashKingAPI/internal/routes/server"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
-
-const maxBadgeResponseSize = 5 * 1024 * 1024
-
-var badgeHTTPClient = &http.Client{Timeout: 10 * time.Second}
-
-// clanBadge godoc
-// @Summary Get clan badge image
-// @Description Returns the clan badge image as a PNG.
-// @Tags Clan
-// @Produce png
-// @Param clan_tag path string true "Clan tag"
-// @Success 200 {file} binary
-// @Failure 404 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/badge [get]
-func clanBadge(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		clanTag := clanFixTag(c.Params("clan_tag"))
-		var badgeToken string
-		_ = a.Store.SQL.QueryRow(c.UserContext(), `SELECT badge_token FROM basic_clan WHERE tag = $1`, clanTag).Scan(&badgeToken)
-		imageLink := badgeURL(badgeToken, 512)
-		if badgeToken == "" {
-			if a.Clash == nil {
-				return apptypes.Error(http.StatusNotFound, "Clan badge not found")
-			}
-			liveClan, err := a.Clash.GetClan(c.UserContext(), clanTag)
-			if err != nil || liveClan == nil || liveClan.Badge.Large == "" {
-				return apptypes.Error(http.StatusNotFound, "Clan badge not found")
-			}
-			imageLink = liveClan.Badge.Large
-		}
-		req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, imageLink, nil)
-		if err != nil {
-			return err
-		}
-		resp, err := badgeHTTPClient.Do(req)
-		if err != nil {
-			return apptypes.Error(http.StatusBadGateway, "Clan badge request failed")
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return apptypes.Error(http.StatusBadGateway, "Clan badge upstream returned an error")
-		}
-		data, err := io.ReadAll(io.LimitReader(resp.Body, maxBadgeResponseSize+1))
-		if err != nil {
-			return apptypes.Error(http.StatusBadGateway, "Failed to read clan badge")
-		}
-		if len(data) > maxBadgeResponseSize {
-			return apptypes.Error(http.StatusBadGateway, "Clan badge response is too large")
-		}
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "image/png"
-		}
-		c.Set("Content-Type", contentType)
-		return c.Send(data)
-	}
-}
 
 // serverSettingsLegacy godoc
 // @Summary Get legacy server settings

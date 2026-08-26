@@ -78,6 +78,23 @@ func TestReaderPrefersPendingPayloadWithoutHTTP(t *testing.T) {
 	}
 }
 
+func TestPlayerWarHistoryQueryMatchesConsolidatedSchema(t *testing.T) {
+	query := strings.ToLower(playerWarHistoryQuery)
+	if strings.Contains(query, "period_start") {
+		t.Fatal("player war history query references removed period_start column")
+	}
+	for _, required := range []string{
+		"unnest(history.war_ids)",
+		"history.player_tag = any($1::text[])",
+		"w.end_time >= $2",
+		"w.end_time <= $3",
+	} {
+		if !strings.Contains(query, required) {
+			t.Errorf("player war history query missing %q", required)
+		}
+	}
+}
+
 func jsonMarshal(value any) ([]byte, error) {
 	return json.Marshal(value)
 }

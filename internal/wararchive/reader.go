@@ -25,6 +25,15 @@ type Reader struct {
 	decoders    sync.Pool
 }
 
+const playerWarHistoryQuery = `
+	SELECT DISTINCT w.war_id::text
+	FROM player_war_history AS history
+	CROSS JOIN LATERAL unnest(history.war_ids) AS history_war_id
+	JOIN wars AS w ON w.war_id = history_war_id
+	WHERE history.player_tag = ANY($1::text[])
+	  AND w.end_time >= $2 AND w.end_time <= $3
+`
+
 func (r *Reader) LoadIDs(ctx context.Context, pool *pgxpool.Pool, warIDs []string) (map[string]War, error) {
 	if len(warIDs) == 0 {
 		return map[string]War{}, nil
@@ -65,16 +74,7 @@ func (r *Reader) LoadForPlayers(ctx context.Context, pool *pgxpool.Pool, playerT
 	if len(playerTags) == 0 {
 		return map[string]War{}, nil
 	}
-	rows, err := pool.Query(ctx, `
-		SELECT DISTINCT w.war_id::text
-		FROM player_war_history AS history
-		CROSS JOIN LATERAL unnest(history.war_ids) AS history_war_id
-		JOIN wars AS w ON w.war_id = history_war_id
-		WHERE history.player_tag = ANY($1)
-		  AND history.period_start >= date_trunc('quarter', $2::timestamptz)::date
-		  AND history.period_start <= date_trunc('quarter', $3::timestamptz)::date
-		  AND w.end_time >= $2 AND w.end_time <= $3
-	`, playerTags, start, end)
+	rows, err := pool.Query(ctx, playerWarHistoryQuery, playerTags, start, end)
 	if err != nil {
 		return nil, err
 	}

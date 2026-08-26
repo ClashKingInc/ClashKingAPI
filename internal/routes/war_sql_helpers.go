@@ -2,14 +2,18 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/sync/errgroup"
 )
 
 const clashBadgeBaseURL = "https://api-assets.clashofclans.com/badges"
@@ -462,82 +466,109 @@ func betterAttack(candidate officialWarAttack, best *officialWarAttack) bool {
 	return candidate.Order < best.Order
 }
 
+const playerWarStatsArchiveQuery = `
+	SELECT war.war_id, war.war_type,
+	       war.archive_pack_id, war.archive_offset, war.archive_compressed_bytes,
+	       pending.payload
+	FROM player_war_history AS history
+	CROSS JOIN LATERAL unnest(history.war_ids) AS player_war(war_id)
+	JOIN wars AS war ON war.war_id = player_war.war_id
+	LEFT JOIN war_archive_pending AS pending
+	  ON pending.war_id = war.war_id AND pending.end_time = war.end_time
+	WHERE history.player_tag = $1
+	  AND war.end_time >= $2
+	  AND war.end_time <= $3
+	ORDER BY war.end_time DESC
+`
+
+type playerWarStatsArchiveRow struct {
+	warID   int32
+	warType string
+	locator wararchive.Locator
+	pending json.RawMessage
+}
+
+type playerWarStatsWar struct {
+	warType string
+	war     wararchive.War
+}
+
+type playerWarArchiveReader interface {
+	Read(context.Context, wararchive.Locator, json.RawMessage) (wararchive.War, error)
+}
+
 func sqlPlayerWarStats(c *fiber.Ctx, a apptypes.Deps, playerTag string, start time.Time, end time.Time) (map[string]any, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT a.war_id, a.war_end_time, a.war_type, w.attacks_per_member, a.attacker_townhall,
-			a.defender_townhall, a.stars, a.destruction_percentage, a.duration
-		FROM war_attacks a
-		JOIN wars w ON w.war_id = a.war_id
-		WHERE a.attacker_tag = $1 AND a.war_end_time >= $2 AND a.war_end_time <= $3
-		ORDER BY a.war_end_time DESC
-	`, playerTag, start, end)
+	rows, err := a.Store.SQL.Query(c.UserContext(), playerWarStatsArchiveQuery, playerTag, start, end)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	archiveRows := make([]playerWarStatsArchiveRow, 0)
+	for rows.Next() {
+		var item playerWarStatsArchiveRow
+		var packID, offset pgtype.Int8
+		var compressedBytes pgtype.Int4
+		var pending []byte
+		if err := rows.Scan(&item.warID, &item.warType, &packID, &offset, &compressedBytes, &pending); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if packID.Valid {
+			item.locator.PackID = packID.Int64
+		}
+		if offset.Valid {
+			item.locator.Offset = offset.Int64
+		}
+		if compressedBytes.Valid {
+			item.locator.CompressedBytes = int(compressedBytes.Int32)
+		}
+		item.pending = json.RawMessage(pending)
+		archiveRows = append(archiveRows, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	reader := wararchive.NewReader(a.Config.WarArchiveOrigin, nil)
+	wars, err := loadPlayerWarStatsWars(c.UserContext(), reader, archiveRows)
+	if err != nil {
+		return nil, err
+	}
+	return playerWarStatsResponse(playerTag, start, end, wars), nil
+}
+
+func loadPlayerWarStatsWars(ctx context.Context, reader playerWarArchiveReader, rows []playerWarStatsArchiveRow) ([]playerWarStatsWar, error) {
+	items := make([]playerWarStatsWar, len(rows))
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(8)
+	for index := range rows {
+		index := index
+		group.Go(func() error {
+			row := rows[index]
+			war, err := reader.Read(groupCtx, row.locator, row.pending)
+			if err != nil {
+				return fmt.Errorf("read archived war %d: %w", row.warID, err)
+			}
+			items[index] = playerWarStatsWar{warType: row.warType, war: war}
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func playerWarStatsResponse(playerTag string, start time.Time, end time.Time, wars []playerWarStatsWar) map[string]any {
 	buckets := map[string]*warStatsBucket{
 		"all":      {},
 		"random":   {},
 		"friendly": {},
 		"cwl":      {},
 	}
-	seenExpected := map[string]bool{}
-	for rows.Next() {
-		var warID, warType string
-		var warEndTime time.Time
-		var attacksPerMember, ownTownhall, defenderTownhall, stars, destruction, duration int
-		if err := rows.Scan(&warID, &warEndTime, &warType, &attacksPerMember, &ownTownhall, &defenderTownhall, &stars, &destruction, &duration); err != nil {
-			return nil, err
-		}
-		_ = warEndTime
-		for _, key := range []string{"all", warType} {
-			bucket := buckets[key]
-			if bucket == nil {
-				continue
-			}
-			expectedKey := key + ":" + warID
-			if !seenExpected[expectedKey] {
-				bucket.Wars++
-				bucket.ExpectedAttacks += attacksPerMember
-				seenExpected[expectedKey] = true
-			}
-			bucket.addAttack(stars, destruction, duration, ownTownhall, defenderTownhall)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	missedRows, err := a.Store.SQL.Query(c.UserContext(), `
-		SELECT m.war_id, w.war_type, m.expected_attacks
-		FROM war_missed_attacks m
-		JOIN wars w ON w.war_id = m.war_id
-		WHERE m.player_tag = $1 AND m.war_end_time >= $2 AND m.war_end_time <= $3
-	`, playerTag, start, end)
-	if err != nil {
-		return nil, err
-	}
-	defer missedRows.Close()
-	for missedRows.Next() {
-		var warID, warType string
-		var expectedAttacks int
-		if err := missedRows.Scan(&warID, &warType, &expectedAttacks); err != nil {
-			return nil, err
-		}
-		for _, key := range []string{"all", warType} {
-			bucket := buckets[key]
-			if bucket == nil {
-				continue
-			}
-			expectedKey := key + ":" + warID
-			if !seenExpected[expectedKey] {
-				bucket.Wars++
-				bucket.ExpectedAttacks += expectedAttacks
-				seenExpected[expectedKey] = true
-			}
-		}
-	}
-	if err := missedRows.Err(); err != nil {
-		return nil, err
+	for _, item := range wars {
+		addArchivedPlayerWarStats(buckets, playerTag, item.warType, item.war)
 	}
 	return map[string]any{
 		"playerTag":      playerTag,
@@ -547,7 +578,50 @@ func sqlPlayerWarStats(c *fiber.Ctx, a apptypes.Deps, playerTag string, start ti
 		"random":         buckets["random"].Map(),
 		"friendly":       buckets["friendly"].Map(),
 		"cwl":            buckets["cwl"].Map(),
-	}, nil
+	}
+}
+
+func addArchivedPlayerWarStats(buckets map[string]*warStatsBucket, playerTag string, warType string, war wararchive.War) {
+	member, opponents, ok := archivedWarPlayer(playerTag, war)
+	if !ok {
+		return
+	}
+	expectedAttacks := war.AttacksPerMember
+	if expectedAttacks <= 0 {
+		expectedAttacks = 1
+	}
+	keys := []string{"all", warType}
+	for _, key := range keys {
+		if bucket := buckets[key]; bucket != nil {
+			bucket.Wars++
+			bucket.ExpectedAttacks += expectedAttacks
+		}
+	}
+	defenderTownhalls := make(map[string]int, len(opponents.Members))
+	for _, opponent := range opponents.Members {
+		defenderTownhalls[opponent.Tag] = opponent.TownhallLevel
+	}
+	for _, attack := range member.Attacks {
+		for _, key := range keys {
+			if bucket := buckets[key]; bucket != nil {
+				bucket.addAttack(attack.Stars, attack.DestructionPercentage, attack.Duration, member.TownhallLevel, defenderTownhalls[attack.DefenderTag])
+			}
+		}
+	}
+}
+
+func archivedWarPlayer(playerTag string, war wararchive.War) (wararchive.Member, wararchive.Clan, bool) {
+	for _, member := range war.Clan.Members {
+		if member.Tag == playerTag {
+			return member, war.Opponent, true
+		}
+	}
+	for _, member := range war.Opponent.Members {
+		if member.Tag == playerTag {
+			return member, war.Clan, true
+		}
+	}
+	return wararchive.Member{}, wararchive.Clan{}, false
 }
 
 type warStatsBucket struct {

@@ -4919,7 +4919,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Change type",
+                        "description": "Change type name or ID (1-12)",
                         "name": "type",
                         "in": "query"
                     }
@@ -18122,43 +18122,47 @@ const docTemplate = `{
         "modelsv2.PlayerChangeRecord": {
             "type": "object",
             "properties": {
-                "clan_tag": {
+                "current": {
                     "type": "string"
                 },
-                "current": {
-                    "$ref": "#/definitions/modelsv2.PlayerChangeValue"
+                "item_id": {
+                    "type": "integer",
+                    "x-nullable": true
                 },
                 "player_tag": {
                     "type": "string"
                 },
                 "previous": {
-                    "$ref": "#/definitions/modelsv2.PlayerChangeValue"
+                    "type": "string"
                 },
                 "time": {
                     "type": "string"
                 },
                 "townhall_level": {
-                    "type": "integer"
+                    "type": "integer",
+                    "x-nullable": true
                 },
                 "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.PlayerChangeValue": {
-            "type": "object",
-            "properties": {
-                "level": {
-                    "type": "integer"
+                    "type": "string",
+                    "enum": [
+                        "troop_level",
+                        "super_troop_boost",
+                        "hero_level",
+                        "spell_level",
+                        "pet_level",
+                        "equipment_level",
+                        "town_hall_level",
+                        "best_trophies",
+                        "best_builder_base_trophies",
+                        "exp_level",
+                        "war_preference",
+                        "name"
+                    ]
                 },
-                "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
+                "type_id": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1
                 }
             }
         },

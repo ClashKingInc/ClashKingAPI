@@ -59,10 +59,10 @@ func TestJoinLeaveBuildResponseShapesClanAndPlayerItems(t *testing.T) {
 // Alias keeps the assertion readable while retaining the concrete slice type.
 type JoinLeaveEventAlias = modelsv2.JoinLeaveEvent
 
-func TestReconstructedWarLogUsesOfficialItemShape(t *testing.T) {
+func TestStoredWarLogUsesWarLogItemShape(t *testing.T) {
 	attacks := 2
 	war := officialWarResponse{
-		TeamSize: 15, AttacksPerMember: &attacks, EndTime: "20260803T120000.000Z",
+		WarType: "random", TeamSize: 15, AttacksPerMember: &attacks, EndTime: "20260803T120000.000Z",
 		Clan:     officialWarClan{Tag: "#CLAN", Stars: 40, DestructionPercentage: 96.2},
 		Opponent: officialWarClan{Tag: "#OTHER", Stars: 38, DestructionPercentage: 94.1},
 	}
@@ -77,9 +77,12 @@ func TestReconstructedWarLogUsesOfficialItemShape(t *testing.T) {
 	if item["result"] != "win" {
 		t.Fatalf("expected win, got %v", item["result"])
 	}
+	if item["type"] != "random" {
+		t.Fatalf("expected random war type, got %v", item["type"])
+	}
 	for _, forbidden := range []string{"state", "members", "preparationStartTime", "startTime"} {
 		if _, exists := item[forbidden]; exists {
-			t.Fatalf("reconstructed war-log item exposed non-warlog field %s", forbidden)
+			t.Fatalf("stored war-log item exposed non-warlog field %s", forbidden)
 		}
 	}
 }

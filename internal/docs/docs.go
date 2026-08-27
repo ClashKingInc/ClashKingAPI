@@ -1906,7 +1906,7 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/warlog": {
             "get": {
-                "description": "Returns stored wars without authentication. Authenticated requests also use the official war log as a current-data filler when it is public.",
+                "description": "Returns wars stored in ClashKing's history.",
                 "produces": [
                     "application/json"
                 ],
@@ -23230,17 +23230,11 @@ const docTemplate = `{
         "routes.clanWarLogResponse": {
             "type": "object",
             "properties": {
-                "isPrivate": {
-                    "type": "boolean"
-                },
                 "items": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/routes.clanWarLogItem"
                     }
-                },
-                "reconstructed": {
-                    "type": "boolean"
                 }
             }
         },

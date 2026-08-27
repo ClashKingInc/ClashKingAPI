@@ -8,16 +8,6 @@ import (
 
 func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Handler) {
 	registerCompatibilityRoutes(app, a)
-	optionalAuth := func(handler fiber.Handler) fiber.Handler {
-		authenticated := wrap(handler)
-		return func(c *fiber.Ctx) error {
-			if c.Get("Authorization") == "" {
-				return handler(c)
-			}
-			return authenticated(c)
-		}
-	}
-
 	userOrBot := func(handler fiber.Handler) fiber.Handler {
 		return authUserOrBot(a, wrap, handler)
 	}
@@ -345,7 +335,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	app.Get("/v2/war/:clan_tag/previous", previousWars(a))
 	app.Get("/v2/clan/:clan_tag/wars", clanWars(a))
-	app.Get("/v2/clan/:clan_tag/warlog", optionalAuth(clanWarLog(a)))
+	app.Get("/v2/clan/:clan_tag/warlog", clanWarLog(a))
 	app.Get("/v2/cwl/:clan_tag/ranking-history", cwlClanHistory(a))
 	app.Get("/v2/cwl/leagues/:league_id/rankings", cwlLeagueRankings(a))
 	app.Get("/v2/cwl/league-thresholds", cwlThresholds)

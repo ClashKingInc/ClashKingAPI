@@ -938,6 +938,15 @@ func TestClanHistoryAndCachedClanOpenAPIContracts(t *testing.T) {
 	if _, exists := warlog["security"]; exists {
 		t.Fatalf("clan warlog must allow unauthenticated requests: %#v", warlog["security"])
 	}
+	warlogResponse := swaggerDefinitionProperties(t, definitions, "routes.clanWarLogResponse")
+	if len(warlogResponse) != 1 {
+		t.Fatalf("clan warlog response should only expose items: %#v", warlogResponse)
+	}
+	for _, retired := range []string{"isPrivate", "reconstructed"} {
+		if _, exists := warlogResponse[retired]; exists {
+			t.Fatalf("clan warlog response exposes retired field %s", retired)
+		}
+	}
 
 	cached := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanCachedResponse")
 	if _, exists := cached["records"]; exists {

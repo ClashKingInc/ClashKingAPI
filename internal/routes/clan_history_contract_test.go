@@ -287,17 +287,6 @@ func TestClanChangesHandlerQueriesAndSerializesTypedValues(t *testing.T) {
 	}
 }
 
-func TestMergeClanWarLogItemsPrefersOfficialAndAppliesWarLimit(t *testing.T) {
-	official := clanWarLogItem{EndTime: "20260803T120000.000Z", Type: "random", Opponent: clanWarLogClanSide{Tag: "#A"}, Clan: clanWarLogClanSide{Name: "Official"}}
-	duplicate := official
-	duplicate.Clan.Name = "Stored"
-	older := clanWarLogItem{EndTime: "20260703T120000.000Z", Type: "cwl", Opponent: clanWarLogClanSide{Tag: "#B"}}
-	items := mergeClanWarLogItems([]clanWarLogItem{official}, []clanWarLogItem{duplicate, older}, 1)
-	if len(items) != 1 || items[0].Clan.Name != "Official" {
-		t.Fatalf("unexpected merged war log: %#v", items)
-	}
-}
-
 func TestClanWarLogHandlerUsesStoredWarsWithoutAuthentication(t *testing.T) {
 	attacks := 2
 	var gotTag string
@@ -323,8 +312,15 @@ func TestClanWarLogHandlerUsesStoredWarsWithoutAuthentication(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.IsPrivate || !body.Reconstructed || len(body.Items) != 1 || body.Items[0].Type != "friendly" || body.Items[0].Result != "win" {
+	if len(body.Items) != 1 || body.Items[0].Type != "friendly" || body.Items[0].Result != "win" {
 		t.Fatalf("unexpected stored warlog response: %#v", body)
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "isPrivate") || strings.Contains(string(encoded), "reconstructed") {
+		t.Fatalf("stored warlog exposes retired metadata: %s", encoded)
 	}
 	response, err = app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/warlog", nil))
 	if err != nil || response.StatusCode != http.StatusOK || len(gotTypes) != 3 || gotLimit != 50 {
@@ -343,40 +339,9 @@ func TestClanWarLogHandlerUsesStoredWarsWithoutAuthentication(t *testing.T) {
 	}
 }
 
-func TestFetchOfficialClanWarLogFiltersTimeAndLabelsRandomWars(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.URL.EscapedPath() != "/v1/clans/%23CLAN/warlog" || request.URL.Query().Get("limit") != "50" {
-			t.Errorf("unexpected official warlog request: %s", request.URL.String())
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"items":[{"result":"win","endTime":"20260820T120000.000Z","teamSize":15,"clan":{"tag":"#CLAN"},"opponent":{"tag":"#A"}},{"result":"lose","endTime":"20260720T120000.000Z","teamSize":15,"clan":{"tag":"#CLAN"},"opponent":{"tag":"#B"}}]}`)
-	}))
-	defer upstream.Close()
-
-	app := fiber.New()
-	app.Get("/", func(c *fiber.Ctx) error {
-		items, ok := fetchOfficialClanWarLog(c, apptypes.Deps{Config: apptypes.Config{ProxyOrigin: upstream.URL}}, "#CLAN", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC), 50)
-		return c.JSON(fiber.Map{"items": items, "ok": ok})
-	})
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
-	if err != nil || response.StatusCode != http.StatusOK {
-		t.Fatalf("official warlog request failed: status=%d err=%v", response.StatusCode, err)
-	}
-	var body struct {
-		Items []clanWarLogItem `json:"items"`
-		OK    bool             `json:"ok"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatal(err)
-	}
-	if !body.OK || len(body.Items) != 1 || body.Items[0].Type != "random" || body.Items[0].Opponent.Tag != "#A" {
-		t.Fatalf("unexpected official warlog: %#v", body)
-	}
-}
-
-func TestOfficialArchiveWarCarriesInternalWarType(t *testing.T) {
-	war := wararchive.War{Type: "friendly", State: "warEnded", Clan: wararchive.Clan{Tag: "#CLAN"}, Opponent: wararchive.Clan{Tag: "#OTHER"}}
-	if item := buildOfficialArchiveWar(war, "#CLAN"); item.WarType != "friendly" {
-		t.Fatalf("archive war type = %q", item.WarType)
+func TestStoredArchiveWarUsesNormalizedSQLWarType(t *testing.T) {
+	war := wararchive.War{State: "warEnded", Clan: wararchive.Clan{Tag: "#CLAN"}, Opponent: wararchive.Clan{Tag: "#OTHER"}}
+	if item := buildStoredArchiveWar(sqlWarRow{WarType: "cwl"}, war, "#CLAN"); item.WarType != "cwl" {
+		t.Fatalf("stored archive war type = %q", item.WarType)
 	}
 }

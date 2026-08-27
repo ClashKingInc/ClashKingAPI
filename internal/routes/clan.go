@@ -2,12 +2,8 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,9 +15,7 @@ import (
 )
 
 type clanWarLogResponse struct {
-	Items         []clanWarLogItem `json:"items"`
-	IsPrivate     bool             `json:"isPrivate"`
-	Reconstructed bool             `json:"reconstructed"`
+	Items []clanWarLogItem `json:"items"`
 }
 
 type clanWarLogItem struct {
@@ -46,7 +40,7 @@ type clanWarLogClanSide struct {
 
 // clanWarLog godoc
 // @Summary Get a clan war log
-// @Description Returns stored wars without authentication. Authenticated requests also use the official war log as a current-data filler when it is public.
+// @Description Returns wars stored in ClashKing's history.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -98,73 +92,8 @@ func clanWarLogHandler(a apptypes.Deps, load clanWarLogLoader) fiber.Handler {
 			}
 		}
 
-		officialItems, official := []clanWarLogItem(nil), false
-		if apptypes.UserID(c.UserContext()) != "" && (warType == "" || warType == "random") {
-			officialItems, official = fetchOfficialClanWarLog(c, a, clanTag, after, before, limit)
-		}
-		items = mergeClanWarLogItems(officialItems, items, limit)
-		return apptypes.JSON(c, fiber.StatusOK, clanWarLogResponse{
-			Items: items, IsPrivate: !official, Reconstructed: !official,
-		})
+		return apptypes.JSON(c, fiber.StatusOK, clanWarLogResponse{Items: items})
 	}
-}
-
-func fetchOfficialClanWarLog(c *fiber.Ctx, a apptypes.Deps, clanTag string, after, before time.Time, limit int) ([]clanWarLogItem, bool) {
-	baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyOrigin), "/")
-	upstreamURL := baseURL + "/v1/clans/" + url.PathEscape(clanTag) + "/warlog?limit=" + strconv.Itoa(limit)
-	req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, upstreamURL, nil)
-	if err != nil {
-		return nil, false
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := proxyHTTPClient.Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, false
-	}
-	if resp.StatusCode == fiber.StatusOK {
-		var payload struct {
-			Items []clanWarLogItem `json:"items"`
-		}
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return nil, false
-		}
-		items := make([]clanWarLogItem, 0, len(payload.Items))
-		for _, item := range payload.Items {
-			end, parseErr := time.Parse("20060102T150405.000Z", item.EndTime)
-			if parseErr != nil || end.Before(after) || end.After(before) {
-				continue
-			}
-			item.Type = "random"
-			items = append(items, item)
-		}
-		return items, true
-	}
-	return nil, false
-}
-
-func mergeClanWarLogItems(primary, stored []clanWarLogItem, limit int) []clanWarLogItem {
-	items := make([]clanWarLogItem, 0, len(primary)+len(stored))
-	seen := make(map[string]struct{}, len(primary)+len(stored))
-	for _, source := range [][]clanWarLogItem{primary, stored} {
-		for _, item := range source {
-			key := item.EndTime + "|" + item.Opponent.Tag
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			items = append(items, item)
-		}
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].EndTime > items[j].EndTime })
-	if len(items) > limit {
-		items = items[:limit]
-	}
-	return items
 }
 
 func buildClanWarLogItem(war officialWarResponse) clanWarLogItem {

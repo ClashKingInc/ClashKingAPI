@@ -169,9 +169,14 @@ func sqlClanWars(c *fiber.Ctx, a apptypes.Deps, clanTag string, start time.Time,
 		if !exists {
 			continue
 		}
-		items = append(items, buildOfficialArchiveWar(value, clanTag))
+		items = append(items, buildStoredArchiveWar(war, value, clanTag))
 	}
 	return items, nil
+}
+
+func buildStoredArchiveWar(row sqlWarRow, archived wararchive.War, clanTag string) officialWarResponse {
+	archived.Type = row.WarType
+	return buildOfficialArchiveWar(archived, clanTag)
 }
 
 func scanSQLWar(row interface{ Scan(dest ...any) error }) (sqlWarRow, error) {

@@ -499,6 +499,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/war/clans/warhits",
 		"/v2/war/players/warhits",
 		"/v2/cwl/{clan_tag}",
+		"/v2/search/clan",
+		"/v2/search/player",
 		"/v2/links/{id}/{player_tag}",
 	}
 	for _, path := range absent {
@@ -513,6 +515,9 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/player/{player_tag}/join-leave/totals",
 		"/v2/player/{player_tag}/join-leave/shared",
 		"/v2/player/{player_tag}/history/stats",
+		"/v2/player/{player_tag}/timers",
+		"/v2/player/search",
+		"/v2/clan/search",
 		"/v2/links/{id}/searches",
 		"/v2/links/{id}/{playerTag}",
 		"/builderbaseleagues",
@@ -1455,7 +1460,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 
 func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 	paths := swaggerPaths(t, buildSwaggerDoc(t))
-	for _, path := range []string{"/v2/home/activity", "/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl", "/v2/search/clan", "/v2/search/player"} {
+	for _, path := range []string{"/v2/home/activity", "/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"} {
 		operation, ok := paths[path].(map[string]any)
 		if !ok {
 			t.Fatalf("expected path object for %s", path)
@@ -1471,6 +1476,40 @@ func TestBuildDocRepresentsQueryOperationsWithoutAdvertisingPost(t *testing.T) {
 		content, _ := requestBody["content"].(map[string]any)
 		if _, ok := content["application/json"]; !ok {
 			t.Fatalf("expected %s QUERY operation to accept application/json, got %v", path, requestBody)
+		}
+	}
+}
+
+func TestSearchOpenAPIUsesGETAndOwningSections(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	player := paths["/v2/player/search"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, player, []string{"Player"})
+	if got := swaggerQueryParams(t, paths, "/v2/player/search"); !reflect.DeepEqual(got, []string{"query", "clanTags", "leagueIds", "townhallLevels", "limit", "cursor"}) {
+		t.Fatalf("player search query params = %v", got)
+	}
+	assertRequiredParameter(t, player["parameters"].([]any), "query", "query")
+	assertQueryParameterSchemaValue(t, player["parameters"], "limit", "default", float64(25))
+	assertQueryParameterSchemaValue(t, player["parameters"], "limit", "maximum", float64(200))
+
+	clan := paths["/v2/clan/search"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, clan, []string{"Clan"})
+	if got := swaggerQueryParams(t, paths, "/v2/clan/search"); !reflect.DeepEqual(got, []string{"query", "locationIds", "warLeagueIds", "clanLevel[min]", "clanLevel[max]", "members[min]", "members[max]", "limit", "cursor"}) {
+		t.Fatalf("clan search query params = %v", got)
+	}
+	assertRequiredParameter(t, clan["parameters"].([]any), "query", "query")
+
+	definitions := swaggerDefinitions(t, doc)
+	pagination := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchCursorPage")
+	for _, field := range []string{"limit", "hasMore", "nextCursor"} {
+		if _, exists := pagination[field]; !exists {
+			t.Fatalf("search pagination missing %s", field)
+		}
+	}
+	for _, retired := range []string{"has_more", "next_cursor"} {
+		if _, exists := pagination[retired]; exists {
+			t.Fatalf("search pagination exposes retired field %s", retired)
 		}
 	}
 }
@@ -1503,13 +1542,13 @@ func TestSearchOpenAPIUsesCompactTypedContracts(t *testing.T) {
 		t.Fatal("player clan omits compact badge")
 	}
 
-	clanFilters := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchClanFilters")
-	assertSwaggerMaxItems(t, clanFilters["location_ids"], 5)
-	assertSwaggerMaxItems(t, clanFilters["cwl_league_ids"], 5)
-	playerFilters := swaggerDefinitionProperties(t, definitions, "modelsv2.SearchPlayerFilters")
-	assertSwaggerMaxItems(t, playerFilters["clan_tags"], 100)
-	assertSwaggerMaxItems(t, playerFilters["league_ids"], 5)
-	assertSwaggerMaxItems(t, playerFilters["townhall_levels"], 100)
+	timers := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerTimer")
+	for _, field := range []string{"type", "expiresAt", "warTag", "clans"} {
+		if _, ok := timers[field]; !ok {
+			t.Fatalf("player timer omits %s", field)
+		}
+	}
+	assertEnum(t, timers["type"], []any{"war", "cwl", "capital"})
 }
 
 func TestServerLogAndReminderDestinationOpenAPIContract(t *testing.T) {

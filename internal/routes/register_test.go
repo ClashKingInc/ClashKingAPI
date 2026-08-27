@@ -150,6 +150,8 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/war/clans/warhits",
 		"/v2/cwl/:clan_tag",
 		"/v2/clan/:clan_tag/leaderboard-history/:leaderboard_type",
+		"/v2/search/clan",
+		"/v2/search/player",
 		"/war/:clanTag/previous",
 		"/war/:clanTag/basic",
 		"/cwl/:clanTag/group",
@@ -166,6 +168,9 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/player/:player_tag/war/attacks",
 		"/v2/player/:player_tag/war/stats",
 		"/v2/player/:player_tag/history/changes",
+		"/v2/player/:player_tag/timers",
+		"/v2/player/search",
+		"/v2/clan/search",
 		"/v2/player/:player_tag/history/stats",
 		"/v2/player/:player_tag/legend-history",
 		"/v2/clan/:clan_tag/legend-history",
@@ -303,18 +308,23 @@ func TestHomeActivityUsesRFCQueryMethod(t *testing.T) {
 	}
 }
 
-func TestSearchRoutesUseRFCQueryMethod(t *testing.T) {
+func TestSearchRoutesUseGETUnderOwningResources(t *testing.T) {
 	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
-	for _, path := range []string{"/v2/search/clan", "/v2/search/player"} {
-		if index := registeredRouteIndex(app, apptypes.MethodQuery, path); index < 0 {
-			t.Fatalf("expected %s to be registered with QUERY", path)
+	for _, path := range []string{"/v2/clan/search", "/v2/player/search"} {
+		if index := registeredRouteIndex(app, fiber.MethodGet, path); index < 0 {
+			t.Fatalf("expected %s to be registered with GET", path)
 		}
-		for _, method := range []string{fiber.MethodGet, fiber.MethodPost} {
+		for _, method := range []string{apptypes.MethodQuery, fiber.MethodPost} {
 			if index := registeredRouteIndex(app, method, path); index >= 0 {
 				t.Fatalf("did not expect a %s compatibility route for %s", method, path)
 			}
+		}
+	}
+	for _, path := range []string{"/v2/search/clan", "/v2/search/player"} {
+		if index := registeredRouteIndex(app, apptypes.MethodQuery, path); index >= 0 {
+			t.Fatalf("retired search route %s remains registered", path)
 		}
 	}
 }

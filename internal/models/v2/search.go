@@ -72,8 +72,8 @@ type SearchPlayerResult struct {
 
 type SearchCursorPage struct {
 	Limit      int     `json:"limit"`
-	HasMore    bool    `json:"has_more"`
-	NextCursor *string `json:"next_cursor"`
+	HasMore    bool    `json:"hasMore"`
+	NextCursor *string `json:"nextCursor"`
 }
 
 type SearchClanResponse struct {

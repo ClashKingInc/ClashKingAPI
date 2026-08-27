@@ -69,7 +69,10 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/player/:player_tag/ranked/:season/battlelog", playerRankedBattlelog(a))
 	app.Get("/v2/player/:player_tag/ranked/:season/group", playerRankedGroup(a))
 	app.Get("/v2/player/:player_tag/history/changes", playerChanges(a))
+	app.Get("/v2/player/:player_tag/timers", playerTimers(a))
+	app.Get("/v2/player/search", searchPlayers(a))
 	app.Get("/v2/player/:player_tag/leaderboard-history/:leaderboard_type", playerLeaderboardHistory(a))
+	app.Get("/v2/clan/search", searchClans(a))
 	app.Get("/v2/clan/:clan_tag/leaderboard-history", clanLeaderboardHistory(a))
 	app.Get("/v2/leaderboard/history/:leaderboard_type/:location_id/:date", leaderboardSnapshotHistory(a))
 	app.Get("/v2/leaderboard/league/:league_tier_id", leaderboardLeague(a))
@@ -205,8 +208,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/player/:player_tag/join-leave/shared", playerJoinLeaveShared(a))
 	app.Get("/v2/player/:player_tag/join-leave", playerJoinLeave(a))
 
-	app.Add(apptypes.MethodQuery, "/v2/search/clan", searchClans(a))
-	app.Add(apptypes.MethodQuery, "/v2/search/player", searchPlayers(a))
 	app.Get("/v2/search/:guild_id/banned-players", authServerParamRead(a, wrap, "guild_id", searchBannedPlayers(a)))
 
 	app.Get("/v2/link/server/:server_id/clan/list", serverRead(serverroutes.GetServerClansBasic(a)))

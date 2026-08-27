@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -92,28 +93,30 @@ type elasticsearchMGetResponse struct {
 
 // searchClans searches the stable clan Elasticsearch alias.
 //
-// Swag only accepts the legacy Swagger 2 method set, so the source annotation
-// uses POST plus x-http-method. The OpenAPI generator emits native QUERY.
-//
 // @Summary Search clans
-// @Description Searches the clan Elasticsearch alias by name or exact tag with optional filters and cursor pagination.
-// @Tags Search
-// @Accept json
+// @Description Finds clans by name or exact tag with comma-separated filters, range bounds, and cursor pagination.
+// @Tags Clan
 // @Produce json
-// @Param body body modelsv2.SearchClanQuery true "Clan search query"
+// @Param query query string true "Clan name or exact tag" minlength(2) maxlength(100)
+// @Param locationIds query []int false "Comma-separated location IDs" collectionFormat(csv)
+// @Param warLeagueIds query []int false "Comma-separated war league IDs" collectionFormat(csv)
+// @Param clanLevel[min] query int false "Minimum clan level" minimum(1)
+// @Param clanLevel[max] query int false "Maximum clan level" minimum(1)
+// @Param members[min] query int false "Minimum member count" minimum(0) maximum(50)
+// @Param members[max] query int false "Maximum member count" minimum(0) maximum(50)
+// @Param limit query int false "Maximum results to return" default(25) minimum(1) maximum(200)
+// @Param cursor query string false "Cursor returned by the previous page"
 // @Success 200 {object} modelsv2.SearchClanResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 415 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @x-http-method "QUERY"
-// @Router /v2/search/clan [post]
+// @Router /v2/clan/search [get]
 func searchClans(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var request modelsv2.SearchClanQuery
-		if err := decodeStatsQueryJSON(c, &request); err != nil {
+		request, err := clanSearchQueryFromURL(c)
+		if err != nil {
 			return err
 		}
-		limit, err := normalizeClanSearchQuery(&request)
+		limit, err := normalizeClanSearchQuery(request)
 		if err != nil {
 			return err
 		}
@@ -149,24 +152,26 @@ func searchClans(a apptypes.Deps) fiber.Handler {
 // searchPlayers searches the stable player Elasticsearch alias.
 //
 // @Summary Search players
-// @Description Searches the player Elasticsearch alias by name or exact tag with optional filters and cursor pagination.
-// @Tags Search
-// @Accept json
+// @Description Finds players by name or exact tag with comma-separated filters and cursor pagination.
+// @Tags Player
 // @Produce json
-// @Param body body modelsv2.SearchPlayerQuery true "Player search query"
+// @Param query query string true "Player name or exact tag" minlength(2) maxlength(100)
+// @Param clanTags query []string false "Comma-separated clan tags" collectionFormat(csv)
+// @Param leagueIds query []int false "Comma-separated league tier IDs" collectionFormat(csv)
+// @Param townhallLevels query []int false "Comma-separated town hall levels" collectionFormat(csv)
+// @Param limit query int false "Maximum results to return" default(25) minimum(1) maximum(200)
+// @Param cursor query string false "Cursor returned by the previous page"
 // @Success 200 {object} modelsv2.SearchPlayerResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 415 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @x-http-method "QUERY"
-// @Router /v2/search/player [post]
+// @Router /v2/player/search [get]
 func searchPlayers(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var request modelsv2.SearchPlayerQuery
-		if err := decodeStatsQueryJSON(c, &request); err != nil {
+		request, err := playerSearchQueryFromURL(c)
+		if err != nil {
 			return err
 		}
-		limit, err := normalizePlayerSearchQuery(&request)
+		limit, err := normalizePlayerSearchQuery(request)
 		if err != nil {
 			return err
 		}
@@ -213,6 +218,115 @@ func searchPlayers(a apptypes.Deps) fiber.Handler {
 			Pagination: modelsv2.SearchCursorPage{Limit: limit, HasMore: hasMore, NextCursor: nextCursor},
 		})
 	}
+}
+
+func clanSearchQueryFromURL(c *fiber.Ctx) (*modelsv2.SearchClanQuery, error) {
+	locationIDs, err := searchQueryInts(c, "locationIds")
+	if err != nil {
+		return nil, err
+	}
+	warLeagueIDs, err := searchQueryInts(c, "warLeagueIds")
+	if err != nil {
+		return nil, err
+	}
+	clanLevel, err := searchQueryRange(c, "clanLevel")
+	if err != nil {
+		return nil, err
+	}
+	members, err := searchQueryRange(c, "members")
+	if err != nil {
+		return nil, err
+	}
+	limit, err := searchQueryOptionalInt(c, "limit")
+	if err != nil {
+		return nil, err
+	}
+	return &modelsv2.SearchClanQuery{
+		Query: c.Query("query"),
+		Filters: modelsv2.SearchClanFilters{
+			LocationIDs: locationIDs, CWLLeagueIDs: warLeagueIDs,
+			ClanLevel: clanLevel, Members: members,
+		},
+		Limit: limit, Cursor: strings.TrimSpace(c.Query("cursor")),
+	}, nil
+}
+
+func playerSearchQueryFromURL(c *fiber.Ctx) (*modelsv2.SearchPlayerQuery, error) {
+	leagueIDs, err := searchQueryInts(c, "leagueIds")
+	if err != nil {
+		return nil, err
+	}
+	townhallLevels, err := searchQueryInts(c, "townhallLevels")
+	if err != nil {
+		return nil, err
+	}
+	limit, err := searchQueryOptionalInt(c, "limit")
+	if err != nil {
+		return nil, err
+	}
+	return &modelsv2.SearchPlayerQuery{
+		Query: c.Query("query"),
+		Filters: modelsv2.SearchPlayerFilters{
+			ClanTags: apptypes.QueryValues(c, "clanTags"), LeagueIDs: leagueIDs,
+			TownhallLevels: townhallLevels,
+		},
+		Limit: limit, Cursor: strings.TrimSpace(c.Query("cursor")),
+	}, nil
+}
+
+func searchQueryInts(c *fiber.Ctx, key string) ([]int, error) {
+	values := apptypes.QueryValues(c, key)
+	out := make([]int, 0, len(values))
+	for _, raw := range values {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, apptypes.Error(fiber.StatusBadRequest, key+" must contain comma-separated integers")
+		}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func searchQueryRange(c *fiber.Ctx, key string) (*modelsv2.SearchIntegerRange, error) {
+	minimum, hasMinimum, err := searchQueryBound(c, key+"[min]")
+	if err != nil {
+		return nil, err
+	}
+	maximum, hasMaximum, err := searchQueryBound(c, key+"[max]")
+	if err != nil {
+		return nil, err
+	}
+	if !hasMinimum && !hasMaximum {
+		return nil, nil
+	}
+	rangeValue := &modelsv2.SearchIntegerRange{}
+	if hasMinimum {
+		rangeValue.Min = &minimum
+	}
+	if hasMaximum {
+		rangeValue.Max = &maximum
+	}
+	return rangeValue, nil
+}
+
+func searchQueryOptionalInt(c *fiber.Ctx, key string) (int, error) {
+	value, exists, err := searchQueryBound(c, key)
+	if err != nil || !exists {
+		return 0, err
+	}
+	return value, nil
+}
+
+func searchQueryBound(c *fiber.Ctx, key string) (int, bool, error) {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return 0, false, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false, apptypes.Error(fiber.StatusBadRequest, key+" must be an integer")
+	}
+	return value, true, nil
 }
 
 func normalizeClanSearchQuery(request *modelsv2.SearchClanQuery) (int, error) {

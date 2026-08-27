@@ -370,35 +370,46 @@ type PlayerWarAttacksResponse struct {
 	Items []PlayerWarAttackItem `json:"items"`
 }
 
-type PlayerWarStatsBucket struct {
-	Wars                int     `json:"wars"`
-	ExpectedAttacks     int     `json:"expectedAttacks"`
-	Attacks             int     `json:"attacks"`
-	MissedAttacks       int     `json:"missedAttacks"`
-	Stars               int     `json:"stars"`
-	AverageStars        float64 `json:"averageStars"`
-	AverageDestruction  float64 `json:"averageDestruction"`
-	AverageDuration     float64 `json:"averageDuration"`
-	Hitrate             float64 `json:"hitrate"`
-	ThreeStarRate       float64 `json:"threeStarRate"`
-	TwoStarRate         float64 `json:"twoStarRate"`
-	OneStarRate         float64 `json:"oneStarRate"`
-	ZeroStarRate        float64 `json:"zeroStarRate"`
-	PerfectAttackRate   float64 `json:"perfectAttackRate"`
-	SameTownhallHitrate float64 `json:"sameTownhallHitrate"`
-	DipHitrate          float64 `json:"dipHitrate"`
-	HitUpHitrate        float64 `json:"hitUpHitrate"`
-	SameTownhallAttacks int     `json:"sameTownhallAttacks"`
-	DipAttacks          int     `json:"dipAttacks"`
-	HitUpAttacks        int     `json:"hitUpAttacks"`
+type PlayerWarHistoryClan struct {
+	Tag                   string          `json:"tag"`
+	Name                  string          `json:"name"`
+	BadgeURLs             PublicBadgeURLs `json:"badgeUrls"`
+	ClanLevel             int             `json:"clanLevel"`
+	Attacks               int             `json:"attacks"`
+	Stars                 int             `json:"stars"`
+	DestructionPercentage float64         `json:"destructionPercentage"`
+}
+
+type PlayerWarHistoryPlayer struct {
+	Tag           string `json:"tag"`
+	Name          string `json:"name"`
+	TownhallLevel int    `json:"townhallLevel"`
+	MapPosition   int    `json:"mapPosition"`
+}
+
+type PlayerWarHistoryAttack struct {
+	Stars                 int                    `json:"stars"`
+	DestructionPercentage int                    `json:"destructionPercentage"`
+	Order                 int                    `json:"order"`
+	Duration              int                    `json:"duration"`
+	Fresh                 bool                   `json:"fresh"`
+	Player                PlayerWarHistoryPlayer `json:"player"`
+}
+
+type PlayerWarHistoryItem struct {
+	TeamSize             int                      `json:"teamSize"`
+	AttacksPerMember     int                      `json:"attacksPerMember"`
+	PreparationStartTime string                   `json:"preparationStartTime"`
+	StartTime            string                   `json:"startTime,omitempty"`
+	EndTime              string                   `json:"endTime"`
+	Clan                 PlayerWarHistoryClan     `json:"clan"`
+	Opponent             PlayerWarHistoryClan     `json:"opponent"`
+	Type                 string                   `json:"type" enums:"cwl,random,friendly"`
+	Player               PlayerWarHistoryPlayer   `json:"player"`
+	Attacks              []PlayerWarHistoryAttack `json:"attacks"`
+	Defenses             []PlayerWarHistoryAttack `json:"defenses"`
 }
 
 type PlayerWarStatsResponse struct {
-	PlayerTag      string               `json:"playerTag"`
-	TimestampStart int64                `json:"timestampStart"`
-	TimestampEnd   int64                `json:"timestampEnd"`
-	Total          PlayerWarStatsBucket `json:"total"`
-	Random         PlayerWarStatsBucket `json:"random"`
-	Friendly       PlayerWarStatsBucket `json:"friendly"`
-	CWL            PlayerWarStatsBucket `json:"cwl"`
+	Items []PlayerWarHistoryItem `json:"items"`
 }

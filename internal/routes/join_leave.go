@@ -19,9 +19,9 @@ import (
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param limit query int false "Maximum events to return; 0 returns full matching history" default(50)
 // @Param time[after] query string false "Only include events at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include events at or before this ISO-8601 time"
+// @Param limit query int false "Maximum events to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.JoinLeaveResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -42,9 +42,9 @@ func clanJoinLeave(a apptypes.Deps) fiber.Handler {
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
-// @Param limit query int false "Maximum events to return; 0 returns full matching history" default(50)
 // @Param time[after] query string false "Only include events at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include events at or before this ISO-8601 time"
+// @Param limit query int false "Maximum events to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.JoinLeaveResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -211,7 +211,7 @@ func joinLeaveLimitFromQuery(c *fiber.Ctx) (int, error) {
 		return 0, err
 	}
 	if limit <= 0 {
-		return 0, nil
+		return 0, apptypes.Error(http.StatusBadRequest, "invalid limit")
 	}
 	return clamp(limit, 1, 500), nil
 }
@@ -307,16 +307,9 @@ func joinLeaveCounts(c *fiber.Ctx, a apptypes.Deps, scope joinLeaveScope, tag st
 }
 
 func joinLeaveWindowFromQuery(c *fiber.Ctx) (joinLeaveWindow, error) {
-	start, err := v2ParseISO8601QueryTime(c, "time", "after", time.Unix(0, 0).UTC())
+	start, end, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
 	if err != nil {
 		return joinLeaveWindow{}, err
-	}
-	end, err := v2ParseISO8601QueryTime(c, "time", "before", time.Unix(9999999999, 0).UTC())
-	if err != nil {
-		return joinLeaveWindow{}, err
-	}
-	if end.Before(start) {
-		return joinLeaveWindow{}, apptypes.Error(http.StatusBadRequest, "time[before] must be after time[after]")
 	}
 	return joinLeaveWindow{
 		start:     start,
@@ -324,6 +317,21 @@ func joinLeaveWindowFromQuery(c *fiber.Ctx) (joinLeaveWindow, error) {
 		startUnix: start.Unix(),
 		endUnix:   end.Unix(),
 	}, nil
+}
+
+func v2TimeWindowFromQuery(c *fiber.Ctx, defaultAfter, defaultBefore time.Time) (time.Time, time.Time, error) {
+	after, err := v2ParseISO8601QueryTime(c, "time", "after", defaultAfter)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	before, err := v2ParseISO8601QueryTime(c, "time", "before", defaultBefore)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if before.Before(after) {
+		return time.Time{}, time.Time{}, apptypes.Error(http.StatusBadRequest, "time[before] must be after time[after]")
+	}
+	return after, before, nil
 }
 
 func joinLeaveSeasonBounds(season string) (time.Time, time.Time, error) {

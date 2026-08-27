@@ -13,7 +13,8 @@ type ClanBadgeURLs struct {
 }
 
 type ClanLeagueRef struct {
-	ID int32 `json:"id"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type ClanRecordEntry struct {
@@ -26,24 +27,29 @@ type ClanBasicRecords struct {
 	WarWinStreak *ClanRecordEntry `json:"warWinStreak,omitempty"`
 }
 
-// ClanBasicResponse is returned by the basic clan endpoints.
-type ClanBasicResponse struct {
-	Name           string            `json:"name"`
-	Tag            string            `json:"tag"`
-	BadgeURLs      ClanBadgeURLs     `json:"badgeUrls"`
-	Description    string            `json:"description"`
-	ClanLevel      int               `json:"clanLevel"`
-	ClanPoints     int               `json:"clanPoints"`
-	Location       *ClanLeagueRef    `json:"location,omitempty"`
-	WarLeague      ClanLeagueRef     `json:"warLeague"`
-	CapitalLeague  *ClanLeagueRef    `json:"capitalLeague,omitempty"`
-	PublicWarLog   bool              `json:"publicWarLog"`
-	WarWins        int               `json:"warWins"`
-	WarWinStreak   int               `json:"warWinStreak"`
-	MemberCount    int               `json:"memberCount"`
-	TroopsDonated  int               `json:"troopsDonated"`
-	TroopsReceived int               `json:"troopsReceived"`
-	LastActive     *time.Time        `json:"lastActive,omitempty"`
-	Records        *ClanBasicRecords `json:"records,omitempty"`
-	Members        any               `json:"members"`
+type ClanCachedMember struct {
+	Tag           string `json:"tag"`
+	Name          string `json:"name"`
+	TownHallLevel int    `json:"townHallLevel"`
+}
+
+// ClanCachedResponse is a potentially several-hours-old clan profile cached by ClashKing.
+type ClanCachedResponse struct {
+	Name           string             `json:"name"`
+	Tag            string             `json:"tag"`
+	BadgeURLs      ClanBadgeURLs      `json:"badgeUrls"`
+	Description    string             `json:"description"`
+	ClanLevel      int                `json:"clanLevel"`
+	ClanPoints     int                `json:"clanPoints"`
+	Location       *SearchLocation    `json:"location,omitempty"`
+	WarLeague      ClanLeagueRef      `json:"warLeague"`
+	CapitalLeague  *ClanLeagueRef     `json:"capitalLeague,omitempty"`
+	PublicWarLog   bool               `json:"publicWarLog"`
+	WarWins        int                `json:"warWins"`
+	WarWinStreak   int                `json:"warWinStreak"`
+	MemberCount    int                `json:"memberCount"`
+	TroopsDonated  int                `json:"troopsDonated"`
+	TroopsReceived int                `json:"troopsReceived"`
+	LastActive     *time.Time         `json:"lastActive,omitempty"`
+	Members        []ClanCachedMember `json:"members"`
 }

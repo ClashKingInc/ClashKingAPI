@@ -3,24 +3,14 @@ package modelsv2
 import "time"
 
 type ClanChangesResponse struct {
-	Name      string             `json:"name"`
-	Tag       string             `json:"tag"`
-	BadgeURLs PublicBadgeURLs    `json:"badgeUrls"`
-	Count     int                `json:"count"`
-	Items     []ClanChangeRecord `json:"items"`
+	Items []ClanChangeRecord `json:"items"`
 }
 
 type ClanChangeRecord struct {
-	Time     time.Time       `json:"time"`
-	Type     string          `json:"type"`
-	Previous ClanChangeValue `json:"previous"`
-	Current  ClanChangeValue `json:"current"`
-}
-
-type ClanChangeValue struct {
-	Kind    string  `json:"kind" enums:"text,integer"`
-	Text    *string `json:"text,omitempty"`
-	Integer *int    `json:"integer,omitempty"`
+	Time     time.Time `json:"time"`
+	Type     string    `json:"type"`
+	Previous any       `json:"previous" swaggertype:"object"`
+	Current  any       `json:"current" swaggertype:"object"`
 }
 
 type BattlelogItemFilters struct {
@@ -59,18 +49,16 @@ type BattlelogItemHitrateResponse struct {
 }
 
 type PlayerRankingsResponse struct {
-	Tag         string                `json:"tag"`
-	HomeVillage PlayerRankingCategory `json:"homeVillage"`
-	BuilderBase PlayerRankingCategory `json:"builderBase"`
+	Tag         string                               `json:"tag"`
+	HomeVillage *PlayerRankingCategory               `json:"homeVillage,omitempty"`
+	BuilderBase *PlayerRankingCategory               `json:"builderBase,omitempty"`
+	Location    *LeaderboardHistoryLocationReference `json:"location,omitempty"`
 }
 
 type PlayerRankingCategory struct {
-	Points       *int    `json:"points" extensions:"x-nullable"`
-	GlobalRank   *int    `json:"globalRank" extensions:"x-nullable"`
-	LocationID   *string `json:"locationId" extensions:"x-nullable"`
-	LocationName *string `json:"locationName" extensions:"x-nullable"`
-	CountryCode  *string `json:"countryCode" extensions:"x-nullable"`
-	LocalRank    *int    `json:"localRank" extensions:"x-nullable"`
+	Trophies   *int `json:"trophies,omitempty"`
+	GlobalRank *int `json:"globalRank,omitempty"`
+	LocalRank  *int `json:"localRank,omitempty"`
 }
 
 type PublicStatsTimeRange struct {
@@ -157,7 +145,6 @@ type PlayerChangeItem struct {
 
 type PlayerChangesResponse struct {
 	Items []PlayerChangeRecord `json:"items"`
-	Count int                  `json:"count"`
 }
 
 type PlayerLeaderboardItem struct {

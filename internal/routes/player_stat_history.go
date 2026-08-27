@@ -18,7 +18,7 @@ const playerStatHistoryQuery = `
 	FROM player_stat_changes
 	WHERE player_tag = $1
 	  AND event_time >= $2
-	  AND event_time < $3
+	  AND event_time <= $3
 	ORDER BY event_time DESC
 	LIMIT $4
 `
@@ -29,7 +29,7 @@ const playerStatHistoryByTypeQuery = `
 	WHERE player_tag = $1
 	  AND stat_type = $2
 	  AND event_time >= $3
-	  AND event_time < $4
+	  AND event_time <= $4
 	ORDER BY event_time DESC
 	LIMIT $5
 `
@@ -47,14 +47,14 @@ type playerStatHistoryDB interface {
 
 // playerStatHistory godoc
 // @Summary Get player stat changes
-// @Description Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.
+// @Description Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
-// @Param timestamp_start query int false "Inclusive start Unix timestamp. Defaults to all history."
-// @Param timestamp_end query int false "Exclusive end Unix timestamp."
-// @Param stat_type query string false "Typed stat filter." Enums(donated,received,clan_games,capital_gold_donated)
-// @Param limit query int false "Maximum number of changes. Default and max 500."
+// @Param type query string true "Stat type" Enums(donated,received,clan_games,capital_gold_donated)
+// @Param time[after] query string false "Only include changes at or after this ISO-8601 time; defaults to 30 days ago when no time range is provided"
+// @Param time[before] query string false "Only include changes at or before this ISO-8601 time"
+// @Param limit query int false "Maximum changes to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.PlayerStatHistoryResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -74,22 +74,21 @@ func playerStatHistoryHandler(db playerStatHistoryDB) fiber.Handler {
 		if playerTag == "" {
 			return apptypes.Error(http.StatusBadRequest, "invalid player_tag")
 		}
-		startUnix, err := playerStatHistoryTimestamp(c, "timestamp_start", 0)
+		statType := modelsv2.PlayerStatType(strings.TrimSpace(c.Query("type")))
+		if statType == "" {
+			return apptypes.Error(http.StatusBadRequest, "type is required")
+		}
+		if _, ok := playerStatTypes[statType]; !ok {
+			return apptypes.Error(http.StatusBadRequest, "invalid type")
+		}
+		now := time.Now().UTC()
+		defaultAfter, defaultBefore := time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC()
+		if strings.TrimSpace(c.Query("time[after]")) == "" && strings.TrimSpace(c.Query("time[before]")) == "" {
+			defaultAfter, defaultBefore = now.Add(-30*24*time.Hour), now
+		}
+		start, end, err := v2TimeWindowFromQuery(c, defaultAfter, defaultBefore)
 		if err != nil {
 			return err
-		}
-		endUnix, err := playerStatHistoryTimestamp(c, "timestamp_end", 9999999999)
-		if err != nil {
-			return err
-		}
-		if startUnix >= endUnix {
-			return apptypes.Error(http.StatusBadRequest, "timestamp_start must be before timestamp_end")
-		}
-		statType := modelsv2.PlayerStatType(strings.TrimSpace(c.Query("stat_type")))
-		if statType != "" {
-			if _, ok := playerStatTypes[statType]; !ok {
-				return apptypes.Error(http.StatusBadRequest, "invalid stat_type")
-			}
 		}
 		limit, err := playerStatHistoryLimit(c.Query("limit"))
 		if err != nil {
@@ -99,14 +98,8 @@ func playerStatHistoryHandler(db playerStatHistoryDB) fiber.Handler {
 			return apptypes.Error(http.StatusServiceUnavailable, "player stat history is unavailable")
 		}
 
-		start := time.Unix(startUnix, 0).UTC()
-		end := time.Unix(endUnix, 0).UTC()
-		query := playerStatHistoryQuery
-		args := []any{playerTag, start, end, limit}
-		if statType != "" {
-			query = playerStatHistoryByTypeQuery
-			args = []any{playerTag, string(statType), start, end, limit}
-		}
+		query := playerStatHistoryByTypeQuery
+		args := []any{playerTag, string(statType), start, end, limit}
 		rows, err := db.Query(c.UserContext(), query, args...)
 		if err != nil {
 			return err
@@ -135,21 +128,9 @@ func playerStatHistoryHandler(db playerStatHistoryDB) fiber.Handler {
 	}
 }
 
-func playerStatHistoryTimestamp(c *fiber.Ctx, name string, fallback int64) (int64, error) {
-	raw := c.Query(name)
-	if raw == "" {
-		return fallback, nil
-	}
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value < 0 {
-		return 0, apptypes.Error(http.StatusBadRequest, "invalid "+name)
-	}
-	return value, nil
-}
-
 func playerStatHistoryLimit(raw string) (int, error) {
 	if raw == "" {
-		return 500, nil
+		return 50, nil
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < 1 {

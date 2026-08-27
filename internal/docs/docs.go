@@ -1550,16 +1550,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/basic": {
+        "/v2/clan/{clan_tag}/cached": {
             "get": {
-                "description": "Returns tracked basic clan data for a clan tag.",
+                "description": "Returns ClashKing's cached version of the clan response. The data may be several hours old.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get basic clan data",
+                "summary": "Get a cached clan profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -1573,7 +1573,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanBasicResponse"
+                            "$ref": "#/definitions/modelsv2.ClanCachedResponse"
                         }
                     },
                     "500": {
@@ -1585,16 +1585,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/changes": {
+        "/v2/clan/{clan_tag}/history/changes": {
             "get": {
-                "description": "Returns stored clan changes such as description changes, clan level upgrades, and war league history.",
+                "description": "Returns description, clan-level, War League, or Capital League changes. Values are strings, integers, or league objects according to type.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan changes",
+                "summary": "Get clan change history",
                 "parameters": [
                     {
                         "type": "string",
@@ -1604,15 +1604,36 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Result limit, max 500",
-                        "name": "limit",
+                        "enum": [
+                            "description",
+                            "clanLevel",
+                            "warLeague",
+                            "capitalLeague"
+                        ],
+                        "type": "string",
+                        "description": "Change type",
+                        "name": "type",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Change type",
-                        "name": "type",
+                        "description": "Only include changes at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include changes at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum changes to return",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -1621,6 +1642,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanChangesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -1651,13 +1678,6 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Maximum events to return; 0 returns full matching history",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
                         "type": "string",
                         "description": "Only include events at or after this ISO-8601 time",
                         "name": "time[after]",
@@ -1667,6 +1687,15 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Only include events at or before this ISO-8601 time",
                         "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum events to return",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -1842,14 +1871,44 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/war-log": {
+        "/v2/clan/{clan_tag}/records": {
             "get": {
-                "security": [
+                "description": "Returns the highest tracked clan-points and war-win-streak records for a clan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Get clan records",
+                "parameters": [
                     {
-                        "ApiKeyAuth": []
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
                     }
                 ],
-                "description": "Returns the official war log when public. Private logs are reconstructed from stored wars with the same item shape and are marked with isPrivate and reconstructed.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanBasicRecords"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/warlog": {
+            "get": {
+                "description": "Returns stored wars without authentication. Authenticated requests also use the official war log as a current-data filler when it is public.",
                 "produces": [
                     "application/json"
                 ],
@@ -1866,6 +1925,31 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "enum": [
+                            "cwl",
+                            "random",
+                            "friendly"
+                        ],
+                        "type": "string",
+                        "description": "War type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include wars ending at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include wars ending at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
                         "default": 50,
                         "description": "Maximum wars to return",
@@ -1882,12 +1966,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -4947,12 +5025,6 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Result limit, max 500",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
                         "enum": [
                             "troop_level",
                             "super_troop_boost",
@@ -4972,6 +5044,27 @@ const docTemplate = `{
                         "name": "type",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include changes at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include changes at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum changes to return",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4998,7 +5091,7 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/history/stats": {
             "get": {
-                "description": "Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.",
+                "description": "Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.",
                 "produces": [
                     "application/json"
                 ],
@@ -5015,18 +5108,6 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Inclusive start Unix timestamp. Defaults to all history.",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Exclusive end Unix timestamp.",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
                         "enum": [
                             "donated",
                             "received",
@@ -5034,13 +5115,29 @@ const docTemplate = `{
                             "capital_gold_donated"
                         ],
                         "type": "string",
-                        "description": "Typed stat filter.",
-                        "name": "stat_type",
+                        "description": "Stat type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include changes at or after this ISO-8601 time; defaults to 30 days ago when no time range is provided",
+                        "name": "time[after]",
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only include changes at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "Maximum number of changes. Default and max 500.",
+                        "default": 50,
+                        "description": "Maximum changes to return",
                         "name": "limit",
                         "in": "query"
                     }
@@ -5092,13 +5189,6 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Maximum events to return; 0 returns full matching history",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
                         "type": "string",
                         "description": "Only include events at or after this ISO-8601 time",
                         "name": "time[after]",
@@ -5108,6 +5198,15 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Only include events at or before this ISO-8601 time",
                         "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum events to return",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -5431,7 +5530,7 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/rankings": {
             "get": {
-                "description": "Returns current Home Village and Builder Base points plus global and official-location placements. A retained location can have a null local rank when the player is no longer ranked there.",
+                "description": "Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.",
                 "produces": [
                     "application/json"
                 ],
@@ -5457,6 +5556,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -5489,20 +5594,34 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Start Unix timestamp",
-                        "name": "timestamp_start",
+                        "enum": [
+                            "cwl",
+                            "random",
+                            "friendly"
+                        ],
+                        "type": "string",
+                        "description": "War type",
+                        "name": "type",
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
+                        "type": "string",
+                        "description": "Only include attacks at or after this ISO-8601 time",
+                        "name": "time[after]",
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only include attacks at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "Maximum number of rows. Max 500.",
+                        "default": 50,
+                        "description": "Maximum attacks to return",
                         "name": "limit",
                         "in": "query"
                     }
@@ -5512,6 +5631,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.PlayerWarAttacksResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -5525,14 +5650,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/war/stats": {
             "get": {
-                "description": "Returns player war performance stats for all, random, friendly, and CWL wars in a time range.",
+                "description": "Returns wars in which the player was rostered, with their attacks and defenses. Empty attack and defense arrays are retained so missed attacks can be derived from attacksPerMember.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player war stats",
+                "summary": "Get player war history",
                 "parameters": [
                     {
                         "type": "string",
@@ -5542,15 +5667,35 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to 90 days ago.",
-                        "name": "timestamp_start",
+                        "enum": [
+                            "cwl",
+                            "random",
+                            "friendly"
+                        ],
+                        "type": "string",
+                        "description": "War type",
+                        "name": "type",
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only include wars ending at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include wars ending at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
+                        "default": 15,
+                        "description": "Maximum wars to return",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -5559,6 +5704,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.PlayerWarStatsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -15796,7 +15947,21 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.ClanBasicResponse": {
+        "modelsv2.ClanCachedMember": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.ClanCachedResponse": {
             "type": "object",
             "properties": {
                 "badgeUrls": {
@@ -15818,20 +15983,22 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
-                    "$ref": "#/definitions/modelsv2.ClanLeagueRef"
+                    "$ref": "#/definitions/modelsv2.SearchLocation"
                 },
                 "memberCount": {
                     "type": "integer"
                 },
-                "members": {},
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanCachedMember"
+                    }
+                },
                 "name": {
                     "type": "string"
                 },
                 "publicWarLog": {
                     "type": "boolean"
-                },
-                "records": {
-                    "$ref": "#/definitions/modelsv2.ClanBasicRecords"
                 },
                 "tag": {
                     "type": "string"
@@ -15935,10 +16102,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "current": {
-                    "$ref": "#/definitions/modelsv2.ClanChangeValue"
+                    "type": "object"
                 },
                 "previous": {
-                    "$ref": "#/definitions/modelsv2.ClanChangeValue"
+                    "type": "object"
                 },
                 "time": {
                     "type": "string"
@@ -15948,44 +16115,14 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.ClanChangeValue": {
-            "type": "object",
-            "properties": {
-                "integer": {
-                    "type": "integer"
-                },
-                "kind": {
-                    "type": "string",
-                    "enum": [
-                        "text",
-                        "integer"
-                    ]
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.ClanChangesResponse": {
             "type": "object",
             "properties": {
-                "badgeUrls": {
-                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
-                },
-                "count": {
-                    "type": "integer"
-                },
                 "items": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.ClanChangeRecord"
                     }
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
                 }
             }
         },
@@ -16028,6 +16165,9 @@ const docTemplate = `{
             "properties": {
                 "id": {
                     "type": "integer"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -18182,9 +18322,6 @@ const docTemplate = `{
         "modelsv2.PlayerChangesResponse": {
             "type": "object",
             "properties": {
-                "count": {
-                    "type": "integer"
-                },
                 "items": {
                     "type": "array",
                     "items": {
@@ -18337,29 +18474,14 @@ const docTemplate = `{
         "modelsv2.PlayerRankingCategory": {
             "type": "object",
             "properties": {
-                "countryCode": {
-                    "type": "string",
-                    "x-nullable": true
-                },
                 "globalRank": {
-                    "type": "integer",
-                    "x-nullable": true
+                    "type": "integer"
                 },
                 "localRank": {
-                    "type": "integer",
-                    "x-nullable": true
+                    "type": "integer"
                 },
-                "locationId": {
-                    "type": "string",
-                    "x-nullable": true
-                },
-                "locationName": {
-                    "type": "string",
-                    "x-nullable": true
-                },
-                "points": {
-                    "type": "integer",
-                    "x-nullable": true
+                "trophies": {
+                    "type": "integer"
                 }
             }
         },
@@ -18371,6 +18493,9 @@ const docTemplate = `{
                 },
                 "homeVillage": {
                     "$ref": "#/definitions/modelsv2.PlayerRankingCategory"
+                },
+                "location": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLocationReference"
                 },
                 "tag": {
                     "type": "string"
@@ -18562,6 +18687,121 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.PlayerWarHistoryAttack": {
+            "type": "object",
+            "properties": {
+                "destructionPercentage": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "fresh": {
+                    "type": "boolean"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "player": {
+                    "$ref": "#/definitions/modelsv2.PlayerWarHistoryPlayer"
+                },
+                "stars": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.PlayerWarHistoryClan": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "integer"
+                },
+                "badgeUrls": {
+                    "$ref": "#/definitions/modelsv2.PublicBadgeURLs"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "destructionPercentage": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.PlayerWarHistoryItem": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PlayerWarHistoryAttack"
+                    }
+                },
+                "attacksPerMember": {
+                    "type": "integer"
+                },
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.PlayerWarHistoryClan"
+                },
+                "defenses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PlayerWarHistoryAttack"
+                    }
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "opponent": {
+                    "$ref": "#/definitions/modelsv2.PlayerWarHistoryClan"
+                },
+                "player": {
+                    "$ref": "#/definitions/modelsv2.PlayerWarHistoryPlayer"
+                },
+                "preparationStartTime": {
+                    "type": "string"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "teamSize": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "cwl",
+                        "random",
+                        "friendly"
+                    ]
+                }
+            }
+        },
+        "modelsv2.PlayerWarHistoryPlayer": {
+            "type": "object",
+            "properties": {
+                "mapPosition": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townhallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.PlayerWarHitResult": {
             "type": "object",
             "properties": {
@@ -18599,71 +18839,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.PlayerWarStatsBucket": {
-            "type": "object",
-            "properties": {
-                "attacks": {
-                    "type": "integer"
-                },
-                "averageDestruction": {
-                    "type": "number"
-                },
-                "averageDuration": {
-                    "type": "number"
-                },
-                "averageStars": {
-                    "type": "number"
-                },
-                "dipAttacks": {
-                    "type": "integer"
-                },
-                "dipHitrate": {
-                    "type": "number"
-                },
-                "expectedAttacks": {
-                    "type": "integer"
-                },
-                "hitUpAttacks": {
-                    "type": "integer"
-                },
-                "hitUpHitrate": {
-                    "type": "number"
-                },
-                "hitrate": {
-                    "type": "number"
-                },
-                "missedAttacks": {
-                    "type": "integer"
-                },
-                "oneStarRate": {
-                    "type": "number"
-                },
-                "perfectAttackRate": {
-                    "type": "number"
-                },
-                "sameTownhallAttacks": {
-                    "type": "integer"
-                },
-                "sameTownhallHitrate": {
-                    "type": "number"
-                },
-                "stars": {
-                    "type": "integer"
-                },
-                "threeStarRate": {
-                    "type": "number"
-                },
-                "twoStarRate": {
-                    "type": "number"
-                },
-                "wars": {
-                    "type": "integer"
-                },
-                "zeroStarRate": {
-                    "type": "number"
-                }
-            }
-        },
         "modelsv2.PlayerWarStatsExportRequest": {
             "type": "object",
             "properties": {
@@ -18684,26 +18859,11 @@ const docTemplate = `{
         "modelsv2.PlayerWarStatsResponse": {
             "type": "object",
             "properties": {
-                "cwl": {
-                    "$ref": "#/definitions/modelsv2.PlayerWarStatsBucket"
-                },
-                "friendly": {
-                    "$ref": "#/definitions/modelsv2.PlayerWarStatsBucket"
-                },
-                "playerTag": {
-                    "type": "string"
-                },
-                "random": {
-                    "$ref": "#/definitions/modelsv2.PlayerWarStatsBucket"
-                },
-                "timestampEnd": {
-                    "type": "integer"
-                },
-                "timestampStart": {
-                    "type": "integer"
-                },
-                "total": {
-                    "$ref": "#/definitions/modelsv2.PlayerWarStatsBucket"
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PlayerWarHistoryItem"
+                    }
                 }
             }
         },
@@ -23058,6 +23218,14 @@ const docTemplate = `{
                 },
                 "teamSize": {
                     "type": "integer"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "cwl",
+                        "random",
+                        "friendly"
+                    ]
                 }
             }
         },

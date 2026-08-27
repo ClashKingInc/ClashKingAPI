@@ -13,18 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// clanBasic godoc
-// @Summary Get basic clan data
-// @Description Returns tracked basic clan data for a clan tag.
+// clanCached godoc
+// @Summary Get a cached clan profile
+// @Description Returns ClashKing's cached version of the clan response. The data may be several hours old.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} modelsv2.ClanBasicResponse
+// @Success 200 {object} modelsv2.ClanCachedResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/basic [get]
-func clanBasic(a apptypes.Deps) fiber.Handler {
+// @Router /v2/clan/{clan_tag}/cached [get]
+func clanCached(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		row, err := v2BasicClan(c, a, legacyClanFixTag(c.Params("clan_tag")))
+		row, err := v2CachedClan(c, a, legacyClanFixTag(c.Params("clan_tag")))
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return apptypes.JSON(c, fiber.StatusOK, nil)
@@ -32,6 +32,28 @@ func clanBasic(a apptypes.Deps) fiber.Handler {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, row)
+	}
+}
+
+// clanRecords godoc
+// @Summary Get clan records
+// @Description Returns the highest tracked clan-points and war-win-streak records for a clan.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Success 200 {object} modelsv2.ClanBasicRecords
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Router /v2/clan/{clan_tag}/records [get]
+func clanRecords(a apptypes.Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		records, err := v2BasicClanRecords(c, a, legacyClanFixTag(c.Params("clan_tag")))
+		if err != nil {
+			return err
+		}
+		if records == nil {
+			records = &modelsv2.ClanBasicRecords{}
+		}
+		return apptypes.JSON(c, fiber.StatusOK, records)
 	}
 }
 
@@ -167,7 +189,7 @@ func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, err
 	return scanBasicClan(row)
 }
 
-func v2BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanBasicResponse, error) {
+func v2CachedClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanCachedResponse, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
 			public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
@@ -177,15 +199,9 @@ func v2BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanBasicR
 	`, tag)
 	data, err := scanBasicClanData(row)
 	if err != nil {
-		return modelsv2.ClanBasicResponse{}, err
+		return modelsv2.ClanCachedResponse{}, err
 	}
-	resp := basicClanResponse(data)
-	records, err := v2BasicClanRecords(c, a, tag)
-	if err != nil {
-		return modelsv2.ClanBasicResponse{}, err
-	}
-	resp.Records = records
-	return resp, nil
+	return cachedClanResponse(data, a), nil
 }
 
 type basicClanScanner interface {
@@ -289,8 +305,13 @@ func basicClanMap(data basicClanData) map[string]any {
 	return item
 }
 
-func basicClanResponse(data basicClanData) modelsv2.ClanBasicResponse {
-	resp := modelsv2.ClanBasicResponse{
+func cachedClanResponse(data basicClanData, a apptypes.Deps) modelsv2.ClanCachedResponse {
+	references := newReferenceCatalog(a)
+	warLeague := modelsv2.ClanLeagueRef{ID: data.cwlLeague}
+	if league := references.warLeague(data.cwlLeague); league != nil {
+		warLeague.Name = league.Name
+	}
+	resp := modelsv2.ClanCachedResponse{
 		Name: data.name,
 		Tag:  data.tag,
 		BadgeURLs: modelsv2.ClanBadgeURLs{
@@ -301,26 +322,54 @@ func basicClanResponse(data basicClanData) modelsv2.ClanBasicResponse {
 		Description:    data.description,
 		ClanLevel:      data.level,
 		ClanPoints:     data.clanPoints,
-		WarLeague:      modelsv2.ClanLeagueRef{ID: int32(data.cwlLeague)},
+		WarLeague:      warLeague,
 		PublicWarLog:   data.publicWarLog,
 		WarWins:        data.warWins,
 		WarWinStreak:   data.warWinStreak,
 		MemberCount:    data.memberCount,
 		TroopsDonated:  data.donated,
 		TroopsReceived: data.received,
-		Members:        data.members,
+		Members:        cachedClanMembers(data.members),
 	}
 	if data.locationID.Valid {
-		resp.Location = &modelsv2.ClanLeagueRef{ID: data.locationID.Int32}
+		if location, ok := searchLocations()[int(data.locationID.Int32)]; ok {
+			copy := location
+			resp.Location = &copy
+		} else {
+			resp.Location = &modelsv2.SearchLocation{ID: int(data.locationID.Int32)}
+		}
 	}
 	if data.capitalLeague.Valid {
-		resp.CapitalLeague = &modelsv2.ClanLeagueRef{ID: data.capitalLeague.Int32}
+		capitalLeague := modelsv2.ClanLeagueRef{ID: int(data.capitalLeague.Int32)}
+		if league := references.capitalLeague(capitalLeague.ID); league != nil {
+			capitalLeague.Name = league.Name
+		}
+		resp.CapitalLeague = &capitalLeague
 	}
 	if data.lastActive.Valid {
 		lastActive := data.lastActive.Time
 		resp.LastActive = &lastActive
 	}
 	return resp
+}
+
+func cachedClanMembers(value any) []modelsv2.ClanCachedMember {
+	rawMembers, ok := value.([]any)
+	if !ok {
+		return []modelsv2.ClanCachedMember{}
+	}
+	members := make([]modelsv2.ClanCachedMember, 0, len(rawMembers))
+	for _, raw := range rawMembers {
+		member, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		members = append(members, modelsv2.ClanCachedMember{
+			Tag: staticDataAsString(member["tag"]), Name: staticDataAsString(member["name"]),
+			TownHallLevel: int(asFloat(member["town_hall"])),
+		})
+	}
+	return members
 }
 
 func v2BasicClanRecords(c *fiber.Ctx, a apptypes.Deps, tag string) (*modelsv2.ClanBasicRecords, error) {

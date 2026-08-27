@@ -9,14 +9,16 @@ import (
 )
 
 type referenceCatalog struct {
-	warLeagues  map[int]modelsv2.LeagueReference
-	leagueTiers map[int]modelsv2.LeagueReference
+	warLeagues     map[int]modelsv2.LeagueReference
+	leagueTiers    map[int]modelsv2.LeagueReference
+	capitalLeagues map[int]modelsv2.LeagueReference
 }
 
 func newReferenceCatalog(a apptypes.Deps) referenceCatalog {
 	catalog := referenceCatalog{
-		warLeagues:  make(map[int]modelsv2.LeagueReference),
-		leagueTiers: make(map[int]modelsv2.LeagueReference),
+		warLeagues:     make(map[int]modelsv2.LeagueReference),
+		leagueTiers:    make(map[int]modelsv2.LeagueReference),
+		capitalLeagues: make(map[int]modelsv2.LeagueReference),
 	}
 	catalog.warLeagues[cwlUnrankedLeagueID] = modelsv2.LeagueReference{
 		ID: cwlUnrankedLeagueID, Name: "Unranked",
@@ -29,6 +31,7 @@ func newReferenceCatalog(a apptypes.Deps) referenceCatalog {
 		ID: cwlUnrankedLeagueID, Name: "Unranked",
 	}
 	catalog.leagueTiers = buildLeagueReferences(a.Clash.StaticSection("league_tiers"))
+	catalog.capitalLeagues = buildLeagueReferences(a.Clash.StaticSection("capital_leagues"))
 	return catalog
 }
 
@@ -65,6 +68,10 @@ func (c referenceCatalog) warLeague(id int) *modelsv2.LeagueReference {
 
 func (c referenceCatalog) leagueTier(id int) *modelsv2.LeagueReference {
 	return leagueReference(c.leagueTiers, id)
+}
+
+func (c referenceCatalog) capitalLeague(id int) *modelsv2.LeagueReference {
+	return leagueReference(c.capitalLeagues, id)
 }
 
 func leagueReference(items map[int]modelsv2.LeagueReference, id int) *modelsv2.LeagueReference {

@@ -21,24 +21,39 @@ import (
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
-// @Param timestamp_start query int false "Start Unix timestamp"
-// @Param timestamp_end query int false "End Unix timestamp"
-// @Param limit query int false "Maximum number of rows. Max 500."
+// @Param type query string false "War type" Enums(cwl,random,friendly)
+// @Param time[after] query string false "Only include attacks at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include attacks at or before this ISO-8601 time"
+// @Param limit query int false "Maximum attacks to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.PlayerWarAttacksResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/war/attacks [get]
 func playerWarAttacks(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := warFixTag(c.Params("player_tag"))
-		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
-		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
-		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 500)
+		warType := strings.ToLower(strings.TrimSpace(c.Query("type")))
+		if warType != "" && warType != "cwl" && warType != "random" && warType != "friendly" {
+			return apptypes.Error(http.StatusBadRequest, "invalid type")
+		}
+		start, end, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+		if err != nil {
+			return err
+		}
+		limit, err := v2QueryInt(c, "limit", 50)
+		if err != nil || limit < 1 {
+			return apptypes.Error(http.StatusBadRequest, "invalid limit")
+		}
+		limit = clamp(limit, 1, 500)
 		wars, err := sqlWarsForPlayersContext(c.UserContext(), a, []string{tag}, start, end)
 		if err != nil {
 			return err
 		}
 		var attacks []sqlWarAttackRow
 		for warID, war := range wars {
+			if warType != "" && war.Type != warType {
+				continue
+			}
 			for _, attack := range wararchive.Attacks(warID, war) {
 				if attack.AttackerTag == tag || attack.DefenderTag == tag {
 					attacks = append(attacks, sqlWarAttackFromArchive(attack))
@@ -59,30 +74,6 @@ func playerWarAttacks(a apptypes.Deps) fiber.Handler {
 			items = append(items, sqlWarAttackMap(attack, tag))
 		}
 		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
-	}
-}
-
-// playerWarStats godoc
-// @Summary Get player war stats
-// @Description Returns player war performance stats for all, random, friendly, and CWL wars in a time range.
-// @Tags Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
-// @Param timestamp_end query int false "End Unix timestamp"
-// @Success 200 {object} modelsv2.PlayerWarStatsResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/player/{player_tag}/war/stats [get]
-func playerWarStats(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := warFixTag(c.Params("player_tag"))
-		start := time.Unix(queryInt64(c, "timestamp_start", time.Now().UTC().Add(-90*24*time.Hour).Unix()), 0).UTC()
-		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
-		stats, err := sqlPlayerWarStats(c, a, tag, start, end)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, http.StatusOK, stats)
 	}
 }
 

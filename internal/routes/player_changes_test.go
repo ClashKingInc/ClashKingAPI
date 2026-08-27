@@ -69,6 +69,8 @@ func TestPlayerChangesQueriesUseNormalizedSchema(t *testing.T) {
 			"event_time, townhall_level, change_type, item_id, previous_value, current_value",
 			"FROM player_change_history",
 			"WHERE player_tag = $1",
+			"event_time >=",
+			"event_time <=",
 			"ORDER BY event_time DESC",
 		} {
 			if !strings.Contains(query, required) {
@@ -128,6 +130,8 @@ func TestPlayerChangesReturnsNormalizedValuesAndUsesTypeFilter(t *testing.T) {
 	troopID := int16(19)
 	superTroopID := int16(33)
 	eventTime := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
+	after := eventTime.Add(-24 * time.Hour)
+	before := eventTime.Add(time.Hour)
 	db := &playerChangesTestDB{rows: &playerChangesTestRows{items: []playerChangesTestRow{
 		{eventTime: eventTime, townhallLevel: &townhall, typeID: 1, itemID: &troopID, previous: "11", current: "12"},
 		{eventTime: eventTime.Add(-time.Second), townhallLevel: &townhall, typeID: 2, itemID: &superTroopID, previous: "0", current: "1"},
@@ -139,14 +143,14 @@ func TestPlayerChangesReturnsNormalizedValuesAndUsesTypeFilter(t *testing.T) {
 		{changeType: 2, itemID: superTroopID}: {Name: "Super Wall Breaker", ID: 33},
 	}
 
-	response, err := queryPlayerChanges(context.Background(), db, "#8GLYGGJQ", []int16{1, 2}, 5, catalog)
+	response, err := queryPlayerChanges(context.Background(), db, "#8GLYGGJQ", []int16{1, 2}, after, before, 5, catalog)
 	if err != nil {
 		t.Fatalf("query player changes: %v", err)
 	}
-	if db.query != playerChangesByTypeQuery || len(db.args) != 3 {
+	if db.query != playerChangesByTypeQuery || len(db.args) != 5 || db.args[2] != after || db.args[3] != before || db.args[4] != 5 {
 		t.Fatalf("unexpected filtered query: %q %#v", db.query, db.args)
 	}
-	if response.Count != 4 || len(response.Items) != 4 {
+	if len(response.Items) != 4 {
 		t.Fatalf("unexpected response count: %#v", response)
 	}
 	if response.Items[0].Type != "troop_level" || response.Items[0].Item == nil || response.Items[0].Item.Name != "P.E.K.K.A" || response.Items[0].Previous != int64(11) || response.Items[0].Current != int64(12) {
@@ -167,7 +171,7 @@ func TestPlayerChangesReturnsNormalizedValuesAndUsesTypeFilter(t *testing.T) {
 		t.Fatalf("marshal response: %v", err)
 	}
 	encoded := string(payload)
-	for _, absent := range []string{"player_tag", "type_id", "item_id"} {
+	for _, absent := range []string{"\"count\"", "player_tag", "type_id", "item_id"} {
 		if strings.Contains(encoded, absent) {
 			t.Fatalf("response contains obsolete field %q: %s", absent, encoded)
 		}
@@ -233,6 +237,8 @@ func TestPlayerChangesRejectsInvalidTypeBeforeDatabaseAccess(t *testing.T) {
 	for _, path := range []string{
 		"/v2/player/%23ABC/history/changes",
 		"/v2/player/%23ABC/history/changes?type=unknown",
+		"/v2/player/%23ABC/history/changes?type=troop_level&time%5Bafter%5D=bad",
+		"/v2/player/%23ABC/history/changes?type=troop_level&limit=0",
 	} {
 		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {

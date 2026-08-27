@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	"github.com/ClashKingInc/ClashKingAPI/internal/swaggerdocs"
@@ -399,6 +398,9 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/permalink/{clan_tag}",
 		"/v2/clan/{clan_tag}/ranking",
 		"/v2/clan/{clan_tag}/badge",
+		"/v2/clan/{clan_tag}/basic",
+		"/v2/clan/{clan_tag}/changes",
+		"/v2/clan/{clan_tag}/war-log",
 		"/clan/{clan_tag}/badge",
 		"/clan/{clan_tag}/basic",
 		"/clan/{clan_tag}/wars",
@@ -586,16 +588,16 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 	if _, exists := eventProperties["townHallLevel"]; !exists {
 		t.Fatal("expected JoinLeaveEvent to expose townHallLevel")
 	}
-	clanBasic, ok := definitions["modelsv2.ClanBasicResponse"].(map[string]any)
+	clanBasic, ok := definitions["modelsv2.ClanCachedResponse"].(map[string]any)
 	if !ok {
-		t.Fatal("expected ClanBasicResponse definition")
+		t.Fatal("expected ClanCachedResponse definition")
 	}
 	clanBasicProperties, ok := clanBasic["properties"].(map[string]any)
 	if !ok {
-		t.Fatal("expected ClanBasicResponse properties")
+		t.Fatal("expected ClanCachedResponse properties")
 	}
 	if _, exists := clanBasicProperties["member_tags"]; exists {
-		t.Fatal("expected ClanBasicResponse not to expose removed member_tags field")
+		t.Fatal("expected ClanCachedResponse not to expose removed member_tags field")
 	}
 	for _, field := range []string{
 		"badge_url",
@@ -610,13 +612,23 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"war_win_streak",
 	} {
 		if _, exists := clanBasicProperties[field]; exists {
-			t.Fatalf("expected ClanBasicResponse not to expose legacy field %s", field)
+			t.Fatalf("expected ClanCachedResponse not to expose legacy field %s", field)
 		}
 	}
-	for _, field := range []string{"name", "tag", "badgeUrls", "clanPoints", "memberCount", "members", "records", "troopsDonated", "troopsReceived", "warWinStreak"} {
+	for _, field := range []string{"name", "tag", "badgeUrls", "clanPoints", "memberCount", "members", "location", "warLeague", "capitalLeague", "troopsDonated", "troopsReceived", "warWinStreak"} {
 		if _, exists := clanBasicProperties[field]; !exists {
-			t.Fatalf("expected ClanBasicResponse to expose %s", field)
+			t.Fatalf("expected ClanCachedResponse to expose %s", field)
 		}
+	}
+	if _, exists := clanBasicProperties["records"]; exists {
+		t.Fatal("expected ClanCachedResponse not to expose records")
+	}
+	member := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanCachedMember")
+	if _, exists := member["townHallLevel"]; !exists {
+		t.Fatal("expected ClanCachedMember to expose townHallLevel")
+	}
+	if _, exists := member["town_hall"]; exists {
+		t.Fatal("expected ClanCachedMember not to expose town_hall")
 	}
 	clanBasicRecords, ok := definitions["modelsv2.ClanBasicRecords"].(map[string]any)
 	if !ok {
@@ -723,7 +735,7 @@ func TestBuildDocKeepsJoinLeaveQueryParamsSimple(t *testing.T) {
 		t.Fatal("join-leave clan schema must not expose a badge")
 	}
 
-	wantHistory := []string{"limit", "time[after]", "time[before]"}
+	wantHistory := []string{"time[after]", "time[before]", "limit"}
 	for _, path := range []string{
 		"/v2/clan/{clan_tag}/join-leave",
 		"/v2/player/{player_tag}/join-leave",
@@ -768,11 +780,12 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 	assertParameterEnum(
 		t,
 		operation["parameters"],
-		"stat_type",
+		"type",
 		[]any{"donated", "received", "clan_games", "capital_gold_donated"},
 	)
+	assertRequiredParameter(t, operation["parameters"].([]any), "type", "query")
 	queryParams := swaggerQueryParams(t, paths, path)
-	wantParams := []string{"timestamp_start", "timestamp_end", "stat_type", "limit"}
+	wantParams := []string{"type", "time[after]", "time[before]", "limit"}
 	if !reflect.DeepEqual(queryParams, wantParams) {
 		t.Fatalf("player stat history query params = %v, want %v", queryParams, wantParams)
 	}
@@ -846,6 +859,7 @@ func TestPlayerStatHistoryOpenAPIUsesTypedCamelCaseContract(t *testing.T) {
 func TestPlayerChangeHistoryOpenAPIRequiresTypedFilter(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)
+	definitions := swaggerDefinitions(t, doc)
 	operation := paths["/v2/player/{player_tag}/history/changes"].(map[string]any)["get"].(map[string]any)
 	params := operation["parameters"].([]any)
 
@@ -864,6 +878,91 @@ func TestPlayerChangeHistoryOpenAPIRequiresTypedFilter(t *testing.T) {
 		"war_preference",
 		"name",
 	})
+	if got := swaggerQueryParams(t, paths, "/v2/player/{player_tag}/history/changes"); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("player change query params = %v", got)
+	}
+	response := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerChangesResponse")
+	if _, exists := response["count"]; exists {
+		t.Fatal("PlayerChangesResponse must not expose count")
+	}
+}
+
+func TestPlayerWarHistoryOpenAPIUsesPerWarContract(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	definitions := swaggerDefinitions(t, doc)
+	path := "/v2/player/{player_tag}/war/stats"
+	operation := paths[path].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, operation["parameters"], "type", []any{"cwl", "random", "friendly"})
+	if got := swaggerQueryParams(t, paths, path); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("player war history query params = %v", got)
+	}
+	response := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerWarStatsResponse")
+	assertArrayItemsRef(t, response["items"], "#/components/schemas/modelsv2.PlayerWarHistoryItem")
+	item := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerWarHistoryItem")
+	for _, field := range []string{"teamSize", "attacksPerMember", "preparationStartTime", "startTime", "endTime", "clan", "opponent", "type", "player", "attacks", "defenses"} {
+		if _, exists := item[field]; !exists {
+			t.Fatalf("PlayerWarHistoryItem missing %s", field)
+		}
+	}
+	for _, retired := range []string{"war", "missed"} {
+		if _, exists := item[retired]; exists {
+			t.Fatalf("PlayerWarHistoryItem exposes %s", retired)
+		}
+	}
+}
+
+func TestClanHistoryAndCachedClanOpenAPIContracts(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	definitions := swaggerDefinitions(t, doc)
+
+	changesPath := "/v2/clan/{clan_tag}/history/changes"
+	changes := paths[changesPath].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, changes["parameters"], "type", []any{"description", "clanLevel", "warLeague", "capitalLeague"})
+	if got := swaggerQueryParams(t, paths, changesPath); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("clan change query params = %v", got)
+	}
+	changesResponse := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanChangesResponse")
+	if len(changesResponse) != 1 {
+		t.Fatalf("ClanChangesResponse should only expose items: %#v", changesResponse)
+	}
+	assertArrayItemsRef(t, changesResponse["items"], "#/components/schemas/modelsv2.ClanChangeRecord")
+
+	warlogPath := "/v2/clan/{clan_tag}/warlog"
+	warlog := paths[warlogPath].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, warlog["parameters"], "type", []any{"cwl", "random", "friendly"})
+	if got := swaggerQueryParams(t, paths, warlogPath); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("clan warlog query params = %v", got)
+	}
+	if _, exists := warlog["security"]; exists {
+		t.Fatalf("clan warlog must allow unauthenticated requests: %#v", warlog["security"])
+	}
+
+	cached := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanCachedResponse")
+	if _, exists := cached["records"]; exists {
+		t.Fatal("cached clan response exposes records")
+	}
+	league := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLeagueRef")
+	for _, field := range []string{"id", "name"} {
+		if _, exists := league[field]; !exists {
+			t.Fatalf("ClanLeagueRef missing %s", field)
+		}
+	}
+	if _, exists := paths["/v2/clan/{clan_tag}/records"]; !exists {
+		t.Fatal("clan records path is missing")
+	}
+}
+
+func TestPlayerWarAttacksOpenAPIUsesSharedWarFilters(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	path := "/v2/player/{player_tag}/war/attacks"
+	operation := paths[path].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, operation["parameters"], "type", []any{"cwl", "random", "friendly"})
+	if got := swaggerQueryParams(t, paths, path); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("player war attack query params = %v", got)
+	}
 }
 
 func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *testing.T) {
@@ -871,19 +970,19 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 	definitions := swaggerDefinitions(t, doc)
 
 	playerRankings := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerRankingsResponse")
-	for _, field := range []string{"tag", "homeVillage", "builderBase"} {
+	for _, field := range []string{"tag", "homeVillage", "builderBase", "location"} {
 		if _, exists := playerRankings[field]; !exists {
 			t.Fatalf("PlayerRankingsResponse missing %s", field)
 		}
 	}
 	category := swaggerDefinitionProperties(t, definitions, "modelsv2.PlayerRankingCategory")
-	for _, field := range []string{"points", "globalRank", "locationId", "locationName", "countryCode", "localRank"} {
+	for _, field := range []string{"trophies", "globalRank", "localRank"} {
 		property, exists := category[field].(map[string]any)
-		if !exists || !isNullable(property) {
-			t.Fatalf("PlayerRankingCategory.%s must be present and nullable: %#v", field, category[field])
+		if !exists || property["type"] != "integer" {
+			t.Fatalf("PlayerRankingCategory.%s must be an optional integer: %#v", field, category[field])
 		}
 	}
-	for _, retired := range []string{"global_rank", "local_rank", "country_code", "country_name", "data", "updatedAt"} {
+	for _, retired := range []string{"points", "locationId", "locationName", "countryCode", "global_rank", "local_rank", "country_code", "country_name", "data", "updatedAt"} {
 		if _, exists := category[retired]; exists {
 			t.Fatalf("PlayerRankingCategory exposes retired field %s", retired)
 		}
@@ -939,8 +1038,8 @@ func TestMigrationThreeOpenAPIUsesFinalRankingNotificationAndServerContracts(t *
 	}
 }
 
-func TestClanBasicResponseKeepsOfficialIdentityFieldsFirst(t *testing.T) {
-	body, err := json.Marshal(modelsv2.ClanBasicResponse{
+func TestClanCachedResponseKeepsOfficialIdentityFieldsFirst(t *testing.T) {
+	body, err := json.Marshal(modelsv2.ClanCachedResponse{
 		Name: "Tamilan",
 		Tag:  "#22PU0L9CY",
 		BadgeURLs: modelsv2.ClanBadgeURLs{
@@ -949,20 +1048,14 @@ func TestClanBasicResponseKeepsOfficialIdentityFieldsFirst(t *testing.T) {
 		Description:    "Be active perform war have fun",
 		ClanLevel:      19,
 		ClanPoints:     0,
-		WarLeague:      modelsv2.ClanLeagueRef{ID: 48000009},
+		WarLeague:      modelsv2.ClanLeagueRef{ID: 48000009, Name: "Gold League I"},
 		PublicWarLog:   false,
 		WarWins:        70,
 		WarWinStreak:   0,
 		MemberCount:    39,
 		TroopsDonated:  2150,
 		TroopsReceived: 2150,
-		Records: &modelsv2.ClanBasicRecords{
-			ClanPoints: &modelsv2.ClanRecordEntry{
-				Value: 50000,
-				Time:  time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
-			},
-		},
-		Members: []any{},
+		Members:        []modelsv2.ClanCachedMember{{Tag: "#P1", Name: "Player", TownHallLevel: 17}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -983,25 +1076,25 @@ func TestClanBasicResponseKeepsOfficialIdentityFieldsFirst(t *testing.T) {
 	if strings.Index(payload, `"members"`) < strings.Index(payload, `"troopsReceived"`) {
 		t.Fatalf("expected members to stay after scalar fields: %s", payload)
 	}
-	if strings.Index(payload, `"members"`) < strings.Index(payload, `"records"`) {
-		t.Fatalf("expected members to stay after records: %s", payload)
+	if !strings.Contains(payload, `"townHallLevel":17`) || strings.Contains(payload, `"town_hall"`) {
+		t.Fatalf("expected cached members to use townHallLevel: %s", payload)
 	}
 }
 
-func TestClanBasicResponseOmitsEmptyRecords(t *testing.T) {
-	body, err := json.Marshal(modelsv2.ClanBasicResponse{
+func TestClanCachedResponseHasNoRecords(t *testing.T) {
+	body, err := json.Marshal(modelsv2.ClanCachedResponse{
 		Name: "Tamilan",
 		Tag:  "#22PU0L9CY",
 		BadgeURLs: modelsv2.ClanBadgeURLs{
 			Large: "badge.png",
 		},
-		Members: []any{},
+		Members: []modelsv2.ClanCachedMember{},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(body), `"records"`) {
-		t.Fatalf("expected records to be omitted when missing: %s", body)
+		t.Fatalf("expected records to be absent from cached response: %s", body)
 	}
 }
 
@@ -1040,9 +1133,10 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/stats/ranked",
 		"/v2/stats/war",
 		"/v2/stats/cwl",
-		"/v2/clan/{clan_tag}/changes",
+		"/v2/clan/{clan_tag}/history/changes",
 		"/v2/clan/{clan_tag}/rankings",
-		"/v2/clan/{clan_tag}/basic",
+		"/v2/clan/{clan_tag}/cached",
+		"/v2/clan/{clan_tag}/records",
 	} {
 		if _, exists := paths[path]; !exists {
 			t.Fatalf("expected public stats path %s in swagger", path)

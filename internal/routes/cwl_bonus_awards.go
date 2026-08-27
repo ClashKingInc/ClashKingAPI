@@ -16,7 +16,7 @@ import (
 // getCWLBonusRecipients godoc
 // @Summary View saved CWL bonus recipients
 // @Description Returns the saved bonus-medal recipients for one server, clan, and CWL season so an existing award plan can be reviewed.
-// @Tags CWL
+// @Tags Server Clans
 // @Produce json
 // @Security ApiKeyAuth
 // @Param server_id path int true "Discord server ID"
@@ -63,7 +63,7 @@ func getCWLBonusRecipients(a apptypes.Deps) fiber.Handler {
 // replaceCWLBonusRecipients godoc
 // @Summary Replace saved CWL bonus recipients
 // @Description Replaces the saved bonus-medal recipients for one server, clan, and CWL season with the submitted player list.
-// @Tags CWL
+// @Tags Server Clans
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth

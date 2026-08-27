@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -172,6 +174,40 @@ func sqlClanWars(c *fiber.Ctx, a apptypes.Deps, clanTag string, start time.Time,
 		items = append(items, buildStoredArchiveWar(war, value, clanTag))
 	}
 	return items, nil
+}
+
+func sqlClanWarAtTime(c *fiber.Ctx, a apptypes.Deps, clanTag string, target time.Time, leeway time.Duration) (*officialWarResponse, error) {
+	row := a.Store.SQL.QueryRow(c.UserContext(), `
+		SELECT war_id::text, clan_tag, opponent_tag, prep_time, start_time, end_time, size, attacks_per_member,
+			war_type, state, battle_modifier, war_tag, clan_name, opponent_name, clan_badge_token,
+			opponent_badge_token, clan_level, opponent_clan_level, clan_attacks, opponent_attacks,
+			clan_stars, opponent_stars, clan_destruction_percentage::float8, opponent_destruction_percentage::float8
+		FROM wars
+		WHERE (clan_tag = $1 OR opponent_tag = $1)
+			AND end_time >= $2 - make_interval(secs => $3)
+			AND end_time <= $2 + make_interval(secs => $3)
+			AND war_type = ANY($4)
+		ORDER BY abs(extract(epoch FROM (end_time - $2)))
+		LIMIT 1
+	`, clanTag, target, leeway.Seconds(), []string{"random", "friendly", "cwl"})
+	war, err := scanSQLWar(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	war = orientWarForClan(war, clanTag)
+	archived, err := sqlArchiveWarsContext(c.UserContext(), a, []string{war.WarID})
+	if err != nil {
+		return nil, err
+	}
+	payload, exists := archived[war.WarID]
+	if !exists {
+		return nil, nil
+	}
+	item := buildStoredArchiveWar(war, payload, clanTag)
+	return &item, nil
 }
 
 func buildStoredArchiveWar(row sqlWarRow, archived wararchive.War, clanTag string) officialWarResponse {

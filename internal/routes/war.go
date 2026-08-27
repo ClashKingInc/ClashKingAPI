@@ -25,7 +25,7 @@ import (
 // warTownhallWeeklyHitrate godoc
 // @Summary Get weekly town hall war hitrate
 // @Description Returns weekly hitrate and average attack quality for a town hall level.
-// @Tags War
+// @Tags War & CWL
 // @Produce json
 // @Param townhall_level path int true "Town hall level"
 // @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
@@ -168,7 +168,7 @@ func warTownhallWeeklyHitrate(a apptypes.Deps) fiber.Handler {
 // warCompletedDaily godoc
 // @Summary Get daily completed war counts
 // @Description Returns completed war counts per day and war type.
-// @Tags War
+// @Tags War & CWL
 // @Produce json
 // @Param timestamp_start query int false "Start Unix timestamp. Defaults to 90 days ago."
 // @Param timestamp_end query int false "End Unix timestamp"
@@ -209,7 +209,7 @@ func warCompletedDaily(a apptypes.Deps) fiber.Handler {
 // cwlClanHistory godoc
 // @Summary Browse a clan's stored CWL groups
 // @Description Returns every stored CWL group containing the clan. Rosters and rounds are historical snapshots; rankings appear only when separately saved.
-// @Tags CWL
+// @Tags War & CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {object} modelsv2.CWLClanHistoryResponse
@@ -232,13 +232,19 @@ func cwlClanHistory(a apptypes.Deps) fiber.Handler {
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
+// @Param limit query int false "Maximum seasons to return" default(6) minimum(1)
 // @Success 200 {object} modelsv2.CWLPlayerHistoryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/cwl/history [get]
 func cwlPlayerHistory(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		playerTag := warFixTag(c.Params("player_tag"))
-		items, err := cwlHistoryForPlayer(c, a, playerTag)
+		limit, err := v2QueryInt(c, "limit", 6)
+		if err != nil || limit < 1 {
+			return apptypes.Error(fiber.StatusBadRequest, "limit must be a positive integer")
+		}
+		items, err := cwlHistoryForPlayer(c, a, playerTag, limit)
 		if err != nil {
 			return err
 		}
@@ -280,90 +286,10 @@ func cwlLeagueRankings(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// clanStats godoc
-// @Summary Count stored wars for selected clans
-// @Description Returns the number of stored wars for each requested clan, with filters available for dates, war types, and preparation states.
-// @Tags War
-// @Produce json
-// @Param clan_tags query []string false "Clan tags"
-// @Param clan_tag query string false "Single clan tag"
-// @Success 200 {object} modelsv2.WarStatsResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/war/clan/stats [get]
-// @Router /v2/war/stats [get]
-func clanStats(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		clanTags := splitCSV(apptypes.QueryValues(c, "clan_tags"), c.Query("clan_tag"))
-		total, err := sqlWarCount(c, a, clanTags)
-		if err != nil {
-			return err
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": []modelsv2.WarStatsItem{{WarCount: int(total), ClanTags: clanTags}}})
-	}
-}
-
-// warSummaryBulk godoc
-// @Summary Compare current wars across several clans
-// @Description Returns a compact current-war summary for each submitted clan tag so multiple wars can be displayed or compared together.
-// @Tags War
-// @Produce json
-// @Param body body modelsv2.WarClanTagsBody true "Clan tags"
-// @Success 200 {object} modelsv2.WarSummaryListResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/war/war-summary [post]
-func warSummaryBulk(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var body modelsv2.WarClanTagsBody
-		if err := apptypes.DecodeJSON(c, &body); err != nil {
-			return err
-		}
-		tags := make([]string, 0, len(body.ClanTags))
-		seen := make(map[string]struct{}, len(body.ClanTags))
-		for _, rawTag := range body.ClanTags {
-			tag := warFixTag(rawTag)
-			if tag == "" {
-				continue
-			}
-			if _, exists := seen[tag]; exists {
-				continue
-			}
-			seen[tag] = struct{}{}
-			tags = append(tags, tag)
-		}
-		if len(tags) == 0 {
-			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
-		}
-		if len(tags) > 100 {
-			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot contain more than 100 unique tags")
-		}
-		ctx := c.UserContext()
-		results := make([]map[string]any, len(tags))
-		sem := make(chan struct{}, 10)
-		var wg sync.WaitGroup
-		for i, tag := range tags {
-			wg.Add(1)
-			go func(idx int, t string) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				defer func() {
-					if r := recover(); r != nil {
-						results[idx] = warSummaryResponse(t, false, false, map[string]any{"state": "notInWar"}, nil, nil)
-					}
-				}()
-				results[idx] = currentWarSummary(ctx, a, t)
-			}(i, tag)
-		}
-		wg.Wait()
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": results})
-	}
-}
-
 // warSummarySingle godoc
 // @Summary View a clan's current war summary
 // @Description Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.
-// @Tags War
+// @Tags War & CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Success 200 {object} modelsv2.WarSummaryResponse
@@ -372,52 +298,6 @@ func warSummaryBulk(a apptypes.Deps) fiber.Handler {
 func warSummarySingle(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return apptypes.JSON(c, fiber.StatusOK, currentWarSummary(c.UserContext(), a, c.Params("clan_tag")))
-	}
-}
-
-// playerWarhits godoc
-// @Summary Compare war performance for selected players
-// @Description Returns stored attack performance for the requested players, with filters for dates, war types, town halls, and attack freshness.
-// @Tags War
-// @Produce json
-// @Param body body modelsv2.WarPlayersBody true "Player tags"
-// @Success 200 {object} modelsv2.PlayerWarHitsResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/war/players/warhits [post]
-func playerWarhits(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		filter, err := mobileDecodeWarHitsFilter(c)
-		if err != nil {
-			return err
-		}
-		if len(filter.PlayerTags) == 0 {
-			return apptypes.Error(fiber.StatusBadRequest, "player_tags cannot be empty")
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileFetchPlayerWarStatsWithFilter(c.UserContext(), a, filter)})
-	}
-}
-
-// clanWarhits godoc
-// @Summary Compare war performance for selected clans
-// @Description Returns stored attack performance for the requested clans, with filters for dates, war types, town halls, and attack freshness.
-// @Tags War
-// @Produce json
-// @Param body body modelsv2.WarClanTagsBody true "Clan tags"
-// @Success 200 {object} modelsv2.ClanWarHitsResponse
-// @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/war/clans/warhits [post]
-func clanWarhits(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		filter, err := mobileDecodeWarHitsFilter(c)
-		if err != nil {
-			return err
-		}
-		if len(filter.ClanTags) == 0 {
-			return apptypes.Error(fiber.StatusBadRequest, "clan_tags cannot be empty")
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": mobileFetchClanWarStatsWithFilter(c.UserContext(), a, filter)})
 	}
 }
 
@@ -480,6 +360,7 @@ const cwlPlayerHistorySelect = `
 	 AND s.clan_tag = player_member.clan_tag
 	WHERE player_member.tag = $1
 	ORDER BY g.season DESC, g.cwl_id DESC, gc.clan_tag
+	LIMIT $2
 `
 
 type cwlPlayerHistorySeed struct {
@@ -488,8 +369,8 @@ type cwlPlayerHistorySeed struct {
 	Item     modelsv2.CWLPlayerHistoryItem
 }
 
-func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string) ([]modelsv2.CWLPlayerHistoryItem, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerHistorySelect, playerTag)
+func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string, limit int) ([]modelsv2.CWLPlayerHistoryItem, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerHistorySelect, playerTag, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -909,18 +790,6 @@ func cwlStandingsForLeague(c *fiber.Ctx, a apptypes.Deps, season string, leagueI
 		}
 	}
 	return items, rows.Err()
-}
-
-func sqlWarCount(c *fiber.Ctx, a apptypes.Deps, clanTags []string) (int64, error) {
-	query := `SELECT count(*) FROM wars`
-	args := []any{}
-	if len(clanTags) > 0 {
-		query += ` WHERE clan_tag = ANY($1) OR opponent_tag = ANY($1)`
-		args = append(args, clanTags)
-	}
-	var total int64
-	err := a.Store.SQL.QueryRow(c.UserContext(), query, args...).Scan(&total)
-	return total, err
 }
 
 func warTimestampToTime(value string) time.Time {

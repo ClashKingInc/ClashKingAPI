@@ -1082,8 +1082,7 @@ func primaryTagOrder() []string {
 	return []string{
 		"Player",
 		"Clan",
-		"War",
-		"CWL",
+		"War & CWL",
 		"Leaderboard",
 		"Counts",
 		"Stats",

@@ -91,8 +91,8 @@ func TestRegisterRoutes(t *testing.T) {
 
 func TestScalarQueryPaths(t *testing.T) {
 	paths := scalarQueryPaths()
-	if len(paths) != 8 {
-		t.Fatalf("QUERY path count = %d, want 8", len(paths))
+	if len(paths) != 6 {
+		t.Fatalf("QUERY path count = %d, want 6", len(paths))
 	}
 	if paths[0] != "/v2/home/activity" || paths[len(paths)-1] != "/v2/stats/war" {
 		t.Fatalf("QUERY paths are not sorted: %v", paths)

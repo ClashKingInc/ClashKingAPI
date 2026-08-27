@@ -145,4 +145,22 @@ func TestPlayerWarStatsRejectsInvalidFiltersBeforeDatabaseAccess(t *testing.T) {
 	}
 }
 
+func TestPlayerWarAttacksRejectsInvalidFiltersBeforeDatabaseAccess(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/player/:player_tag/war/attacks", playerWarAttacks(apptypes.Deps{}))
+	for _, path := range []string{
+		"/v2/player/%23PLAYER/war/attacks?type=league",
+		"/v2/player/%23PLAYER/war/attacks?limit=0",
+		"/v2/player/%23PLAYER/war/attacks?time%5Bafter%5D=bad",
+	} {
+		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("request %s status = %d, want 400", path, response.StatusCode)
+		}
+	}
+}
+
 var _ modelsv2.PlayerWarStatsResponse

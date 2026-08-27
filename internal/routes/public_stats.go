@@ -806,19 +806,10 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 	references := newReferenceCatalog(a)
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
-		storageType, err := clanChangeStorageType(c.Query("type"))
+		storageType, after, before, limit, err := clanChangeQueryOptions(c)
 		if err != nil {
 			return err
 		}
-		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
-		if err != nil {
-			return err
-		}
-		limit, err := v2QueryInt(c, "limit", 50)
-		if err != nil || limit < 1 {
-			return apptypes.Error(fiber.StatusBadRequest, "invalid limit")
-		}
-		limit = clamp(limit, 1, 500)
 		rows, err := a.Store.SQL.Query(c.UserContext(), `
 			SELECT event_time, change_type, previous_value, current_value
 			FROM clan_change_history
@@ -859,6 +850,22 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanChangesResponse{Items: items})
 	}
+}
+
+func clanChangeQueryOptions(c *fiber.Ctx) (string, time.Time, time.Time, int, error) {
+	storageType, err := clanChangeStorageType(c.Query("type"))
+	if err != nil {
+		return "", time.Time{}, time.Time{}, 0, err
+	}
+	after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+	if err != nil {
+		return "", time.Time{}, time.Time{}, 0, err
+	}
+	limit, err := v2QueryInt(c, "limit", 50)
+	if err != nil || limit < 1 {
+		return "", time.Time{}, time.Time{}, 0, apptypes.Error(fiber.StatusBadRequest, "invalid limit")
+	}
+	return storageType, after, before, clamp(limit, 1, 500), nil
 }
 
 func clanChangeValue(changeType string, raw []byte, references referenceCatalog) (any, error) {

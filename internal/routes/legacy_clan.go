@@ -23,8 +23,14 @@ import (
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/cached [get]
 func clanCached(a apptypes.Deps) fiber.Handler {
+	return clanCachedHandler(a, v2CachedClan)
+}
+
+type clanCachedLoader func(*fiber.Ctx, apptypes.Deps, string) (modelsv2.ClanCachedResponse, error)
+
+func clanCachedHandler(a apptypes.Deps, load clanCachedLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		row, err := v2CachedClan(c, a, legacyClanFixTag(c.Params("clan_tag")))
+		row, err := load(c, a, legacyClanFixTag(c.Params("clan_tag")))
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return apptypes.JSON(c, fiber.StatusOK, nil)
@@ -45,8 +51,14 @@ func clanCached(a apptypes.Deps) fiber.Handler {
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/records [get]
 func clanRecords(a apptypes.Deps) fiber.Handler {
+	return clanRecordsHandler(a, v2BasicClanRecords)
+}
+
+type clanRecordsLoader func(*fiber.Ctx, apptypes.Deps, string) (*modelsv2.ClanBasicRecords, error)
+
+func clanRecordsHandler(a apptypes.Deps, load clanRecordsLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		records, err := v2BasicClanRecords(c, a, legacyClanFixTag(c.Params("clan_tag")))
+		records, err := load(c, a, legacyClanFixTag(c.Params("clan_tag")))
 		if err != nil {
 			return err
 		}

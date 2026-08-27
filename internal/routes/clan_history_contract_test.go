@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,92 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func TestClanCachedHandlerReturnsCachedDataAndHandlesMissingRows(t *testing.T) {
+	want := modelsv2.ClanCachedResponse{Name: "Clan", Tag: "#CLAN", ClanLevel: 20}
+	loader := func(_ *fiber.Ctx, _ apptypes.Deps, tag string) (modelsv2.ClanCachedResponse, error) {
+		if tag != "#CLAN" {
+			t.Fatalf("normalized clan tag = %q", tag)
+		}
+		return want, nil
+	}
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/clan/:clan_tag/cached", clanCachedHandler(apptypes.Deps{}, loader))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23clan/cached", nil))
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("cached clan request: status=%d err=%v", response.StatusCode, err)
+	}
+	var got modelsv2.ClanCachedResponse
+	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != want.Name || got.Tag != want.Tag || got.ClanLevel != want.ClanLevel {
+		t.Fatalf("cached clan response = %#v", got)
+	}
+
+	app = fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/clan/:clan_tag/cached", clanCachedHandler(apptypes.Deps{}, func(*fiber.Ctx, apptypes.Deps, string) (modelsv2.ClanCachedResponse, error) {
+		return modelsv2.ClanCachedResponse{}, pgx.ErrNoRows
+	}))
+	response, err = app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/cached", nil))
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("missing cached clan request: status=%d err=%v", response.StatusCode, err)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "null" {
+		t.Fatalf("missing cached clan body = %s", body)
+	}
+}
+
+func TestClanCachedAndRecordsHandlersPropagateFailures(t *testing.T) {
+	wantErr := errors.New("database unavailable")
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/cached", clanCachedHandler(apptypes.Deps{}, func(*fiber.Ctx, apptypes.Deps, string) (modelsv2.ClanCachedResponse, error) {
+		return modelsv2.ClanCachedResponse{}, wantErr
+	}))
+	app.Get("/records", clanRecordsHandler(apptypes.Deps{}, func(*fiber.Ctx, apptypes.Deps, string) (*modelsv2.ClanBasicRecords, error) {
+		return nil, wantErr
+	}))
+	for _, path := range []string{"/cached", "/records"} {
+		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil || response.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("%s failure: status=%d err=%v", path, response.StatusCode, err)
+		}
+	}
+}
+
+func TestClanRecordsHandlerReturnsEmptyAndStoredRecords(t *testing.T) {
+	recordTime := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	records := &modelsv2.ClanBasicRecords{ClanPoints: &modelsv2.ClanRecordEntry{Value: 54321, Time: recordTime}}
+	for name, result := range map[string]*modelsv2.ClanBasicRecords{"empty": nil, "stored": records} {
+		t.Run(name, func(t *testing.T) {
+			app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+			app.Get("/v2/clan/:clan_tag/records", clanRecordsHandler(apptypes.Deps{}, func(_ *fiber.Ctx, _ apptypes.Deps, tag string) (*modelsv2.ClanBasicRecords, error) {
+				if tag != "#CLAN" {
+					t.Fatalf("normalized clan tag = %q", tag)
+				}
+				return result, nil
+			}))
+			response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23clan/records", nil))
+			if err != nil || response.StatusCode != http.StatusOK {
+				t.Fatalf("records request: status=%d err=%v", response.StatusCode, err)
+			}
+			var got modelsv2.ClanBasicRecords
+			if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+			if result == nil && (got.ClanPoints != nil || got.WarWinStreak != nil) {
+				t.Fatalf("empty records response = %#v", got)
+			}
+			if result != nil && (got.ClanPoints == nil || got.ClanPoints.Value != 54321) {
+				t.Fatalf("stored records response = %#v", got)
+			}
+		})
+	}
+}
 
 type clanChangesTestDB struct {
 	query string

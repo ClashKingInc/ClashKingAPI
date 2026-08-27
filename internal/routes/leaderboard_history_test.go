@@ -367,12 +367,12 @@ func TestLeaderboardHistoryRoutesReturnEmptyItemsAndRejectInvalidScopes(t *testi
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
 	app.Get("/v2/leaderboard/history/:leaderboard_type/:location_id/:date", leaderboardSnapshotHistoryHandler(emptyDB))
 	app.Get("/v2/player/:player_tag/leaderboard-history/:leaderboard_type", playerLeaderboardHistoryHandler(emptyDB))
-	app.Get("/v2/clan/:clan_tag/leaderboard-history", clanLeaderboardHistoryHandler(emptyDB))
+	app.Get("/v2/clan/:clan_tag/history/leaderboards", clanLeaderboardHistoryHandler(emptyDB))
 
 	for _, path := range []string{
 		"/v2/leaderboard/history/player_home_trophies/global/2026-07-26",
 		"/v2/player/P0Y/leaderboard-history/player_builder_base_trophies",
-		"/v2/clan/2PP/leaderboard-history?type=clan_capital_points&limit=50&time%5Bafter%5D=2026-01-01T00%3A00%3A00Z",
+		"/v2/clan/2PP/history/leaderboards?type=clan_capital_points&limit=50&time%5Bafter%5D=2026-01-01T00%3A00%3A00Z",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {
@@ -401,9 +401,9 @@ func TestLeaderboardHistoryRoutesReturnEmptyItemsAndRejectInvalidScopes(t *testi
 		"/v2/leaderboard/history/player_home_trophies/not-global/2026-07-26",
 		"/v2/leaderboard/history/player_home_trophies/global/20260726",
 		"/v2/player/P0Y/leaderboard-history/clan_home_points",
-		"/v2/clan/2PP/leaderboard-history?type=player_home_trophies",
-		"/v2/clan/2PP/leaderboard-history?type=clan_home_points&limit=251",
-		"/v2/clan/2PP/leaderboard-history?type=clan_home_points&time%5Bbefore%5D=bad",
+		"/v2/clan/2PP/history/leaderboards?type=player_home_trophies",
+		"/v2/clan/2PP/history/leaderboards?type=clan_home_points&limit=251",
+		"/v2/clan/2PP/history/leaderboards?type=clan_home_points&time%5Bbefore%5D=bad",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {

@@ -11122,86 +11122,7 @@
         ]
       }
     },
-    "/v2/clan/{clan_tag}/join-leave": {
-      "get": {
-        "description": "Returns stored joins and leaves for one clan. Time filters affect returned events, while available and uniquePlayers remain all-time totals.",
-        "parameters": [
-          {
-            "description": "Clan tag",
-            "in": "path",
-            "name": "clan_tag",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Only include events at or after this ISO-8601 time",
-            "in": "query",
-            "name": "time[after]",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Only include events at or before this ISO-8601 time",
-            "in": "query",
-            "name": "time[before]",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Maximum events to return",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 50,
-              "maximum": 500,
-              "minimum": 1,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.JoinLeaveResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Review a clan's membership changes",
-        "tags": [
-          "Clan"
-        ]
-      }
-    },
-    "/v2/clan/{clan_tag}/leaderboard-history": {
+    "/v2/clan/{clan_tag}/history/leaderboards": {
       "get": {
         "description": "Returns dated clan placements and points for one required leaderboard type, with optional inclusive time bounds.",
         "parameters": [
@@ -11304,7 +11225,7 @@
         ]
       }
     },
-    "/v2/clan/{clan_tag}/legend-history": {
+    "/v2/clan/{clan_tag}/history/legends": {
       "get": {
         "description": "Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.",
         "parameters": [
@@ -11388,6 +11309,85 @@
           }
         },
         "summary": "Review a clan's final Legend finishers",
+        "tags": [
+          "Clan"
+        ]
+      }
+    },
+    "/v2/clan/{clan_tag}/join-leave": {
+      "get": {
+        "description": "Returns stored joins and leaves for one clan. Time filters affect returned events, while available and uniquePlayers remain all-time totals.",
+        "parameters": [
+          {
+            "description": "Clan tag",
+            "in": "path",
+            "name": "clan_tag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include events at or after this ISO-8601 time",
+            "in": "query",
+            "name": "time[after]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include events at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum events to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.JoinLeaveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Review a clan's membership changes",
         "tags": [
           "Clan"
         ]

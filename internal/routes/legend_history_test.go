@@ -224,13 +224,13 @@ func TestLegendHistoryRoutesReturnEmptyItemsAndValidateInputs(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
 	app.Get("/v2/legends/history/:season", legendSeasonHistoryHandler(emptyDB, nil))
 	app.Get("/v2/player/:player_tag/legend-history", playerLegendHistoryHandler(emptyDB, nil))
-	app.Get("/v2/clan/:clan_tag/legend-history", clanLegendHistoryHandler(emptyDB))
+	app.Get("/v2/clan/:clan_tag/history/legends", clanLegendHistoryHandler(emptyDB))
 
 	for _, path := range []string{
 		"/v2/legends/history/2026-07",
 		"/v2/legends/history/v2-2026-07-06T05:00:00Z?limit=200",
 		"/v2/player/P0Y/legend-history",
-		"/v2/clan/2PP/legend-history?limit=250&time%5Bafter%5D=2023-01-01T00%3A00%3A00Z",
+		"/v2/clan/2PP/history/legends?limit=250&time%5Bafter%5D=2023-01-01T00%3A00%3A00Z",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {
@@ -254,8 +254,8 @@ func TestLegendHistoryRoutesReturnEmptyItemsAndValidateInputs(t *testing.T) {
 		"/v2/legends/history/2026-07?limit=201",
 		"/v2/player/%23/legend-history",
 		"/v2/clan/%23/legend-history",
-		"/v2/clan/2PP/legend-history?limit=251",
-		"/v2/clan/2PP/legend-history?time%5Bbefore%5D=bad",
+		"/v2/clan/2PP/history/legends?limit=251",
+		"/v2/clan/2PP/history/legends?time%5Bbefore%5D=bad",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {

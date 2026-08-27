@@ -407,7 +407,7 @@ func playerLeaderboardHistoryHandler(
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/leaderboard-history [get]
+// @Router /v2/clan/{clan_tag}/history/leaderboards [get]
 func clanLeaderboardHistory(a apptypes.Deps) fiber.Handler {
 	return clanLeaderboardHistoryHandler(configuredLeaderboardHistoryDB(a), func(
 		ctx context.Context,

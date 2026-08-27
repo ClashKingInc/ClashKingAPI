@@ -499,6 +499,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/war/clans/warhits",
 		"/v2/war/players/warhits",
 		"/v2/cwl/{clan_tag}",
+		"/v2/clan/{clan_tag}/leaderboard-history",
+		"/v2/clan/{clan_tag}/legend-history",
 		"/v2/search/clan",
 		"/v2/search/player",
 		"/v2/links/{id}/{player_tag}",
@@ -1201,13 +1203,13 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/player/{player_tag}/rankings",
 		"/v2/player/{player_tag}/battlelog/history",
 		"/v2/player/{player_tag}/legend-history",
-		"/v2/clan/{clan_tag}/legend-history",
+		"/v2/clan/{clan_tag}/history/legends",
 		"/v2/legends/history/{season}",
 		"/v2/player/{player_tag}/ranked/{season}/battlelog",
 		"/v2/player/{player_tag}/ranked/{season}/group",
 		"/v2/player/{player_tag}/history/changes",
 		"/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}",
-		"/v2/clan/{clan_tag}/leaderboard-history",
+		"/v2/clan/{clan_tag}/history/leaderboards",
 		"/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}",
 		"/v2/leaderboard/league/{league_tier_id}",
 		"/v2/leaderboard/townhalls/{townhall_level}",
@@ -1334,10 +1336,10 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 			t.Fatalf("clan leaderboard history item exposes retired field %s", retired)
 		}
 	}
-	clanLeaderboardPath := paths["/v2/clan/{clan_tag}/leaderboard-history"].(map[string]any)
+	clanLeaderboardPath := paths["/v2/clan/{clan_tag}/history/leaderboards"].(map[string]any)
 	clanLeaderboardGet := clanLeaderboardPath["get"].(map[string]any)
 	assertTags(t, clanLeaderboardGet, []string{"Clan"})
-	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/leaderboard-history"); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/leaderboards"); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
 		t.Fatalf("clan leaderboard history query params = %v", got)
 	}
 	assertRequiredParameter(t, clanLeaderboardGet["parameters"].([]any), "type", "query")
@@ -1385,10 +1387,10 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 			t.Fatalf("expected clan Legend item field %s", field)
 		}
 	}
-	clanLegendPath := paths["/v2/clan/{clan_tag}/legend-history"].(map[string]any)
+	clanLegendPath := paths["/v2/clan/{clan_tag}/history/legends"].(map[string]any)
 	clanLegendGet := clanLegendPath["get"].(map[string]any)
 	assertTags(t, clanLegendGet, []string{"Clan"})
-	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/legend-history"); !reflect.DeepEqual(got, []string{"time[after]", "time[before]", "limit"}) {
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/legends"); !reflect.DeepEqual(got, []string{"time[after]", "time[before]", "limit"}) {
 		t.Fatalf("clan Legend history query params = %v", got)
 	}
 	assertQueryParameterSchemaValue(t, clanLegendGet["parameters"], "limit", "default", float64(50))

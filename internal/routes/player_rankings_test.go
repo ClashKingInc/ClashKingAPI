@@ -97,6 +97,25 @@ func TestQueryPlayerRankingsDoesNotFabricateMissingGlobalPlacement(t *testing.T)
 	}
 }
 
+func TestQueryPlayerRankingsBuildsCategoryFromLocalPlacement(t *testing.T) {
+	db := &playerRankingsTestDB{rows: &playerRankingTestRows{items: []playerRankingTestRow{
+		{rankingType: "builder_base", locationID: "32000006", rank: intPointer(7), points: intPointer(5342)},
+	}}}
+	response, err := queryPlayerRankings(context.Background(), db, "#P2")
+	if err != nil {
+		t.Fatalf("queryPlayerRankings() error = %v", err)
+	}
+	if response.BuilderBase == nil || response.BuilderBase.LocalRank == nil || *response.BuilderBase.LocalRank != 7 {
+		t.Fatalf("local Builder Base rank missing: %#v", response.BuilderBase)
+	}
+	if response.BuilderBase.Trophies == nil || *response.BuilderBase.Trophies != 5342 {
+		t.Fatalf("local Builder Base trophies missing: %#v", response.BuilderBase)
+	}
+	if response.BuilderBase.GlobalRank != nil || response.HomeVillage != nil {
+		t.Fatalf("local-only ranking fabricated global data: %#v", response)
+	}
+}
+
 func TestQueryPlayerRankingsCanReturnNoHistory(t *testing.T) {
 	db := &playerRankingsTestDB{rows: &playerRankingTestRows{}}
 	response, err := queryPlayerRankings(context.Background(), db, "#P3")

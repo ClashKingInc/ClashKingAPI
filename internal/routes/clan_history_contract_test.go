@@ -339,6 +339,35 @@ func TestClanWarLogHandlerUsesStoredWarsWithoutAuthentication(t *testing.T) {
 	}
 }
 
+func TestClanWarHistoryOptionsUseSharedFiltersAndEndpointDefaults(t *testing.T) {
+	var gotTypes []string
+	var gotLimit int
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/wars", func(c *fiber.Ctx) error {
+		_, _, types, limit, err := clanWarHistoryOptions(c, 15)
+		if err != nil {
+			return err
+		}
+		gotTypes, gotLimit = types, limit
+		return c.SendStatus(http.StatusNoContent)
+	})
+
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/wars?type=cwl&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z", nil))
+	if err != nil || response.StatusCode != http.StatusNoContent || gotLimit != 15 || len(gotTypes) != 1 || gotTypes[0] != "cwl" {
+		t.Fatalf("shared clan war filters: status=%d types=%v limit=%d err=%v", response.StatusCode, gotTypes, gotLimit, err)
+	}
+	response, err = app.Test(httptest.NewRequest(http.MethodGet, "/wars?limit=501", nil))
+	if err != nil || response.StatusCode != http.StatusNoContent || gotLimit != 500 {
+		t.Fatalf("clamped clan war limit: status=%d limit=%d err=%v", response.StatusCode, gotLimit, err)
+	}
+	for _, path := range []string{"/wars?type=league", "/wars?limit=0", "/wars?time%5Bbefore%5D=bad"} {
+		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil || response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid shared clan war filters %s: status=%d err=%v", path, response.StatusCode, err)
+		}
+	}
+}
+
 func TestStoredArchiveWarUsesNormalizedSQLWarType(t *testing.T) {
 	war := wararchive.War{State: "warEnded", Clan: wararchive.Clan{Tag: "#CLAN"}, Opponent: wararchive.Clan{Tag: "#OTHER"}}
 	if item := buildStoredArchiveWar(sqlWarRow{WarType: "cwl"}, war, "#CLAN"); item.WarType != "cwl" {

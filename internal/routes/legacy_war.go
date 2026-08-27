@@ -11,8 +11,8 @@ import (
 )
 
 // warPrevious godoc
-// @Summary Get previous wars
-// @Description Returns stored previous wars for a clan.
+// @Summary Browse a clan's older stored wars
+// @Description Returns older wars stored for the clan through the legacy response shape. New integrations should use the versioned clan wars endpoint.
 // @Tags War
 // @Produce json
 // @Param clanTag path string true "Clan tag"
@@ -36,8 +36,8 @@ func warPrevious(a apptypes.Deps) fiber.Handler {
 }
 
 // warPreviousAtTime godoc
-// @Summary Get previous war by end time
-// @Description Returns the stored previous war near the supplied Clash API end time.
+// @Summary Find a stored war by end time
+// @Description Returns the stored clan war nearest the supplied official end time through the legacy response shape.
 // @Tags War
 // @Produce json
 // @Param clanTag path string true "Clan tag"
@@ -62,8 +62,8 @@ func warPreviousAtTime(a apptypes.Deps) fiber.Handler {
 }
 
 // warBasic godoc
-// @Summary Get current or recent war
-// @Description Returns the current or most recent non-CWL war for a clan.
+// @Summary View a clan's latest regular war
+// @Description Returns the clan's current or most recent non-CWL war through the legacy response shape used by older clients.
 // @Tags War
 // @Produce json
 // @Param clanTag path string true "Clan tag"
@@ -85,9 +85,9 @@ func warBasic(a apptypes.Deps) fiber.Handler {
 }
 
 // cwlGroup godoc
-// @Summary Get current CWL group
-// @Description Returns the current season CWL group for a clan.
-// @Tags War
+// @Summary View a clan's current CWL group
+// @Description Returns the clan's current CWL group through the legacy response shape used by older clients.
+// @Tags CWL
 // @Produce json
 // @Param clanTag path string true "Clan tag"
 // @Success 200 {object} modelsv2.CWLGroupResponse
@@ -104,9 +104,9 @@ func cwlGroup(a apptypes.Deps) fiber.Handler {
 }
 
 // cwlSeason godoc
-// @Summary Get CWL group by season
-// @Description Returns the CWL group for a clan and season.
-// @Tags War
+// @Summary View a clan's CWL group by season
+// @Description Returns the clan's CWL group for a selected season through the legacy response shape used by older clients.
+// @Tags CWL
 // @Produce json
 // @Param clanTag path string true "Clan tag"
 // @Param season path string true "Season YYYY-MM"

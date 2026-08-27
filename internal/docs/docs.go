@@ -43,14 +43,14 @@ const docTemplate = `{
         },
         "/cwl/{clanTag}/group": {
             "get": {
-                "description": "Returns the current season CWL group for a clan.",
+                "description": "Returns the clan's current CWL group through the legacy response shape used by older clients.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "CWL"
                 ],
-                "summary": "Get current CWL group",
+                "summary": "View a clan's current CWL group",
                 "parameters": [
                     {
                         "type": "string",
@@ -72,14 +72,14 @@ const docTemplate = `{
         },
         "/cwl/{clanTag}/{season}": {
             "get": {
-                "description": "Returns the CWL group for a clan and season.",
+                "description": "Returns the clan's CWL group for a selected season through the legacy response shape used by older clients.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "CWL"
                 ],
-                "summary": "Get CWL group by season",
+                "summary": "View a clan's CWL group by season",
                 "parameters": [
                     {
                         "type": "string",
@@ -1552,14 +1552,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/cached": {
             "get": {
-                "description": "Returns ClashKing's cached version of the clan response. The data may be several hours old.",
+                "description": "Returns a stored clan profile when live data is unnecessary. Values may be several hours behind the official API.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get a cached clan profile",
+                "summary": "Read a recently cached clan profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -1587,14 +1587,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/history/changes": {
             "get": {
-                "description": "Returns description or clan-level changes. Values are strings or integers according to type.",
+                "description": "Returns stored description or clan-level changes with optional inclusive time bounds. Each value keeps its natural string or integer type.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan change history",
+                "summary": "Review changes to a clan's profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -1659,14 +1659,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single clan tag. available and uniquePlayers are all-time totals; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns stored joins and leaves for one clan. Time filters affect returned events, while available and uniquePlayers remain all-time totals.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan join-leave history",
+                "summary": "Review a clan's membership changes",
                 "parameters": [
                     {
                         "type": "string",
@@ -1836,14 +1836,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/rankings": {
             "get": {
-                "description": "Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.",
+                "description": "Returns current Home Village, Builder Base, and Clan Capital scores with every available global and local leaderboard position.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get rankings of a clan",
+                "summary": "View a clan's current leaderboard positions",
                 "parameters": [
                     {
                         "type": "string",
@@ -1871,14 +1871,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/records": {
             "get": {
-                "description": "Returns the highest tracked clan-points and war-win-streak records for a clan.",
+                "description": "Returns the clan's highest tracked points and longest war win streak, including when each record was reached.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan records",
+                "summary": "View a clan's tracked records",
                 "parameters": [
                     {
                         "type": "string",
@@ -1906,14 +1906,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/warlog": {
             "get": {
-                "description": "Returns wars stored in ClashKing's history.",
+                "description": "Returns stored wars in the official clan war-log shape, with optional type and end-time filters for paging historical results.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get a clan war log",
+                "summary": "Official API-compatible war log from stored war history",
                 "parameters": [
                     {
                         "type": "string",
@@ -1979,14 +1979,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/wars": {
             "get": {
-                "description": "Returns previous wars for a clan rebuilt from SQL war rows, attacks, and missed attacks.",
+                "description": "Returns complete stored war details, including members and attacks, filtered by war type and inclusive end-time boundaries.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get stored clan wars",
+                "summary": "Complete stored wars for a clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -1996,33 +1996,35 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to all history.",
-                        "name": "timestamp_start",
+                        "enum": [
+                            "cwl",
+                            "random",
+                            "friendly"
+                        ],
+                        "type": "string",
+                        "description": "War type",
+                        "name": "type",
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
+                        "type": "string",
+                        "description": "Only include wars ending at or after this ISO-8601 time",
+                        "name": "time[after]",
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only include wars ending at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "Maximum number of wars. Max 250.",
+                        "default": 15,
+                        "description": "Maximum wars to return",
                         "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
-                        "name": "war_types",
                         "in": "query"
                     }
                 ],
@@ -2031,6 +2033,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.WarListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -2233,91 +2241,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/cwl/league-thresholds": {
-            "get": {
-                "description": "Returns the static CWL promotion and demotion thresholds list.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Promo and demotion thresholds for CWL leagues",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLThresholdResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/cwl/leagues/{league_id}/rankings": {
-            "get": {
-                "description": "Returns only persisted standings for one season, league, and war size. Empty standings are a successful empty result until Tracking has computed them.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Persisted CWL league rankings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "CWL league ID",
-                        "name": "league_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "CWL season (YYYY-MM)",
-                        "name": "season",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "CWL war size",
-                        "name": "war_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLLeagueRankingsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/cwl/{clan_tag}": {
             "get": {
-                "description": "Returns the requested season, or the most recent stored season when season is omitted.",
+                "description": "Returns the requested CWL group with its roster, rounds, and wars, or the clan's most recent stored season when omitted.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "CWL"
                 ],
-                "summary": "Get a stored CWL group",
+                "summary": "View a clan's stored CWL group",
                 "parameters": [
                     {
                         "type": "string",
@@ -2351,14 +2284,14 @@ const docTemplate = `{
         },
         "/v2/cwl/{clan_tag}/ranking-history": {
             "get": {
-                "description": "Returns typed CWL group snapshots for a clan. A group without persisted standings returns its roster and lifecycle data with no synthetic ranking.",
+                "description": "Returns every stored CWL group containing the clan. Rosters and rounds are historical snapshots; rankings appear only when separately saved.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "CWL"
                 ],
-                "summary": "CWL group history for a clan",
+                "summary": "Browse a clan's stored CWL groups",
                 "parameters": [
                     {
                         "type": "string",
@@ -2386,13 +2319,14 @@ const docTemplate = `{
         },
         "/v2/cwl/{clan_tag}/seasons": {
             "get": {
+                "description": "Lists every stored CWL season containing the clan, with its league, team size, state, and available group standing.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "CWL"
                 ],
-                "summary": "List stored CWL seasons for a clan",
+                "summary": "List a clan's stored CWL seasons",
                 "parameters": [
                     {
                         "type": "string",
@@ -3152,6 +3086,61 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.PublicClanLeaderboardResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/cwl/{league_id}": {
+            "get": {
+                "description": "Returns the saved leaderboard for one CWL season, league, and team size, ordered by global rank and then group rank.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Rank CWL clans within a league",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "CWL league ID",
+                        "name": "league_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "CWL team size",
+                        "name": "team_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLLeagueRankingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -4906,14 +4895,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/battlelog/history": {
             "get": {
-                "description": "Returns historical returned battlelogs for a player, including farming hits when present.",
+                "description": "Returns previously observed battle logs for the player, including farming attacks when those results were available during tracking.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player battlelog history",
+                "summary": "Browse a player's saved battle history",
                 "parameters": [
                     {
                         "type": "string",
@@ -4971,14 +4960,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/cwl/history": {
             "get": {
-                "description": "Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.",
+                "description": "Returns each season containing the player, with their clan, league, team size, attacks, missed attacks, results, stars, and placements.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "Player"
                 ],
-                "summary": "CWL group history for a player",
+                "summary": "Review a player's CWL season history",
                 "parameters": [
                     {
                         "type": "string",
@@ -5006,14 +4995,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/history/changes": {
             "get": {
-                "description": "Returns stored player profile changes of the requested type.",
+                "description": "Returns stored changes of one required type, such as upgrades or trophies, with optional inclusive time bounds.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player change history",
+                "summary": "Review changes to a player's profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -5089,14 +5078,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/history/stats": {
             "get": {
-                "description": "Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.",
+                "description": "Returns positive changes for one required activity type over an inclusive time range, newest first and limited to stored observations.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player stat changes",
+                "summary": "Track a player's activity gains",
                 "parameters": [
                     {
                         "type": "string",
@@ -5170,14 +5159,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns stored clan joins and leaves for one player. Time filters affect returned events, while available remains the all-time total.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player join-leave history",
+                "summary": "Review a player's clan movements",
                 "parameters": [
                     {
                         "type": "string",
@@ -5232,14 +5221,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave/shared": {
             "get": {
-                "description": "Returns clans two players shared, total shared minutes per clan, and each shared time range.",
+                "description": "Returns every clan the two players shared, including their total overlap and the exact stored time ranges together.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get shared player join-leave clan totals",
+                "summary": "Find clans shared by two players",
                 "parameters": [
                     {
                         "type": "string",
@@ -5280,14 +5269,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave/totals": {
             "get": {
-                "description": "Returns total minutes and join visit counts for each clan a player spent time in across all stored join-leave history.",
+                "description": "Totals the player's stored time and visits for every clan, making long-term clan membership easy to compare.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player join-leave clan totals",
+                "summary": "Measure a player's time in each clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -5426,14 +5415,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/ranked/{season}/battlelog": {
             "get": {
-                "description": "Returns player ranked season placement plus recent ranked battlelog rows.",
+                "description": "Returns the player's placement for one ranked season together with the recent battles saved for that season.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player ranked battlelog",
+                "summary": "Review a player's ranked season battles",
                 "parameters": [
                     {
                         "type": "string",
@@ -5480,14 +5469,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/ranked/{season}/group": {
             "get": {
-                "description": "Returns ranked group data for the group containing the requested player.",
+                "description": "Returns the complete ranked group containing the player for one season, including every stored member and placement.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player ranked group",
+                "summary": "View a player's ranked season group",
                 "parameters": [
                     {
                         "type": "string",
@@ -5528,14 +5517,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/rankings": {
             "get": {
-                "description": "Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.",
+                "description": "Returns current Home Village and Builder Base trophy positions plus the player's official ranking location when it is known.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get current player rankings",
+                "summary": "View a player's current leaderboard positions",
                 "parameters": [
                     {
                         "type": "string",
@@ -5575,14 +5564,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/war/attacks": {
             "get": {
-                "description": "Returns stored attacks and defenses involving a player, most recent first.",
+                "description": "Returns stored attacks made by or against the player, with optional war type and inclusive time filters, newest first.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player war attacks",
+                "summary": "Browse a player's war attacks and defenses",
                 "parameters": [
                     {
                         "type": "string",
@@ -5648,14 +5637,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/war/stats": {
             "get": {
-                "description": "Returns wars in which the player was rostered, with their attacks and defenses. Empty attack and defense arrays are retained so missed attacks can be derived from attacksPerMember.",
+                "description": "Returns wars where the player appeared, including both sides and every attack involving them. Empty attack lists reveal missed opportunities.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player war history",
+                "summary": "Review a player's complete war history",
                 "parameters": [
                     {
                         "type": "string",
@@ -9833,13 +9822,14 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
+                "description": "Returns the saved bonus-medal recipients for one server, clan, and CWL season so an existing award plan can be reviewed.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "CWL"
                 ],
-                "summary": "Get stored CWL bonus recipients",
+                "summary": "View saved CWL bonus recipients",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9878,6 +9868,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
+                "description": "Replaces the saved bonus-medal recipients for one server, clan, and CWL season with the submitted player list.",
                 "consumes": [
                     "application/json"
                 ],
@@ -9887,7 +9878,7 @@ const docTemplate = `{
                 "tags": [
                     "CWL"
                 ],
-                "summary": "Replace stored CWL bonus recipients",
+                "summary": "Replace saved CWL bonus recipients",
                 "parameters": [
                     {
                         "type": "integer",
@@ -13478,14 +13469,14 @@ const docTemplate = `{
         },
         "/v2/war/clan/stats": {
             "get": {
-                "description": "Returns the number of wars for the requested clan tags.",
+                "description": "Returns the number of stored wars for each requested clan, with filters available for dates, war types, and preparation states.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Clan war stats",
+                "summary": "Count stored wars for selected clans",
                 "parameters": [
                     {
                         "type": "array",
@@ -13522,14 +13513,14 @@ const docTemplate = `{
         },
         "/v2/war/clans/warhits": {
             "post": {
-                "description": "Returns war hit rows for the requested clan tags.",
+                "description": "Returns stored attack performance for the requested clans, with filters for dates, war types, town halls, and attack freshness.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Clan warhits stats",
+                "summary": "Compare war performance for selected clans",
                 "parameters": [
                     {
                         "description": "Clan tags",
@@ -13565,14 +13556,14 @@ const docTemplate = `{
         },
         "/v2/war/players/warhits": {
             "post": {
-                "description": "Returns war hit rows for the requested player tags.",
+                "description": "Returns stored attack performance for the requested players, with filters for dates, war types, town halls, and attack freshness.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Player warhits stats",
+                "summary": "Compare war performance for selected players",
                 "parameters": [
                     {
                         "description": "Player tags",
@@ -13608,14 +13599,14 @@ const docTemplate = `{
         },
         "/v2/war/stats": {
             "get": {
-                "description": "Returns the number of wars for the requested clan tags.",
+                "description": "Returns the number of stored wars for each requested clan, with filters available for dates, war types, and preparation states.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Clan war stats",
+                "summary": "Count stored wars for selected clans",
                 "parameters": [
                     {
                         "type": "array",
@@ -13652,14 +13643,14 @@ const docTemplate = `{
         },
         "/v2/war/war-summary": {
             "post": {
-                "description": "Returns current war summary data for multiple clan tags.",
+                "description": "Returns a compact current-war summary for each submitted clan tag so multiple wars can be displayed or compared together.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Get full war summary for multiple clans",
+                "summary": "Compare current wars across several clans",
                 "parameters": [
                     {
                         "description": "Clan tags",
@@ -13693,75 +13684,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/war/{clan_tag}/previous": {
-            "get": {
-                "description": "Returns previous wars for a clan tag, optionally filtered to CWL.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Previous wars for a clan",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Start timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include CWL wars",
-                        "name": "include_cwl",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/war/{clan_tag}/war-summary": {
             "get": {
-                "description": "Returns current war summary data for a single clan tag.",
+                "description": "Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Get war summary for a clan",
+                "summary": "View a clan's current war summary",
                 "parameters": [
                     {
                         "type": "string",
@@ -13789,14 +13721,14 @@ const docTemplate = `{
         },
         "/war/{clanTag}/basic": {
             "get": {
-                "description": "Returns the current or most recent non-CWL war for a clan.",
+                "description": "Returns the clan's current or most recent non-CWL war through the legacy response shape used by older clients.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Get current or recent war",
+                "summary": "View a clan's latest regular war",
                 "parameters": [
                     {
                         "type": "string",
@@ -13824,14 +13756,14 @@ const docTemplate = `{
         },
         "/war/{clanTag}/previous": {
             "get": {
-                "description": "Returns the stored previous war near the supplied Clash API end time.",
+                "description": "Returns the stored clan war nearest the supplied official end time through the legacy response shape.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "War"
                 ],
-                "summary": "Get previous war by end time",
+                "summary": "Find a stored war by end time",
                 "parameters": [
                     {
                         "type": "string",
@@ -15663,6 +15595,9 @@ const docTemplate = `{
                     "type": "integer",
                     "x-nullable": true
                 },
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.LeagueReference"
+                },
                 "wars": {
                     "allOf": [
                         {
@@ -15685,10 +15620,6 @@ const docTemplate = `{
                 "clan": {
                     "$ref": "#/definitions/modelsv2.CWLPlayerHistoryClan"
                 },
-                "cwlLeagueId": {
-                    "type": "integer",
-                    "x-nullable": true
-                },
                 "missedAttacks": {
                     "type": "integer"
                 },
@@ -15703,12 +15634,12 @@ const docTemplate = `{
                 "season": {
                     "type": "string"
                 },
-                "townHallLevel": {
-                    "type": "integer"
-                },
-                "warSize": {
+                "teamSize": {
                     "type": "integer",
                     "x-nullable": true
+                },
+                "townHallLevel": {
+                    "type": "integer"
                 }
             }
         },
@@ -15895,34 +15826,6 @@ const docTemplate = `{
                 },
                 "tag": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.CWLThresholdItem": {
-            "type": "object",
-            "properties": {
-                "demote": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "promo": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.CWLThresholdResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLThresholdItem"
-                    }
                 }
             }
         },

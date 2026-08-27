@@ -14,7 +14,8 @@ import (
 )
 
 // cwlSeasons godoc
-// @Summary List stored CWL seasons for a clan
+// @Summary List a clan's stored CWL seasons
+// @Description Lists every stored CWL season containing the clan, with its league, team size, state, and available group standing.
 // @Tags CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -72,8 +73,8 @@ func cwlSeasons(a apptypes.Deps) fiber.Handler {
 }
 
 // storedCWL godoc
-// @Summary Get a stored CWL group
-// @Description Returns the requested season, or the most recent stored season when season is omitted.
+// @Summary View a clan's stored CWL group
+// @Description Returns the requested CWL group with its roster, rounds, and wars, or the clan's most recent stored season when omitted.
 // @Tags CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"

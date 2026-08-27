@@ -1,13 +1,5 @@
 package modelsv2
 
-// CWLThresholdItem is one league row returned by GET /v2/cwl/league-thresholds.
-type CWLThresholdItem struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Promo  int    `json:"promo"`
-	Demote int    `json:"demote"`
-}
-
 // CWLStanding is a stored CWL standing. Rankings are absent until Tracking
 // persists them; API readers never derive them from wars.
 type CWLStanding struct {
@@ -61,8 +53,7 @@ type CWLPlayerHistoryResponse struct {
 type CWLPlayerHistoryItem struct {
 	Season        string                    `json:"season"`
 	TownHallLevel int                       `json:"townHallLevel"`
-	CWLLeagueID   *int                      `json:"cwlLeagueId" extensions:"x-nullable"`
-	WarSize       *int                      `json:"warSize" extensions:"x-nullable"`
+	TeamSize      *int                      `json:"teamSize" extensions:"x-nullable"`
 	Clan          CWLPlayerHistoryClan      `json:"clan"`
 	Attacks       []CWLPlayerHistoryAttack  `json:"attacks"`
 	Placement     *CWLPlayerAttackPlacement `json:"placement" extensions:"x-nullable"`
@@ -73,6 +64,7 @@ type CWLPlayerHistoryClan struct {
 	Tag        string                     `json:"tag"`
 	Name       string                     `json:"name"`
 	BadgeURLs  WarBadgeURLs               `json:"badgeUrls"`
+	WarLeague  *LeagueReference           `json:"warLeague,omitempty"`
 	Wars       *CWLPlayerHistoryWarRecord `json:"wars" extensions:"x-nullable"`
 	TotalStars *int                       `json:"totalStars" extensions:"x-nullable"`
 	Placement  *CWLPlayerClanPlacement    `json:"placement" extensions:"x-nullable"`
@@ -207,10 +199,6 @@ type WarCompletedDailyItem struct {
 
 type WarCompletedDailyResponse struct {
 	Items []WarCompletedDailyItem `json:"items"`
-}
-
-type CWLThresholdResponse struct {
-	Items []CWLThresholdItem `json:"items"`
 }
 
 type WarStatsResponse struct {

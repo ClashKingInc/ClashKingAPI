@@ -39,8 +39,8 @@ type clanWarLogClanSide struct {
 }
 
 // clanWarLog godoc
-// @Summary Get a clan war log
-// @Description Returns wars stored in ClashKing's history.
+// @Summary Official API-compatible war log from stored war history
+// @Description Returns stored wars in the official clan war-log shape, with optional type and end-time filters for paging historical results.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -64,22 +64,9 @@ func clanWarLogHandler(a apptypes.Deps, load clanWarLogLoader) fiber.Handler {
 		if clanTag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "clan_tag cannot be empty")
 		}
-		warType := strings.ToLower(strings.TrimSpace(c.Query("type")))
-		if warType != "" && warType != "cwl" && warType != "random" && warType != "friendly" {
-			return apptypes.Error(fiber.StatusBadRequest, "invalid type")
-		}
-		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+		after, before, types, limit, err := clanWarHistoryOptions(c, 50)
 		if err != nil {
 			return err
-		}
-		limit, err := v2QueryInt(c, "limit", 50)
-		if err != nil || limit < 1 {
-			return apptypes.Error(fiber.StatusBadRequest, "invalid limit")
-		}
-		limit = clamp(limit, 1, 500)
-		types := []string{"random", "friendly", "cwl"}
-		if warType != "" {
-			types = []string{warType}
 		}
 		wars, err := load(c, a, clanTag, after, before, types, limit)
 		if err != nil {
@@ -94,6 +81,26 @@ func clanWarLogHandler(a apptypes.Deps, load clanWarLogLoader) fiber.Handler {
 
 		return apptypes.JSON(c, fiber.StatusOK, clanWarLogResponse{Items: items})
 	}
+}
+
+func clanWarHistoryOptions(c *fiber.Ctx, defaultLimit int) (time.Time, time.Time, []string, int, error) {
+	warType := strings.ToLower(strings.TrimSpace(c.Query("type")))
+	if warType != "" && warType != "cwl" && warType != "random" && warType != "friendly" {
+		return time.Time{}, time.Time{}, nil, 0, apptypes.Error(fiber.StatusBadRequest, "invalid type")
+	}
+	after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+	if err != nil {
+		return time.Time{}, time.Time{}, nil, 0, err
+	}
+	limit, err := v2QueryInt(c, "limit", defaultLimit)
+	if err != nil || limit < 1 {
+		return time.Time{}, time.Time{}, nil, 0, apptypes.Error(fiber.StatusBadRequest, "invalid limit")
+	}
+	types := []string{"random", "friendly", "cwl"}
+	if warType != "" {
+		types = []string{warType}
+	}
+	return after, before, types, clamp(limit, 1, 500), nil
 }
 
 func buildClanWarLogItem(war officialWarResponse) clanWarLogItem {
@@ -133,26 +140,29 @@ func valueOrDefault(value *int, fallback int) int {
 }
 
 // clanWars godoc
-// @Summary Get stored clan wars
-// @Description Returns previous wars for a clan rebuilt from SQL war rows, attacks, and missed attacks.
+// @Summary Complete stored wars for a clan
+// @Description Returns complete stored war details, including members and attacks, filtered by war type and inclusive end-time boundaries.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param timestamp_start query int false "Start Unix timestamp. Defaults to all history."
-// @Param timestamp_end query int false "End Unix timestamp"
-// @Param limit query int false "Maximum number of wars. Max 250."
-// @Param war_type query string false "War type filter. Repeatable. Values: random, friendly, cwl, all."
-// @Param war_types query string false "Comma-separated war type filter. Values: random,friendly,cwl."
+// @Param type query string false "War type" Enums(cwl,random,friendly)
+// @Param time[after] query string false "Only include wars ending at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include wars ending at or before this ISO-8601 time"
+// @Param limit query int false "Maximum wars to return" default(15) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.WarListResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/wars [get]
 func clanWars(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
-		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
-		end := time.Unix(queryInt64(c, "timestamp_end", 9999999999), 0).UTC()
-		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 250)
-		types := warTypesFromQuery(c, true)
+		if clanTag == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "clan_tag cannot be empty")
+		}
+		start, end, types, limit, err := clanWarHistoryOptions(c, 15)
+		if err != nil {
+			return err
+		}
 		wars, err := sqlClanWars(c, a, clanTag, start, end, types, limit)
 		if err != nil {
 			return err
@@ -162,8 +172,8 @@ func clanWars(a apptypes.Deps) fiber.Handler {
 }
 
 // clanRanking godoc
-// @Summary Get rankings of a clan
-// @Description Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.
+// @Summary View a clan's current leaderboard positions
+// @Description Returns current Home Village, Builder Base, and Clan Capital scores with every available global and local leaderboard position.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -267,8 +277,8 @@ func emptyClanRankingCategory() modelsv2.ClanRankingCategory {
 }
 
 // clanComposition godoc
-// @Summary Get composition of a clan or clans
-// @Description Returns town hall, role, and league composition for the requested clan tags.
+// @Summary Compare member composition across clans
+// @Description Breaks each requested clan down by member town hall, role, and league so roster composition can be compared quickly.
 // @Tags Clan
 // @Produce json
 // @Param clan_tags query []string false "Clan tags"
@@ -314,8 +324,8 @@ func clanComposition(a apptypes.Deps) fiber.Handler {
 }
 
 // clansDetails godoc
-// @Summary Get full stats for a list of clans
-// @Description Returns detailed clan objects for the requested clan tags.
+// @Summary Load live profiles for several clans
+// @Description Returns complete live clan profiles for every requested tag, preserving the familiar official API structure for each result.
 // @Tags Clan
 // @Produce json
 // @Param body body modelsv2.ClanTagsBody true "Clan tags"
@@ -346,8 +356,8 @@ func clansDetails(a apptypes.Deps) fiber.Handler {
 }
 
 // clanDetails godoc
-// @Summary Get full stats for a single clan
-// @Description Returns the live clan object for a clan tag.
+// @Summary Load a clan's live profile
+// @Description Returns the clan's current official profile, including members, leagues, location, labels, capital details, and war settings.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"

@@ -140,6 +140,9 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/global/war/completed/daily",
 		"/war/:clan_tag/previous",
 		"/war/:clan_tag/previous/:end_time",
+		"/v2/war/:clan_tag/previous",
+		"/v2/cwl/leagues/:league_id/rankings",
+		"/v2/cwl/league-thresholds",
 	} {
 		if paths[path] {
 			t.Fatalf("expected %s to be absent from registered routes", path)
@@ -165,7 +168,7 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/cwl/:clan_tag/seasons",
 		"/v2/cwl/:clan_tag",
 		"/v2/cwl/:clan_tag/ranking-history",
-		"/v2/cwl/leagues/:league_id/rankings",
+		"/v2/leaderboard/cwl/:league_id",
 		"/v2/links/:id",
 		"/v2/links/:id/:playerTag",
 		"/v2/links/:id/order",

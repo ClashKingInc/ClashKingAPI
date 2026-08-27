@@ -186,6 +186,10 @@ func TestClanLegendHistoryUsesClanRankSeasonIndexPattern(t *testing.T) {
 	}
 	for _, required := range []string{
 		"WHERE clan_tag = $1",
+		"season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T",
+		"pg_input_is_valid(substring(season FROM 4), 'timestamp with time zone')",
+		"season ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'",
+		"ELSE NULL",
 		"season_time >= $2 AND season_time <= $3",
 		"ORDER BY season_time DESC, rank",
 		"LIMIT $4",
@@ -193,6 +197,9 @@ func TestClanLegendHistoryUsesClanRankSeasonIndexPattern(t *testing.T) {
 		if !strings.Contains(db.query, required) {
 			t.Fatalf("clan query missing %q: %s", required, db.query)
 		}
+	}
+	if strings.Contains(db.query, "WHEN left(season, 3) = 'v2-' THEN substring(season FROM 4)::timestamptz") {
+		t.Fatalf("clan Legend query casts every v2 season ID: %s", db.query)
 	}
 	if len(db.args) != 4 || db.args[0] != "#CLAN" || db.args[1] != after || db.args[2] != before || db.args[3] != 250 {
 		t.Fatalf("unexpected clan args: %#v", db.args)

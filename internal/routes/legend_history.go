@@ -53,8 +53,12 @@ const legendClanHistoryQuery = `
 	SELECT season, player_tag, player_name, exp_level, trophies, attack_wins, defense_wins, rank
 	FROM (
 		SELECT *, CASE
-			WHEN left(season, 3) = 'v2-' THEN substring(season FROM 4)::timestamptz
-			ELSE (season || '-01')::timestamptz
+			WHEN season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$'
+			 AND pg_input_is_valid(substring(season FROM 4), 'timestamp with time zone')
+				THEN substring(season FROM 4)::timestamptz
+			WHEN season ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+				THEN (season || '-01')::timestamptz
+			ELSE NULL
 		END AS season_time
 		FROM legend_history
 		WHERE clan_tag = $1

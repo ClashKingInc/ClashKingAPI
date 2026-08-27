@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,8 +13,51 @@ import (
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type clanChangesTestDB struct {
+	query string
+	args  []any
+	rows  pgx.Rows
+}
+
+func (db *clanChangesTestDB) Query(_ context.Context, query string, args ...any) (pgx.Rows, error) {
+	db.query, db.args = query, args
+	return db.rows, nil
+}
+
+type clanChangesTestRow struct {
+	time       time.Time
+	changeType string
+	previous   []byte
+	current    []byte
+}
+
+type clanChangesTestRows struct {
+	pgx.Rows
+	items  []clanChangesTestRow
+	cursor int
+}
+
+func (rows *clanChangesTestRows) Close()     {}
+func (rows *clanChangesTestRows) Err() error { return nil }
+func (rows *clanChangesTestRows) Next() bool {
+	if rows.cursor >= len(rows.items) {
+		return false
+	}
+	rows.cursor++
+	return true
+}
+func (rows *clanChangesTestRows) Scan(dest ...any) error {
+	row := rows.items[rows.cursor-1]
+	*dest[0].(*time.Time) = row.time
+	*dest[1].(*string) = row.changeType
+	*dest[2].(*[]byte) = row.previous
+	*dest[3].(*[]byte) = row.current
+	return nil
+}
 
 func TestCachedClanMembersUsesOfficialTownHallField(t *testing.T) {
 	members := cachedClanMembers([]any{map[string]any{
@@ -133,6 +177,40 @@ func TestClanChangeQueryOptionsUsesSharedTimeAndLimits(t *testing.T) {
 	}
 }
 
+func TestClanChangesHandlerQueriesAndSerializesTypedValues(t *testing.T) {
+	eventTime := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	db := &clanChangesTestDB{rows: &clanChangesTestRows{items: []clanChangesTestRow{{
+		time: eventTime, changeType: "cwl_league_id", previous: []byte(`48000013`), current: []byte(`48000014`),
+	}}}}
+	references := referenceCatalog{warLeagues: map[int]modelsv2.LeagueReference{
+		48000013: {ID: 48000013, Name: "Crystal League II"},
+		48000014: {ID: 48000014, Name: "Crystal League I"},
+	}}
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/clan/:clan_tag/history/changes", clanChangesHandler(db, references))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/history/changes?type=warLeague&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z&limit=25", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("clan changes status = %d", response.StatusCode)
+	}
+	if len(db.args) != 5 || db.args[0] != "#CLAN" || db.args[1] != "cwl_league_id" || db.args[4] != 25 {
+		t.Fatalf("unexpected clan changes query args: %#v", db.args)
+	}
+	var body modelsv2.ClanChangesResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Items) != 1 || body.Items[0].Type != "warLeague" {
+		t.Fatalf("unexpected clan changes response: %#v", body)
+	}
+	current := body.Items[0].Current.(map[string]any)
+	if current["id"] != float64(48000014) || current["name"] != "Crystal League I" {
+		t.Fatalf("unexpected current league: %#v", current)
+	}
+}
+
 func TestMergeClanWarLogItemsPrefersOfficialAndAppliesWarLimit(t *testing.T) {
 	official := clanWarLogItem{EndTime: "20260803T120000.000Z", Type: "random", Opponent: clanWarLogClanSide{Tag: "#A"}, Clan: clanWarLogClanSide{Name: "Official"}}
 	duplicate := official
@@ -141,6 +219,51 @@ func TestMergeClanWarLogItemsPrefersOfficialAndAppliesWarLimit(t *testing.T) {
 	items := mergeClanWarLogItems([]clanWarLogItem{official}, []clanWarLogItem{duplicate, older}, 1)
 	if len(items) != 1 || items[0].Clan.Name != "Official" {
 		t.Fatalf("unexpected merged war log: %#v", items)
+	}
+}
+
+func TestClanWarLogHandlerUsesStoredWarsWithoutAuthentication(t *testing.T) {
+	attacks := 2
+	var gotTag string
+	var gotTypes []string
+	var gotLimit int
+	loader := func(_ *fiber.Ctx, _ apptypes.Deps, tag string, _, _ time.Time, types []string, limit int) ([]officialWarResponse, error) {
+		gotTag, gotTypes, gotLimit = tag, types, limit
+		return []officialWarResponse{{
+			WarType: "friendly", State: "warEnded", EndTime: "20260820T120000.000Z", TeamSize: 15, AttacksPerMember: &attacks,
+			Clan: officialWarClan{Tag: "#CLAN", Stars: 40}, Opponent: officialWarClan{Tag: "#OTHER", Stars: 38},
+		}}, nil
+	}
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/clan/:clan_tag/warlog", clanWarLogHandler(apptypes.Deps{}, loader))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/warlog?type=friendly&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&limit=20", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || gotTag != "#CLAN" || len(gotTypes) != 1 || gotTypes[0] != "friendly" || gotLimit != 20 {
+		t.Fatalf("stored warlog request: status=%d tag=%q types=%v limit=%d", response.StatusCode, gotTag, gotTypes, gotLimit)
+	}
+	var body clanWarLogResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.IsPrivate || !body.Reconstructed || len(body.Items) != 1 || body.Items[0].Type != "friendly" || body.Items[0].Result != "win" {
+		t.Fatalf("unexpected stored warlog response: %#v", body)
+	}
+	response, err = app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/warlog", nil))
+	if err != nil || response.StatusCode != http.StatusOK || len(gotTypes) != 3 || gotLimit != 50 {
+		t.Fatalf("default stored warlog request: status=%d types=%v limit=%d err=%v", response.StatusCode, gotTypes, gotLimit, err)
+	}
+	for _, path := range []string{
+		"/v2/clan/%23CLAN/warlog?type=league",
+		"/v2/clan/%23CLAN/warlog?limit=0",
+		"/v2/clan/%23CLAN/warlog?time%5Bafter%5D=bad",
+		"/v2/clan/%23/warlog",
+	} {
+		response, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil || response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid stored warlog request %s: status=%d err=%v", path, response.StatusCode, err)
+		}
 	}
 }
 

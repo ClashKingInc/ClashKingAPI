@@ -803,14 +803,28 @@ func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/history/changes [get]
 func clanChanges(a apptypes.Deps) fiber.Handler {
-	references := newReferenceCatalog(a)
+	var db clanChangesDB
+	if a.Store != nil {
+		db = a.Store.SQL
+	}
+	return clanChangesHandler(db, newReferenceCatalog(a))
+}
+
+type clanChangesDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func clanChangesHandler(db clanChangesDB, references referenceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
 		storageType, after, before, limit, err := clanChangeQueryOptions(c)
 		if err != nil {
 			return err
 		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
+		if db == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "clan change history is unavailable")
+		}
+		rows, err := db.Query(c.UserContext(), `
 			SELECT event_time, change_type, previous_value, current_value
 			FROM clan_change_history
 			WHERE clan_tag = $1 AND ($2 = '' OR change_type = $2)

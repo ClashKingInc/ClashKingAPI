@@ -59,6 +59,12 @@ type clanWarLogClanSide struct {
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/clan/{clan_tag}/warlog [get]
 func clanWarLog(a apptypes.Deps) fiber.Handler {
+	return clanWarLogHandler(a, sqlClanWars)
+}
+
+type clanWarLogLoader func(*fiber.Ctx, apptypes.Deps, string, time.Time, time.Time, []string, int) ([]officialWarResponse, error)
+
+func clanWarLogHandler(a apptypes.Deps, load clanWarLogLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
 		if clanTag == "" {
@@ -81,7 +87,7 @@ func clanWarLog(a apptypes.Deps) fiber.Handler {
 		if warType != "" {
 			types = []string{warType}
 		}
-		wars, err := sqlClanWars(c, a, clanTag, after, before, types, limit)
+		wars, err := load(c, a, clanTag, after, before, types, limit)
 		if err != nil {
 			return err
 		}

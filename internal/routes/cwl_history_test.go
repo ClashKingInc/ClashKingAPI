@@ -38,9 +38,8 @@ func TestScanCWLPlayerHistorySeedBuildsBadgeAndPersistedStandingFacts(t *testing
 	if seed.CWLID != "internal-cwl" {
 		t.Fatalf("internal cwl id = %q", seed.CWLID)
 	}
-	if seed.Item.CWLLeagueID == nil || *seed.Item.CWLLeagueID != 48000017 ||
-		seed.Item.WarSize == nil || *seed.Item.WarSize != 15 {
-		t.Fatalf("unexpected league/war size: %#v", seed.Item)
+	if seed.LeagueID != 48000017 || seed.Item.TeamSize == nil || *seed.Item.TeamSize != 15 {
+		t.Fatalf("unexpected league/team size: %#v", seed.Item)
 	}
 	if seed.Item.Clan.BadgeURLs.Medium != "https://api-assets.clashofclans.com/badges/200/badge-token.png" {
 		t.Fatalf("badgeUrls = %#v", seed.Item.Clan.BadgeURLs)
@@ -55,6 +54,20 @@ func TestScanCWLPlayerHistorySeedBuildsBadgeAndPersistedStandingFacts(t *testing
 	}
 }
 
+func TestDecodeCWLRoundTagsAcceptsStoredAndOfficialShapes(t *testing.T) {
+	for name, raw := range map[string]string{
+		"stored":   `[["#WAR1"],["#WAR2","#0"]]`,
+		"official": `[{"warTags":["#WAR1"]},{"warTags":["#WAR2","#0"]}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := decodeCWLRoundTags([]byte(raw))
+			if len(got) != 2 || len(got[0]) != 1 || got[0][0] != "#WAR1" || len(got[1]) != 2 || got[1][0] != "#WAR2" {
+				t.Fatalf("decoded rounds = %#v", got)
+			}
+		})
+	}
+}
+
 func TestCWLPlayerHistoryResponseUsesDedicatedCamelCaseShape(t *testing.T) {
 	response := modelsv2.CWLPlayerHistoryResponse{
 		Items: []modelsv2.CWLPlayerHistoryItem{{
@@ -62,6 +75,7 @@ func TestCWLPlayerHistoryResponseUsesDedicatedCamelCaseShape(t *testing.T) {
 			Clan: modelsv2.CWLPlayerHistoryClan{
 				Tag: "#CLAN", Name: "Clan",
 				BadgeURLs: modelsv2.WarBadgeURLs{Small: "small", Medium: "medium", Large: "large"},
+				WarLeague: &modelsv2.LeagueReference{ID: 48000017, Name: "Champion League II"},
 			},
 			Attacks: []modelsv2.CWLPlayerHistoryAttack{},
 		}},
@@ -78,7 +92,7 @@ func TestCWLPlayerHistoryResponseUsesDedicatedCamelCaseShape(t *testing.T) {
 		t.Fatalf("outer response must contain only items, got %s", raw)
 	}
 	item := decoded["items"].([]any)[0].(map[string]any)
-	for _, field := range []string{"season", "townHallLevel", "cwlLeagueId", "warSize", "clan", "attacks", "placement", "missedAttacks"} {
+	for _, field := range []string{"season", "townHallLevel", "teamSize", "clan", "attacks", "placement", "missedAttacks"} {
 		if _, found := item[field]; !found {
 			t.Errorf("history item missing %q", field)
 		}
@@ -88,11 +102,16 @@ func TestCWLPlayerHistoryResponseUsesDedicatedCamelCaseShape(t *testing.T) {
 			t.Errorf("player history retained obsolete generic field %q", obsolete)
 		}
 	}
-	if item["cwlLeagueId"] != nil || item["warSize"] != nil || item["placement"] != nil {
-		t.Fatalf("unknown league, war size, and placement must be explicit nulls, got %s", raw)
+	for _, retired := range []string{"cwlLeagueId", "warSize"} {
+		if _, found := item[retired]; found {
+			t.Errorf("history item retained retired field %q", retired)
+		}
+	}
+	if item["teamSize"] != nil || item["placement"] != nil {
+		t.Fatalf("unknown team size and placement must be explicit nulls, got %s", raw)
 	}
 	clan := item["clan"].(map[string]any)
-	for _, field := range []string{"tag", "name", "badgeUrls", "wars", "totalStars", "placement"} {
+	for _, field := range []string{"tag", "name", "badgeUrls", "warLeague", "wars", "totalStars", "placement"} {
 		if _, found := clan[field]; !found {
 			t.Errorf("player history clan missing %q", field)
 		}
@@ -161,10 +180,12 @@ func TestCWLQueriesUseFinalTypedSchema(t *testing.T) {
 		"'townHallLevel', member.town_hall",
 		"LEFT JOIN cwl_standings AS s ON s.cwl_id = gc.cwl_id AND s.clan_tag = gc.clan_tag",
 		"FROM cwl_standings", "ORDER BY global_rank NULLS LAST, group_rank NULLS LAST, clan_tag",
-		"JOIN wars AS w ON w.war_tag = round_tags.war_tag",
+		"roundTags := decodeCWLRoundTags(roundsJSON)",
+		"war_tag = ANY($1)",
 		"sqlArchiveWarsContext(c.UserContext(), a, warIDs)",
 		"for _, attack := range member.Attacks",
 		"strings.ToLower(state) != \"ended\"",
+		"calculateCWLSeasonSummary",
 	} {
 		if !strings.Contains(string(warSource), required) {
 			t.Errorf("typed CWL reader missing %q", required)

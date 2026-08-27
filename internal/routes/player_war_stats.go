@@ -42,8 +42,8 @@ type playerWarStatsDB interface {
 }
 
 // playerWarStats godoc
-// @Summary Get player war history
-// @Description Returns wars in which the player was rostered, with their attacks and defenses. Empty attack and defense arrays are retained so missed attacks can be derived from attacksPerMember.
+// @Summary Review a player's complete war history
+// @Description Returns wars where the player appeared, including both sides and every attack involving them. Empty attack lists reveal missed opportunities.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"

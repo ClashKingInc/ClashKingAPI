@@ -537,9 +537,13 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 
 	builderBaseLeagues := paths["/builderbaseleagues"].(map[string]any)["get"].(map[string]any)
 	assertTags(t, builderBaseLeagues, []string{"Other"})
-	for _, path := range []string{"/war/{clanTag}/previous", "/war/{clanTag}/basic", "/cwl/{clanTag}/group", "/cwl/{clanTag}/{season}"} {
+	for _, path := range []string{"/war/{clanTag}/previous", "/war/{clanTag}/basic"} {
 		operation := paths[path].(map[string]any)["get"].(map[string]any)
 		assertTags(t, operation, []string{"War"})
+	}
+	for _, path := range []string{"/cwl/{clanTag}/group", "/cwl/{clanTag}/{season}"} {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		assertTags(t, operation, []string{"CWL"})
 	}
 	for _, path := range []string{"/list/townhalls", "/list/seasons"} {
 		if _, exists := paths[path]; exists {
@@ -948,6 +952,15 @@ func TestClanHistoryAndCachedClanOpenAPIContracts(t *testing.T) {
 		}
 	}
 
+	warsPath := "/v2/clan/{clan_tag}/wars"
+	wars := paths[warsPath].(map[string]any)["get"].(map[string]any)
+	assertParameterEnum(t, wars["parameters"], "type", []any{"cwl", "random", "friendly"})
+	if got := swaggerQueryParams(t, paths, warsPath); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("clan wars query params = %v", got)
+	}
+	assertQueryParameterSchemaValue(t, wars["parameters"], "limit", "default", float64(15))
+	assertQueryParameterSchemaValue(t, wars["parameters"], "limit", "maximum", float64(500))
+
 	cached := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanCachedResponse")
 	if _, exists := cached["records"]; exists {
 		t.Fatal("cached clan response exposes records")
@@ -960,6 +973,48 @@ func TestClanHistoryAndCachedClanOpenAPIContracts(t *testing.T) {
 	}
 	if _, exists := paths["/v2/clan/{clan_tag}/records"]; !exists {
 		t.Fatal("clan records path is missing")
+	}
+}
+
+func TestCWLOpenAPIRoutesUseTheirOwningSections(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	definitions := swaggerDefinitions(t, doc)
+
+	if _, exists := paths["/v2/war/{clan_tag}/previous"]; exists {
+		t.Fatal("retired v2 previous-war route remains in swagger")
+	}
+	if _, exists := paths["/v2/cwl/league-thresholds"]; exists {
+		t.Fatal("retired CWL threshold route remains in swagger")
+	}
+	if _, exists := paths["/v2/cwl/leagues/{league_id}/rankings"]; exists {
+		t.Fatal("old CWL rankings route remains in swagger")
+	}
+
+	playerHistory := paths["/v2/player/{player_tag}/cwl/history"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, playerHistory, []string{"Player"})
+	groupHistory := paths["/v2/cwl/{clan_tag}/ranking-history"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, groupHistory, []string{"CWL"})
+	leaderboard := paths["/v2/leaderboard/cwl/{league_id}"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, leaderboard, []string{"Leaderboard"})
+	if got := swaggerQueryParams(t, paths, "/v2/leaderboard/cwl/{league_id}"); !reflect.DeepEqual(got, []string{"season", "team_size"}) {
+		t.Fatalf("CWL leaderboard query params = %v", got)
+	}
+
+	item := swaggerDefinitionProperties(t, definitions, "modelsv2.CWLPlayerHistoryItem")
+	for _, field := range []string{"season", "townHallLevel", "teamSize", "clan", "attacks", "placement", "missedAttacks"} {
+		if _, exists := item[field]; !exists {
+			t.Fatalf("CWL player history item missing %s", field)
+		}
+	}
+	for _, retired := range []string{"cwlLeagueId", "warSize"} {
+		if _, exists := item[retired]; exists {
+			t.Fatalf("CWL player history item exposes retired field %s", retired)
+		}
+	}
+	clan := swaggerDefinitionProperties(t, definitions, "modelsv2.CWLPlayerHistoryClan")
+	if _, exists := clan["warLeague"]; !exists {
+		t.Fatal("CWL player history clan omits warLeague")
 	}
 }
 
@@ -1573,6 +1628,25 @@ func assertParameterEnum(t *testing.T, value any, name string, want []any) {
 		}
 	}
 	t.Fatalf("expected %s parameter in %v", name, params)
+}
+
+func assertQueryParameterSchemaValue(t *testing.T, value any, name, key string, want any) {
+	t.Helper()
+	params, ok := value.([]any)
+	if !ok {
+		t.Fatalf("expected parameters array, got %v", value)
+	}
+	for _, raw := range params {
+		param, _ := raw.(map[string]any)
+		if param["name"] == name && param["in"] == "query" {
+			schema, _ := param["schema"].(map[string]any)
+			if !reflect.DeepEqual(schema[key], want) {
+				t.Fatalf("expected %s %s %v, got %v", name, key, want, param)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected query parameter %s in %v", name, params)
 }
 
 func assertRequiredParameter(t *testing.T, params []any, name string, in string) {

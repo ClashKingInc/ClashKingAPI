@@ -333,12 +333,10 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Post("/v2/server/:server_id/countdowns", serverWrite(serverroutes.EnableCountdown(a)))
 	app.Delete("/v2/server/:server_id/countdowns", serverWrite(serverroutes.DisableCountdown(a)))
 
-	app.Get("/v2/war/:clan_tag/previous", previousWars(a))
 	app.Get("/v2/clan/:clan_tag/wars", clanWars(a))
 	app.Get("/v2/clan/:clan_tag/warlog", clanWarLog(a))
 	app.Get("/v2/cwl/:clan_tag/ranking-history", cwlClanHistory(a))
-	app.Get("/v2/cwl/leagues/:league_id/rankings", cwlLeagueRankings(a))
-	app.Get("/v2/cwl/league-thresholds", cwlThresholds)
+	app.Get("/v2/leaderboard/cwl/:league_id", cwlLeagueRankings(a))
 	app.Get("/v2/cwl/:clan_tag/seasons", cwlSeasons(a))
 	app.Get("/v2/cwl/:clan_tag", storedCWL(a))
 	app.Get("/v2/war/clan/stats", clanStats(a))

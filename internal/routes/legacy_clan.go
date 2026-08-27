@@ -14,8 +14,8 @@ import (
 )
 
 // clanCached godoc
-// @Summary Get a cached clan profile
-// @Description Returns ClashKing's cached version of the clan response. The data may be several hours old.
+// @Summary Read a recently cached clan profile
+// @Description Returns a stored clan profile when live data is unnecessary. Values may be several hours behind the official API.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -42,8 +42,8 @@ func clanCachedHandler(a apptypes.Deps, load clanCachedLoader) fiber.Handler {
 }
 
 // clanRecords godoc
-// @Summary Get clan records
-// @Description Returns the highest tracked clan-points and war-win-streak records for a clan.
+// @Summary View a clan's tracked records
+// @Description Returns the clan's highest tracked points and longest war win streak, including when each record was reached.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"

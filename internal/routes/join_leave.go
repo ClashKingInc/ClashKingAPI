@@ -14,8 +14,8 @@ import (
 )
 
 // clanJoinLeave godoc
-// @Summary Get clan join-leave history
-// @Description Returns join and leave history for a single clan tag. available and uniquePlayers are all-time totals; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
+// @Summary Review a clan's membership changes
+// @Description Returns stored joins and leaves for one clan. Time filters affect returned events, while available and uniquePlayers remain all-time totals.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -37,8 +37,8 @@ func clanJoinLeave(a apptypes.Deps) fiber.Handler {
 }
 
 // playerJoinLeave godoc
-// @Summary Get player join-leave history
-// @Description Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.
+// @Summary Review a player's clan movements
+// @Description Returns stored clan joins and leaves for one player. Time filters affect returned events, while available remains the all-time total.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -60,8 +60,8 @@ func playerJoinLeave(a apptypes.Deps) fiber.Handler {
 }
 
 // playerJoinLeaveTotals godoc
-// @Summary Get player join-leave clan totals
-// @Description Returns total minutes and join visit counts for each clan a player spent time in across all stored join-leave history.
+// @Summary Measure a player's time in each clan
+// @Description Totals the player's stored time and visits for every clan, making long-term clan membership easy to compare.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -88,8 +88,8 @@ func playerJoinLeaveTotals(a apptypes.Deps) fiber.Handler {
 }
 
 // playerJoinLeaveShared godoc
-// @Summary Get shared player join-leave clan totals
-// @Description Returns clans two players shared, total shared minutes per clan, and each shared time range.
+// @Summary Find clans shared by two players
+// @Description Returns every clan the two players shared, including their total overlap and the exact stored time ranges together.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"

@@ -46,8 +46,8 @@ type playerStatHistoryDB interface {
 }
 
 // playerStatHistory godoc
-// @Summary Get player stat changes
-// @Description Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.
+// @Summary Track a player's activity gains
+// @Description Returns positive changes for one required activity type over an inclusive time range, newest first and limited to stored observations.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"

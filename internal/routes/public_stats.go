@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,12 +18,13 @@ import (
 
 // playerRankings godoc
 // @Summary Get current player rankings
-// @Description Returns current Home Village and Builder Base points plus global and official-location placements. A retained location can have a null local rank when the player is no longer ranked there.
+// @Description Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
 // @Success 200 {object} modelsv2.PlayerRankingsResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 404 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Router /v2/player/{player_tag}/rankings [get]
 func playerRankings(a apptypes.Deps) fiber.Handler {
@@ -39,6 +39,9 @@ func playerRankings(a apptypes.Deps) fiber.Handler {
 		}
 		if err := resolvePlayerRankingLocations(c.UserContext(), a, &response); err != nil {
 			return err
+		}
+		if response.HomeVillage == nil && response.BuilderBase == nil && response.Location == nil {
+			return apptypes.Error(fiber.StatusNotFound, "no player ranking history found")
 		}
 		return apptypes.JSON(c, fiber.StatusOK, response)
 	}
@@ -74,19 +77,35 @@ func queryPlayerRankings(ctx context.Context, db playerRankingsDB, tag string) (
 		if err := rows.Scan(&rankingType, &locationID, &rank, &points); err != nil {
 			return modelsv2.PlayerRankingsResponse{}, err
 		}
-		category := &response.HomeVillage
+		var category **modelsv2.PlayerRankingCategory
 		if rankingType == "builder_base" {
 			category = &response.BuilderBase
+		} else {
+			category = &response.HomeVillage
 		}
 		if locationID == "global" {
-			category.GlobalRank = rank
-			category.Points = points
+			if rank != nil || points != nil {
+				if *category == nil {
+					*category = &modelsv2.PlayerRankingCategory{}
+				}
+				(*category).GlobalRank = rank
+				(*category).Trophies = points
+			}
 			continue
 		}
-		category.LocationID = &locationID
-		category.LocalRank = rank
-		if category.Points == nil {
-			category.Points = points
+		if response.Location == nil {
+			if id, parseErr := strconv.Atoi(locationID); parseErr == nil {
+				response.Location = &modelsv2.LeaderboardHistoryLocationReference{ID: id}
+			}
+		}
+		if rank != nil || points != nil {
+			if *category == nil {
+				*category = &modelsv2.PlayerRankingCategory{}
+			}
+			(*category).LocalRank = rank
+			if (*category).Trophies == nil {
+				(*category).Trophies = points
+			}
 		}
 	}
 	return response, rows.Err()
@@ -97,37 +116,20 @@ func resolvePlayerRankingLocations(
 	a apptypes.Deps,
 	response *modelsv2.PlayerRankingsResponse,
 ) error {
-	if response.HomeVillage.LocationID == nil && response.BuilderBase.LocationID == nil {
+	if response.Location == nil {
 		return nil
 	}
 	locations, err := a.Clash.SearchLocations(ctx)
 	if err != nil {
 		return err
 	}
-	byID := make(map[string]struct {
-		name        string
-		countryCode string
-	}, len(locations))
 	for _, location := range locations {
-		byID[strconv.Itoa(location.ID)] = struct {
-			name        string
-			countryCode string
-		}{name: location.Name, countryCode: location.CountryCode}
-	}
-	for _, category := range []*modelsv2.PlayerRankingCategory{
-		&response.HomeVillage,
-		&response.BuilderBase,
-	} {
-		if category.LocationID == nil {
-			continue
-		}
-		location, ok := byID[*category.LocationID]
-		if !ok {
-			continue
-		}
-		category.LocationName = &location.name
-		if location.countryCode != "" {
-			category.CountryCode = &location.countryCode
+		if location.ID == response.Location.ID {
+			response.Location.Name = location.Name
+			response.Location.IsCountry = location.IsCountry
+			response.Location.CountryCode = location.CountryCode
+			response.Location.LocalizedName = location.Localised
+			break
 		}
 	}
 	return nil
@@ -307,8 +309,10 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
-// @Param limit query int false "Result limit, max 500"
 // @Param type query string true "Change type" Enums(troop_level,super_troop_boost,hero_level,spell_level,pet_level,equipment_level,townhall_level,best_trophies,best_builder_base_trophies,exp_level,war_preference,name)
+// @Param time[after] query string false "Only include changes at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include changes at or before this ISO-8601 time"
+// @Param limit query int false "Maximum changes to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.PlayerChangesResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -328,7 +332,15 @@ func playerChanges(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return apptypes.Error(fiber.StatusBadRequest, err.Error())
 		}
-		response, err := queryPlayerChanges(c.UserContext(), a.Store.SQL, tag, changeTypes, clamp(queryInt(c, "limit", 100), 1, 500), itemCatalog)
+		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+		if err != nil {
+			return err
+		}
+		limit, err := v2QueryInt(c, "limit", 50)
+		if err != nil || limit < 1 {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid limit")
+		}
+		response, err := queryPlayerChanges(c.UserContext(), a.Store.SQL, tag, changeTypes, after, before, clamp(limit, 1, 500), itemCatalog)
 		if err != nil {
 			return err
 		}
@@ -343,17 +355,18 @@ type playerChangesDB interface {
 const playerChangesQuery = `
 	SELECT event_time, townhall_level, change_type, item_id, previous_value, current_value
 	FROM player_change_history
-	WHERE player_tag = $1
+	WHERE player_tag = $1 AND event_time >= $2 AND event_time <= $3
 	ORDER BY event_time DESC
-	LIMIT $2
+	LIMIT $4
 `
 
 const playerChangesByTypeQuery = `
 	SELECT event_time, townhall_level, change_type, item_id, previous_value, current_value
 	FROM player_change_history
 	WHERE player_tag = $1 AND change_type = ANY($2::smallint[])
+	  AND event_time >= $3 AND event_time <= $4
 	ORDER BY event_time DESC
-	LIMIT $3
+	LIMIT $5
 `
 
 var playerChangeTypeNames = map[int16]string{
@@ -441,12 +454,12 @@ func parsePlayerChangeTypeFilter(value string) ([]int16, error) {
 	return nil, errors.New("type must be a change type name or ID from 1 to 12")
 }
 
-func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, changeTypes []int16, limit int, itemCatalog map[playerChangeItemKey]modelsv2.PlayerChangeItem) (modelsv2.PlayerChangesResponse, error) {
+func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, changeTypes []int16, after, before time.Time, limit int, itemCatalog map[playerChangeItemKey]modelsv2.PlayerChangeItem) (modelsv2.PlayerChangesResponse, error) {
 	query := playerChangesQuery
-	args := []any{tag, limit}
+	args := []any{tag, after, before, limit}
 	if len(changeTypes) != 0 {
 		query = playerChangesByTypeQuery
-		args = []any{tag, changeTypes, limit}
+		args = []any{tag, changeTypes, after, before, limit}
 	}
 	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
@@ -486,7 +499,6 @@ func queryPlayerChanges(ctx context.Context, db playerChangesDB, tag string, cha
 	if err := rows.Err(); err != nil {
 		return modelsv2.PlayerChangesResponse{}, err
 	}
-	response.Count = len(response.Items)
 	return response, nil
 }
 
@@ -777,31 +789,49 @@ func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 }
 
 // clanChanges godoc
-// @Summary Get clan changes
-// @Description Returns stored clan changes such as description changes, clan level upgrades, and war league history.
+// @Summary Get clan change history
+// @Description Returns description, clan-level, War League, or Capital League changes. Values are strings, integers, or league objects according to type.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param limit query int false "Result limit, max 500"
-// @Param type query string false "Change type"
+// @Param type query string false "Change type" Enums(description,clanLevel,warLeague,capitalLeague)
+// @Param time[after] query string false "Only include changes at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include changes at or before this ISO-8601 time"
+// @Param limit query int false "Maximum changes to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} modelsv2.ClanChangesResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/changes [get]
+// @Router /v2/clan/{clan_tag}/history/changes [get]
 func clanChanges(a apptypes.Deps) fiber.Handler {
+	var db clanChangesDB
+	if a.Store != nil {
+		db = a.Store.SQL
+	}
+	return clanChangesHandler(db, newReferenceCatalog(a))
+}
+
+type clanChangesDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func clanChangesHandler(db clanChangesDB, references referenceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
-		limit := clamp(queryInt(c, "limit", 100), 1, 500)
-		name, badgeToken, err := clanChangeIdentity(c, a, tag)
+		storageType, after, before, limit, err := clanChangeQueryOptions(c)
 		if err != nil {
 			return err
 		}
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
+		if db == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "clan change history is unavailable")
+		}
+		rows, err := db.Query(c.UserContext(), `
 			SELECT event_time, change_type, previous_value, current_value
 			FROM clan_change_history
 			WHERE clan_tag = $1 AND ($2 = '' OR change_type = $2)
+			  AND event_time >= $3 AND event_time <= $4
 			ORDER BY event_time DESC
-			LIMIT $3
-		`, tag, clanChangeStorageType(c.Query("type")), limit)
+			LIMIT $5
+		`, tag, storageType, after, before, limit)
 		if err != nil {
 			return err
 		}
@@ -814,60 +844,72 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 			if err := rows.Scan(&eventTime, &changeType, &previousRaw, &currentRaw); err != nil {
 				return err
 			}
+			previous, err := clanChangeValue(changeType, previousRaw, references)
+			if err != nil {
+				return err
+			}
+			current, err := clanChangeValue(changeType, currentRaw, references)
+			if err != nil {
+				return err
+			}
 			items = append(items, modelsv2.ClanChangeRecord{
 				Time:     eventTime,
 				Type:     clanChangeAPIType(changeType),
-				Previous: clanChangeValue(previousRaw),
-				Current:  clanChangeValue(currentRaw),
+				Previous: previous,
+				Current:  current,
 			})
 		}
 		if err := rows.Err(); err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, clanChangesResponse(name, tag, badgeToken, items))
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanChangesResponse{Items: items})
 	}
 }
 
-func clanChangeValue(raw []byte) modelsv2.ClanChangeValue {
+func clanChangeQueryOptions(c *fiber.Ctx) (string, time.Time, time.Time, int, error) {
+	storageType, err := clanChangeStorageType(c.Query("type"))
+	if err != nil {
+		return "", time.Time{}, time.Time{}, 0, err
+	}
+	after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+	if err != nil {
+		return "", time.Time{}, time.Time{}, 0, err
+	}
+	limit, err := v2QueryInt(c, "limit", 50)
+	if err != nil || limit < 1 {
+		return "", time.Time{}, time.Time{}, 0, apptypes.Error(fiber.StatusBadRequest, "invalid limit")
+	}
+	return storageType, after, before, clamp(limit, 1, 500), nil
+}
+
+func clanChangeValue(changeType string, raw []byte, references referenceCatalog) (any, error) {
 	var text string
 	if json.Unmarshal(raw, &text) == nil {
-		return modelsv2.ClanChangeValue{Kind: "text", Text: &text}
+		return text, nil
 	}
 	var integer int
 	if json.Unmarshal(raw, &integer) == nil {
-		return modelsv2.ClanChangeValue{Kind: "integer", Integer: &integer}
+		switch changeType {
+		case "cwl_league_id":
+			return clanChangeLeagueValue(integer, references.warLeague(integer)), nil
+		case "capital_league_id":
+			return clanChangeLeagueValue(integer, references.capitalLeague(integer)), nil
+		default:
+			return integer, nil
+		}
 	}
-	return modelsv2.ClanChangeValue{Kind: "text"}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
-func clanChangeIdentity(c *fiber.Ctx, a apptypes.Deps, tag string) (string, string, error) {
-	var name, badgeToken string
-	err := a.Store.SQL.QueryRow(c.UserContext(), `
-		SELECT name, badge_token
-		FROM basic_clan
-		WHERE tag = $1
-	`, tag).Scan(&name, &badgeToken)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", "", nil
+func clanChangeLeagueValue(id int, reference *modelsv2.LeagueReference) modelsv2.LeagueReference {
+	if reference != nil {
+		return *reference
 	}
-	return name, badgeToken, err
-}
-
-func clanChangesResponse(name string, tag string, badgeToken string, items []modelsv2.ClanChangeRecord) modelsv2.ClanChangesResponse {
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].Time.After(items[j].Time)
-	})
-	return modelsv2.ClanChangesResponse{
-		Name: name,
-		Tag:  tag,
-		BadgeURLs: modelsv2.PublicBadgeURLs{
-			Small:  badgeURL(badgeToken, 70),
-			Medium: badgeURL(badgeToken, 200),
-			Large:  badgeURL(badgeToken, 512),
-		},
-		Count: len(items),
-		Items: items,
-	}
+	return modelsv2.LeagueReference{ID: id}
 }
 
 func clanChangeAPIType(changeType string) string {
@@ -883,16 +925,20 @@ func clanChangeAPIType(changeType string) string {
 	}
 }
 
-func clanChangeStorageType(changeType string) string {
+func clanChangeStorageType(changeType string) (string, error) {
 	switch changeType {
+	case "":
+		return "", nil
+	case "description":
+		return "description", nil
 	case "clanLevel":
-		return "clan_level"
+		return "clan_level", nil
 	case "warLeague":
-		return "cwl_league_id"
+		return "cwl_league_id", nil
 	case "capitalLeague":
-		return "capital_league_id"
+		return "capital_league_id", nil
 	default:
-		return changeType
+		return "", apptypes.Error(fiber.StatusBadRequest, "invalid type")
 	}
 }
 

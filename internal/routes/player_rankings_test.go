@@ -53,7 +53,7 @@ func (rows *playerRankingTestRows) Scan(dest ...any) error {
 
 func intPointer(value int) *int { return &value }
 
-func TestQueryPlayerRankingsPreservesNullableNumericLocation(t *testing.T) {
+func TestQueryPlayerRankingsReturnsVillagesAndSharedLocation(t *testing.T) {
 	db := &playerRankingsTestDB{rows: &playerRankingTestRows{items: []playerRankingTestRow{
 		{rankingType: "home", locationID: "global", rank: intPointer(12), points: intPointer(6123)},
 		{rankingType: "home", locationID: "32000087", rank: nil, points: nil},
@@ -64,16 +64,16 @@ func TestQueryPlayerRankingsPreservesNullableNumericLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("queryPlayerRankings() error = %v", err)
 	}
-	if response.HomeVillage.GlobalRank == nil || *response.HomeVillage.GlobalRank != 12 {
+	if response.HomeVillage == nil || response.HomeVillage.GlobalRank == nil || *response.HomeVillage.GlobalRank != 12 || response.HomeVillage.Trophies == nil || *response.HomeVillage.Trophies != 6123 {
 		t.Fatalf("unexpected Home Village global rank: %#v", response.HomeVillage)
 	}
-	if response.HomeVillage.LocationID == nil || *response.HomeVillage.LocationID != "32000087" {
-		t.Fatalf("retained numeric location was lost: %#v", response.HomeVillage)
+	if response.Location == nil || response.Location.ID != 32000087 {
+		t.Fatalf("retained numeric location was lost: %#v", response.Location)
 	}
 	if response.HomeVillage.LocalRank != nil {
 		t.Fatalf("inactive retained location must keep a null local rank: %#v", response.HomeVillage)
 	}
-	if response.BuilderBase.GlobalRank == nil || *response.BuilderBase.GlobalRank != 41 {
+	if response.BuilderBase == nil || response.BuilderBase.GlobalRank == nil || *response.BuilderBase.GlobalRank != 41 || response.BuilderBase.Trophies == nil || *response.BuilderBase.Trophies != 5200 {
 		t.Fatalf("unexpected Builder Base global rank: %#v", response.BuilderBase)
 	}
 	if len(db.args) != 1 || db.args[0] != "#P1" {
@@ -89,11 +89,41 @@ func TestQueryPlayerRankingsDoesNotFabricateMissingGlobalPlacement(t *testing.T)
 	if err != nil {
 		t.Fatalf("queryPlayerRankings() error = %v", err)
 	}
-	if response.BuilderBase.GlobalRank != nil || response.BuilderBase.Points != nil {
-		t.Fatalf("missing global placement was fabricated: %#v", response.BuilderBase)
+	if response.BuilderBase != nil {
+		t.Fatalf("empty Builder Base ranking must be omitted: %#v", response.BuilderBase)
 	}
-	if response.BuilderBase.LocationID == nil || *response.BuilderBase.LocationID != "32000006" {
-		t.Fatalf("retained location missing: %#v", response.BuilderBase)
+	if response.Location == nil || response.Location.ID != 32000006 {
+		t.Fatalf("retained location missing: %#v", response.Location)
+	}
+}
+
+func TestQueryPlayerRankingsBuildsCategoryFromLocalPlacement(t *testing.T) {
+	db := &playerRankingsTestDB{rows: &playerRankingTestRows{items: []playerRankingTestRow{
+		{rankingType: "builder_base", locationID: "32000006", rank: intPointer(7), points: intPointer(5342)},
+	}}}
+	response, err := queryPlayerRankings(context.Background(), db, "#P2")
+	if err != nil {
+		t.Fatalf("queryPlayerRankings() error = %v", err)
+	}
+	if response.BuilderBase == nil || response.BuilderBase.LocalRank == nil || *response.BuilderBase.LocalRank != 7 {
+		t.Fatalf("local Builder Base rank missing: %#v", response.BuilderBase)
+	}
+	if response.BuilderBase.Trophies == nil || *response.BuilderBase.Trophies != 5342 {
+		t.Fatalf("local Builder Base trophies missing: %#v", response.BuilderBase)
+	}
+	if response.BuilderBase.GlobalRank != nil || response.HomeVillage != nil {
+		t.Fatalf("local-only ranking fabricated global data: %#v", response)
+	}
+}
+
+func TestQueryPlayerRankingsCanReturnNoHistory(t *testing.T) {
+	db := &playerRankingsTestDB{rows: &playerRankingTestRows{}}
+	response, err := queryPlayerRankings(context.Background(), db, "#P3")
+	if err != nil {
+		t.Fatalf("queryPlayerRankings() error = %v", err)
+	}
+	if response.HomeVillage != nil || response.BuilderBase != nil || response.Location != nil {
+		t.Fatalf("empty ranking history fabricated data: %#v", response)
 	}
 }
 

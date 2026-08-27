@@ -2095,7 +2095,21 @@
         },
         "type": "object"
       },
-      "modelsv2.ClanBasicResponse": {
+      "modelsv2.ClanCachedMember": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "townHallLevel": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.ClanCachedResponse": {
         "properties": {
           "badgeUrls": {
             "$ref": "#/components/schemas/modelsv2.ClanBadgeURLs"
@@ -2116,20 +2130,22 @@
             "type": "string"
           },
           "location": {
-            "$ref": "#/components/schemas/modelsv2.ClanLeagueRef"
+            "$ref": "#/components/schemas/modelsv2.SearchLocation"
           },
           "memberCount": {
             "type": "integer"
           },
-          "members": {},
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.ClanCachedMember"
+            },
+            "type": "array"
+          },
           "name": {
             "type": "string"
           },
           "publicWarLog": {
             "type": "boolean"
-          },
-          "records": {
-            "$ref": "#/components/schemas/modelsv2.ClanBasicRecords"
           },
           "tag": {
             "type": "string"
@@ -2233,10 +2249,10 @@
       "modelsv2.ClanChangeRecord": {
         "properties": {
           "current": {
-            "$ref": "#/components/schemas/modelsv2.ClanChangeValue"
+            "type": "object"
           },
           "previous": {
-            "$ref": "#/components/schemas/modelsv2.ClanChangeValue"
+            "type": "object"
           },
           "time": {
             "type": "string"
@@ -2247,43 +2263,13 @@
         },
         "type": "object"
       },
-      "modelsv2.ClanChangeValue": {
-        "properties": {
-          "integer": {
-            "type": "integer"
-          },
-          "kind": {
-            "enum": [
-              "text",
-              "integer"
-            ],
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "modelsv2.ClanChangesResponse": {
         "properties": {
-          "badgeUrls": {
-            "$ref": "#/components/schemas/modelsv2.PublicBadgeURLs"
-          },
-          "count": {
-            "type": "integer"
-          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/modelsv2.ClanChangeRecord"
             },
             "type": "array"
-          },
-          "name": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -2326,6 +2312,9 @@
         "properties": {
           "id": {
             "type": "integer"
+          },
+          "name": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -4488,9 +4477,6 @@
       },
       "modelsv2.PlayerChangesResponse": {
         "properties": {
-          "count": {
-            "type": "integer"
-          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/modelsv2.PlayerChangeRecord"
@@ -4643,41 +4629,14 @@
       },
       "modelsv2.PlayerRankingCategory": {
         "properties": {
-          "countryCode": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "globalRank": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
           "localRank": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer"
           },
-          "locationId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "locationName": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "points": {
-            "type": [
-              "integer",
-              "null"
-            ]
+          "trophies": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4689,6 +4648,9 @@
           },
           "homeVillage": {
             "$ref": "#/components/schemas/modelsv2.PlayerRankingCategory"
+          },
+          "location": {
+            "$ref": "#/components/schemas/modelsv2.LeaderboardHistoryLocationReference"
           },
           "tag": {
             "type": "string"
@@ -4887,6 +4849,121 @@
         },
         "type": "object"
       },
+      "modelsv2.PlayerWarHistoryAttack": {
+        "properties": {
+          "destructionPercentage": {
+            "type": "integer"
+          },
+          "duration": {
+            "type": "integer"
+          },
+          "fresh": {
+            "type": "boolean"
+          },
+          "order": {
+            "type": "integer"
+          },
+          "player": {
+            "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryPlayer"
+          },
+          "stars": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.PlayerWarHistoryClan": {
+        "properties": {
+          "attacks": {
+            "type": "integer"
+          },
+          "badgeUrls": {
+            "$ref": "#/components/schemas/modelsv2.PublicBadgeURLs"
+          },
+          "clanLevel": {
+            "type": "integer"
+          },
+          "destructionPercentage": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "stars": {
+            "type": "integer"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.PlayerWarHistoryItem": {
+        "properties": {
+          "attacks": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryAttack"
+            },
+            "type": "array"
+          },
+          "attacksPerMember": {
+            "type": "integer"
+          },
+          "clan": {
+            "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryClan"
+          },
+          "defenses": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryAttack"
+            },
+            "type": "array"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "opponent": {
+            "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryClan"
+          },
+          "player": {
+            "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryPlayer"
+          },
+          "preparationStartTime": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "teamSize": {
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "cwl",
+              "random",
+              "friendly"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.PlayerWarHistoryPlayer": {
+        "properties": {
+          "mapPosition": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "townhallLevel": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "modelsv2.PlayerWarHitResult": {
         "properties": {
           "name": {
@@ -4924,71 +5001,6 @@
         },
         "type": "object"
       },
-      "modelsv2.PlayerWarStatsBucket": {
-        "properties": {
-          "attacks": {
-            "type": "integer"
-          },
-          "averageDestruction": {
-            "type": "number"
-          },
-          "averageDuration": {
-            "type": "number"
-          },
-          "averageStars": {
-            "type": "number"
-          },
-          "dipAttacks": {
-            "type": "integer"
-          },
-          "dipHitrate": {
-            "type": "number"
-          },
-          "expectedAttacks": {
-            "type": "integer"
-          },
-          "hitUpAttacks": {
-            "type": "integer"
-          },
-          "hitUpHitrate": {
-            "type": "number"
-          },
-          "hitrate": {
-            "type": "number"
-          },
-          "missedAttacks": {
-            "type": "integer"
-          },
-          "oneStarRate": {
-            "type": "number"
-          },
-          "perfectAttackRate": {
-            "type": "number"
-          },
-          "sameTownhallAttacks": {
-            "type": "integer"
-          },
-          "sameTownhallHitrate": {
-            "type": "number"
-          },
-          "stars": {
-            "type": "integer"
-          },
-          "threeStarRate": {
-            "type": "number"
-          },
-          "twoStarRate": {
-            "type": "number"
-          },
-          "wars": {
-            "type": "integer"
-          },
-          "zeroStarRate": {
-            "type": "number"
-          }
-        },
-        "type": "object"
-      },
       "modelsv2.PlayerWarStatsExportRequest": {
         "properties": {
           "limit": {
@@ -5008,26 +5020,11 @@
       },
       "modelsv2.PlayerWarStatsResponse": {
         "properties": {
-          "cwl": {
-            "$ref": "#/components/schemas/modelsv2.PlayerWarStatsBucket"
-          },
-          "friendly": {
-            "$ref": "#/components/schemas/modelsv2.PlayerWarStatsBucket"
-          },
-          "playerTag": {
-            "type": "string"
-          },
-          "random": {
-            "$ref": "#/components/schemas/modelsv2.PlayerWarStatsBucket"
-          },
-          "timestampEnd": {
-            "type": "integer"
-          },
-          "timestampStart": {
-            "type": "integer"
-          },
-          "total": {
-            "$ref": "#/components/schemas/modelsv2.PlayerWarStatsBucket"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.PlayerWarHistoryItem"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -9390,6 +9387,14 @@
           },
           "teamSize": {
             "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "cwl",
+              "random",
+              "friendly"
+            ],
+            "type": "string"
           }
         },
         "type": "object"
@@ -11227,9 +11232,9 @@
         ]
       }
     },
-    "/v2/clan/{clan_tag}/basic": {
+    "/v2/clan/{clan_tag}/cached": {
       "get": {
-        "description": "Returns tracked basic clan data for a clan tag.",
+        "description": "Returns ClashKing's cached version of the clan response. The data may be several hours old.",
         "parameters": [
           {
             "description": "Clan tag",
@@ -11246,7 +11251,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ClanBasicResponse"
+                  "$ref": "#/components/schemas/modelsv2.ClanCachedResponse"
                 }
               }
             },
@@ -11263,15 +11268,15 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get basic clan data",
+        "summary": "Get a cached clan profile",
         "tags": [
           "Clan"
         ]
       }
     },
-    "/v2/clan/{clan_tag}/changes": {
+    "/v2/clan/{clan_tag}/history/changes": {
       "get": {
-        "description": "Returns stored clan changes such as description changes, clan level upgrades, and war league history.",
+        "description": "Returns description, clan-level, War League, or Capital League changes. Values are strings, integers, or league objects according to type.",
         "parameters": [
           {
             "description": "Clan tag",
@@ -11283,19 +11288,44 @@
             }
           },
           {
-            "description": "Result limit, max 500",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
             "description": "Change type",
             "in": "query",
             "name": "type",
             "schema": {
+              "enum": [
+                "description",
+                "clanLevel",
+                "warLeague",
+                "capitalLeague"
+              ],
               "type": "string"
+            }
+          },
+          {
+            "description": "Only include changes at or after this ISO-8601 time",
+            "in": "query",
+            "name": "time[after]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include changes at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum changes to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -11310,6 +11340,16 @@
             },
             "description": "OK"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -11321,7 +11361,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get clan changes",
+        "summary": "Get clan change history",
         "tags": [
           "Clan"
         ]
@@ -11341,15 +11381,6 @@
             }
           },
           {
-            "description": "Maximum events to return; 0 returns full matching history",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 50,
-              "type": "integer"
-            }
-          },
-          {
             "description": "Only include events at or after this ISO-8601 time",
             "in": "query",
             "name": "time[after]",
@@ -11363,6 +11394,17 @@
             "name": "time[before]",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "description": "Maximum events to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -11595,9 +11637,51 @@
         ]
       }
     },
-    "/v2/clan/{clan_tag}/war-log": {
+    "/v2/clan/{clan_tag}/records": {
       "get": {
-        "description": "Returns the official war log when public. Private logs are reconstructed from stored wars with the same item shape and are marked with isPrivate and reconstructed.",
+        "description": "Returns the highest tracked clan-points and war-win-streak records for a clan.",
+        "parameters": [
+          {
+            "description": "Clan tag",
+            "in": "path",
+            "name": "clan_tag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ClanBasicRecords"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get clan records",
+        "tags": [
+          "Clan"
+        ]
+      }
+    },
+    "/v2/clan/{clan_tag}/warlog": {
+      "get": {
+        "description": "Returns stored wars without authentication. Authenticated requests also use the official war log as a current-data filler when it is public.",
         "parameters": [
           {
             "description": "Clan tag",
@@ -11609,11 +11693,42 @@
             }
           },
           {
+            "description": "War type",
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "enum": [
+                "cwl",
+                "random",
+                "friendly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include wars ending at or after this ISO-8601 time",
+            "in": "query",
+            "name": "time[after]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include wars ending at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "description": "Maximum wars to return",
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 50,
+              "maximum": 500,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -11639,16 +11754,6 @@
             },
             "description": "Bad Request"
           },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
           "500": {
             "content": {
               "application/json": {
@@ -11660,11 +11765,6 @@
             "description": "Internal Server Error"
           }
         },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "summary": "Get a clan war log",
         "tags": [
           "Clan"
@@ -15351,14 +15451,6 @@
             }
           },
           {
-            "description": "Result limit, max 500",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
             "description": "Change type",
             "in": "query",
             "name": "type",
@@ -15379,6 +15471,33 @@
                 "name"
               ],
               "type": "string"
+            }
+          },
+          {
+            "description": "Only include changes at or after this ISO-8601 time",
+            "in": "query",
+            "name": "time[after]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include changes at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum changes to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -15422,7 +15541,7 @@
     },
     "/v2/player/{player_tag}/history/stats": {
       "get": {
-        "description": "Returns stored typed positive stat changes for a player over a half-open Unix timestamp range, newest first.",
+        "description": "Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.",
         "parameters": [
           {
             "description": "Player tag",
@@ -15434,25 +15553,10 @@
             }
           },
           {
-            "description": "Inclusive start Unix timestamp. Defaults to all history.",
+            "description": "Stat type",
             "in": "query",
-            "name": "timestamp_start",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Exclusive end Unix timestamp.",
-            "in": "query",
-            "name": "timestamp_end",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Typed stat filter.",
-            "in": "query",
-            "name": "stat_type",
+            "name": "type",
+            "required": true,
             "schema": {
               "enum": [
                 "donated",
@@ -15464,10 +15568,29 @@
             }
           },
           {
-            "description": "Maximum number of changes. Default and max 500.",
+            "description": "Only include changes at or after this ISO-8601 time; defaults to 30 days ago when no time range is provided",
+            "in": "query",
+            "name": "time[after]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include changes at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum changes to return",
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -15534,15 +15657,6 @@
             }
           },
           {
-            "description": "Maximum events to return; 0 returns full matching history",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 50,
-              "type": "integer"
-            }
-          },
-          {
             "description": "Only include events at or after this ISO-8601 time",
             "in": "query",
             "name": "time[after]",
@@ -15556,6 +15670,17 @@
             "name": "time[before]",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "description": "Maximum events to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -15979,7 +16104,7 @@
     },
     "/v2/player/{player_tag}/rankings": {
       "get": {
-        "description": "Returns current Home Village and Builder Base points plus global and official-location placements. A retained location can have a null local rank when the player is no longer ranked there.",
+        "description": "Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.",
         "parameters": [
           {
             "description": "Player tag",
@@ -16012,6 +16137,16 @@
             },
             "description": "Bad Request"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -16043,26 +16178,42 @@
             }
           },
           {
-            "description": "Start Unix timestamp",
+            "description": "War type",
             "in": "query",
-            "name": "timestamp_start",
+            "name": "type",
             "schema": {
-              "type": "integer"
+              "enum": [
+                "cwl",
+                "random",
+                "friendly"
+              ],
+              "type": "string"
             }
           },
           {
-            "description": "End Unix timestamp",
+            "description": "Only include attacks at or after this ISO-8601 time",
             "in": "query",
-            "name": "timestamp_end",
+            "name": "time[after]",
             "schema": {
-              "type": "integer"
+              "type": "string"
             }
           },
           {
-            "description": "Maximum number of rows. Max 500.",
+            "description": "Only include attacks at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum attacks to return",
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -16077,6 +16228,16 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
           },
           "500": {
             "content": {
@@ -16097,7 +16258,7 @@
     },
     "/v2/player/{player_tag}/war/stats": {
       "get": {
-        "description": "Returns player war performance stats for all, random, friendly, and CWL wars in a time range.",
+        "description": "Returns wars in which the player was rostered, with their attacks and defenses. Empty attack and defense arrays are retained so missed attacks can be derived from attacksPerMember.",
         "parameters": [
           {
             "description": "Player tag",
@@ -16109,18 +16270,42 @@
             }
           },
           {
-            "description": "Start Unix timestamp. Defaults to 90 days ago.",
+            "description": "War type",
             "in": "query",
-            "name": "timestamp_start",
+            "name": "type",
             "schema": {
-              "type": "integer"
+              "enum": [
+                "cwl",
+                "random",
+                "friendly"
+              ],
+              "type": "string"
             }
           },
           {
-            "description": "End Unix timestamp",
+            "description": "Only include wars ending at or after this ISO-8601 time",
             "in": "query",
-            "name": "timestamp_end",
+            "name": "time[after]",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only include wars ending at or before this ISO-8601 time",
+            "in": "query",
+            "name": "time[before]",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum wars to return",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 15,
+              "maximum": 500,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -16136,6 +16321,16 @@
             },
             "description": "OK"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -16147,7 +16342,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "Get player war stats",
+        "summary": "Get player war history",
         "tags": [
           "Player"
         ]

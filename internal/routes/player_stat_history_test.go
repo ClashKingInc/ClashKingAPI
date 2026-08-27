@@ -71,7 +71,7 @@ func TestPlayerStatHistoryQueryUsesTypedPositiveDeltaSchema(t *testing.T) {
 		"FROM player_stat_changes",
 		"WHERE player_tag = $1",
 		"event_time >= $2",
-		"event_time < $3",
+		"event_time <= $3",
 		"ORDER BY event_time DESC",
 		"LIMIT $4",
 	} {
@@ -84,7 +84,7 @@ func TestPlayerStatHistoryQueryUsesTypedPositiveDeltaSchema(t *testing.T) {
 		"WHERE player_tag = $1",
 		"stat_type = $2",
 		"event_time >= $3",
-		"event_time < $4",
+		"event_time <= $4",
 		"ORDER BY event_time DESC",
 		"LIMIT $5",
 	} {
@@ -116,10 +116,11 @@ func TestPlayerStatHistoryRejectsInvalidQueryBeforeDatabaseAccess(t *testing.T) 
 	app.Get("/v2/player/:player_tag/history/stats", handler)
 
 	for _, path := range []string{
-		"/v2/player/%23ABC/history/stats?timestamp_start=bad",
-		"/v2/player/%23ABC/history/stats?timestamp_start=20&timestamp_end=10",
-		"/v2/player/%23ABC/history/stats?stat_type=gold",
-		"/v2/player/%23ABC/history/stats?limit=0",
+		"/v2/player/%23ABC/history/stats",
+		"/v2/player/%23ABC/history/stats?type=donated&time%5Bafter%5D=bad",
+		"/v2/player/%23ABC/history/stats?type=donated&time%5Bafter%5D=2026-08-27T12%3A00%3A00Z&time%5Bbefore%5D=2026-08-26T12%3A00%3A00Z",
+		"/v2/player/%23ABC/history/stats?type=gold",
+		"/v2/player/%23ABC/history/stats?type=donated&limit=0",
 	} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response, err := app.Test(request)
@@ -140,7 +141,7 @@ func TestPlayerStatHistoryAcceptsEveryTypedFilter(t *testing.T) {
 	for _, statType := range []string{"donated", "received", "clan_games", "capital_gold_donated"} {
 		request := httptest.NewRequest(
 			http.MethodGet,
-			"/v2/player/%23ABC/history/stats?stat_type="+statType,
+			"/v2/player/%23ABC/history/stats?type="+statType,
 			nil,
 		)
 		response, err := app.Test(request)
@@ -173,7 +174,7 @@ func TestPlayerStatHistoryReturnsTypedChangesAndUsesIndexedFilterQuery(t *testin
 
 	response, err := app.Test(httptest.NewRequest(
 		http.MethodGet,
-		"/v2/player/P0Y/history/stats?timestamp_start=100&timestamp_end=200&stat_type=donated&limit=25",
+		"/v2/player/P0Y/history/stats?type=donated&time%5Bafter%5D=1970-01-01T00%3A01%3A40Z&time%5Bbefore%5D=1970-01-01T00%3A03%3A20Z&limit=25",
 		nil,
 	))
 	if err != nil {
@@ -206,5 +207,25 @@ func TestPlayerStatHistoryReturnsTypedChangesAndUsesIndexedFilterQuery(t *testin
 		!db.args[3].(time.Time).Equal(time.Unix(200, 0).UTC()) ||
 		db.args[4] != 25 {
 		t.Fatalf("unexpected player stat history query args: %#v", db.args)
+	}
+}
+
+func TestPlayerStatHistoryDefaultsToThirtyDaysAndFiftyItems(t *testing.T) {
+	db := &playerStatHistoryTestDB{rows: &playerStatHistoryTestRows{}}
+	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
+	app.Get("/v2/player/:player_tag/history/stats", playerStatHistoryHandler(db))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/player/P0Y/history/stats?type=received", nil))
+	if err != nil {
+		t.Fatalf("player stat history request: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("player stat history status = %d, want 200", response.StatusCode)
+	}
+	if len(db.args) != 5 || db.args[4] != 50 {
+		t.Fatalf("unexpected default query args: %#v", db.args)
+	}
+	after, before := db.args[2].(time.Time), db.args[3].(time.Time)
+	if duration := before.Sub(after); duration < 30*24*time.Hour-time.Second || duration > 30*24*time.Hour+time.Second {
+		t.Fatalf("default history window = %s, want 30 days", duration)
 	}
 }

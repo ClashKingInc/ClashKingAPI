@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ type clanWarLogResponse struct {
 
 type clanWarLogItem struct {
 	Result           string             `json:"result"`
+	Type             string             `json:"type" enums:"cwl,random,friendly"`
 	EndTime          string             `json:"endTime"`
 	TeamSize         int                `json:"teamSize"`
 	AttacksPerMember int                `json:"attacksPerMember"`
@@ -44,73 +46,131 @@ type clanWarLogClanSide struct {
 
 // clanWarLog godoc
 // @Summary Get a clan war log
-// @Description Returns the official war log when public. Private logs are reconstructed from stored wars with the same item shape and are marked with isPrivate and reconstructed.
+// @Description Returns stored wars without authentication. Authenticated requests also use the official war log as a current-data filler when it is public.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param limit query int false "Maximum wars to return" default(50)
-// @Security ApiKeyAuth
+// @Param type query string false "War type" Enums(cwl,random,friendly)
+// @Param time[after] query string false "Only include wars ending at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include wars ending at or before this ISO-8601 time"
+// @Param limit query int false "Maximum wars to return" default(50) minimum(1) maximum(500)
 // @Success 200 {object} clanWarLogResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
-// @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/war-log [get]
+// @Router /v2/clan/{clan_tag}/warlog [get]
 func clanWarLog(a apptypes.Deps) fiber.Handler {
+	return clanWarLogHandler(a, sqlClanWars)
+}
+
+type clanWarLogLoader func(*fiber.Ctx, apptypes.Deps, string, time.Time, time.Time, []string, int) ([]officialWarResponse, error)
+
+func clanWarLogHandler(a apptypes.Deps, load clanWarLogLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
 		if clanTag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "clan_tag cannot be empty")
 		}
-		limit := clamp(warParseIntDefault(c.Query("limit"), 50), 1, 250)
-		baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyOrigin), "/")
-		upstreamURL := baseURL + "/v1/clans/" + url.PathEscape(clanTag) + "/warlog?limit=" + strconv.Itoa(limit)
-		req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, upstreamURL, nil)
+		warType := strings.ToLower(strings.TrimSpace(c.Query("type")))
+		if warType != "" && warType != "cwl" && warType != "random" && warType != "friendly" {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid type")
+		}
+		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Accept", "application/json")
-		resp, err := proxyHTTPClient.Do(req)
-		if err != nil {
-			return apptypes.Error(fiber.StatusBadGateway, "Proxy upstream request failed: "+err.Error())
+		limit, err := v2QueryInt(c, "limit", 50)
+		if err != nil || limit < 1 {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid limit")
 		}
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
+		limit = clamp(limit, 1, 500)
+		types := []string{"random", "friendly", "cwl"}
+		if warType != "" {
+			types = []string{warType}
 		}
-		if resp.StatusCode == fiber.StatusOK {
-			var payload map[string]any
-			if err := json.Unmarshal(body, &payload); err != nil {
-				return err
-			}
-			payload["isPrivate"] = false
-			payload["reconstructed"] = false
-			return apptypes.JSON(c, fiber.StatusOK, payload)
-		}
-		if resp.StatusCode != fiber.StatusForbidden {
-			return c.Status(resp.StatusCode).Send(body)
-		}
-
-		wars, err := sqlClanWars(c, a, clanTag, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC(), []string{"random", "friendly"}, limit)
+		wars, err := load(c, a, clanTag, after, before, types, limit)
 		if err != nil {
 			return err
 		}
 		items := make([]clanWarLogItem, 0, len(wars))
 		for _, war := range wars {
-			if war.State != "warEnded" {
-				continue
+			if war.State == "warEnded" {
+				items = append(items, buildClanWarLogItem(war))
 			}
-			items = append(items, buildClanWarLogItem(war))
 		}
+
+		officialItems, official := []clanWarLogItem(nil), false
+		if apptypes.UserID(c.UserContext()) != "" && (warType == "" || warType == "random") {
+			officialItems, official = fetchOfficialClanWarLog(c, a, clanTag, after, before, limit)
+		}
+		items = mergeClanWarLogItems(officialItems, items, limit)
 		return apptypes.JSON(c, fiber.StatusOK, clanWarLogResponse{
-			Items: items, IsPrivate: true, Reconstructed: true,
+			Items: items, IsPrivate: !official, Reconstructed: !official,
 		})
 	}
+}
+
+func fetchOfficialClanWarLog(c *fiber.Ctx, a apptypes.Deps, clanTag string, after, before time.Time, limit int) ([]clanWarLogItem, bool) {
+	baseURL := strings.TrimRight(strings.TrimSpace(a.Config.ProxyOrigin), "/")
+	upstreamURL := baseURL + "/v1/clans/" + url.PathEscape(clanTag) + "/warlog?limit=" + strconv.Itoa(limit)
+	req, err := http.NewRequestWithContext(c.UserContext(), http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := proxyHTTPClient.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false
+	}
+	if resp.StatusCode == fiber.StatusOK {
+		var payload struct {
+			Items []clanWarLogItem `json:"items"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil, false
+		}
+		items := make([]clanWarLogItem, 0, len(payload.Items))
+		for _, item := range payload.Items {
+			end, parseErr := time.Parse("20060102T150405.000Z", item.EndTime)
+			if parseErr != nil || end.Before(after) || end.After(before) {
+				continue
+			}
+			item.Type = "random"
+			items = append(items, item)
+		}
+		return items, true
+	}
+	return nil, false
+}
+
+func mergeClanWarLogItems(primary, stored []clanWarLogItem, limit int) []clanWarLogItem {
+	items := make([]clanWarLogItem, 0, len(primary)+len(stored))
+	seen := make(map[string]struct{}, len(primary)+len(stored))
+	for _, source := range [][]clanWarLogItem{primary, stored} {
+		for _, item := range source {
+			key := item.EndTime + "|" + item.Opponent.Tag
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].EndTime > items[j].EndTime })
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items
 }
 
 func buildClanWarLogItem(war officialWarResponse) clanWarLogItem {
 	return clanWarLogItem{
 		Result:           clanWarLogResult(war.Clan, war.Opponent),
+		Type:             war.WarType,
 		EndTime:          war.EndTime,
 		TeamSize:         war.TeamSize,
 		AttacksPerMember: valueOrDefault(war.AttacksPerMember, 1),

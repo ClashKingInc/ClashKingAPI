@@ -78,6 +78,7 @@ type sqlWarAttackRow struct {
 }
 
 type officialWarResponse struct {
+	WarType              string          `json:"-"`
 	State                string          `json:"state"`
 	TeamSize             int             `json:"teamSize"`
 	AttacksPerMember     *int            `json:"attacksPerMember,omitempty"`
@@ -314,6 +315,7 @@ func sqlAttacksForPlayersContext(ctx context.Context, a apptypes.Deps, playerTag
 
 func buildOfficialWar(war sqlWarRow, members []sqlWarMemberRow, attacks []sqlWarAttackRow) officialWarResponse {
 	item := officialWarResponse{
+		WarType:              war.WarType,
 		State:                officialWarState(war.State),
 		TeamSize:             war.Size,
 		BattleModifier:       &war.BattleModifier,
@@ -342,7 +344,8 @@ func buildOfficialArchiveWar(war wararchive.War, clanTag string) officialWarResp
 		war.Clan, war.Opponent = war.Opponent, war.Clan
 	}
 	item := officialWarResponse{
-		State: officialWarState(war.State), TeamSize: war.TeamSize, PreparationStartTime: clashTime(war.PreparationStartTime),
+		WarType: war.Type,
+		State:   officialWarState(war.State), TeamSize: war.TeamSize, PreparationStartTime: clashTime(war.PreparationStartTime),
 		EndTime: clashTime(war.EndTime), Clan: officialArchiveClan(war.Clan, war.Opponent),
 		Opponent: officialArchiveClan(war.Opponent, war.Clan),
 	}

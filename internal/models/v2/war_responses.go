@@ -116,12 +116,6 @@ type CWLLeagueRankingsResponse struct {
 	Items       []CWLStanding `json:"items"`
 }
 
-// WarStatsItem is the single entry returned by GET /v2/war/clan/stats.
-type WarStatsItem struct {
-	WarCount int      `json:"war_count"`
-	ClanTags []string `json:"clan_tags"`
-}
-
 type WarBadgeURLs struct {
 	Small  string `json:"small"`
 	Large  string `json:"large"`
@@ -201,10 +195,6 @@ type WarCompletedDailyResponse struct {
 	Items []WarCompletedDailyItem `json:"items"`
 }
 
-type WarStatsResponse struct {
-	Items []WarStatsItem `json:"items"`
-}
-
 type CWLLeague struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
@@ -264,71 +254,6 @@ type WarSummaryResponse struct {
 	WarInfo        WarSummaryInfo    `json:"war_info"`
 	LeagueInfo     *CWLGroupResponse `json:"league_info,omitempty"`
 	WarLeagueInfos []WarResponse     `json:"war_league_infos"`
-}
-
-type WarSummaryListResponse struct {
-	Items []WarSummaryResponse `json:"items"`
-}
-
-type WarMatchupStats struct {
-	AverageStars       float64        `json:"averageStars"`
-	AverageDestruction float64        `json:"averageDestruction"`
-	Count              int            `json:"count"`
-	StarsCount         map[string]int `json:"starsCount"`
-}
-
-type WarHitBucket struct {
-	WarsCounts         int                        `json:"warsCounts"`
-	TotalAttacks       int                        `json:"totalAttacks"`
-	TotalDefenses      int                        `json:"totalDefenses"`
-	MissedAttacks      int                        `json:"missedAttacks"`
-	MissedDefenses     int                        `json:"missedDefenses"`
-	StarsCount         map[string]int             `json:"starsCount"`
-	StarsCountDef      map[string]int             `json:"starsCountDef"`
-	ByEnemyTownhall    map[string]WarMatchupStats `json:"byEnemyTownhall"`
-	ByEnemyTownhallDef map[string]WarMatchupStats `json:"byEnemyTownhallDef"`
-}
-
-type WarHitStats struct {
-	All      WarHitBucket `json:"all"`
-	Random   WarHitBucket `json:"random"`
-	CWL      WarHitBucket `json:"cwl"`
-	Friendly WarHitBucket `json:"friendly"`
-}
-
-type TimeRange struct {
-	Start int64 `json:"start"`
-	End   int64 `json:"end"`
-}
-
-type PlayerWarHitResult struct {
-	Name          string      `json:"name"`
-	Tag           string      `json:"tag"`
-	TownhallLevel int         `json:"townhallLevel"`
-	Stats         WarHitStats `json:"stats"`
-	TimeRange     TimeRange   `json:"timeRange"`
-	Wars          []WarHitWar `json:"wars"`
-}
-
-type WarHitWar struct {
-	WarData        WarResponse `json:"war_data"`
-	Members        []WarMember `json:"members"`
-	MissedAttacks  int         `json:"missedAttacks,omitempty"`
-	MissedDefenses int         `json:"missedDefenses,omitempty"`
-}
-
-type ClanWarHitResult struct {
-	ClanTag string               `json:"clan_tag"`
-	Players []PlayerWarHitResult `json:"players"`
-	Wars    []WarHitWar          `json:"wars"`
-}
-
-type PlayerWarHitsResponse struct {
-	Items []PlayerWarHitResult `json:"items"`
-}
-
-type ClanWarHitsResponse struct {
-	Items []ClanWarHitResult `json:"items"`
 }
 
 type PlayerWarAttackItem struct {

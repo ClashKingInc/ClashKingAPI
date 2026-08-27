@@ -64,7 +64,7 @@ func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
 			`tagsSorter: (a, b) => {`,
 			`const tagName = (value) =>`,
 			`"Player",`,
-			`"CWL",`,
+			`"War \u0026 CWL",`,
 			`"Links",`,
 			`request = new Request(request, { method: "QUERY" })`,
 			`const labelScalarQueryMethods = () => {`,
@@ -489,6 +489,16 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/war/{clan_tag}/previous/{end_time}",
 		"/cwl/{clan_tag}/group",
 		"/cwl/{clan_tag}/{season}",
+		"/war/{clanTag}/previous",
+		"/war/{clanTag}/basic",
+		"/cwl/{clanTag}/group",
+		"/cwl/{clanTag}/{season}",
+		"/v2/war/clan/stats",
+		"/v2/war/stats",
+		"/v2/war/war-summary",
+		"/v2/war/clans/warhits",
+		"/v2/war/players/warhits",
+		"/v2/cwl/{clan_tag}",
 		"/v2/links/{id}/{player_tag}",
 	}
 	for _, path := range absent {
@@ -506,10 +516,8 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/links/{id}/searches",
 		"/v2/links/{id}/{playerTag}",
 		"/builderbaseleagues",
-		"/war/{clanTag}/previous",
-		"/war/{clanTag}/basic",
-		"/cwl/{clanTag}/group",
-		"/cwl/{clanTag}/{season}",
+		"/v2/war/{clan_tag}/previous/{endtime}",
+		"/v2/cwl/{clan_tag}/group",
 		"/v2/cdn/upload",
 		"/v2/exports/war/cwl-summary",
 		"/v2/exports/war/player-stats",
@@ -530,21 +538,14 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		}
 	}
 
-	previous := paths["/war/{clanTag}/previous"].(map[string]any)["get"].(map[string]any)
+	previous := paths["/v2/war/{clan_tag}/previous/{endtime}"].(map[string]any)["get"].(map[string]any)
 	params, _ := previous["parameters"].([]any)
-	assertRequiredParameter(t, params, "endTime", "query")
-	assertRequiredParameter(t, params, "clanTag", "path")
+	assertRequiredParameter(t, params, "endtime", "path")
+	assertRequiredParameter(t, params, "clan_tag", "path")
+	assertTags(t, previous, []string{"War & CWL"})
 
 	builderBaseLeagues := paths["/builderbaseleagues"].(map[string]any)["get"].(map[string]any)
 	assertTags(t, builderBaseLeagues, []string{"Other"})
-	for _, path := range []string{"/war/{clanTag}/previous", "/war/{clanTag}/basic"} {
-		operation := paths[path].(map[string]any)["get"].(map[string]any)
-		assertTags(t, operation, []string{"War"})
-	}
-	for _, path := range []string{"/cwl/{clanTag}/group", "/cwl/{clanTag}/{season}"} {
-		operation := paths[path].(map[string]any)["get"].(map[string]any)
-		assertTags(t, operation, []string{"CWL"})
-	}
 	for _, path := range []string{"/list/townhalls", "/list/seasons"} {
 		if _, exists := paths[path]; exists {
 			t.Fatalf("expected removed legacy list path %s to be absent", path)
@@ -993,8 +994,33 @@ func TestCWLOpenAPIRoutesUseTheirOwningSections(t *testing.T) {
 
 	playerHistory := paths["/v2/player/{player_tag}/cwl/history"].(map[string]any)["get"].(map[string]any)
 	assertTags(t, playerHistory, []string{"Player"})
+	if got := swaggerQueryParams(t, paths, "/v2/player/{player_tag}/cwl/history"); !reflect.DeepEqual(got, []string{"limit"}) {
+		t.Fatalf("player CWL history query params = %v", got)
+	}
+	assertQueryParameterSchemaValue(t, playerHistory["parameters"], "limit", "default", float64(6))
+
 	groupHistory := paths["/v2/cwl/{clan_tag}/ranking-history"].(map[string]any)["get"].(map[string]any)
-	assertTags(t, groupHistory, []string{"CWL"})
+	assertTags(t, groupHistory, []string{"War & CWL"})
+	group := paths["/v2/cwl/{clan_tag}/group"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, group, []string{"War & CWL"})
+	seasons := paths["/v2/cwl/{clan_tag}/seasons"].(map[string]any)["get"].(map[string]any)
+	assertTags(t, seasons, []string{"War & CWL"})
+	if got := swaggerQueryParams(t, paths, "/v2/cwl/{clan_tag}/seasons"); !reflect.DeepEqual(got, []string{"limit"}) {
+		t.Fatalf("CWL seasons query params = %v", got)
+	}
+	assertQueryParameterSchemaValue(t, seasons["parameters"], "limit", "default", float64(12))
+
+	for _, path := range []string{
+		"/v2/server/{server_id}/cwl/{clan_tag}/bonus-recipients",
+	} {
+		operation := paths[path].(map[string]any)
+		for method, raw := range operation {
+			if method == "parameters" {
+				continue
+			}
+			assertTags(t, raw.(map[string]any), []string{"Server Clans"})
+		}
+	}
 	leaderboard := paths["/v2/leaderboard/cwl/{league_id}"].(map[string]any)["get"].(map[string]any)
 	assertTags(t, leaderboard, []string{"Leaderboard"})
 	if got := swaggerQueryParams(t, paths, "/v2/leaderboard/cwl/{league_id}"); !reflect.DeepEqual(got, []string{"season", "team_size"}) {
@@ -1176,7 +1202,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/player/{player_tag}/ranked/{season}/group",
 		"/v2/player/{player_tag}/history/changes",
 		"/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}",
-		"/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}",
+		"/v2/clan/{clan_tag}/leaderboard-history",
 		"/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}",
 		"/v2/leaderboard/league/{league_tier_id}",
 		"/v2/leaderboard/townhalls/{townhall_level}",
@@ -1289,9 +1315,30 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		t.Fatal("expected player leaderboard history to expose playerTag")
 	}
 	clanLeaderboardProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLeaderboardHistoryResponse")
-	if _, exists := clanLeaderboardProps["clanTag"]; !exists {
-		t.Fatal("expected clan leaderboard history to expose clanTag")
+	if len(clanLeaderboardProps) != 1 || clanLeaderboardProps["items"] == nil {
+		t.Fatalf("expected clan leaderboard history to expose only items, got %v", clanLeaderboardProps)
 	}
+	clanLeaderboardItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLeaderboardHistoryItem")
+	for _, field := range []string{"date", "rank", "clanPoints", "builderBasePoints", "capitalPoints", "members", "location"} {
+		if _, exists := clanLeaderboardItemProps[field]; !exists {
+			t.Fatalf("expected clan leaderboard history item field %s", field)
+		}
+	}
+	for _, retired := range []string{"type", "clanTag", "name", "locationId", "details", "tag"} {
+		if _, exists := clanLeaderboardItemProps[retired]; exists {
+			t.Fatalf("clan leaderboard history item exposes retired field %s", retired)
+		}
+	}
+	clanLeaderboardPath := paths["/v2/clan/{clan_tag}/leaderboard-history"].(map[string]any)
+	clanLeaderboardGet := clanLeaderboardPath["get"].(map[string]any)
+	assertTags(t, clanLeaderboardGet, []string{"Clan"})
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/leaderboard-history"); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
+		t.Fatalf("clan leaderboard history query params = %v", got)
+	}
+	assertRequiredParameter(t, clanLeaderboardGet["parameters"].([]any), "type", "query")
+	assertParameterEnum(t, clanLeaderboardGet["parameters"], "type", []any{"clan_home_points", "clan_builder_base_points", "clan_capital_points"})
+	assertQueryParameterSchemaValue(t, clanLeaderboardGet["parameters"], "limit", "default", float64(50))
+	assertQueryParameterSchemaValue(t, clanLeaderboardGet["parameters"], "limit", "maximum", float64(250))
 	for _, definition := range []string{
 		"modelsv2.LegendSeasonHistoryResponse",
 		"modelsv2.PlayerLegendHistoryResponse",
@@ -1324,16 +1371,23 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 			t.Fatalf("Legend item exposes unavailable/internal field %s", unavailable)
 		}
 	}
-	clanLegendPath := paths["/v2/clan/{clan_tag}/legend-history"].(map[string]any)
-	clanLegendGet := clanLegendPath["get"].(map[string]any)
-	clanLegendParameters := clanLegendGet["parameters"].([]any)
-	for _, raw := range clanLegendParameters {
-		parameter := raw.(map[string]any)
-		schema, _ := parameter["schema"].(map[string]any)
-		if parameter["name"] == "limit" && schema["maximum"] != float64(1000) {
-			t.Fatalf("clan Legend limit maximum = %#v, want 1000", schema["maximum"])
+	clanLegendItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLegendHistoryItem")
+	if len(clanLegendItemProps) != 8 {
+		t.Fatalf("expected compact clan Legend item, got %v", clanLegendItemProps)
+	}
+	for _, field := range []string{"season", "tag", "name", "expLevel", "trophies", "attackWins", "defenseWins", "rank"} {
+		if _, exists := clanLegendItemProps[field]; !exists {
+			t.Fatalf("expected clan Legend item field %s", field)
 		}
 	}
+	clanLegendPath := paths["/v2/clan/{clan_tag}/legend-history"].(map[string]any)
+	clanLegendGet := clanLegendPath["get"].(map[string]any)
+	assertTags(t, clanLegendGet, []string{"Clan"})
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/legend-history"); !reflect.DeepEqual(got, []string{"time[after]", "time[before]", "limit"}) {
+		t.Fatalf("clan Legend history query params = %v", got)
+	}
+	assertQueryParameterSchemaValue(t, clanLegendGet["parameters"], "limit", "default", float64(50))
+	assertQueryParameterSchemaValue(t, clanLegendGet["parameters"], "limit", "maximum", float64(250))
 	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
 	snapshotGet := snapshotPath["get"].(map[string]any)
 	assertParameterEnum(t, snapshotGet["parameters"], "leaderboard_type", []any{
@@ -1366,7 +1420,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	if !ok {
 		t.Fatal("expected swagger tags list")
 	}
-	want := []string{"Player", "Clan", "War", "CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links"}
+	want := []string{"Player", "Clan", "War & CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links"}
 	if len(tags) < len(want) {
 		t.Fatalf("expected at least %d tags, got %d", len(want), len(tags))
 	}

@@ -78,8 +78,16 @@ type PlayerLeaderboardHistoryResponse struct {
 	Items     []LeaderboardEntityHistoryItem `json:"items"`
 }
 
+type ClanLeaderboardHistoryItem struct {
+	Date              string                               `json:"date"`
+	Rank              int                                  `json:"rank"`
+	ClanPoints        *int                                 `json:"clanPoints,omitempty"`
+	BuilderBasePoints *int                                 `json:"builderBasePoints,omitempty"`
+	CapitalPoints     *int                                 `json:"capitalPoints,omitempty"`
+	Members           int                                  `json:"members"`
+	Location          *LeaderboardHistoryLocationReference `json:"location,omitempty"`
+}
+
 type ClanLeaderboardHistoryResponse struct {
-	Type    LeaderboardHistoryType         `json:"type"`
-	ClanTag string                         `json:"clanTag"`
-	Items   []LeaderboardEntityHistoryItem `json:"items"`
+	Items []ClanLeaderboardHistoryItem `json:"items"`
 }

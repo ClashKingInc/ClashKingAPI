@@ -1470,16 +1470,29 @@ components:
                 server_id:
                     type: string
             type: object
+        modelsv2.ClanLeaderboardHistoryItem:
+            properties:
+                builderBasePoints:
+                    type: integer
+                capitalPoints:
+                    type: integer
+                clanPoints:
+                    type: integer
+                date:
+                    type: string
+                location:
+                    $ref: '#/components/schemas/modelsv2.LeaderboardHistoryLocationReference'
+                members:
+                    type: integer
+                rank:
+                    type: integer
+            type: object
         modelsv2.ClanLeaderboardHistoryResponse:
             properties:
-                clanTag:
-                    type: string
                 items:
                     items:
-                        $ref: '#/components/schemas/modelsv2.LeaderboardEntityHistoryItem'
+                        $ref: '#/components/schemas/modelsv2.ClanLeaderboardHistoryItem'
                     type: array
-                type:
-                    $ref: '#/components/schemas/modelsv2.LeaderboardHistoryType'
             type: object
         modelsv2.ClanLeagueRef:
             properties:
@@ -1488,11 +1501,30 @@ components:
                 name:
                     type: string
             type: object
+        modelsv2.ClanLegendHistoryItem:
+            properties:
+                attackWins:
+                    type: integer
+                defenseWins:
+                    type: integer
+                expLevel:
+                    type: integer
+                name:
+                    type: string
+                rank:
+                    type: integer
+                season:
+                    type: string
+                tag:
+                    type: string
+                trophies:
+                    type: integer
+            type: object
         modelsv2.ClanLegendHistoryResponse:
             properties:
                 items:
                     items:
-                        $ref: '#/components/schemas/modelsv2.LegendHistoryItem'
+                        $ref: '#/components/schemas/modelsv2.ClanLegendHistoryItem'
                     type: array
             type: object
         modelsv2.ClanListItem:
@@ -1604,26 +1636,6 @@ components:
                 clan_tags:
                     items:
                         type: string
-                    type: array
-            type: object
-        modelsv2.ClanWarHitResult:
-            properties:
-                clan_tag:
-                    type: string
-                players:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.PlayerWarHitResult'
-                    type: array
-                wars:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.WarHitWar'
-                    type: array
-            type: object
-        modelsv2.ClanWarHitsResponse:
-            properties:
-                items:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.ClanWarHitResult'
                     type: array
             type: object
         modelsv2.CountdownStatus:
@@ -3233,30 +3245,6 @@ components:
                     type: string
                 townhallLevel:
                     type: integer
-            type: object
-        modelsv2.PlayerWarHitResult:
-            properties:
-                name:
-                    type: string
-                stats:
-                    $ref: '#/components/schemas/modelsv2.WarHitStats'
-                tag:
-                    type: string
-                timeRange:
-                    $ref: '#/components/schemas/modelsv2.TimeRange'
-                townhallLevel:
-                    type: integer
-                wars:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.WarHitWar'
-                    type: array
-            type: object
-        modelsv2.PlayerWarHitsResponse:
-            properties:
-                items:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.PlayerWarHitResult'
-                    type: array
             type: object
         modelsv2.PlayerWarStatsExportRequest:
             properties:
@@ -5717,13 +5705,6 @@ components:
                         type: string
                     type: array
             type: object
-        modelsv2.TimeRange:
-            properties:
-                end:
-                    type: integer
-                start:
-                    type: integer
-            type: object
         modelsv2.TrophyBucket:
             properties:
                 bucket:
@@ -5906,13 +5887,6 @@ components:
                 tag:
                     type: string
             type: object
-        modelsv2.WarClanTagsBody:
-            properties:
-                clan_tags:
-                    items:
-                        type: string
-                    type: array
-            type: object
         modelsv2.WarCompletedDailyItem:
             properties:
                 day:
@@ -5929,78 +5903,12 @@ components:
                         $ref: '#/components/schemas/modelsv2.WarCompletedDailyItem'
                     type: array
             type: object
-        modelsv2.WarHitBucket:
-            properties:
-                byEnemyTownhall:
-                    additionalProperties:
-                        $ref: '#/components/schemas/modelsv2.WarMatchupStats'
-                    type: object
-                byEnemyTownhallDef:
-                    additionalProperties:
-                        $ref: '#/components/schemas/modelsv2.WarMatchupStats'
-                    type: object
-                missedAttacks:
-                    type: integer
-                missedDefenses:
-                    type: integer
-                starsCount:
-                    additionalProperties:
-                        type: integer
-                    type: object
-                starsCountDef:
-                    additionalProperties:
-                        type: integer
-                    type: object
-                totalAttacks:
-                    type: integer
-                totalDefenses:
-                    type: integer
-                warsCounts:
-                    type: integer
-            type: object
-        modelsv2.WarHitStats:
-            properties:
-                all:
-                    $ref: '#/components/schemas/modelsv2.WarHitBucket'
-                cwl:
-                    $ref: '#/components/schemas/modelsv2.WarHitBucket'
-                friendly:
-                    $ref: '#/components/schemas/modelsv2.WarHitBucket'
-                random:
-                    $ref: '#/components/schemas/modelsv2.WarHitBucket'
-            type: object
-        modelsv2.WarHitWar:
-            properties:
-                members:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.WarMember'
-                    type: array
-                missedAttacks:
-                    type: integer
-                missedDefenses:
-                    type: integer
-                war_data:
-                    $ref: '#/components/schemas/modelsv2.WarResponse'
-            type: object
         modelsv2.WarListResponse:
             properties:
                 items:
                     items:
                         $ref: '#/components/schemas/modelsv2.WarResponse'
                     type: array
-            type: object
-        modelsv2.WarMatchupStats:
-            properties:
-                averageDestruction:
-                    type: number
-                averageStars:
-                    type: number
-                count:
-                    type: integer
-                starsCount:
-                    additionalProperties:
-                        type: integer
-                    type: object
             type: object
         modelsv2.WarMember:
             properties:
@@ -6020,13 +5928,6 @@ components:
                     type: string
                 townhallLevel:
                     type: integer
-            type: object
-        modelsv2.WarPlayersBody:
-            properties:
-                players:
-                    items:
-                        type: string
-                    type: array
             type: object
         modelsv2.WarResponse:
             properties:
@@ -6053,22 +5954,6 @@ components:
                 warStartTime:
                     type: string
             type: object
-        modelsv2.WarStatsItem:
-            properties:
-                clan_tags:
-                    items:
-                        type: string
-                    type: array
-                war_count:
-                    type: integer
-            type: object
-        modelsv2.WarStatsResponse:
-            properties:
-                items:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.WarStatsItem'
-                    type: array
-            type: object
         modelsv2.WarSummaryInfo:
             properties:
                 bypass:
@@ -6077,13 +5962,6 @@ components:
                     $ref: '#/components/schemas/modelsv2.WarResponse'
                 state:
                     type: string
-            type: object
-        modelsv2.WarSummaryListResponse:
-            properties:
-                items:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.WarSummaryResponse'
-                    type: array
             type: object
         modelsv2.WarSummaryResponse:
             properties:
@@ -6214,64 +6092,6 @@ paths:
             summary: Get builder base leagues
             tags:
                 - Other
-    /cwl/{clanTag}/{season}:
-        get:
-            description: Returns the clan's CWL group for a selected season through the legacy response shape used by older clients.
-            parameters:
-                - description: Clan tag
-                  in: path
-                  name: clanTag
-                  required: true
-                  schema:
-                    type: string
-                - description: Season YYYY-MM
-                  in: path
-                  name: season
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.CWLGroupResponse'
-                    description: OK
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Not Found
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: View a clan's CWL group by season
-            tags:
-                - CWL
-    /cwl/{clanTag}/group:
-        get:
-            description: Returns the clan's current CWL group through the legacy response shape used by older clients.
-            parameters:
-                - description: Clan tag
-                  in: path
-                  name: clanTag
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.CWLGroupResponse'
-                    description: OK
-            summary: View a clan's current CWL group
-            tags:
-                - CWL
     /global/counts:
         get:
             description: Returns global tracking counts used by legacy clients.
@@ -7413,9 +7233,9 @@ paths:
             summary: Review a clan's membership changes
             tags:
                 - Clan
-    /v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}:
+    /v2/clan/{clan_tag}/leaderboard-history:
         get:
-            description: Returns typed dated placements for clan Home Village, Builder Base, or Capital leaderboards.
+            description: Returns dated clan placements and points for one required leaderboard type, with optional inclusive time bounds.
             parameters:
                 - description: Clan tag
                   in: path
@@ -7423,9 +7243,9 @@ paths:
                   required: true
                   schema:
                     type: string
-                - description: Canonical clan leaderboard type
-                  in: path
-                  name: leaderboard_type
+                - description: Leaderboard type
+                  in: query
+                  name: type
                   required: true
                   schema:
                     enum:
@@ -7433,6 +7253,24 @@ paths:
                         - clan_builder_base_points
                         - clan_capital_points
                     type: string
+                - description: Only include snapshots at or after this ISO-8601 time
+                  in: query
+                  name: time[after]
+                  schema:
+                    type: string
+                - description: Only include snapshots at or before this ISO-8601 time
+                  in: query
+                  name: time[before]
+                  schema:
+                    type: string
+                - description: Maximum snapshots to return
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    maximum: 250
+                    minimum: 1
+                    type: integer
             responses:
                 "200":
                     content:
@@ -7458,12 +7296,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/modelsv2.ErrorResponse'
                     description: Service Unavailable
-            summary: Get a clan's leaderboard history
+            summary: Review a clan's leaderboard history
             tags:
-                - Leaderboard
+                - Clan
     /v2/clan/{clan_tag}/legend-history:
         get:
-            description: Returns normalized historical Legend finishers for one clan, ordered by best rank and then newest season.
+            description: Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.
             parameters:
                 - description: Clan tag
                   in: path
@@ -7471,12 +7309,22 @@ paths:
                   required: true
                   schema:
                     type: string
-                - description: Result limit
+                - description: Only include seasons at or after this ISO-8601 time
+                  in: query
+                  name: time[after]
+                  schema:
+                    type: string
+                - description: Only include seasons at or before this ISO-8601 time
+                  in: query
+                  name: time[before]
+                  schema:
+                    type: string
+                - description: Maximum finishers to return
                   in: query
                   name: limit
                   schema:
-                    default: 200
-                    maximum: 1000
+                    default: 50
+                    maximum: 250
                     minimum: 1
                     type: integer
             responses:
@@ -7504,9 +7352,9 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/modelsv2.ErrorResponse'
                     description: Service Unavailable
-            summary: Get a clan's final Legend finishers
+            summary: Review a clan's final Legend finishers
             tags:
-                - Leaderboard
+                - Clan
     /v2/clan/{clan_tag}/rankings:
         get:
             description: Returns current Home Village, Builder Base, and Clan Capital scores with every available global and local leaderboard position.
@@ -7812,7 +7660,7 @@ paths:
             summary: Get player town hall counts
             tags:
                 - Counts
-    /v2/cwl/{clan_tag}:
+    /v2/cwl/{clan_tag}/group:
         get:
             description: Returns the requested CWL group with its roster, rounds, and wars, or the clan's most recent stored season when omitted.
             parameters:
@@ -7842,7 +7690,7 @@ paths:
                     description: Not Found
             summary: View a clan's stored CWL group
             tags:
-                - CWL
+                - War & CWL
     /v2/cwl/{clan_tag}/ranking-history:
         get:
             description: Returns every stored CWL group containing the clan. Rosters and rounds are historical snapshots; rankings appear only when separately saved.
@@ -7868,7 +7716,7 @@ paths:
                     description: Internal Server Error
             summary: Browse a clan's stored CWL groups
             tags:
-                - CWL
+                - War & CWL
     /v2/cwl/{clan_tag}/seasons:
         get:
             description: Lists every stored CWL season containing the clan, with its league, team size, state, and available group standing.
@@ -7879,6 +7727,13 @@ paths:
                   required: true
                   schema:
                     type: string
+                - description: Maximum seasons to return
+                  in: query
+                  name: limit
+                  schema:
+                    default: 12
+                    minimum: 1
+                    type: integer
             responses:
                 "200":
                     content:
@@ -7886,9 +7741,15 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/modelsv2.CWLSeasonsResponse'
                     description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
             summary: List a clan's stored CWL seasons
             tags:
-                - CWL
+                - War & CWL
     /v2/dates/current:
         get:
             description: Returns current season and event date identifiers.
@@ -9832,6 +9693,13 @@ paths:
                   required: true
                   schema:
                     type: string
+                - description: Maximum seasons to return
+                  in: query
+                  name: limit
+                  schema:
+                    default: 6
+                    minimum: 1
+                    type: integer
             responses:
                 "200":
                     content:
@@ -9839,6 +9707,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/modelsv2.CWLPlayerHistoryResponse'
                     description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
                 "500":
                     content:
                         application/json:
@@ -13484,7 +13358,7 @@ paths:
                 - ApiKeyAuth: []
             summary: View saved CWL bonus recipients
             tags:
-                - CWL
+                - Server Clans
         put:
             description: Replaces the saved bonus-medal recipients for one server, clan, and CWL season with the submitted player list.
             parameters:
@@ -13524,7 +13398,7 @@ paths:
                 - ApiKeyAuth: []
             summary: Replace saved CWL bonus recipients
             tags:
-                - CWL
+                - Server Clans
     /v2/server/{server_id}/dashboard-access:
         get:
             description: Returns assignable Discord roles and role grants. Requires Manage Guild permission.
@@ -16064,6 +15938,44 @@ paths:
             summary: Verify email address with 6-digit code
             tags:
                 - App Authentication
+    /v2/war/{clan_tag}/previous/{endtime}:
+        get:
+            description: Returns the stored clan war ending nearest the supplied Clash time, allowing a ten-minute difference in either direction.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: War end time in Clash format, such as 20260820T120000.000Z
+                  in: path
+                  name: endtime
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.WarResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+            summary: Find a stored war by end time
+            tags:
+                - War & CWL
     /v2/war/{clan_tag}/war-summary:
         get:
             description: Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.
@@ -16089,240 +16001,11 @@ paths:
                     description: Internal Server Error
             summary: View a clan's current war summary
             tags:
-                - War
-    /v2/war/clan/stats:
-        get:
-            description: Returns the number of stored wars for each requested clan, with filters available for dates, war types, and preparation states.
-            parameters:
-                - description: Clan tags
-                  explode: false
-                  in: query
-                  name: clan_tags
-                  schema:
-                    items:
-                        type: string
-                    type: array
-                  style: form
-                - description: Single clan tag
-                  in: query
-                  name: clan_tag
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.WarStatsResponse'
-                    description: OK
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Count stored wars for selected clans
-            tags:
-                - War
-    /v2/war/clans/warhits:
-        post:
-            description: Returns stored attack performance for the requested clans, with filters for dates, war types, town halls, and attack freshness.
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/modelsv2.WarClanTagsBody'
-                description: Clan tags
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ClanWarHitsResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Compare war performance for selected clans
-            tags:
-                - War
-    /v2/war/players/warhits:
-        post:
-            description: Returns stored attack performance for the requested players, with filters for dates, war types, town halls, and attack freshness.
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/modelsv2.WarPlayersBody'
-                description: Player tags
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.PlayerWarHitsResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Compare war performance for selected players
-            tags:
-                - War
-    /v2/war/stats:
-        get:
-            description: Returns the number of stored wars for each requested clan, with filters available for dates, war types, and preparation states.
-            parameters:
-                - description: Clan tags
-                  explode: false
-                  in: query
-                  name: clan_tags
-                  schema:
-                    items:
-                        type: string
-                    type: array
-                  style: form
-                - description: Single clan tag
-                  in: query
-                  name: clan_tag
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.WarStatsResponse'
-                    description: OK
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Count stored wars for selected clans
-            tags:
-                - War
-    /v2/war/war-summary:
-        post:
-            description: Returns a compact current-war summary for each submitted clan tag so multiple wars can be displayed or compared together.
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/modelsv2.WarClanTagsBody'
-                description: Clan tags
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.WarSummaryListResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: Compare current wars across several clans
-            tags:
-                - War
-    /war/{clanTag}/basic:
-        get:
-            description: Returns the clan's current or most recent non-CWL war through the legacy response shape used by older clients.
-            parameters:
-                - description: Clan tag
-                  in: path
-                  name: clanTag
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.WarResponse'
-                    description: OK
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Internal Server Error
-            summary: View a clan's latest regular war
-            tags:
-                - War
-    /war/{clanTag}/previous:
-        get:
-            description: Returns the stored clan war nearest the supplied official end time through the legacy response shape.
-            parameters:
-                - description: Clan tag
-                  in: path
-                  name: clanTag
-                  required: true
-                  schema:
-                    type: string
-                - description: War end time in Clash format
-                  in: query
-                  name: endTime
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.WarResponse'
-                    description: OK
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Bad Request
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
-                    description: Not Found
-            summary: Find a stored war by end time
-            tags:
-                - War
+                - War & CWL
 tags:
     - name: Player
     - name: Clan
-    - name: War
-    - name: CWL
+    - name: War & CWL
     - name: Leaderboard
     - name: Counts
     - name: Stats

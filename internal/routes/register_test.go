@@ -143,6 +143,17 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/war/:clan_tag/previous",
 		"/v2/cwl/leagues/:league_id/rankings",
 		"/v2/cwl/league-thresholds",
+		"/v2/war/clan/stats",
+		"/v2/war/stats",
+		"/v2/war/war-summary",
+		"/v2/war/players/warhits",
+		"/v2/war/clans/warhits",
+		"/v2/cwl/:clan_tag",
+		"/v2/clan/:clan_tag/leaderboard-history/:leaderboard_type",
+		"/war/:clanTag/previous",
+		"/war/:clanTag/basic",
+		"/cwl/:clanTag/group",
+		"/cwl/:clanTag/:season",
 	} {
 		if paths[path] {
 			t.Fatalf("expected %s to be absent from registered routes", path)
@@ -166,9 +177,10 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/player/:player_tag/cwl/history",
 		"/v2/server/:server_id/cwl/:clan_tag/bonus-recipients",
 		"/v2/cwl/:clan_tag/seasons",
-		"/v2/cwl/:clan_tag",
+		"/v2/cwl/:clan_tag/group",
 		"/v2/cwl/:clan_tag/ranking-history",
 		"/v2/leaderboard/cwl/:league_id",
+		"/v2/war/:clan_tag/previous/:endtime",
 		"/v2/links/:id",
 		"/v2/links/:id/:playerTag",
 		"/v2/links/:id/order",
@@ -186,12 +198,8 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/app/announcements/:id",
 		"/v2/app/posts",
 		"/v2/player/:player_tag/leaderboard-history/:leaderboard_type",
-		"/v2/clan/:clan_tag/leaderboard-history/:leaderboard_type",
+		"/v2/clan/:clan_tag/leaderboard-history",
 		"/v2/leaderboard/history/:leaderboard_type/:location_id/:date",
-		"/war/:clanTag/previous",
-		"/war/:clanTag/basic",
-		"/cwl/:clanTag/group",
-		"/cwl/:clanTag/:season",
 		"/builderbaseleagues",
 		"/v2/links/server/:server_id",
 		"/v2/server/:server_id/reactivate",
@@ -269,17 +277,17 @@ func TestServerLogMethodsAreRegistered(t *testing.T) {
 	}
 }
 
-func TestLegacyWarPreviousRequiresEndTimeQuery(t *testing.T) {
+func TestVersionedWarPreviousRequiresEndTimePath(t *testing.T) {
 	app := newRegisteredRoutesTestAppWithErrorHandler()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
 
-	resp, err := app.Test(httptest.NewRequest("GET", "/war/%232PP/previous", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/v2/war/%232PP/previous/not-a-time", nil))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Fatalf("expected missing endTime to return 400, got %d", resp.StatusCode)
+		t.Fatalf("expected invalid endtime to return 400, got %d", resp.StatusCode)
 	}
 }
 

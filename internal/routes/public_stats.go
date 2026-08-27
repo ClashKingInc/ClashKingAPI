@@ -790,11 +790,11 @@ func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 
 // clanChanges godoc
 // @Summary Get clan change history
-// @Description Returns description, clan-level, War League, or Capital League changes. Values are strings, integers, or league objects according to type.
+// @Description Returns description or clan-level changes. Values are strings or integers according to type.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param type query string false "Change type" Enums(description,clanLevel,warLeague,capitalLeague)
+// @Param type query string false "Change type" Enums(description,clanLevel)
 // @Param time[after] query string false "Only include changes at or after this ISO-8601 time"
 // @Param time[before] query string false "Only include changes at or before this ISO-8601 time"
 // @Param limit query int false "Maximum changes to return" default(50) minimum(1) maximum(500)
@@ -807,14 +807,14 @@ func clanChanges(a apptypes.Deps) fiber.Handler {
 	if a.Store != nil {
 		db = a.Store.SQL
 	}
-	return clanChangesHandler(db, newReferenceCatalog(a))
+	return clanChangesHandler(db)
 }
 
 type clanChangesDB interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
 
-func clanChangesHandler(db clanChangesDB, references referenceCatalog) fiber.Handler {
+func clanChangesHandler(db clanChangesDB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
 		storageType, after, before, limit, err := clanChangeQueryOptions(c)
@@ -827,7 +827,9 @@ func clanChangesHandler(db clanChangesDB, references referenceCatalog) fiber.Han
 		rows, err := db.Query(c.UserContext(), `
 			SELECT event_time, change_type, previous_value, current_value
 			FROM clan_change_history
-			WHERE clan_tag = $1 AND ($2 = '' OR change_type = $2)
+			WHERE clan_tag = $1
+			  AND change_type IN ('description', 'clan_level')
+			  AND ($2 = '' OR change_type = $2)
 			  AND event_time >= $3 AND event_time <= $4
 			ORDER BY event_time DESC
 			LIMIT $5
@@ -844,11 +846,11 @@ func clanChangesHandler(db clanChangesDB, references referenceCatalog) fiber.Han
 			if err := rows.Scan(&eventTime, &changeType, &previousRaw, &currentRaw); err != nil {
 				return err
 			}
-			previous, err := clanChangeValue(changeType, previousRaw, references)
+			previous, err := clanChangeValue(previousRaw)
 			if err != nil {
 				return err
 			}
-			current, err := clanChangeValue(changeType, currentRaw, references)
+			current, err := clanChangeValue(currentRaw)
 			if err != nil {
 				return err
 			}
@@ -882,21 +884,14 @@ func clanChangeQueryOptions(c *fiber.Ctx) (string, time.Time, time.Time, int, er
 	return storageType, after, before, clamp(limit, 1, 500), nil
 }
 
-func clanChangeValue(changeType string, raw []byte, references referenceCatalog) (any, error) {
+func clanChangeValue(raw []byte) (any, error) {
 	var text string
 	if json.Unmarshal(raw, &text) == nil {
 		return text, nil
 	}
 	var integer int
 	if json.Unmarshal(raw, &integer) == nil {
-		switch changeType {
-		case "cwl_league_id":
-			return clanChangeLeagueValue(integer, references.warLeague(integer)), nil
-		case "capital_league_id":
-			return clanChangeLeagueValue(integer, references.capitalLeague(integer)), nil
-		default:
-			return integer, nil
-		}
+		return integer, nil
 	}
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
@@ -905,21 +900,10 @@ func clanChangeValue(changeType string, raw []byte, references referenceCatalog)
 	return value, nil
 }
 
-func clanChangeLeagueValue(id int, reference *modelsv2.LeagueReference) modelsv2.LeagueReference {
-	if reference != nil {
-		return *reference
-	}
-	return modelsv2.LeagueReference{ID: id}
-}
-
 func clanChangeAPIType(changeType string) string {
 	switch changeType {
 	case "clan_level":
 		return "clanLevel"
-	case "cwl_league_id":
-		return "warLeague"
-	case "capital_league_id":
-		return "capitalLeague"
 	default:
 		return snakeToLowerCamel(changeType)
 	}
@@ -933,10 +917,6 @@ func clanChangeStorageType(changeType string) (string, error) {
 		return "description", nil
 	case "clanLevel":
 		return "clan_level", nil
-	case "warLeague":
-		return "cwl_league_id", nil
-	case "capitalLeague":
-		return "capital_league_id", nil
 	default:
 		return "", apptypes.Error(fiber.StatusBadRequest, "invalid type")
 	}

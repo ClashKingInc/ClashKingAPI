@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -186,32 +187,21 @@ func TestCachedClanResponseEnrichesStoredReferencesAndNormalizesMembers(t *testi
 	}
 }
 
-func TestClanChangeValuesUsePrimitivesAndLeagueReferences(t *testing.T) {
-	references := referenceCatalog{
-		warLeagues: map[int]modelsv2.LeagueReference{
-			48000014: {ID: 48000014, Name: "Crystal League I"},
-		},
-		capitalLeagues: map[int]modelsv2.LeagueReference{
-			85000015: {ID: 85000015, Name: "Gold League II"},
-		},
-	}
+func TestClanChangeValuesUsePrimitives(t *testing.T) {
 	tests := []struct {
-		changeType string
-		raw        string
-		want       any
+		raw  string
+		want any
 	}{
-		{changeType: "description", raw: `"Old description"`, want: "Old description"},
-		{changeType: "clan_level", raw: `19`, want: 19},
-		{changeType: "cwl_league_id", raw: `48000014`, want: modelsv2.LeagueReference{ID: 48000014, Name: "Crystal League I"}},
-		{changeType: "capital_league_id", raw: `85000015`, want: modelsv2.LeagueReference{ID: 85000015, Name: "Gold League II"}},
+		{raw: `"Old description"`, want: "Old description"},
+		{raw: `19`, want: 19},
 	}
 	for _, test := range tests {
-		got, err := clanChangeValue(test.changeType, []byte(test.raw), references)
+		got, err := clanChangeValue([]byte(test.raw))
 		if err != nil {
-			t.Fatalf("change value %s: %v", test.changeType, err)
+			t.Fatalf("change value %s: %v", test.raw, err)
 		}
 		if got != test.want {
-			t.Fatalf("change value %s = %#v, want %#v", test.changeType, got, test.want)
+			t.Fatalf("change value %s = %#v, want %#v", test.raw, got, test.want)
 		}
 	}
 }
@@ -219,15 +209,16 @@ func TestClanChangeValuesUsePrimitivesAndLeagueReferences(t *testing.T) {
 func TestClanChangeStorageTypesAreLimitedToDocumentedOptions(t *testing.T) {
 	for apiType, storageType := range map[string]string{
 		"": "", "description": "description", "clanLevel": "clan_level",
-		"warLeague": "cwl_league_id", "capitalLeague": "capital_league_id",
 	} {
 		got, err := clanChangeStorageType(apiType)
 		if err != nil || got != storageType {
 			t.Fatalf("storage type %q = %q, %v", apiType, got, err)
 		}
 	}
-	if _, err := clanChangeStorageType("name"); err == nil {
-		t.Fatal("unsupported clan change type unexpectedly succeeded")
+	for _, unsupported := range []string{"name", "warLeague", "capitalLeague"} {
+		if _, err := clanChangeStorageType(unsupported); err == nil {
+			t.Fatalf("unsupported clan change type %q unexpectedly succeeded", unsupported)
+		}
 	}
 }
 
@@ -240,7 +231,7 @@ func TestClanChangeQueryOptionsUsesSharedTimeAndLimits(t *testing.T) {
 		}
 		return c.JSON(fiber.Map{"type": storageType, "after": after, "before": before, "limit": limit})
 	})
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/?type=warLeague&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z&limit=700", nil))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/?type=clanLevel&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z&limit=700", nil))
 	if err != nil || response.StatusCode != http.StatusOK {
 		t.Fatalf("valid clan change options failed: status=%d err=%v", response.StatusCode, err)
 	}
@@ -253,7 +244,7 @@ func TestClanChangeQueryOptionsUsesSharedTimeAndLimits(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Type != "cwl_league_id" || body.Limit != 500 || body.After.Day() != 1 || body.Before.Day() != 31 {
+	if body.Type != "clan_level" || body.Limit != 500 || body.After.Day() != 1 || body.Before.Day() != 31 {
 		t.Fatalf("unexpected clan change options: %#v", body)
 	}
 	for _, path := range []string{"/?type=name", "/?limit=0", "/?time%5Bafter%5D=bad"} {
@@ -267,34 +258,32 @@ func TestClanChangeQueryOptionsUsesSharedTimeAndLimits(t *testing.T) {
 func TestClanChangesHandlerQueriesAndSerializesTypedValues(t *testing.T) {
 	eventTime := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	db := &clanChangesTestDB{rows: &clanChangesTestRows{items: []clanChangesTestRow{{
-		time: eventTime, changeType: "cwl_league_id", previous: []byte(`48000013`), current: []byte(`48000014`),
+		time: eventTime, changeType: "clan_level", previous: []byte(`19`), current: []byte(`20`),
 	}}}}
-	references := referenceCatalog{warLeagues: map[int]modelsv2.LeagueReference{
-		48000013: {ID: 48000013, Name: "Crystal League II"},
-		48000014: {ID: 48000014, Name: "Crystal League I"},
-	}}
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
-	app.Get("/v2/clan/:clan_tag/history/changes", clanChangesHandler(db, references))
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/history/changes?type=warLeague&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z&limit=25", nil))
+	app.Get("/v2/clan/:clan_tag/history/changes", clanChangesHandler(db))
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v2/clan/%23CLAN/history/changes?type=clanLevel&time%5Bafter%5D=2026-08-01T00%3A00%3A00Z&time%5Bbefore%5D=2026-08-31T00%3A00%3A00Z&limit=25", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("clan changes status = %d", response.StatusCode)
 	}
-	if len(db.args) != 5 || db.args[0] != "#CLAN" || db.args[1] != "cwl_league_id" || db.args[4] != 25 {
+	if len(db.args) != 5 || db.args[0] != "#CLAN" || db.args[1] != "clan_level" || db.args[4] != 25 {
 		t.Fatalf("unexpected clan changes query args: %#v", db.args)
+	}
+	if !strings.Contains(db.query, "change_type IN ('description', 'clan_level')") {
+		t.Fatalf("clan changes query does not exclude league changes: %s", db.query)
 	}
 	var body modelsv2.ClanChangesResponse
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Items) != 1 || body.Items[0].Type != "warLeague" {
+	if len(body.Items) != 1 || body.Items[0].Type != "clanLevel" {
 		t.Fatalf("unexpected clan changes response: %#v", body)
 	}
-	current := body.Items[0].Current.(map[string]any)
-	if current["id"] != float64(48000014) || current["name"] != "Crystal League I" {
-		t.Fatalf("unexpected current league: %#v", current)
+	if body.Items[0].Previous != float64(19) || body.Items[0].Current != float64(20) {
+		t.Fatalf("unexpected clan-level values: %#v", body.Items[0])
 	}
 }
 

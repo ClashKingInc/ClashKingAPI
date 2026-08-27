@@ -1587,7 +1587,7 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/history/changes": {
             "get": {
-                "description": "Returns description, clan-level, War League, or Capital League changes. Values are strings, integers, or league objects according to type.",
+                "description": "Returns description or clan-level changes. Values are strings or integers according to type.",
                 "produces": [
                     "application/json"
                 ],
@@ -1606,9 +1606,7 @@ const docTemplate = `{
                     {
                         "enum": [
                             "description",
-                            "clanLevel",
-                            "warLeague",
-                            "capitalLeague"
+                            "clanLevel"
                         ],
                         "type": "string",
                         "description": "Change type",

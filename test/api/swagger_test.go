@@ -919,7 +919,7 @@ func TestClanHistoryAndCachedClanOpenAPIContracts(t *testing.T) {
 
 	changesPath := "/v2/clan/{clan_tag}/history/changes"
 	changes := paths[changesPath].(map[string]any)["get"].(map[string]any)
-	assertParameterEnum(t, changes["parameters"], "type", []any{"description", "clanLevel", "warLeague", "capitalLeague"})
+	assertParameterEnum(t, changes["parameters"], "type", []any{"description", "clanLevel"})
 	if got := swaggerQueryParams(t, paths, changesPath); !reflect.DeepEqual(got, []string{"type", "time[after]", "time[before]", "limit"}) {
 		t.Fatalf("clan change query params = %v", got)
 	}

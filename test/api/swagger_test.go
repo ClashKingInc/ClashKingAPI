@@ -404,7 +404,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/clan/{clan_tag}/badge",
 		"/clan/{clan_tag}/basic",
 		"/clan/{clan_tag}/wars",
-		"/clan/{clan_tag}/join-leave",
 		"/clan/search",
 		"/clan/{clan_tag}/historical",
 		"/capital",
@@ -422,14 +421,12 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/player/search/{name}",
 		"/player/to-do",
 		"/player/{player_tag}/historical/{season}",
-		"/player/{player_tag}/join-leave",
 		"/player/{player_tag}/join-leave/totals",
 		"/player/{player_tag}/join-leave/shared",
 		"/player/{player_tag}/legend_rankings",
 		"/player/{player_tag}/legends",
 		"/player/{player_tag}/raids",
 		"/player/{player_tag}/stats",
-		"/player/{player_tag}/warhits",
 		"/player/{player_tag}/war/attacks",
 		"/player/{player_tag}/war/stats",
 		"/player/{player_tag}/wartimer",
@@ -485,10 +482,6 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		"/v2/static/{category}/{item_id_or_name}",
 		"/v2/{category}",
 		"/v2/static/{category}",
-		"/war/{clan_tag}/previous",
-		"/war/{clan_tag}/previous/{end_time}",
-		"/cwl/{clan_tag}/group",
-		"/cwl/{clan_tag}/{season}",
 		"/war/{clanTag}/previous",
 		"/war/{clanTag}/basic",
 		"/cwl/{clanTag}/group",
@@ -512,6 +505,13 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"/clan/{clan_tag}/join-leave",
+		"/player/{player_tag}/join-leave",
+		"/player/{player_tag}/warhits",
+		"/war/{clan_tag}/previous",
+		"/war/{clan_tag}/previous/{end_time}",
+		"/cwl/{clan_tag}/group",
+		"/cwl/{clan_tag}/{season}",
 		"/v2/clan/{clan_tag}/join-leave",
 		"/v2/player/{player_tag}/join-leave",
 		"/v2/player/{player_tag}/join-leave/totals",
@@ -736,6 +736,35 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 		if _, exists := definitions[obsoleteDefinition]; exists {
 			t.Fatalf("expected %s definition to be removed", obsoleteDefinition)
 		}
+	}
+}
+
+func TestLegacyCompatibilityRoutesStayIsolatedAndTyped(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+
+	want := map[string]string{
+		"/clan/{clan_tag}/join-leave":         "#/components/schemas/legacy.JoinLeaveResponse",
+		"/player/{player_tag}/join-leave":     "#/components/schemas/legacy.JoinLeaveResponse",
+		"/player/{player_tag}/warhits":        "#/components/schemas/legacy.PlayerWarHitsResponse",
+		"/war/{clan_tag}/previous":            "#/components/schemas/legacy.WarListResponse",
+		"/war/{clan_tag}/previous/{end_time}": "#/components/schemas/legacy.War",
+		"/cwl/{clan_tag}/group":               "#/components/schemas/legacy.CWLGroupEnvelope",
+		"/cwl/{clan_tag}/{season}":            "#/components/schemas/legacy.CWLGroup",
+	}
+	for path, responseRef := range want {
+		operation := paths[path].(map[string]any)["get"].(map[string]any)
+		assertTags(t, operation, []string{"Legacy"})
+		response := operation["responses"].(map[string]any)["200"].(map[string]any)
+		content := response["content"].(map[string]any)["application/json"].(map[string]any)
+		assertRef(t, content["schema"], responseRef)
+	}
+
+	if got := swaggerQueryParams(t, paths, "/player/{player_tag}/warhits"); !reflect.DeepEqual(got, []string{"timestamp_start", "timestamp_end", "limit"}) {
+		t.Fatalf("legacy warhits query params = %v", got)
+	}
+	if got := swaggerQueryParams(t, paths, "/clan/{clan_tag}/join-leave"); !reflect.DeepEqual(got, []string{"timestamp_start", "time_stamp_end", "limit"}) {
+		t.Fatalf("legacy clan join-leave query params = %v", got)
 	}
 }
 

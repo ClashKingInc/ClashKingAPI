@@ -41,6 +41,130 @@ const docTemplate = `{
                 }
             }
         },
+        "/clan/{clan_tag}/join-leave": {
+            "get": {
+                "description": "Legacy v1-compatible tracked clan membership events.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "Clan join and leave history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Inclusive Unix timestamp",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 9999999999,
+                        "description": "Inclusive Unix timestamp",
+                        "name": "time_stamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 250,
+                        "description": "Maximum events",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.JoinLeaveResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cwl/{clan_tag}/group": {
+            "get": {
+                "description": "Legacy v1-compatible Mongo-style CWL group envelope. Returns null when unavailable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "Current-season CWL group for a clan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.CWLGroupEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/cwl/{clan_tag}/{season}": {
+            "get": {
+                "description": "Legacy v1-compatible CWL group with round war tags expanded into stored wars.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "CWL information for a clan in a season",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Season in YYYY-MM or date form",
+                        "name": "season",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.CWLGroup"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/global/counts": {
             "get": {
                 "description": "Returns global tracking counts used by legacy clients.",
@@ -56,6 +180,107 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.GlobalCountsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/player/{player_tag}/join-leave": {
+            "get": {
+                "description": "Legacy v1-compatible tracked player membership events.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "Player join and leave history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Inclusive Unix timestamp",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 9999999999,
+                        "description": "Inclusive Unix timestamp",
+                        "name": "time_stamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 250,
+                        "description": "Maximum source events",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.JoinLeaveResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/player/{player_tag}/warhits": {
+            "get": {
+                "description": "Legacy v1-compatible war-grouped player history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "War attacks and defenses for a player",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Inclusive preparation-time start",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 2527625513,
+                        "description": "Inclusive preparation-time end",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum wars",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.PlayerWarHitsResponse"
                         }
                     }
                 }
@@ -13904,9 +14129,442 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/war/{clan_tag}/previous": {
+            "get": {
+                "description": "Legacy v1-compatible stored full-war history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "Previous wars for a clan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Inclusive preparation-time start",
+                        "name": "timestamp_start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 9999999999,
+                        "description": "Inclusive preparation-time end",
+                        "name": "timestamp_end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum wars",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.WarListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/war/{clan_tag}/previous/{end_time}": {
+            "get": {
+                "description": "Legacy v1-compatible lookup within five minutes of the supplied Clash timestamp.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Legacy"
+                ],
+                "summary": "Previous war at an end time",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time in Clash format",
+                        "name": "end_time",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/legacy.War"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "legacy.BadgeURLs": {
+            "type": "object",
+            "properties": {
+                "large": {
+                    "type": "string"
+                },
+                "medium": {
+                    "type": "string"
+                },
+                "small": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.CWLClan": {
+            "type": "object",
+            "properties": {
+                "badgeUrls": {
+                    "$ref": "#/definitions/legacy.BadgeURLs"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.CWLMember"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.CWLGroup": {
+            "type": "object",
+            "properties": {
+                "clans": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.CWLClan"
+                    }
+                },
+                "rounds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.CWLRound"
+                    }
+                },
+                "season": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.CWLGroupEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/legacy.CWLGroup"
+                }
+            }
+        },
+        "legacy.CWLMember": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townHallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "legacy.CWLRound": {
+            "type": "object",
+            "properties": {
+                "warTags": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "legacy.JoinLeaveEvent": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "type": "string"
+                },
+                "clan_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "th": {
+                    "type": "integer"
+                },
+                "time": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.JoinLeaveResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.JoinLeaveEvent"
+                    }
+                }
+            }
+        },
+        "legacy.PlayerWarHit": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.WarHitAttack"
+                    }
+                },
+                "defenses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.WarHitAttack"
+                    }
+                },
+                "member_data": {
+                    "$ref": "#/definitions/legacy.WarMember"
+                },
+                "war_data": {
+                    "$ref": "#/definitions/legacy.War"
+                }
+            }
+        },
+        "legacy.PlayerWarHitsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.PlayerWarHit"
+                    }
+                }
+            }
+        },
+        "legacy.War": {
+            "type": "object",
+            "properties": {
+                "attacksPerMember": {
+                    "type": "integer"
+                },
+                "battleModifier": {
+                    "type": "string"
+                },
+                "clan": {
+                    "$ref": "#/definitions/legacy.WarClan"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "opponent": {
+                    "$ref": "#/definitions/legacy.WarClan"
+                },
+                "preparationStartTime": {
+                    "type": "string"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "teamSize": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "warStartTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.WarAttack": {
+            "type": "object",
+            "properties": {
+                "attackerTag": {
+                    "type": "string"
+                },
+                "defenderTag": {
+                    "type": "string"
+                },
+                "destructionPercentage": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "stars": {
+                    "type": "integer"
+                }
+            }
+        },
+        "legacy.WarClan": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "integer"
+                },
+                "badgeUrls": {
+                    "$ref": "#/definitions/legacy.BadgeURLs"
+                },
+                "clanLevel": {
+                    "type": "integer"
+                },
+                "destructionPercentage": {
+                    "type": "number"
+                },
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.WarMember"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "stars": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "legacy.WarHitAttack": {
+            "type": "object",
+            "properties": {
+                "attack_order": {
+                    "type": "integer"
+                },
+                "attacker": {
+                    "$ref": "#/definitions/legacy.WarMember"
+                },
+                "attackerTag": {
+                    "type": "string"
+                },
+                "defender": {
+                    "$ref": "#/definitions/legacy.WarMember"
+                },
+                "defenderTag": {
+                    "type": "string"
+                },
+                "destructionPercentage": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "fresh": {
+                    "type": "boolean"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "stars": {
+                    "type": "integer"
+                }
+            }
+        },
+        "legacy.WarListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.War"
+                    }
+                }
+            }
+        },
+        "legacy.WarMember": {
+            "type": "object",
+            "properties": {
+                "attacks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/legacy.WarAttack"
+                    }
+                },
+                "bestOpponentAttack": {
+                    "$ref": "#/definitions/legacy.WarAttack"
+                },
+                "mapPosition": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "opponentAttacks": {
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "townhallLevel": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.AccountConflictErrorResponse": {
             "type": "object",
             "properties": {

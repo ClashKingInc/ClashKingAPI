@@ -1,6 +1,7 @@
 package routes
 
 import (
+	legacyroutes "github.com/ClashKingInc/ClashKingAPI/internal/routes/legacy"
 	serverroutes "github.com/ClashKingInc/ClashKingAPI/internal/routes/server"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
@@ -358,6 +359,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 }
 
 func registerCompatibilityRoutes(app *fiber.App, a apptypes.Deps) {
+	legacyroutes.Register(app, a)
 	app.Get("/global/counts", globalCounts(a))
 	app.Get("/builderbaseleagues", builderBaseLeagues())
 

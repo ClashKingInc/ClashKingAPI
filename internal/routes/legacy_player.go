@@ -3,13 +3,11 @@ package routes
 import (
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var v1PlayerTagRe = regexp.MustCompile(`[^A-Z0-9]+`)
@@ -44,23 +42,6 @@ func parseYearMonth(yearStr, monthStr string, year, month *int) (bool, error) {
 	return true, nil
 }
 
-// legacyPlayerWarhits godoc
-// @Summary Get player war hits
-// @Description Returns recent war attacks and defenses for a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param timestamp_start query int false "Start Unix timestamp"
-// @Param timestamp_end query int false "End Unix timestamp"
-// @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func legacyPlayerWarhits(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return playerWarAttacks(a)(c)
-	}
-}
-
 // playerWartimer godoc
 // @Summary Get player war timer
 // @Description Returns current war timer data for a player when available.
@@ -75,63 +56,6 @@ func playerWartimer(a apptypes.Deps) fiber.Handler {
 			return apptypes.JSON(c, http.StatusOK, nil)
 		}
 		return apptypes.JSON(c, http.StatusOK, result)
-	}
-}
-
-// legacyPlayerJoinLeave godoc
-// @Summary Get player join-leave history
-// @Description Returns tracked join and leave events for a player.
-// @Tags Legacy Player
-// @Produce json
-// @Param player_tag path string true "Player tag"
-// @Param timestamp_start query int false "Start Unix timestamp"
-// @Param time_stamp_end query int false "End Unix timestamp"
-// @Param limit query int false "Maximum number of rows"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func legacyPlayerJoinLeave(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		tag := fixTag(c.Params("player_tag"))
-		start := time.Unix(queryInt64(c, "timestamp_start", 0), 0).UTC()
-		end := time.Unix(queryInt64(c, "time_stamp_end", 9999999999), 0).UTC()
-		limit := queryInt(c, "limit", 250)
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT jl."time", jl."type", jl.clan_tag, jl.player_tag, jl.player_name, jl.townhall_level,
-				bc.name AS clan_name
-			FROM join_leave_history jl
-			LEFT JOIN basic_clan bc ON bc.tag = jl.clan_tag
-			WHERE jl.player_tag = $1 AND jl."time" >= $2 AND jl."time" <= $3
-			ORDER BY jl."time" DESC
-			LIMIT $4
-		`, tag, start, end, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var eventTime time.Time
-			var eventType, clanTag, playerTag string
-			var playerName, clanName pgtype.Text
-			var townhall int16
-			if err := rows.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall, &clanName); err != nil {
-				return err
-			}
-			item := map[string]any{}
-			item["time"] = eventTime
-			item["type"] = eventType
-			item["clan"] = clanTag
-			item["tag"] = playerTag
-			item["th"] = townhall
-			if playerName.Valid {
-				item["name"] = playerName.String
-			}
-			if clanName.Valid {
-				item["clan_name"] = clanName.String
-			}
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, http.StatusOK, map[string]any{"items": items})
 	}
 }
 
@@ -163,19 +87,6 @@ func queryInt64(c *fiber.Ctx, key string, def int64) int64 {
 		v = v*10 + int64(ch-'0')
 	}
 	return v
-}
-
-func sortedJoin(a, b string) string {
-	if a < b {
-		return a + "-" + b
-	}
-	return b + "-" + a
-}
-
-func sortWarsByEndTime(wars []map[string]any) {
-	sort.SliceStable(wars, func(i, j int) bool {
-		return stringValue(wars[i]["endTime"]) > stringValue(wars[j]["endTime"])
-	})
 }
 
 const currentWarTimerQuery = `
@@ -215,39 +126,6 @@ func currentWarTimerResponse(row currentWarTimerScanner, tag string) (map[string
 		"unix_time": endTime.Unix(),
 		"time":      endTime.UTC().Format(time.RFC3339),
 	}, nil
-}
-
-func scanWarAttackRow(row interface{ Scan(dest ...any) error }, playerTag string) (map[string]any, error) {
-	var warID, warType, attackingClan, defendingClan, attacker, defender string
-	var warEnd time.Time
-	var warSize int
-	var attackerTH, defenderTH int16
-	var stars, destruction int16
-	var duration, order int
-	if err := row.Scan(&warID, &warEnd, &warType, &warSize, &attackingClan, &defendingClan, &attacker, &defender, &attackerTH, &defenderTH, &stars, &destruction, &duration, &order); err != nil {
-		return nil, err
-	}
-	attack := map[string]any{
-		"war_id": warID, "war_end_time": warEnd, "war_type": warType, "war_size": warSize,
-		"attackerTag": attacker, "defenderTag": defender, "stars": stars,
-		"destructionPercentage": destruction, "duration": duration, "order": order,
-	}
-	item := map[string]any{
-		"war_data": map[string]any{
-			"war_id": warID, "endTime": warEnd, "type": warType, "teamSize": warSize,
-			"clan": map[string]any{"tag": attackingClan}, "opponent": map[string]any{"tag": defendingClan},
-		},
-		"member_data": map[string]any{"tag": playerTag},
-		"attacks":     []map[string]any{},
-		"defenses":    []map[string]any{},
-	}
-	if attacker == playerTag {
-		item["attacks"] = []map[string]any{attack}
-	}
-	if defender == playerTag {
-		item["defenses"] = []map[string]any{attack}
-	}
-	return item, nil
 }
 
 func seasonBounds(season string) (time.Time, time.Time, error) {

@@ -29,7 +29,6 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/capital/:clan_tag",
 		"/clan/:clan_tag/basic",
 		"/clan/:clan_tag/wars",
-		"/clan/:clan_tag/join-leave",
 		"/clan/search",
 		"/clan/:clan_tag/historical",
 		"/legends/clan/:clan_tag/:date",
@@ -39,14 +38,12 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/player/:player_tag/stats",
 		"/player/:player_tag/legends",
 		"/player/:player_tag/historical/:season",
-		"/player/:player_tag/warhits",
 		"/player/:player_tag/war/attacks",
 		"/player/:player_tag/war/stats",
 		"/player/:player_tag/raids",
 		"/player/to-do",
 		"/player/:player_tag/legend_rankings",
 		"/player/:player_tag/wartimer",
-		"/player/:player_tag/join-leave",
 		"/player/search/:name",
 		"/player/full-search/:name",
 		"/v2/capital/player-stats",
@@ -138,8 +135,6 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/player/:player_tag/stat-history",
 		"/global/war/townhall/:townhall_level/hitrate/weekly",
 		"/global/war/completed/daily",
-		"/war/:clan_tag/previous",
-		"/war/:clan_tag/previous/:end_time",
 		"/v2/war/:clan_tag/previous",
 		"/v2/cwl/leagues/:league_id/rankings",
 		"/v2/cwl/league-thresholds",
@@ -157,8 +152,6 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 		"/v2/search/player",
 		"/war/:clanTag/previous",
 		"/war/:clanTag/basic",
-		"/cwl/:clanTag/group",
-		"/cwl/:clanTag/:season",
 	} {
 		if paths[path] {
 			t.Fatalf("expected %s to be absent from registered routes", path)
@@ -166,6 +159,13 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"/clan/:clan_tag/join-leave",
+		"/player/:player_tag/join-leave",
+		"/player/:player_tag/warhits",
+		"/war/:clan_tag/previous",
+		"/war/:clan_tag/previous/:end_time",
+		"/cwl/:clan_tag/group",
+		"/cwl/:clan_tag/:season",
 		"/v2/clan/:clan_tag/join-leave",
 		"/v2/player/:player_tag/join-leave",
 		"/v2/player/:player_tag/war/attacks",

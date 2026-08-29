@@ -1,5 +1,225 @@
 components:
     schemas:
+        legacy.BadgeURLs:
+            properties:
+                large:
+                    type: string
+                medium:
+                    type: string
+                small:
+                    type: string
+            type: object
+        legacy.CWLClan:
+            properties:
+                badgeUrls:
+                    $ref: '#/components/schemas/legacy.BadgeURLs'
+                clanLevel:
+                    type: integer
+                members:
+                    items:
+                        $ref: '#/components/schemas/legacy.CWLMember'
+                    type: array
+                name:
+                    type: string
+                tag:
+                    type: string
+            type: object
+        legacy.CWLGroup:
+            properties:
+                clans:
+                    items:
+                        $ref: '#/components/schemas/legacy.CWLClan'
+                    type: array
+                rounds:
+                    items:
+                        $ref: '#/components/schemas/legacy.CWLRound'
+                    type: array
+                season:
+                    type: string
+                state:
+                    type: string
+            type: object
+        legacy.CWLGroupEnvelope:
+            properties:
+                data:
+                    $ref: '#/components/schemas/legacy.CWLGroup'
+            type: object
+        legacy.CWLMember:
+            properties:
+                name:
+                    type: string
+                tag:
+                    type: string
+                townHallLevel:
+                    type: integer
+            type: object
+        legacy.CWLRound:
+            properties:
+                warTags:
+                    items:
+                        type: object
+                    type: array
+            type: object
+        legacy.JoinLeaveEvent:
+            properties:
+                clan:
+                    type: string
+                clan_name:
+                    type: string
+                name:
+                    type: string
+                tag:
+                    type: string
+                th:
+                    type: integer
+                time:
+                    type: string
+                type:
+                    type: string
+            type: object
+        legacy.JoinLeaveResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/legacy.JoinLeaveEvent'
+                    type: array
+            type: object
+        legacy.PlayerWarHit:
+            properties:
+                attacks:
+                    items:
+                        $ref: '#/components/schemas/legacy.WarHitAttack'
+                    type: array
+                defenses:
+                    items:
+                        $ref: '#/components/schemas/legacy.WarHitAttack'
+                    type: array
+                member_data:
+                    $ref: '#/components/schemas/legacy.WarMember'
+                war_data:
+                    $ref: '#/components/schemas/legacy.War'
+            type: object
+        legacy.PlayerWarHitsResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/legacy.PlayerWarHit'
+                    type: array
+            type: object
+        legacy.War:
+            properties:
+                attacksPerMember:
+                    type: integer
+                battleModifier:
+                    type: string
+                clan:
+                    $ref: '#/components/schemas/legacy.WarClan'
+                endTime:
+                    type: string
+                opponent:
+                    $ref: '#/components/schemas/legacy.WarClan'
+                preparationStartTime:
+                    type: string
+                season:
+                    type: string
+                startTime:
+                    type: string
+                state:
+                    type: string
+                tag:
+                    type: string
+                teamSize:
+                    type: integer
+                type:
+                    type: string
+                warStartTime:
+                    type: string
+            type: object
+        legacy.WarAttack:
+            properties:
+                attackerTag:
+                    type: string
+                defenderTag:
+                    type: string
+                destructionPercentage:
+                    type: integer
+                duration:
+                    type: integer
+                order:
+                    type: integer
+                stars:
+                    type: integer
+            type: object
+        legacy.WarClan:
+            properties:
+                attacks:
+                    type: integer
+                badgeUrls:
+                    $ref: '#/components/schemas/legacy.BadgeURLs'
+                clanLevel:
+                    type: integer
+                destructionPercentage:
+                    type: number
+                members:
+                    items:
+                        $ref: '#/components/schemas/legacy.WarMember'
+                    type: array
+                name:
+                    type: string
+                stars:
+                    type: integer
+                tag:
+                    type: string
+            type: object
+        legacy.WarHitAttack:
+            properties:
+                attack_order:
+                    type: integer
+                attacker:
+                    $ref: '#/components/schemas/legacy.WarMember'
+                attackerTag:
+                    type: string
+                defender:
+                    $ref: '#/components/schemas/legacy.WarMember'
+                defenderTag:
+                    type: string
+                destructionPercentage:
+                    type: integer
+                duration:
+                    type: integer
+                fresh:
+                    type: boolean
+                order:
+                    type: integer
+                stars:
+                    type: integer
+            type: object
+        legacy.WarListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/legacy.War'
+                    type: array
+            type: object
+        legacy.WarMember:
+            properties:
+                attacks:
+                    items:
+                        $ref: '#/components/schemas/legacy.WarAttack'
+                    type: array
+                bestOpponentAttack:
+                    $ref: '#/components/schemas/legacy.WarAttack'
+                mapPosition:
+                    type: integer
+                name:
+                    type: string
+                opponentAttacks:
+                    type: integer
+                tag:
+                    type: string
+                townhallLevel:
+                    type: integer
+            type: object
         modelsv2.AccountConflictErrorResponse:
             properties:
                 account:
@@ -6285,6 +6505,98 @@ paths:
             summary: Get builder base leagues
             tags:
                 - Other
+    /clan/{clan_tag}/join-leave:
+        get:
+            description: Legacy v1-compatible tracked clan membership events.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Inclusive Unix timestamp
+                  in: query
+                  name: timestamp_start
+                  schema:
+                    default: 0
+                    type: integer
+                - description: Inclusive Unix timestamp
+                  in: query
+                  name: time_stamp_end
+                  schema:
+                    default: 9.999999999e+09
+                    type: integer
+                - description: Maximum events
+                  in: query
+                  name: limit
+                  schema:
+                    default: 250
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.JoinLeaveResponse'
+                    description: OK
+            summary: Clan join and leave history
+            tags:
+                - Legacy
+    /cwl/{clan_tag}/{season}:
+        get:
+            description: Legacy v1-compatible CWL group with round war tags expanded into stored wars.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Season in YYYY-MM or date form
+                  in: path
+                  name: season
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.CWLGroup'
+                    description: OK
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties:
+                                    type: string
+                                type: object
+                    description: Not Found
+            summary: CWL information for a clan in a season
+            tags:
+                - Legacy
+    /cwl/{clan_tag}/group:
+        get:
+            description: Legacy v1-compatible Mongo-style CWL group envelope. Returns null when unavailable.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.CWLGroupEnvelope'
+                    description: OK
+            summary: Current-season CWL group for a clan
+            tags:
+                - Legacy
     /global/counts:
         get:
             description: Returns global tracking counts used by legacy clients.
@@ -6298,6 +6610,83 @@ paths:
             summary: Get global ClashKing counts
             tags:
                 - Global
+    /player/{player_tag}/join-leave:
+        get:
+            description: Legacy v1-compatible tracked player membership events.
+            parameters:
+                - description: Player tag
+                  in: path
+                  name: player_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Inclusive Unix timestamp
+                  in: query
+                  name: timestamp_start
+                  schema:
+                    default: 0
+                    type: integer
+                - description: Inclusive Unix timestamp
+                  in: query
+                  name: time_stamp_end
+                  schema:
+                    default: 9.999999999e+09
+                    type: integer
+                - description: Maximum source events
+                  in: query
+                  name: limit
+                  schema:
+                    default: 250
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.JoinLeaveResponse'
+                    description: OK
+            summary: Player join and leave history
+            tags:
+                - Legacy
+    /player/{player_tag}/warhits:
+        get:
+            description: Legacy v1-compatible war-grouped player history.
+            parameters:
+                - description: Player tag
+                  in: path
+                  name: player_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Inclusive preparation-time start
+                  in: query
+                  name: timestamp_start
+                  schema:
+                    default: 0
+                    type: integer
+                - description: Inclusive preparation-time end
+                  in: query
+                  name: timestamp_end
+                  schema:
+                    default: 2.527625513e+09
+                    type: integer
+                - description: Maximum wars
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    maximum: 100
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.PlayerWarHitsResponse'
+                    description: OK
+            summary: War attacks and defenses for a player
+            tags:
+                - Legacy
     /v2/achievements/check:
         post:
             description: Checks verified linked players for achievements that can currently be evaluated, awards new matches, and returns the full catalog.
@@ -16510,6 +16899,78 @@ paths:
             summary: Find a stored war by end time
             tags:
                 - War & CWL
+    /war/{clan_tag}/previous:
+        get:
+            description: Legacy v1-compatible stored full-war history.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Inclusive preparation-time start
+                  in: query
+                  name: timestamp_start
+                  schema:
+                    default: 0
+                    type: integer
+                - description: Inclusive preparation-time end
+                  in: query
+                  name: timestamp_end
+                  schema:
+                    default: 9.999999999e+09
+                    type: integer
+                - description: Maximum wars
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.WarListResponse'
+                    description: OK
+            summary: Previous wars for a clan
+            tags:
+                - Legacy
+    /war/{clan_tag}/previous/{end_time}:
+        get:
+            description: Legacy v1-compatible lookup within five minutes of the supplied Clash timestamp.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: End time in Clash format
+                  in: path
+                  name: end_time
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/legacy.War'
+                    description: OK
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties:
+                                    type: string
+                                type: object
+                    description: Not Found
+            summary: Previous war at an end time
+            tags:
+                - Legacy
 tags:
     - name: Player
     - name: Clan
@@ -16534,6 +16995,7 @@ tags:
     - name: Dashboard Access
     - name: Enums
     - name: Global
+    - name: Legacy
     - name: Mobile App
     - name: Notifications
     - name: Public Rosters

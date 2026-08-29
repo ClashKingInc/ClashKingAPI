@@ -110,6 +110,8 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Put("/v2/notifications/preferences", wrap(putNotificationPreferences(a)))
 	app.Put("/v2/notifications/accounts/:player_tag", wrap(putNotificationAccount(a)))
 	app.Post("/v2/tracking/verified-players", wrap(refreshVerifiedPlayerTracking(a)))
+	app.Get("/v2/admin/tracking/summary", authBot(a, trackingOperationsSummary(a)))
+	app.Get("/v2/admin/tracking/timeseries", authBot(a, trackingOperationsTimeSeries(a)))
 	app.Get("/v2/billing/subscription", wrap(billingSubscription(a)))
 	app.Get("/v2/billing/usage", wrap(billingUsage(a)))
 	app.Put("/v2/billing/subscription/assignment", wrap(updateBillingAssignment(a)))

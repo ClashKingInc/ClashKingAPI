@@ -222,6 +222,125 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/admin/tracking/summary": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the latest API-derived operational state for every tracking script and domain. Requires the admin service token.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Tracking"
+                ],
+                "summary": "Get tracking operations summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.TrackingOperationsSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/admin/tracking/timeseries": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns bucketed, bounded operational chart data. Window is restricted to 15m, 1h, 6h, or 24h; script and domain are optional exact-match filters.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin Tracking"
+                ],
+                "summary": "Get tracking operations time series",
+                "parameters": [
+                    {
+                        "enum": [
+                            "15m",
+                            "1h",
+                            "6h",
+                            "24h"
+                        ],
+                        "type": "string",
+                        "default": "1h",
+                        "description": "Chart window",
+                        "name": "window",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact script name",
+                        "name": "script",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact domain name",
+                        "name": "domain",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.TrackingOperationsTimeSeriesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/app/announcements": {
             "get": {
                 "security": [
@@ -22552,6 +22671,361 @@ const docTemplate = `{
                 },
                 "start": {
                     "type": "integer"
+                }
+            }
+        },
+        "modelsv2.TrackingDatabaseMetrics": {
+            "type": "object",
+            "properties": {
+                "average_store_duration_ms": {
+                    "type": "number"
+                },
+                "batch_count": {
+                    "type": "integer"
+                },
+                "rows_affected": {
+                    "type": "integer"
+                },
+                "rows_requested": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.TrackingDomainPoint": {
+            "type": "object",
+            "properties": {
+                "average_processing_duration_ms": {
+                    "type": "number"
+                },
+                "average_request_latency_ms": {
+                    "type": "number"
+                },
+                "database": {
+                    "$ref": "#/definitions/modelsv2.TrackingDatabaseMetrics"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "interval_duration_seconds": {
+                    "type": "number"
+                },
+                "observed_at": {
+                    "type": "string"
+                },
+                "processing_count": {
+                    "type": "integer"
+                },
+                "queue_depth": {
+                    "type": "integer"
+                },
+                "reported_healthy": {
+                    "type": "boolean"
+                },
+                "request_count": {
+                    "type": "integer"
+                },
+                "requests_per_second": {
+                    "type": "number"
+                },
+                "targets": {
+                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "write_count": {
+                    "type": "integer"
+                },
+                "writes_per_second": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.TrackingDomainSeries": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingDomainPoint"
+                    }
+                },
+                "script": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.TrackingDomainState": {
+            "type": "object",
+            "properties": {
+                "average_processing_duration_ms": {
+                    "type": "number"
+                },
+                "average_request_latency_ms": {
+                    "type": "number"
+                },
+                "database": {
+                    "$ref": "#/definitions/modelsv2.TrackingDatabaseMetrics"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "health": {
+                    "$ref": "#/definitions/modelsv2.TrackingHealth"
+                },
+                "interval_duration_seconds": {
+                    "type": "number"
+                },
+                "interval_end": {
+                    "type": "string"
+                },
+                "interval_start": {
+                    "type": "string"
+                },
+                "last_success": {
+                    "type": "string"
+                },
+                "latest_error": {
+                    "type": "string"
+                },
+                "processing_count": {
+                    "type": "integer"
+                },
+                "queue_depth": {
+                    "type": "integer"
+                },
+                "request_count": {
+                    "type": "integer"
+                },
+                "requests_per_second": {
+                    "type": "number"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "script": {
+                    "type": "string"
+                },
+                "targets": {
+                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                },
+                "write_count": {
+                    "type": "integer"
+                },
+                "writes_per_second": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.TrackingGlobalClansProgress": {
+            "type": "object",
+            "properties": {
+                "non_priority": {
+                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                },
+                "priority": {
+                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                }
+            }
+        },
+        "modelsv2.TrackingHealth": {
+            "type": "object",
+            "properties": {
+                "age_seconds": {
+                    "type": "number"
+                },
+                "healthy": {
+                    "type": "boolean"
+                },
+                "observed_at": {
+                    "type": "string"
+                },
+                "reported_healthy": {
+                    "type": "boolean"
+                },
+                "stale": {
+                    "type": "boolean"
+                },
+                "stale_after_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.TrackingOperationsSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "domains": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingDomainState"
+                    }
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "globalclans": {
+                    "$ref": "#/definitions/modelsv2.TrackingGlobalClansProgress"
+                },
+                "processes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingProcessState"
+                    }
+                },
+                "stale_after_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "modelsv2.TrackingOperationsTimeSeriesResponse": {
+            "type": "object",
+            "properties": {
+                "bucket_seconds": {
+                    "type": "integer"
+                },
+                "domains": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingDomainSeries"
+                    }
+                },
+                "end": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "max_points_per_series": {
+                    "type": "integer"
+                },
+                "processes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingProcessSeries"
+                    }
+                },
+                "start": {
+                    "type": "string"
+                },
+                "window": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.TrackingProcessPoint": {
+            "type": "object",
+            "properties": {
+                "gc_cycles": {
+                    "type": "integer"
+                },
+                "goroutines": {
+                    "type": "number"
+                },
+                "heap_objects": {
+                    "type": "integer"
+                },
+                "observed_at": {
+                    "type": "string"
+                },
+                "ram_bytes": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "uptime_seconds": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.TrackingProcessSeries": {
+            "type": "object",
+            "properties": {
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.TrackingProcessPoint"
+                    }
+                },
+                "script": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.TrackingProcessState": {
+            "type": "object",
+            "properties": {
+                "gc_cycles": {
+                    "type": "integer"
+                },
+                "goroutines": {
+                    "type": "integer"
+                },
+                "health": {
+                    "$ref": "#/definitions/modelsv2.TrackingHealth"
+                },
+                "heap_objects": {
+                    "type": "integer"
+                },
+                "interval_end": {
+                    "type": "string"
+                },
+                "interval_start": {
+                    "type": "string"
+                },
+                "process_started_at": {
+                    "type": "string"
+                },
+                "ram_bytes": {
+                    "description": "Go heap bytes reported by tracking_process_stats.alloc_bytes.",
+                    "type": "integer"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "script": {
+                    "type": "string"
+                },
+                "uptime_seconds": {
+                    "type": "number"
+                }
+            }
+        },
+        "modelsv2.TrackingTargetProgress": {
+            "type": "object",
+            "properties": {
+                "completion_percentage": {
+                    "type": "number"
+                },
+                "current_cycle": {
+                    "type": "integer"
+                },
+                "estimated_loop_completion": {
+                    "type": "string"
+                },
+                "estimated_seconds_remaining": {
+                    "type": "number"
+                },
+                "processed_targets": {
+                    "type": "integer"
+                },
+                "target_count": {
+                    "type": "integer"
+                },
+                "targets_per_second": {
+                    "type": "number"
                 }
             }
         },

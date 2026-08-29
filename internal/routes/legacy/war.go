@@ -151,16 +151,17 @@ func previousWarAtTimeHandler(findWar warAtTimeQuery, loadWars warArchiveLoader)
 }
 
 func queryWarAtTime(ctx context.Context, db warQueryDB, clanTag string, target time.Time) (string, error) {
+	const leeway = 5 * time.Minute
 	var id string
 	err := db.QueryRow(ctx, `
 			SELECT war_id::text
 			FROM wars
 			WHERE (clan_tag = $1 OR opponent_tag = $1)
-			  AND end_time >= $2 - interval '5 minutes'
-			  AND end_time <= $2 + interval '5 minutes'
-			ORDER BY abs(extract(epoch FROM (end_time - $2))), war_id
+			  AND end_time >= $2
+			  AND end_time <= $3
+			ORDER BY abs(extract(epoch FROM end_time)::double precision - $4), war_id
 			LIMIT 1
-		`, clanTag, target).Scan(&id)
+		`, clanTag, target.Add(-leeway), target.Add(leeway), float64(target.Unix())+float64(target.Nanosecond())/float64(time.Second)).Scan(&id)
 	return id, err
 }
 

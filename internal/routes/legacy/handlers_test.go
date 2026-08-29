@@ -237,6 +237,13 @@ func TestLegacyWarQueries(t *testing.T) {
 	if err != nil || id != "3" {
 		t.Fatalf("queryWarAtTime: id=%q err=%v", id, err)
 	}
+	query := strings.ToLower(db.queries[1])
+	if strings.Contains(query, "$2 -") || strings.Contains(query, "$2 +") || !strings.Contains(query, "end_time >= $2") || !strings.Contains(query, "end_time <= $3") {
+		t.Fatalf("queryWarAtTime retained ambiguous timestamp arithmetic: %q", query)
+	}
+	if len(db.args[1]) != 4 || db.args[1][1] != start.Add(-5*time.Minute) || db.args[1][2] != start.Add(5*time.Minute) {
+		t.Fatalf("queryWarAtTime bounds = %#v", db.args[1])
+	}
 
 	db = &legacyTestDB{rows: []pgx.Rows{&legacyTestRows{values: [][]any{{"4"}}}}}
 	ids, err = queryPlayerWarIDs(context.Background(), db, "#PLAYER", start, start.Add(time.Hour), 1)

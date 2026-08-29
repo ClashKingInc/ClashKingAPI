@@ -253,7 +253,7 @@ func TestLegendHistoryRoutesReturnEmptyItemsAndValidateInputs(t *testing.T) {
 	for _, path := range []string{
 		"/v2/legends/history/2026-07?limit=201",
 		"/v2/player/%23/legend-history",
-		"/v2/clan/%23/legend-history",
+		"/v2/clan/%23/history/legends",
 		"/v2/clan/2PP/history/legends?limit=251",
 		"/v2/clan/2PP/history/legends?time%5Bbefore%5D=bad",
 	} {

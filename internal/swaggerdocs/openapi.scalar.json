@@ -8601,6 +8601,361 @@
         },
         "type": "object"
       },
+      "modelsv2.TrackingDatabaseMetrics": {
+        "properties": {
+          "average_store_duration_ms": {
+            "type": "number"
+          },
+          "batch_count": {
+            "type": "integer"
+          },
+          "rows_affected": {
+            "type": "integer"
+          },
+          "rows_requested": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingDomainPoint": {
+        "properties": {
+          "average_processing_duration_ms": {
+            "type": "number"
+          },
+          "average_request_latency_ms": {
+            "type": "number"
+          },
+          "database": {
+            "$ref": "#/components/schemas/modelsv2.TrackingDatabaseMetrics"
+          },
+          "error_count": {
+            "type": "integer"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "interval_duration_seconds": {
+            "type": "number"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "processing_count": {
+            "type": "integer"
+          },
+          "queue_depth": {
+            "type": "integer"
+          },
+          "reported_healthy": {
+            "type": "boolean"
+          },
+          "request_count": {
+            "type": "integer"
+          },
+          "requests_per_second": {
+            "type": "number"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "write_count": {
+            "type": "integer"
+          },
+          "writes_per_second": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingDomainSeries": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingDomainPoint"
+            },
+            "type": "array"
+          },
+          "script": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingDomainState": {
+        "properties": {
+          "average_processing_duration_ms": {
+            "type": "number"
+          },
+          "average_request_latency_ms": {
+            "type": "number"
+          },
+          "database": {
+            "$ref": "#/components/schemas/modelsv2.TrackingDatabaseMetrics"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "error_count": {
+            "type": "integer"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "health": {
+            "$ref": "#/components/schemas/modelsv2.TrackingHealth"
+          },
+          "interval_duration_seconds": {
+            "type": "number"
+          },
+          "interval_end": {
+            "type": "string"
+          },
+          "interval_start": {
+            "type": "string"
+          },
+          "last_success": {
+            "type": "string"
+          },
+          "latest_error": {
+            "type": "string"
+          },
+          "processing_count": {
+            "type": "integer"
+          },
+          "queue_depth": {
+            "type": "integer"
+          },
+          "request_count": {
+            "type": "integer"
+          },
+          "requests_per_second": {
+            "type": "number"
+          },
+          "run_id": {
+            "type": "integer"
+          },
+          "script": {
+            "type": "string"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+          },
+          "write_count": {
+            "type": "integer"
+          },
+          "writes_per_second": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingGlobalClansProgress": {
+        "properties": {
+          "non_priority": {
+            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingHealth": {
+        "properties": {
+          "age_seconds": {
+            "type": "number"
+          },
+          "healthy": {
+            "type": "boolean"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "reported_healthy": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "stale_after_seconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingOperationsSummaryResponse": {
+        "properties": {
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingDomainState"
+            },
+            "type": "array"
+          },
+          "generated_at": {
+            "type": "string"
+          },
+          "globalclans": {
+            "$ref": "#/components/schemas/modelsv2.TrackingGlobalClansProgress"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingProcessState"
+            },
+            "type": "array"
+          },
+          "stale_after_seconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingOperationsTimeSeriesResponse": {
+        "properties": {
+          "bucket_seconds": {
+            "type": "integer"
+          },
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingDomainSeries"
+            },
+            "type": "array"
+          },
+          "end": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "string"
+          },
+          "max_points_per_series": {
+            "type": "integer"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingProcessSeries"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingProcessPoint": {
+        "properties": {
+          "gc_cycles": {
+            "type": "integer"
+          },
+          "goroutines": {
+            "type": "number"
+          },
+          "heap_objects": {
+            "type": "integer"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "ram_bytes": {
+            "type": "integer"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingProcessSeries": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/modelsv2.TrackingProcessPoint"
+            },
+            "type": "array"
+          },
+          "script": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingProcessState": {
+        "properties": {
+          "gc_cycles": {
+            "type": "integer"
+          },
+          "goroutines": {
+            "type": "integer"
+          },
+          "health": {
+            "$ref": "#/components/schemas/modelsv2.TrackingHealth"
+          },
+          "heap_objects": {
+            "type": "integer"
+          },
+          "interval_end": {
+            "type": "string"
+          },
+          "interval_start": {
+            "type": "string"
+          },
+          "process_started_at": {
+            "type": "string"
+          },
+          "ram_bytes": {
+            "description": "Go heap bytes reported by tracking_process_stats.alloc_bytes.",
+            "type": "integer"
+          },
+          "run_id": {
+            "type": "integer"
+          },
+          "script": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.TrackingTargetProgress": {
+        "properties": {
+          "completion_percentage": {
+            "type": "number"
+          },
+          "current_cycle": {
+            "type": "integer"
+          },
+          "estimated_loop_completion": {
+            "type": "string"
+          },
+          "estimated_seconds_remaining": {
+            "type": "number"
+          },
+          "processed_targets": {
+            "type": "integer"
+          },
+          "target_count": {
+            "type": "integer"
+          },
+          "targets_per_second": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "modelsv2.TrophyBucket": {
         "properties": {
           "bucket": {
@@ -9316,6 +9671,161 @@
         "summary": "Get guild activity summary",
         "tags": [
           "Activity \u0026 Inactivity"
+        ]
+      }
+    },
+    "/v2/admin/tracking/summary": {
+      "get": {
+        "description": "Returns the latest API-derived operational state for every tracking script and domain. Requires the admin service token.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.TrackingOperationsSummaryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Get tracking operations summary",
+        "tags": [
+          "Admin Tracking"
+        ]
+      }
+    },
+    "/v2/admin/tracking/timeseries": {
+      "get": {
+        "description": "Returns bucketed, bounded operational chart data. Window is restricted to 15m, 1h, 6h, or 24h; script and domain are optional exact-match filters.",
+        "parameters": [
+          {
+            "description": "Chart window",
+            "in": "query",
+            "name": "window",
+            "schema": {
+              "default": "1h",
+              "enum": [
+                "15m",
+                "1h",
+                "6h",
+                "24h"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exact script name",
+            "in": "query",
+            "name": "script",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exact domain name",
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.TrackingOperationsTimeSeriesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Get tracking operations time series",
+        "tags": [
+          "Admin Tracking"
         ]
       }
     },
@@ -25644,6 +26154,9 @@
     },
     {
       "name": "Activity \u0026 Inactivity"
+    },
+    {
+      "name": "Admin Tracking"
     },
     {
       "name": "App Authentication"

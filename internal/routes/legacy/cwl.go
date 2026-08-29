@@ -1,6 +1,7 @@
 package legacy
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	legacymodels "github.com/ClashKingInc/ClashKingAPI/internal/models/legacy"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
@@ -15,6 +17,8 @@ import (
 )
 
 const cwlSeasonDateCutoff = "2026-06-14"
+
+type cwlGroupLoader func(context.Context, string, string, bool) (*legacymodels.CWLGroup, error)
 
 // currentCWLGroup godoc
 // @Summary Current-season CWL group for a clan
@@ -25,9 +29,17 @@ const cwlSeasonDateCutoff = "2026-06-14"
 // @Success 200 {object} legacy.CWLGroupEnvelope
 // @Router /cwl/{clan_tag}/group [get]
 func currentCWLGroup(deps apptypes.Deps) fiber.Handler {
+	return currentCWLGroupHandler(func(ctx context.Context, tag, season string, hydrate bool) (*legacymodels.CWLGroup, error) {
+		return loadCWLGroup(ctx, deps.Store.SQL, func(ctx context.Context, ids []string) (map[string]wararchive.War, error) {
+			return deps.Store.WarArchive.LoadIDs(ctx, deps.Store.SQL, ids)
+		}, tag, season, hydrate)
+	})
+}
+
+func currentCWLGroupHandler(load cwlGroupLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := clashy.GetSeasonID()
-		group, err := loadCWLGroup(c, deps, fixTag(c.Params("clan_tag")), season, false)
+		group, err := load(c.UserContext(), fixTag(c.Params("clan_tag")), season, false)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apptypes.JSON(c, http.StatusOK, nil)
 		}
@@ -49,9 +61,17 @@ func currentCWLGroup(deps apptypes.Deps) fiber.Handler {
 // @Failure 404 {object} map[string]string
 // @Router /cwl/{clan_tag}/{season} [get]
 func cwlSeason(deps apptypes.Deps) fiber.Handler {
+	return cwlSeasonHandler(func(ctx context.Context, tag, season string, hydrate bool) (*legacymodels.CWLGroup, error) {
+		return loadCWLGroup(ctx, deps.Store.SQL, func(ctx context.Context, ids []string) (map[string]wararchive.War, error) {
+			return deps.Store.WarArchive.LoadIDs(ctx, deps.Store.SQL, ids)
+		}, tag, season, hydrate)
+	})
+}
+
+func cwlSeasonHandler(load cwlGroupLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		season := normalizeCWLSeason(c.Params("season"))
-		group, err := loadCWLGroup(c, deps, fixTag(c.Params("clan_tag")), season, true)
+		group, err := load(c.UserContext(), fixTag(c.Params("clan_tag")), season, true)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apptypes.JSON(c, http.StatusNotFound, map[string]string{"detail": "No CWL Data Found"})
 		}
@@ -78,10 +98,10 @@ func normalizeCWLSeason(season string) string {
 	return season
 }
 
-func loadCWLGroup(c *fiber.Ctx, deps apptypes.Deps, clanTag, season string, hydrateWars bool) (*legacymodels.CWLGroup, error) {
+func loadCWLGroup(ctx context.Context, db warQueryDB, loadArchive warArchiveLoader, clanTag, season string, hydrateWars bool) (*legacymodels.CWLGroup, error) {
 	var id, storedSeason, state string
 	var roundsRaw []byte
-	err := deps.Store.SQL.QueryRow(c.UserContext(), `
+	err := db.QueryRow(ctx, `
 		SELECT groups.cwl_id, groups.season, groups.state, groups.rounds
 		FROM cwl_groups AS groups
 		JOIN cwl_group_clans AS clan ON clan.cwl_id = groups.cwl_id
@@ -92,7 +112,7 @@ func loadCWLGroup(c *fiber.Ctx, deps apptypes.Deps, clanTag, season string, hydr
 	if err != nil {
 		return nil, err
 	}
-	clans, err := loadCWLClans(c, deps, id)
+	clans, err := loadCWLClans(ctx, db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +128,7 @@ func loadCWLGroup(c *fiber.Ctx, deps apptypes.Deps, clanTag, season string, hydr
 		}
 		return response, nil
 	}
-	wars, err := loadCWLWars(c, deps, rounds, storedSeason)
+	wars, err := loadCWLWars(ctx, db, loadArchive, rounds, storedSeason)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +164,8 @@ func decodeCWLRounds(raw []byte) [][]string {
 	return direct
 }
 
-func loadCWLClans(c *fiber.Ctx, deps apptypes.Deps, id string) ([]legacymodels.CWLClan, error) {
-	rows, err := deps.Store.SQL.Query(c.UserContext(), `
+func loadCWLClans(ctx context.Context, db warQueryDB, id string) ([]legacymodels.CWLClan, error) {
+	rows, err := db.Query(ctx, `
 		SELECT clan.clan_tag, clan.name, clan.clan_level, clan.badge_token,
 		       member.tag, member.name, member.town_hall
 		FROM cwl_group_clans AS clan
@@ -181,7 +201,7 @@ func loadCWLClans(c *fiber.Ctx, deps apptypes.Deps, id string) ([]legacymodels.C
 	return clans, rows.Err()
 }
 
-func loadCWLWars(c *fiber.Ctx, deps apptypes.Deps, rounds [][]string, season string) (map[string]legacymodels.War, error) {
+func loadCWLWars(ctx context.Context, db warQueryDB, loadArchive warArchiveLoader, rounds [][]string, season string) (map[string]legacymodels.War, error) {
 	tags := []string{}
 	seen := map[string]struct{}{}
 	for _, round := range rounds {
@@ -198,7 +218,7 @@ func loadCWLWars(c *fiber.Ctx, deps apptypes.Deps, rounds [][]string, season str
 	if len(tags) == 0 {
 		return map[string]legacymodels.War{}, nil
 	}
-	rows, err := deps.Store.SQL.Query(c.UserContext(), `
+	rows, err := db.Query(ctx, `
 		SELECT war_id::text, war_tag
 		FROM wars
 		WHERE war_type = 'cwl' AND war_tag = ANY($1)
@@ -223,7 +243,7 @@ func loadCWLWars(c *fiber.Ctx, deps apptypes.Deps, rounds [][]string, season str
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	archived, err := deps.Store.WarArchive.LoadIDs(c.UserContext(), deps.Store.SQL, ids)
+	archived, err := loadArchive(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

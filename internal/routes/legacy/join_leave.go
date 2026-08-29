@@ -1,6 +1,7 @@
 package legacy
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"time"
@@ -8,6 +9,7 @@ import (
 	legacymodels "github.com/ClashKingInc/ClashKingAPI/internal/models/legacy"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -19,6 +21,12 @@ type joinLeaveRow struct {
 	Name     string
 	Townhall int
 	ClanName string
+}
+
+type joinLeaveLoader func(context.Context, string, time.Time, time.Time, int) ([]joinLeaveRow, error)
+
+type joinLeaveDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
 
 // clanJoinLeave godoc
@@ -33,6 +41,12 @@ type joinLeaveRow struct {
 // @Success 200 {object} legacy.JoinLeaveResponse
 // @Router /clan/{clan_tag}/join-leave [get]
 func clanJoinLeave(deps apptypes.Deps) fiber.Handler {
+	return clanJoinLeaveHandler(func(ctx context.Context, tag string, start, end time.Time, limit int) ([]joinLeaveRow, error) {
+		return loadClanJoinLeave(ctx, deps.Store.SQL, tag, start, end, limit)
+	})
+}
+
+func clanJoinLeaveHandler(load joinLeaveLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start, end, limit, err := joinLeaveOptions(c)
 		if err != nil {
@@ -41,34 +55,46 @@ func clanJoinLeave(deps apptypes.Deps) fiber.Handler {
 		if limit <= 0 {
 			return apptypes.JSON(c, http.StatusOK, legacymodels.JoinLeaveResponse{Items: []legacymodels.JoinLeaveEvent{}})
 		}
-		rows, err := deps.Store.SQL.Query(c.UserContext(), `
+		rows, err := load(c.UserContext(), fixTag(c.Params("clan_tag")), start, end, limit)
+		if err != nil {
+			return err
+		}
+		items := make([]legacymodels.JoinLeaveEvent, 0, len(rows))
+		for _, row := range rows {
+			items = append(items, legacyJoinLeaveEvent(row, false))
+		}
+		return apptypes.JSON(c, http.StatusOK, legacymodels.JoinLeaveResponse{Items: items})
+	}
+}
+
+func loadClanJoinLeave(ctx context.Context, db joinLeaveDB, tag string, start, end time.Time, limit int) ([]joinLeaveRow, error) {
+	rows, err := db.Query(ctx, `
 			SELECT "time", "type", clan_tag, player_tag, player_name, townhall_level
 			FROM join_leave_history
 			WHERE clan_tag = $1 AND "time" >= $2 AND "time" <= $3
 			ORDER BY "time" DESC
 			LIMIT $4
-		`, fixTag(c.Params("clan_tag")), start, end, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := make([]legacymodels.JoinLeaveEvent, 0, limit)
-		for rows.Next() {
-			var row joinLeaveRow
-			var name pgtype.Text
-			if err := rows.Scan(&row.Time, &row.Type, &row.Clan, &row.Tag, &name, &row.Townhall); err != nil {
-				return err
-			}
-			if name.Valid {
-				row.Name = name.String
-			}
-			items = append(items, legacyJoinLeaveEvent(row, false))
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		return apptypes.JSON(c, http.StatusOK, legacymodels.JoinLeaveResponse{Items: items})
+		`, tag, start, end, limit)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
+	items := make([]joinLeaveRow, 0, limit)
+	for rows.Next() {
+		var row joinLeaveRow
+		var name pgtype.Text
+		if err := rows.Scan(&row.Time, &row.Type, &row.Clan, &row.Tag, &name, &row.Townhall); err != nil {
+			return nil, err
+		}
+		if name.Valid {
+			row.Name = name.String
+		}
+		items = append(items, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // playerJoinLeave godoc
@@ -83,6 +109,12 @@ func clanJoinLeave(deps apptypes.Deps) fiber.Handler {
 // @Success 200 {object} legacy.JoinLeaveResponse
 // @Router /player/{player_tag}/join-leave [get]
 func playerJoinLeave(deps apptypes.Deps) fiber.Handler {
+	return playerJoinLeaveHandler(func(ctx context.Context, tag string, start, end time.Time, limit int) ([]joinLeaveRow, error) {
+		return loadPlayerJoinLeave(ctx, deps.Store.SQL, tag, start, end, limit)
+	})
+}
+
+func playerJoinLeaveHandler(load joinLeaveLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start, end, limit, err := joinLeaveOptions(c)
 		if err != nil {
@@ -91,32 +123,8 @@ func playerJoinLeave(deps apptypes.Deps) fiber.Handler {
 		if limit <= 0 {
 			return apptypes.JSON(c, http.StatusOK, legacymodels.JoinLeaveResponse{Items: []legacymodels.JoinLeaveEvent{}})
 		}
-		rows, err := deps.Store.SQL.Query(c.UserContext(), `
-			SELECT jl."time", jl."type", jl.clan_tag, jl.player_tag, jl.player_name,
-			       jl.townhall_level, clan.name
-			FROM join_leave_history AS jl
-			JOIN basic_clan AS clan ON clan.tag = jl.clan_tag
-			WHERE jl.player_tag = $1 AND jl."time" >= $2 AND jl."time" <= $3
-			ORDER BY jl."time" ASC
-			LIMIT $4
-		`, fixTag(c.Params("player_tag")), start, end, limit)
+		events, err := load(c.UserContext(), fixTag(c.Params("player_tag")), start, end, limit)
 		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		events := make([]joinLeaveRow, 0, limit)
-		for rows.Next() {
-			var row joinLeaveRow
-			var name pgtype.Text
-			if err := rows.Scan(&row.Time, &row.Type, &row.Clan, &row.Tag, &name, &row.Townhall, &row.ClanName); err != nil {
-				return err
-			}
-			if name.Valid {
-				row.Name = name.String
-			}
-			events = append(events, row)
-		}
-		if err := rows.Err(); err != nil {
 			return err
 		}
 		events = processPlayerJoinLeave(events)
@@ -126,6 +134,38 @@ func playerJoinLeave(deps apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusOK, legacymodels.JoinLeaveResponse{Items: items})
 	}
+}
+
+func loadPlayerJoinLeave(ctx context.Context, db joinLeaveDB, tag string, start, end time.Time, limit int) ([]joinLeaveRow, error) {
+	rows, err := db.Query(ctx, `
+			SELECT jl."time", jl."type", jl.clan_tag, jl.player_tag, jl.player_name,
+			       jl.townhall_level, clan.name
+			FROM join_leave_history AS jl
+			JOIN basic_clan AS clan ON clan.tag = jl.clan_tag
+			WHERE jl.player_tag = $1 AND jl."time" >= $2 AND jl."time" <= $3
+			ORDER BY jl."time" ASC
+			LIMIT $4
+		`, tag, start, end, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	events := make([]joinLeaveRow, 0, limit)
+	for rows.Next() {
+		var row joinLeaveRow
+		var name pgtype.Text
+		if err := rows.Scan(&row.Time, &row.Type, &row.Clan, &row.Tag, &name, &row.Townhall, &row.ClanName); err != nil {
+			return nil, err
+		}
+		if name.Valid {
+			row.Name = name.String
+		}
+		events = append(events, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func joinLeaveOptions(c *fiber.Ctx) (time.Time, time.Time, int, error) {

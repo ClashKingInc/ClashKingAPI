@@ -1,6 +1,7 @@
 package legacy
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sort"
@@ -12,6 +13,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
+
+type warIDQuery func(context.Context, string, time.Time, time.Time, int) ([]string, error)
+type warArchiveLoader func(context.Context, []string) (map[string]wararchive.War, error)
+type warAtTimeQuery func(context.Context, string, time.Time) (string, error)
 
 // previousWars godoc
 // @Summary Previous wars for a clan
@@ -25,6 +30,17 @@ import (
 // @Success 200 {object} legacy.WarListResponse
 // @Router /war/{clan_tag}/previous [get]
 func previousWars(deps apptypes.Deps) fiber.Handler {
+	return previousWarsHandler(
+		func(ctx context.Context, tag string, start, end time.Time, limit int) ([]string, error) {
+			return queryWarIDs(ctx, deps.Store.SQL, tag, start, end, limit)
+		},
+		func(ctx context.Context, ids []string) (map[string]wararchive.War, error) {
+			return deps.Store.WarArchive.LoadIDs(ctx, deps.Store.SQL, ids)
+		},
+	)
+}
+
+func previousWarsHandler(queryIDs warIDQuery, loadWars warArchiveLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		startUnix, err := parseInt64(c.Query("timestamp_start"), 0)
 		if err != nil {
@@ -41,11 +57,11 @@ func previousWars(deps apptypes.Deps) fiber.Handler {
 		if limit <= 0 {
 			return apptypes.JSON(c, http.StatusOK, legacymodels.WarListResponse{Items: []legacymodels.War{}})
 		}
-		ids, err := queryWarIDs(c, deps, fixTag(c.Params("clan_tag")), time.Unix(startUnix, 0).UTC(), time.Unix(endUnix, 0).UTC(), limit)
+		ids, err := queryIDs(c.UserContext(), fixTag(c.Params("clan_tag")), time.Unix(startUnix, 0).UTC(), time.Unix(endUnix, 0).UTC(), limit)
 		if err != nil {
 			return err
 		}
-		wars, err := deps.Store.WarArchive.LoadIDs(c.UserContext(), deps.Store.SQL, ids)
+		wars, err := loadWars(c.UserContext(), ids)
 		if err != nil {
 			return err
 		}
@@ -59,8 +75,13 @@ func previousWars(deps apptypes.Deps) fiber.Handler {
 	}
 }
 
-func queryWarIDs(c *fiber.Ctx, deps apptypes.Deps, clanTag string, start, end time.Time, limit int) ([]string, error) {
-	rows, err := deps.Store.SQL.Query(c.UserContext(), `
+type warQueryDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func queryWarIDs(ctx context.Context, db warQueryDB, clanTag string, start, end time.Time, limit int) ([]string, error) {
+	rows, err := db.Query(ctx, `
 		SELECT war_id::text
 		FROM wars
 		WHERE (clan_tag = $1 OR opponent_tag = $1)
@@ -94,28 +115,30 @@ func queryWarIDs(c *fiber.Ctx, deps apptypes.Deps, clanTag string, start, end ti
 // @Failure 404 {object} map[string]string
 // @Router /war/{clan_tag}/previous/{end_time} [get]
 func previousWarAtTime(deps apptypes.Deps) fiber.Handler {
+	return previousWarAtTimeHandler(
+		func(ctx context.Context, tag string, target time.Time) (string, error) {
+			return queryWarAtTime(ctx, deps.Store.SQL, tag, target)
+		},
+		func(ctx context.Context, ids []string) (map[string]wararchive.War, error) {
+			return deps.Store.WarArchive.LoadIDs(ctx, deps.Store.SQL, ids)
+		},
+	)
+}
+
+func previousWarAtTimeHandler(findWar warAtTimeQuery, loadWars warArchiveLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		target, err := time.Parse("20060102T150405.000Z", c.Params("end_time"))
 		if err != nil {
 			return fiber.NewError(http.StatusUnprocessableEntity, "invalid end_time")
 		}
-		var id string
-		err = deps.Store.SQL.QueryRow(c.UserContext(), `
-			SELECT war_id::text
-			FROM wars
-			WHERE (clan_tag = $1 OR opponent_tag = $1)
-			  AND end_time >= $2 - interval '5 minutes'
-			  AND end_time <= $2 + interval '5 minutes'
-			ORDER BY abs(extract(epoch FROM (end_time - $2))), war_id
-			LIMIT 1
-		`, fixTag(c.Params("clan_tag")), target).Scan(&id)
+		id, err := findWar(c.UserContext(), fixTag(c.Params("clan_tag")), target)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apptypes.JSON(c, http.StatusNotFound, map[string]string{"detail": "War Not Found"})
 		}
 		if err != nil {
 			return err
 		}
-		wars, err := deps.Store.WarArchive.LoadIDs(c.UserContext(), deps.Store.SQL, []string{id})
+		wars, err := loadWars(c.UserContext(), []string{id})
 		if err != nil {
 			return err
 		}
@@ -125,6 +148,20 @@ func previousWarAtTime(deps apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusOK, legacyWar(war, true))
 	}
+}
+
+func queryWarAtTime(ctx context.Context, db warQueryDB, clanTag string, target time.Time) (string, error) {
+	var id string
+	err := db.QueryRow(ctx, `
+			SELECT war_id::text
+			FROM wars
+			WHERE (clan_tag = $1 OR opponent_tag = $1)
+			  AND end_time >= $2 - interval '5 minutes'
+			  AND end_time <= $2 + interval '5 minutes'
+			ORDER BY abs(extract(epoch FROM (end_time - $2))), war_id
+			LIMIT 1
+		`, clanTag, target).Scan(&id)
+	return id, err
 }
 
 // playerWarHits godoc
@@ -139,6 +176,17 @@ func previousWarAtTime(deps apptypes.Deps) fiber.Handler {
 // @Success 200 {object} legacy.PlayerWarHitsResponse
 // @Router /player/{player_tag}/warhits [get]
 func playerWarHits(deps apptypes.Deps) fiber.Handler {
+	return playerWarHitsHandler(
+		func(ctx context.Context, tag string, start, end time.Time, limit int) ([]string, error) {
+			return queryPlayerWarIDs(ctx, deps.Store.SQL, tag, start, end, limit)
+		},
+		func(ctx context.Context, ids []string) (map[string]wararchive.War, error) {
+			return deps.Store.WarArchive.LoadIDs(ctx, deps.Store.SQL, ids)
+		},
+	)
+}
+
+func playerWarHitsHandler(queryIDs warIDQuery, loadWars warArchiveLoader) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		startUnix, err := parseInt64(c.Query("timestamp_start"), 0)
 		if err != nil {
@@ -159,32 +207,11 @@ func playerWarHits(deps apptypes.Deps) fiber.Handler {
 			limit = 100
 		}
 		tag := fixTag(c.Params("player_tag"))
-		rows, err := deps.Store.SQL.Query(c.UserContext(), `
-			SELECT selected.war_id::text
-			FROM player_war_history AS history
-			CROSS JOIN LATERAL unnest(history.war_ids) AS selected(war_id)
-			JOIN wars AS war ON war.war_id = selected.war_id
-			WHERE history.player_tag = $1
-			  AND war.prep_time >= $2 AND war.prep_time <= $3
-			ORDER BY war.prep_time DESC, war.war_id DESC
-			LIMIT $4
-		`, tag, time.Unix(startUnix, 0).UTC(), time.Unix(endUnix, 0).UTC(), limit)
+		ids, err := queryIDs(c.UserContext(), tag, time.Unix(startUnix, 0).UTC(), time.Unix(endUnix, 0).UTC(), limit)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		ids := make([]string, 0, limit)
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			ids = append(ids, id)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		wars, err := deps.Store.WarArchive.LoadIDs(c.UserContext(), deps.Store.SQL, ids)
+		wars, err := loadWars(c.UserContext(), ids)
 		if err != nil {
 			return err
 		}
@@ -198,6 +225,35 @@ func playerWarHits(deps apptypes.Deps) fiber.Handler {
 		}
 		return apptypes.JSON(c, http.StatusOK, legacymodels.PlayerWarHitsResponse{Items: items})
 	}
+}
+
+func queryPlayerWarIDs(ctx context.Context, db warQueryDB, tag string, start, end time.Time, limit int) ([]string, error) {
+	rows, err := db.Query(ctx, `
+			SELECT selected.war_id::text
+			FROM player_war_history AS history
+			CROSS JOIN LATERAL unnest(history.war_ids) AS selected(war_id)
+			JOIN wars AS war ON war.war_id = selected.war_id
+			WHERE history.player_tag = $1
+			  AND war.prep_time >= $2 AND war.prep_time <= $3
+			ORDER BY war.prep_time DESC, war.war_id DESC
+			LIMIT $4
+		`, tag, start, end, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 func buildPlayerWarHit(playerTag string, war wararchive.War) (legacymodels.PlayerWarHit, bool) {

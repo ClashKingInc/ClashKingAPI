@@ -39,7 +39,16 @@ func parseInt64(raw string, fallback int64) (int64, error) {
 	if raw == "" {
 		return fallback, nil
 	}
-	return strconv.ParseInt(raw, 10, 64)
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err == nil {
+		return value, nil
+	}
+
+	integer, fraction, hasFraction := strings.Cut(raw, ".")
+	if !hasFraction || fraction == "" || strings.Trim(fraction, "0") != "" {
+		return 0, err
+	}
+	return strconv.ParseInt(integer, 10, 64)
 }
 
 func clashTime(value time.Time) string {

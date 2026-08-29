@@ -144,8 +144,17 @@ func TestLegacyWarHandlersValidateAndReturnContracts(t *testing.T) {
 	if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `"preparationStartTime"`) {
 		t.Fatalf("previous wars: status=%d body=%s", response.StatusCode, body)
 	}
+	response, _ = legacyTestRequest(t, "/:clan_tag/previous", "/%23clan/previous?timestamp_start=1769732975.0&timestamp_end=1769733975.000", previousWarsHandler(func(_ context.Context, _ string, start, end time.Time, _ int) ([]string, error) {
+		if start.Unix() != 1769732975 || end.Unix() != 1769733975 {
+			t.Fatalf("decimal previous bounds: start=%v end=%v", start, end)
+		}
+		return []string{}, nil
+	}, load))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("decimal previous timestamp status = %d", response.StatusCode)
+	}
 
-	for _, path := range []string{"/%23clan/previous?timestamp_start=nope", "/%23clan/previous?timestamp_end=nope", "/%23clan/previous?limit=nope"} {
+	for _, path := range []string{"/%23clan/previous?timestamp_start=nope", "/%23clan/previous?timestamp_start=1.5", "/%23clan/previous?timestamp_end=nope", "/%23clan/previous?limit=nope"} {
 		response, _ = legacyTestRequest(t, "/:clan_tag/previous", path, previousWarsHandler(query, load))
 		if response.StatusCode != http.StatusUnprocessableEntity {
 			t.Fatalf("%s status = %d", path, response.StatusCode)
@@ -212,6 +221,15 @@ func TestLegacyPlayerWarHitsHandler(t *testing.T) {
 	response, body := legacyTestRequest(t, "/:player_tag/warhits", "/%23player/warhits?limit=200", playerWarHitsHandler(query, load))
 	if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `"war_data"`) {
 		t.Fatalf("warhits: status=%d body=%s", response.StatusCode, body)
+	}
+	response, _ = legacyTestRequest(t, "/:player_tag/warhits", "/%23player/warhits?timestamp_start=1769733013.0&timestamp_end=1769734013.000", playerWarHitsHandler(func(_ context.Context, _ string, start, end time.Time, _ int) ([]string, error) {
+		if start.Unix() != 1769733013 || end.Unix() != 1769734013 {
+			t.Fatalf("decimal warhits bounds: start=%v end=%v", start, end)
+		}
+		return []string{}, nil
+	}, load))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("decimal warhits timestamp status = %d", response.StatusCode)
 	}
 	for _, path := range []string{"/%23player/warhits?timestamp_start=x", "/%23player/warhits?timestamp_end=x", "/%23player/warhits?limit=x"} {
 		response, _ = legacyTestRequest(t, "/:player_tag/warhits", path, playerWarHitsHandler(query, load))
@@ -396,6 +414,12 @@ func TestLegacyHelpersAndRegistration(t *testing.T) {
 	}
 	if _, err := parseInt64("bad", 1); err == nil {
 		t.Fatal("parseInt64 accepted invalid input")
+	}
+	if got, err := parseInt64("1769732975.0", 0); err != nil || got != 1769732975 {
+		t.Fatalf("parseInt64 integral decimal = %d, %v", got, err)
+	}
+	if _, err := parseInt64("1769732975.5", 0); err == nil {
+		t.Fatal("parseInt64 accepted a fractional integer parameter")
 	}
 	if got := badgeURLs(""); got != (legacymodels.BadgeURLs{}) {
 		t.Fatalf("empty badges = %#v", got)

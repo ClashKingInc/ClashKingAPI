@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -66,42 +65,6 @@ func clanRecordsHandler(a apptypes.Deps, load clanRecordsLoader) fiber.Handler {
 			records = &modelsv2.ClanBasicRecords{}
 		}
 		return apptypes.JSON(c, fiber.StatusOK, records)
-	}
-}
-
-// legacyClanJoinLeave godoc
-// @Summary Get clan join-leave history
-// @Description Returns tracked join and leave events for a clan.
-// @Tags Legacy Clans
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Param timestamp_start query int false "Start Unix timestamp"
-// @Param time_stamp_end query int false "End Unix timestamp"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} modelsv2.ErrorResponse
-func legacyClanJoinLeave(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		start := time.Unix(legacyClanParseInt64Default(c.Query("timestamp_start"), 0), 0).UTC()
-		end := time.Unix(legacyClanParseInt64Default(c.Query("time_stamp_end"), 9999999999), 0).UTC()
-		rows, err := a.Store.SQL.Query(c.UserContext(), `
-			SELECT "time", "type", clan_tag, player_tag, player_name, townhall_level
-			FROM join_leave_history
-			WHERE clan_tag = $1 AND "time" >= $2 AND "time" <= $3
-			ORDER BY "time" DESC
-		`, legacyClanFixTag(c.Params("clan_tag")), start, end)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			item, err := scanJoinLeaveRow(rows)
-			if err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return apptypes.JSON(c, fiber.StatusOK, map[string]any{"items": items})
 	}
 }
 
@@ -412,26 +375,6 @@ func v2BasicClanRecords(c *fiber.Ctx, a apptypes.Deps, tag string) (*modelsv2.Cl
 		return nil, nil
 	}
 	return &records, nil
-}
-
-func scanJoinLeaveRow(row basicClanScanner) (map[string]any, error) {
-	var eventTime time.Time
-	var eventType, clanTag, playerTag string
-	var playerName pgtype.Text
-	var townhall int16
-	if err := row.Scan(&eventTime, &eventType, &clanTag, &playerTag, &playerName, &townhall); err != nil {
-		return nil, err
-	}
-	item := map[string]any{}
-	item["time"] = eventTime
-	item["type"] = eventType
-	item["clan"] = clanTag
-	item["tag"] = playerTag
-	item["th"] = townhall
-	if playerName.Valid {
-		item["name"] = playerName.String
-	}
-	return item, nil
 }
 
 func memberTagsToList(tags []string) []map[string]any {

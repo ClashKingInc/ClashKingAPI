@@ -23,6 +23,10 @@ func TestEmbeddedDocuments(t *testing.T) {
 	if document["openapi"] != "3.2.0" {
 		t.Fatalf("OpenAPI version = %v", document["openapi"])
 	}
+	info, ok := document["info"].(map[string]any)
+	if !ok || info["description"] != swaggerBaseDescription {
+		t.Fatalf("OpenAPI description does not match the served master copy: %v", info["description"])
+	}
 
 	yamlDocument, err := BuildYAMLDoc()
 	if err != nil || !strings.Contains(yamlDocument, "openapi: 3.2.0") {

@@ -20,7 +20,16 @@ import (
 
 // @title ClashKing API
 // @version 1.0
-// @description ClashKing Go API documentation. Use Authorize with Bearer access tokens for protected routes. This API is still under active construction, so use it with caution because endpoints and payloads may still change.
+// @description ### Clash of Clans Based API 👑
+// @description - No Auth Required, Free to Use
+// @description - Please credit if using these stats in your project, Creator Code: ClashKing
+// @description - Ratelimit is largely 30 req/sec, 5 req/sec on post & large requests
+// @description - Largely 300 second cache
+// @description - Not perfect, stats are collected by polling the Official API
+// @description - [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
+// @description
+// @description This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it.
+// @description For more information see [Supercell's Fan Content Policy](https://supercell.com/fan-content-policy)
 // @BasePath /
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header

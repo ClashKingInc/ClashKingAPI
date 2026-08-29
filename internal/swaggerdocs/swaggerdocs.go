@@ -12,9 +12,18 @@ import (
 
 const (
 	swaggerBaseTitle       = "ClashKing API"
-	swaggerBaseDescription = "ClashKing Go API documentation. This API is still under active construction, so use it with caution because endpoints and payloads may still change."
-	scalarVersion          = "1.63.0"
-	swaggerUIVersion       = "5.32.11"
+	swaggerBaseDescription = `### Clash of Clans Based API 👑
+- No Auth Required, Free to Use
+- Please credit if using these stats in your project, Creator Code: ClashKing
+- Ratelimit is largely 30 req/sec, 5 req/sec on post & large requests
+- Largely 300 second cache
+- Not perfect, stats are collected by polling the Official API
+- [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
+
+This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it.
+For more information see [Supercell's Fan Content Policy](https://supercell.com/fan-content-policy)`
+	scalarVersion    = "1.63.0"
+	swaggerUIVersion = "5.32.11"
 )
 
 //go:embed openapi.json

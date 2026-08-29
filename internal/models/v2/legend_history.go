@@ -48,14 +48,23 @@ type ClanLegendSeasonSummary struct {
 
 type ClanLegendHistorySummaryResponse struct {
 	Seasons     []ClanLegendSeasonSummary `json:"seasons"`
-	TopFinishes []ClanLegendHistoryItem   `json:"topFinishes"`
+	TopFinishes []ClanLegendTopFinish     `json:"topFinishes"`
+}
+
+type ClanLegendTopFinish struct {
+	Season      string `json:"season"`
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	Trophies    int    `json:"trophies"`
+	AttackWins  int    `json:"attackWins"`
+	DefenseWins int    `json:"defenseWins"`
+	Rank        int    `json:"rank"`
 }
 
 type ClanLegendHistoryItem struct {
 	Season      string `json:"season"`
 	Tag         string `json:"tag"`
 	Name        string `json:"name"`
-	ExpLevel    int    `json:"expLevel"`
 	Trophies    int    `json:"trophies"`
 	AttackWins  int    `json:"attackWins"`
 	DefenseWins int    `json:"defenseWins"`

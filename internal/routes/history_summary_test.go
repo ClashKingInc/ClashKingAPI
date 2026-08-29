@@ -72,14 +72,14 @@ func TestClanLegendHistorySummaryReturnsSeasonsAndRepeatedTopPlayer(t *testing.T
 	db := &historySummaryTestDB{rows: []pgx.Rows{
 		&historySummaryTestRows{items: [][]any{{"v2-2026-07-06T05:00:00Z", seasonTime, 18}}},
 		&historySummaryTestRows{items: [][]any{
-			{"v2-2026-07-06T05:00:00Z", "#PLAYER", "Magic", 300, 6500, 310, 2, 1},
-			{"2026-06", "#PLAYER", "Magic", 299, 6400, 300, 3, 2},
+			{"v2-2026-07-06T05:00:00Z", "#PLAYER", "Magic", 6500, 310, 2, 1},
+			{"2026-06", "#PLAYER", "Magic", 6400, 300, 3, 2},
 		}},
 	}}
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
 	app.Get("/v2/clan/:clan_tag/history/legends/summary", clanLegendHistorySummaryHandler(db))
 
-	response, err := app.Test(httptest.NewRequest("GET", "/v2/clan/2PP/history/legends/summary", nil))
+	response, err := app.Test(httptest.NewRequest("GET", "/v2/clan/2PP/history/legends/summary?top=2", nil))
 	if err != nil || response.StatusCode != fiber.StatusOK {
 		t.Fatalf("summary request: status=%d err=%v", response.StatusCode, err)
 	}
@@ -95,8 +95,18 @@ func TestClanLegendHistorySummaryReturnsSeasonsAndRepeatedTopPlayer(t *testing.T
 	}
 	if len(db.queries) != 2 || !strings.Contains(db.queries[0], "GROUP BY season, season_time") ||
 		!strings.Contains(db.queries[1], "ORDER BY rank, trophies DESC, season DESC") ||
-		!strings.Contains(db.queries[1], "LIMIT 10") {
+		!strings.Contains(db.queries[1], "LIMIT $2") {
 		t.Fatalf("unexpected summary queries: %#v", db.queries)
+	}
+	if len(db.args[1]) != 2 || db.args[1][0] != "#2PP" || db.args[1][1] != 2 {
+		t.Fatalf("unexpected top-finish args: %#v", db.args[1])
+	}
+	encoded, err := json.Marshal(body.TopFinishes[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "expLevel") {
+		t.Fatalf("top finish exposes expLevel: %s", encoded)
 	}
 }
 
@@ -126,19 +136,21 @@ func TestClanLeaderboardSummaryUsesAuthoritativeTrophySeasons(t *testing.T) {
 	}
 }
 
-func TestClanCapitalLeaderboardSummaryReturnsClampedRollingWindows(t *testing.T) {
-	earliest := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	latest := time.Date(2026, time.August, 29, 0, 0, 0, 0, time.UTC)
-	db := &historySummaryTestDB{rows: []pgx.Rows{&historySummaryTestRows{items: [][]any{{earliest, latest}}}}}
+func TestClanCapitalLeaderboardSummaryUsesTheSameSeasonShape(t *testing.T) {
+	db := &historySummaryTestDB{rows: []pgx.Rows{&historySummaryTestRows{items: [][]any{
+		{time.Date(2026, time.March, 31, 0, 0, 0, 0, time.UTC), 20, 5100},
+		{time.Date(2026, time.March, 30, 0, 0, 0, 0, time.UTC), 12, 5200},
+	}}}}
 	response, err := queryClanLeaderboardHistorySummary(context.Background(), db, modelsv2.LeaderboardHistoryTypeClanCapitalPoints, "#CLAN")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Earliest == nil || response.Latest == nil || response.DefaultWindowDays == nil || *response.DefaultWindowDays != 180 {
-		t.Fatalf("unexpected capital availability: %#v", response)
+	if len(response.Seasons) != 1 || response.Seasons[0].Season != "2026-04" || response.Seasons[0].DaysInTop200 != 2 ||
+		response.Seasons[0].BestRank != 12 || response.Seasons[0].PeakPoints != 5200 {
+		t.Fatalf("unexpected capital seasons: %#v", response.Seasons)
 	}
-	if len(response.RollingWindows) != 3 || response.RollingWindows[2].Days != 180 || !response.RollingWindows[2].Before.Equal(latest) {
-		t.Fatalf("unexpected rolling windows: %#v", response.RollingWindows)
+	if !strings.Contains(db.queries[0], "FROM leaderboard_history_clan_capital") || !strings.Contains(db.queries[0], "MAX(capital_points)") {
+		t.Fatalf("unexpected capital query: %s", db.queries[0])
 	}
 }
 
@@ -150,6 +162,8 @@ func TestClanHistorySummaryRoutesRequireValidScope(t *testing.T) {
 
 	for _, path := range []string{
 		"/v2/clan/%23/history/legends/summary",
+		"/v2/clan/2PP/history/legends/summary?top=0",
+		"/v2/clan/2PP/history/legends/summary?top=51",
 		"/v2/clan/2PP/history/leaderboards/summary",
 		"/v2/clan/2PP/history/leaderboards/summary?type=player_home_trophies",
 	} {

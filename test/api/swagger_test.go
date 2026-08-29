@@ -1389,13 +1389,16 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		}
 	}
 	clanLegendItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLegendHistoryItem")
-	if len(clanLegendItemProps) != 8 {
+	if len(clanLegendItemProps) != 7 {
 		t.Fatalf("expected compact clan Legend item, got %v", clanLegendItemProps)
 	}
-	for _, field := range []string{"season", "tag", "name", "expLevel", "trophies", "attackWins", "defenseWins", "rank"} {
+	for _, field := range []string{"season", "tag", "name", "trophies", "attackWins", "defenseWins", "rank"} {
 		if _, exists := clanLegendItemProps[field]; !exists {
 			t.Fatalf("expected clan Legend item field %s", field)
 		}
+	}
+	if _, exists := clanLegendItemProps["expLevel"]; exists {
+		t.Fatal("clan Legend history exposes expLevel")
 	}
 	clanLegendPath := paths["/v2/clan/{clan_tag}/history/legends"].(map[string]any)
 	clanLegendGet := clanLegendPath["get"].(map[string]any)
@@ -1408,9 +1411,12 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	clanLegendSummaryPath := paths["/v2/clan/{clan_tag}/history/legends/summary"].(map[string]any)
 	clanLegendSummaryGet := clanLegendSummaryPath["get"].(map[string]any)
 	assertTags(t, clanLegendSummaryGet, []string{"Clan"})
-	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/legends/summary"); len(got) != 0 {
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/legends/summary"); !reflect.DeepEqual(got, []string{"top"}) {
 		t.Fatalf("clan Legend summary query params = %v", got)
 	}
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "default", float64(10))
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "minimum", float64(1))
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "maximum", float64(50))
 	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
 	snapshotGet := snapshotPath["get"].(map[string]any)
 	assertParameterEnum(t, snapshotGet["parameters"], "leaderboard_type", []any{

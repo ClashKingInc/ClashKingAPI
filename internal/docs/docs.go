@@ -1889,7 +1889,7 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/history/leaderboards/summary": {
             "get": {
-                "description": "Returns selectable seasons for Home and Builder leaderboards, or available dates and rolling windows for Capital.",
+                "description": "Returns selectable Clash seasons with exact history bounds and performance summaries for Home, Builder, or Capital leaderboards.",
                 "produces": [
                     "application/json"
                 ],
@@ -2031,6 +2031,15 @@ const docTemplate = `{
                         "name": "clan_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of best finishes to return",
+                        "name": "top",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -16132,40 +16141,11 @@ const docTemplate = `{
         "modelsv2.ClanLeaderboardHistorySummaryResponse": {
             "type": "object",
             "properties": {
-                "defaultWindowDays": {
-                    "type": "integer"
-                },
-                "earliest": {
-                    "type": "string"
-                },
-                "latest": {
-                    "type": "string"
-                },
-                "rollingWindows": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.ClanLeaderboardRollingWindow"
-                    }
-                },
                 "seasons": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.ClanLeaderboardSeasonSummary"
                     }
-                }
-            }
-        },
-        "modelsv2.ClanLeaderboardRollingWindow": {
-            "type": "object",
-            "properties": {
-                "after": {
-                    "type": "string"
-                },
-                "before": {
-                    "type": "string"
-                },
-                "days": {
-                    "type": "integer"
                 }
             }
         },
@@ -16212,9 +16192,6 @@ const docTemplate = `{
                 "defenseWins": {
                     "type": "integer"
                 },
-                "expLevel": {
-                    "type": "integer"
-                },
                 "name": {
                     "type": "string"
                 },
@@ -16255,7 +16232,7 @@ const docTemplate = `{
                 "topFinishes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.ClanLegendHistoryItem"
+                        "$ref": "#/definitions/modelsv2.ClanLegendTopFinish"
                     }
                 }
             }
@@ -16274,6 +16251,32 @@ const docTemplate = `{
                 },
                 "season": {
                     "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanLegendTopFinish": {
+            "type": "object",
+            "properties": {
+                "attackWins": {
+                    "type": "integer"
+                },
+                "defenseWins": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "trophies": {
+                    "type": "integer"
                 }
             }
         },

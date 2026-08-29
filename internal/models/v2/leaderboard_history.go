@@ -103,16 +103,6 @@ type ClanLeaderboardSeasonSummary struct {
 	PeakPoints   int       `json:"peakPoints"`
 }
 
-type ClanLeaderboardRollingWindow struct {
-	Days   int       `json:"days"`
-	After  time.Time `json:"after"`
-	Before time.Time `json:"before"`
-}
-
 type ClanLeaderboardHistorySummaryResponse struct {
-	Seasons           []ClanLeaderboardSeasonSummary `json:"seasons,omitempty"`
-	Earliest          *time.Time                     `json:"earliest,omitempty"`
-	Latest            *time.Time                     `json:"latest,omitempty"`
-	RollingWindows    []ClanLeaderboardRollingWindow `json:"rollingWindows,omitempty"`
-	DefaultWindowDays *int                           `json:"defaultWindowDays,omitempty"`
+	Seasons []ClanLeaderboardSeasonSummary `json:"seasons"`
 }

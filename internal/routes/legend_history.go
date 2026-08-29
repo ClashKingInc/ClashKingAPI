@@ -50,7 +50,7 @@ const legendPlayerHistoryQuery = `
 `
 
 const legendClanHistoryQuery = `
-	SELECT season, player_tag, player_name, exp_level, trophies, attack_wins, defense_wins, rank
+	SELECT season, player_tag, player_name, trophies, attack_wins, defense_wins, rank
 	FROM (
 		SELECT *, CASE
 			WHEN season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$'
@@ -88,11 +88,11 @@ const legendClanHistorySummarySeasonsQuery = `
 `
 
 const legendClanHistorySummaryTopQuery = `
-	SELECT season, player_tag, player_name, exp_level, trophies, attack_wins, defense_wins, rank
+	SELECT season, player_tag, player_name, trophies, attack_wins, defense_wins, rank
 	FROM legend_history
 	WHERE clan_tag = $1
 	ORDER BY rank, trophies DESC, season DESC
-	LIMIT 10
+	LIMIT $2
 `
 
 type legendHistoryDB interface {
@@ -292,6 +292,7 @@ func clanLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
+// @Param top query int false "Number of best finishes to return" default(10) minimum(1) maximum(50)
 // @Success 200 {object} modelsv2.ClanLegendHistorySummaryResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
@@ -310,11 +311,15 @@ func clanLegendHistorySummaryHandler(db legendHistoryDB) fiber.Handler {
 		if db == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
 		}
+		top, ok := boundedLegendHistoryLimit(c.Query("top"), 10, 50)
+		if !ok {
+			return apptypes.Error(fiber.StatusBadRequest, "top must be between 1 and 50")
+		}
 		seasons, err := queryClanLegendHistorySummarySeasons(c.UserContext(), db, tag)
 		if err != nil {
 			return err
 		}
-		topFinishes, err := queryClanLegendHistoryTopFinishes(c.UserContext(), db, tag)
+		topFinishes, err := queryClanLegendHistoryTopFinishes(c.UserContext(), db, tag, top)
 		if err != nil {
 			return err
 		}
@@ -343,17 +348,17 @@ func queryClanLegendHistorySummarySeasons(ctx context.Context, db legendHistoryD
 	return items, rows.Err()
 }
 
-func queryClanLegendHistoryTopFinishes(ctx context.Context, db legendHistoryDB, tag string) ([]modelsv2.ClanLegendHistoryItem, error) {
-	rows, err := db.Query(ctx, legendClanHistorySummaryTopQuery, tag)
+func queryClanLegendHistoryTopFinishes(ctx context.Context, db legendHistoryDB, tag string, limit int) ([]modelsv2.ClanLegendTopFinish, error) {
+	rows, err := db.Query(ctx, legendClanHistorySummaryTopQuery, tag, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	items := []modelsv2.ClanLegendHistoryItem{}
+	items := []modelsv2.ClanLegendTopFinish{}
 	for rows.Next() {
-		var item modelsv2.ClanLegendHistoryItem
-		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.ExpLevel, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
+		var item modelsv2.ClanLegendTopFinish
+		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -371,7 +376,7 @@ func queryClanLegendHistory(ctx context.Context, db legendHistoryDB, tag string,
 	items := []modelsv2.ClanLegendHistoryItem{}
 	for rows.Next() {
 		var item modelsv2.ClanLegendHistoryItem
-		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.ExpLevel, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
+		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

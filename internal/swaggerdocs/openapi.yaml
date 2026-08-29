@@ -1468,29 +1468,10 @@ components:
             type: object
         modelsv2.ClanLeaderboardHistorySummaryResponse:
             properties:
-                defaultWindowDays:
-                    type: integer
-                earliest:
-                    type: string
-                latest:
-                    type: string
-                rollingWindows:
-                    items:
-                        $ref: '#/components/schemas/modelsv2.ClanLeaderboardRollingWindow'
-                    type: array
                 seasons:
                     items:
                         $ref: '#/components/schemas/modelsv2.ClanLeaderboardSeasonSummary'
                     type: array
-            type: object
-        modelsv2.ClanLeaderboardRollingWindow:
-            properties:
-                after:
-                    type: string
-                before:
-                    type: string
-                days:
-                    type: integer
             type: object
         modelsv2.ClanLeaderboardSeasonSummary:
             properties:
@@ -1520,8 +1501,6 @@ components:
                     type: integer
                 defenseWins:
                     type: integer
-                expLevel:
-                    type: integer
                 name:
                     type: string
                 rank:
@@ -1548,7 +1527,7 @@ components:
                     type: array
                 topFinishes:
                     items:
-                        $ref: '#/components/schemas/modelsv2.ClanLegendHistoryItem'
+                        $ref: '#/components/schemas/modelsv2.ClanLegendTopFinish'
                     type: array
             type: object
         modelsv2.ClanLegendSeasonSummary:
@@ -1561,6 +1540,23 @@ components:
                     type: integer
                 season:
                     type: string
+            type: object
+        modelsv2.ClanLegendTopFinish:
+            properties:
+                attackWins:
+                    type: integer
+                defenseWins:
+                    type: integer
+                name:
+                    type: string
+                rank:
+                    type: integer
+                season:
+                    type: string
+                tag:
+                    type: string
+                trophies:
+                    type: integer
             type: object
         modelsv2.ClanListItem:
             properties:
@@ -7542,7 +7538,7 @@ paths:
                 - Clan
     /v2/clan/{clan_tag}/history/leaderboards/summary:
         get:
-            description: Returns selectable seasons for Home and Builder leaderboards, or available dates and rolling windows for Capital.
+            description: Returns selectable Clash seasons with exact history bounds and performance summaries for Home, Builder, or Capital leaderboards.
             parameters:
                 - description: Clan tag
                   in: path
@@ -7654,6 +7650,14 @@ paths:
                   required: true
                   schema:
                     type: string
+                - description: Number of best finishes to return
+                  in: query
+                  name: top
+                  schema:
+                    default: 10
+                    maximum: 50
+                    minimum: 1
+                    type: integer
             responses:
                 "200":
                     content:

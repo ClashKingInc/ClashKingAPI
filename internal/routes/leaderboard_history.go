@@ -12,10 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var clanCapitalLeaderboardRollingWindowDays = []int{30, 90, 180}
-
-const clanLeaderboardDefaultRollingWindowDays = 180
-
 const playerTrophyHistoryColumns = `
 	player_tag,
 	player_name,
@@ -459,7 +455,7 @@ func clanLeaderboardHistoryHandler(
 
 // clanLeaderboardHistorySummary godoc
 // @Summary Summarize a clan's leaderboard history
-// @Description Returns selectable seasons for Home and Builder leaderboards, or available dates and rolling windows for Capital.
+// @Description Returns selectable Clash seasons with exact history bounds and performance summaries for Home, Builder, or Capital leaderboards.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
@@ -508,24 +504,7 @@ func queryClanLeaderboardHistorySummary(
 	}
 	defer rows.Close()
 
-	response := modelsv2.ClanLeaderboardHistorySummaryResponse{}
-	if leaderboardType == modelsv2.LeaderboardHistoryTypeClanCapitalPoints {
-		if rows.Next() {
-			var earliest, latest *time.Time
-			if err := rows.Scan(&earliest, &latest); err != nil {
-				return response, err
-			}
-			response.Earliest, response.Latest = earliest, latest
-			if earliest != nil && latest != nil {
-				defaultDays := clanLeaderboardDefaultRollingWindowDays
-				response.DefaultWindowDays = &defaultDays
-				response.RollingWindows = clanLeaderboardRollingWindows(*earliest, *latest)
-			}
-		}
-		return response, rows.Err()
-	}
-
-	response.Seasons = []modelsv2.ClanLeaderboardSeasonSummary{}
+	response := modelsv2.ClanLeaderboardHistorySummaryResponse{Seasons: []modelsv2.ClanLeaderboardSeasonSummary{}}
 	bySeason := map[string]*modelsv2.ClanLeaderboardSeasonSummary{}
 	seasonIndexes := map[string]int{}
 	for rows.Next() {
@@ -574,9 +553,7 @@ func clanLeaderboardHistorySummaryQuery(leaderboardType modelsv2.LeaderboardHist
 	case modelsv2.LeaderboardHistoryTypeClanBuilderBasePoints:
 		table, points = "leaderboard_history_clan_builder_base", "builder_base_points"
 	case modelsv2.LeaderboardHistoryTypeClanCapitalPoints:
-		return `SELECT MIN(date), MAX(date)
-			FROM leaderboard_history_clan_capital
-			WHERE clan_tag = $1`
+		table, points = "leaderboard_history_clan_capital", "capital_points"
 	default:
 		return ""
 	}
@@ -585,18 +562,6 @@ func clanLeaderboardHistorySummaryQuery(leaderboardType modelsv2.LeaderboardHist
 		WHERE clan_tag = $1
 		GROUP BY date
 		ORDER BY date DESC`
-}
-
-func clanLeaderboardRollingWindows(earliest, latest time.Time) []modelsv2.ClanLeaderboardRollingWindow {
-	windows := make([]modelsv2.ClanLeaderboardRollingWindow, 0, len(clanCapitalLeaderboardRollingWindowDays))
-	for _, days := range clanCapitalLeaderboardRollingWindowDays {
-		after := latest.AddDate(0, 0, -(days - 1))
-		if after.Before(earliest) {
-			after = earliest
-		}
-		windows = append(windows, modelsv2.ClanLeaderboardRollingWindow{Days: days, After: after, Before: latest})
-	}
-	return windows
 }
 
 func queryClanLeaderboardHistory(

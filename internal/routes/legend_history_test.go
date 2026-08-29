@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -67,6 +68,9 @@ func (rows *legendHistoryTestRows) Scan(dest ...any) error {
 	*dest[5].(*int) = row.attackWins
 	*dest[6].(*int) = row.defenseWins
 	*dest[7].(*int) = row.rank
+	if len(dest) == 8 {
+		return nil
+	}
 	*dest[8].(**string) = row.clanTag
 	*dest[9].(**string) = row.clanName
 	*dest[10].(**string) = row.clanBadgeToken
@@ -95,13 +99,13 @@ func TestLegendHistorySeasonAndLimitValidation(t *testing.T) {
 	if limit, ok := legendHistoryLimit("200"); !ok || limit != 200 {
 		t.Fatalf("season maximum limit = %d, %v", limit, ok)
 	}
-	if limit, ok := clanLegendHistoryLimit(""); !ok || limit != 200 {
+	if limit, ok := clanLegendHistoryLimit(""); !ok || limit != 50 {
 		t.Fatalf("clan default limit = %d, %v", limit, ok)
 	}
-	if limit, ok := clanLegendHistoryLimit("1000"); !ok || limit != 1000 {
+	if limit, ok := clanLegendHistoryLimit("250"); !ok || limit != 250 {
 		t.Fatalf("clan maximum limit = %d, %v", limit, ok)
 	}
-	for _, invalid := range []string{"0", "1001", "-1", "abc"} {
+	for _, invalid := range []string{"0", "251", "-1", "abc"} {
 		if _, ok := clanLegendHistoryLimit(invalid); ok {
 			t.Fatalf("invalid clan limit %q accepted", invalid)
 		}
@@ -171,7 +175,9 @@ func TestQueryLegendHistoryUsesNormalizedColumnsAndRebuildsReferences(t *testing
 
 func TestClanLegendHistoryUsesClanRankSeasonIndexPattern(t *testing.T) {
 	db := &legendHistoryTestDB{rows: &legendHistoryTestRows{}}
-	items, err := queryLegendHistory(context.Background(), db, nil, legendClanHistoryQuery, "#CLAN", 1000)
+	after := time.Date(2023, time.January, 1, 0, 0, 0, 0, time.UTC)
+	before := time.Date(2026, time.December, 31, 0, 0, 0, 0, time.UTC)
+	items, err := queryClanLegendHistory(context.Background(), db, "#CLAN", after, before, 250)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,14 +186,22 @@ func TestClanLegendHistoryUsesClanRankSeasonIndexPattern(t *testing.T) {
 	}
 	for _, required := range []string{
 		"WHERE clan_tag = $1",
-		"ORDER BY rank, season DESC",
-		"LIMIT $2",
+		"season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T",
+		"pg_input_is_valid(substring(season FROM 4), 'timestamp with time zone')",
+		"season ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'",
+		"ELSE NULL",
+		"season_time >= $2 AND season_time <= $3",
+		"ORDER BY season_time DESC, rank",
+		"LIMIT $4",
 	} {
 		if !strings.Contains(db.query, required) {
 			t.Fatalf("clan query missing %q: %s", required, db.query)
 		}
 	}
-	if len(db.args) != 2 || db.args[0] != "#CLAN" || db.args[1] != 1000 {
+	if strings.Contains(db.query, "WHEN left(season, 3) = 'v2-' THEN substring(season FROM 4)::timestamptz") {
+		t.Fatalf("clan Legend query casts every v2 season ID: %s", db.query)
+	}
+	if len(db.args) != 4 || db.args[0] != "#CLAN" || db.args[1] != after || db.args[2] != before || db.args[3] != 250 {
 		t.Fatalf("unexpected clan args: %#v", db.args)
 	}
 }
@@ -210,13 +224,13 @@ func TestLegendHistoryRoutesReturnEmptyItemsAndValidateInputs(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
 	app.Get("/v2/legends/history/:season", legendSeasonHistoryHandler(emptyDB, nil))
 	app.Get("/v2/player/:player_tag/legend-history", playerLegendHistoryHandler(emptyDB, nil))
-	app.Get("/v2/clan/:clan_tag/legend-history", clanLegendHistoryHandler(emptyDB, nil))
+	app.Get("/v2/clan/:clan_tag/history/legends", clanLegendHistoryHandler(emptyDB))
 
 	for _, path := range []string{
 		"/v2/legends/history/2026-07",
 		"/v2/legends/history/v2-2026-07-06T05:00:00Z?limit=200",
 		"/v2/player/P0Y/legend-history",
-		"/v2/clan/2PP/legend-history?limit=1000",
+		"/v2/clan/2PP/history/legends?limit=250&time%5Bafter%5D=2023-01-01T00%3A00%3A00Z",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {
@@ -240,7 +254,8 @@ func TestLegendHistoryRoutesReturnEmptyItemsAndValidateInputs(t *testing.T) {
 		"/v2/legends/history/2026-07?limit=201",
 		"/v2/player/%23/legend-history",
 		"/v2/clan/%23/legend-history",
-		"/v2/clan/2PP/legend-history?limit=1001",
+		"/v2/clan/2PP/history/legends?limit=251",
+		"/v2/clan/2PP/history/legends?time%5Bbefore%5D=bad",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {

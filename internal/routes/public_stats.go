@@ -17,8 +17,8 @@ import (
 )
 
 // playerRankings godoc
-// @Summary Get current player rankings
-// @Description Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.
+// @Summary View a player's current leaderboard positions
+// @Description Returns current Home Village and Builder Base trophy positions plus the player's official ranking location when it is known.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -136,8 +136,8 @@ func resolvePlayerRankingLocations(
 }
 
 // playerBattlelogHistory godoc
-// @Summary Get player battlelog history
-// @Description Returns historical returned battlelogs for a player, including farming hits when present.
+// @Summary Browse a player's saved battle history
+// @Description Returns previously observed battle logs for the player, including farming attacks when those results were available during tracking.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -196,8 +196,8 @@ func playerBattlelogHistory(a apptypes.Deps) fiber.Handler {
 }
 
 // playerRankedBattlelog godoc
-// @Summary Get player ranked battlelog
-// @Description Returns player ranked season placement plus recent ranked battlelog rows.
+// @Summary Review a player's ranked season battles
+// @Description Returns the player's placement for one ranked season together with the recent battles saved for that season.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -249,8 +249,8 @@ func playerRankedBattlelog(a apptypes.Deps) fiber.Handler {
 }
 
 // playerRankedGroup godoc
-// @Summary Get player ranked group
-// @Description Returns ranked group data for the group containing the requested player.
+// @Summary View a player's ranked season group
+// @Description Returns the complete ranked group containing the player for one season, including every stored member and placement.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -304,8 +304,8 @@ func playerRankedGroup(a apptypes.Deps) fiber.Handler {
 }
 
 // playerChanges godoc
-// @Summary Get player change history
-// @Description Returns stored player profile changes of the requested type.
+// @Summary Review changes to a player's profile
+// @Description Returns stored changes of one required type, such as upgrades or trophies, with optional inclusive time bounds.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"
@@ -789,8 +789,8 @@ func globalLeagueTiers(a apptypes.Deps) fiber.Handler {
 }
 
 // clanChanges godoc
-// @Summary Get clan change history
-// @Description Returns description or clan-level changes. Values are strings or integers according to type.
+// @Summary Review changes to a clan's profile
+// @Description Returns stored description or clan-level changes with optional inclusive time bounds. Each value keeps its natural string or integer type.
 // @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"

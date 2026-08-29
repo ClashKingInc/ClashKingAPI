@@ -394,17 +394,20 @@ func playerLeaderboardHistoryHandler(
 }
 
 // clanLeaderboardHistory godoc
-// @Summary Get a clan's leaderboard history
-// @Description Returns typed dated placements for clan Home Village, Builder Base, or Capital leaderboards.
-// @Tags Leaderboard
+// @Summary Review a clan's leaderboard history
+// @Description Returns dated clan placements and points for one required leaderboard type, with optional inclusive time bounds.
+// @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param leaderboard_type path string true "Canonical clan leaderboard type" Enums(clan_home_points,clan_builder_base_points,clan_capital_points)
+// @Param type query string true "Leaderboard type" Enums(clan_home_points,clan_builder_base_points,clan_capital_points)
+// @Param time[after] query string false "Only include snapshots at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include snapshots at or before this ISO-8601 time"
+// @Param limit query int false "Maximum snapshots to return" default(50) minimum(1) maximum(250)
 // @Success 200 {object} modelsv2.ClanLeaderboardHistoryResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type} [get]
+// @Router /v2/clan/{clan_tag}/history/leaderboards [get]
 func clanLeaderboardHistory(a apptypes.Deps) fiber.Handler {
 	return clanLeaderboardHistoryHandler(configuredLeaderboardHistoryDB(a), func(
 		ctx context.Context,
@@ -423,9 +426,17 @@ func clanLeaderboardHistoryHandler(
 		if tag == "" {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid clan_tag")
 		}
-		leaderboardType, ok := clanLeaderboardHistoryType(c.Params("leaderboard_type"))
+		leaderboardType, ok := clanLeaderboardHistoryType(c.Query("type"))
 		if !ok {
-			return apptypes.Error(fiber.StatusBadRequest, "invalid clan leaderboard_type")
+			return apptypes.Error(fiber.StatusBadRequest, "invalid type")
+		}
+		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+		if err != nil {
+			return err
+		}
+		limit, err := v2QueryInt(c, "limit", 50)
+		if err != nil || limit < 1 || limit > 250 {
+			return apptypes.Error(fiber.StatusBadRequest, "limit must be between 1 and 250")
 		}
 		if db == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "leaderboard history is unavailable")
@@ -434,16 +445,68 @@ func clanLeaderboardHistoryHandler(
 		if len(metadataLoader) != 0 && metadataLoader[0] != nil {
 			metadata = metadataLoader[0](c.UserContext(), leaderboardType)
 		}
-		items, err := queryLeaderboardEntityHistory(c.UserContext(), db, metadata, leaderboardType, tag)
+		items, err := queryClanLeaderboardHistory(c.UserContext(), db, metadata, leaderboardType, tag, after, before, limit)
 		if err != nil {
 			return err
 		}
-		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLeaderboardHistoryResponse{
-			Type:    leaderboardType,
-			ClanTag: tag,
-			Items:   items,
-		})
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLeaderboardHistoryResponse{Items: items})
 	}
+}
+
+func queryClanLeaderboardHistory(
+	ctx context.Context,
+	db leaderboardHistoryDB,
+	metadata leaderboardHistoryMetadata,
+	leaderboardType modelsv2.LeaderboardHistoryType,
+	tag string,
+	after, before time.Time,
+	limit int,
+) ([]modelsv2.ClanLeaderboardHistoryItem, error) {
+	query := clanLeaderboardHistoryQuery(leaderboardType)
+	rows, err := db.Query(ctx, query, tag, after, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []modelsv2.ClanLeaderboardHistoryItem{}
+	for rows.Next() {
+		var date time.Time
+		var locationID string
+		details, err := scanLeaderboardEntityHistoryItem(rows, metadata, leaderboardType, &date, &locationID)
+		if err != nil {
+			return nil, err
+		}
+		item := modelsv2.ClanLeaderboardHistoryItem{
+			Date: date.Format("2006-01-02"), Rank: details.Rank,
+			ClanPoints: details.ClanPoints, BuilderBasePoints: details.BuilderBasePoints,
+			CapitalPoints: details.CapitalPoints, Location: details.Location,
+		}
+		if details.Members != nil {
+			item.Members = *details.Members
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func clanLeaderboardHistoryQuery(leaderboardType modelsv2.LeaderboardHistoryType) string {
+	var table, columns string
+	switch leaderboardType {
+	case modelsv2.LeaderboardHistoryTypeClanHomePoints:
+		table, columns = "leaderboard_history_clan_home", clanTrophyHistoryColumns
+	case modelsv2.LeaderboardHistoryTypeClanBuilderBasePoints:
+		table, columns = "leaderboard_history_clan_builder_base", clanBuilderBaseTrophyHistoryColumns
+	case modelsv2.LeaderboardHistoryTypeClanCapitalPoints:
+		table, columns = "leaderboard_history_clan_capital", clanCapitalHistoryColumns
+	default:
+		return ""
+	}
+	return `SELECT date, location_id, ` + columns + `
+		FROM ` + table + `
+		WHERE clan_tag = $1 AND date >= $2 AND date <= $3
+		ORDER BY date DESC, location_id, rank
+		LIMIT $4`
 }
 
 func queryLeaderboardSnapshotHistory(

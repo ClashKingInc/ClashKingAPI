@@ -64,7 +64,7 @@ func TestScalarAdapterMakesQueryOperationsVisibleWithoutChangingTheirMeaning(t *
 	}
 
 	paths := doc["paths"].(map[string]any)
-	for _, path := range []string{"/v2/home/activity", "/v2/search/clan", "/v2/search/player"} {
+	for _, path := range []string{"/v2/home/activity"} {
 		pathItem := paths[path].(map[string]any)
 		if _, ok := pathItem["query"]; ok {
 			t.Fatalf("Scalar adapter retains invisible QUERY operation for %s", path)
@@ -106,8 +106,6 @@ func TestGeneratedDocumentUsesOpenAPI32Contracts(t *testing.T) {
 		"/v2/stats/ranked",
 		"/v2/stats/war",
 		"/v2/stats/cwl",
-		"/v2/search/clan",
-		"/v2/search/player",
 	} {
 		pathItem := paths[path].(map[string]any)
 		if _, ok := pathItem["post"]; ok {
@@ -124,6 +122,15 @@ func TestGeneratedDocumentUsesOpenAPI32Contracts(t *testing.T) {
 		content := requestBody["content"].(map[string]any)
 		if _, ok := content["application/json"]; !ok {
 			t.Fatalf("%s does not declare an application/json request body", path)
+		}
+	}
+	for _, path := range []string{"/v2/player/search", "/v2/clan/search"} {
+		pathItem := paths[path].(map[string]any)
+		if _, ok := pathItem["get"].(map[string]any); !ok {
+			t.Fatalf("%s does not contain a GET operation: %v", path, pathItem)
+		}
+		if _, ok := pathItem["query"]; ok {
+			t.Fatalf("%s unexpectedly contains a QUERY operation", path)
 		}
 	}
 

@@ -281,15 +281,18 @@ func TestClanSnapshotsUseTypedMetricTablesAndCanonicalLocation(t *testing.T) {
 
 func TestLeaderboardEntityHistoryUsesEntityDateIndexPattern(t *testing.T) {
 	date := time.Date(2026, time.July, 25, 0, 0, 0, 0, time.UTC)
+	after := date.AddDate(0, -1, 0)
+	before := date.AddDate(0, 1, 0)
 	db := &leaderboardHistoryTestDB{rows: &leaderboardHistoryTestRows{items: []leaderboardHistoryTestRow{
 		{values: []any{
 			date, "32000006",
 			"#2PP", "Example Clan", "badge", 20, 54321, 50, 32000006, 7, 8,
 		}},
 	}}}
-	items, err := queryLeaderboardEntityHistory(
-		context.Background(), db, leaderboardHistoryMetadata{},
-		modelsv2.LeaderboardHistoryTypeClanHomePoints, "#2PP",
+	location := modelsv2.LeaderboardHistoryLocationReference{ID: 32000006, Name: "United States", IsCountry: true, CountryCode: "US"}
+	items, err := queryClanLeaderboardHistory(
+		context.Background(), db, leaderboardHistoryMetadata{locations: map[int]modelsv2.LeaderboardHistoryLocationReference{32000006: location}},
+		modelsv2.LeaderboardHistoryTypeClanHomePoints, "#2PP", after, before, 50,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -297,23 +300,23 @@ func TestLeaderboardEntityHistoryUsesEntityDateIndexPattern(t *testing.T) {
 	for _, required := range []string{
 		"FROM leaderboard_history_clan_home",
 		"WHERE clan_tag = $1",
+		"date >= $2 AND date <= $3",
 		"ORDER BY date DESC",
+		"LIMIT $4",
 	} {
 		if !strings.Contains(db.query, required) {
 			t.Fatalf("entity query missing %q: %s", required, db.query)
 		}
 	}
-	if len(db.args) != 1 || db.args[0] != "#2PP" {
+	if len(db.args) != 4 || db.args[0] != "#2PP" || db.args[1] != after || db.args[2] != before || db.args[3] != 50 {
 		t.Fatalf("unexpected entity args: %#v", db.args)
 	}
 	if len(items) != 1 ||
 		items[0].Date != "2026-07-25" ||
-		items[0].LocationID != "32000006" ||
-		items[0].Name != "Example Clan" ||
 		items[0].Rank != 7 ||
-		items[0].Details.Rank != 7 ||
-		items[0].Details.ClanPoints == nil ||
-		*items[0].Details.ClanPoints != 54321 {
+		items[0].Members != 50 ||
+		items[0].Location == nil || items[0].Location.CountryCode != "US" ||
+		items[0].ClanPoints == nil || *items[0].ClanPoints != 54321 {
 		t.Fatalf("unexpected entity history item: %#v", items)
 	}
 }
@@ -364,12 +367,12 @@ func TestLeaderboardHistoryRoutesReturnEmptyItemsAndRejectInvalidScopes(t *testi
 	app := fiber.New(fiber.Config{ErrorHandler: apptypes.ErrorHandler})
 	app.Get("/v2/leaderboard/history/:leaderboard_type/:location_id/:date", leaderboardSnapshotHistoryHandler(emptyDB))
 	app.Get("/v2/player/:player_tag/leaderboard-history/:leaderboard_type", playerLeaderboardHistoryHandler(emptyDB))
-	app.Get("/v2/clan/:clan_tag/leaderboard-history/:leaderboard_type", clanLeaderboardHistoryHandler(emptyDB))
+	app.Get("/v2/clan/:clan_tag/history/leaderboards", clanLeaderboardHistoryHandler(emptyDB))
 
 	for _, path := range []string{
 		"/v2/leaderboard/history/player_home_trophies/global/2026-07-26",
 		"/v2/player/P0Y/leaderboard-history/player_builder_base_trophies",
-		"/v2/clan/2PP/leaderboard-history/clan_capital_points",
+		"/v2/clan/2PP/history/leaderboards?type=clan_capital_points&limit=50&time%5Bafter%5D=2026-01-01T00%3A00%3A00Z",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {
@@ -398,7 +401,9 @@ func TestLeaderboardHistoryRoutesReturnEmptyItemsAndRejectInvalidScopes(t *testi
 		"/v2/leaderboard/history/player_home_trophies/not-global/2026-07-26",
 		"/v2/leaderboard/history/player_home_trophies/global/20260726",
 		"/v2/player/P0Y/leaderboard-history/clan_home_points",
-		"/v2/clan/2PP/leaderboard-history/player_home_trophies",
+		"/v2/clan/2PP/history/leaderboards?type=player_home_trophies",
+		"/v2/clan/2PP/history/leaderboards?type=clan_home_points&limit=251",
+		"/v2/clan/2PP/history/leaderboards?type=clan_home_points&time%5Bbefore%5D=bad",
 	} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {

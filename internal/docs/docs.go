@@ -41,83 +41,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/cwl/{clanTag}/group": {
-            "get": {
-                "description": "Returns the current season CWL group for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get current CWL group",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clanTag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLGroupResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/cwl/{clanTag}/{season}": {
-            "get": {
-                "description": "Returns the CWL group for a clan and season.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get CWL group by season",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clanTag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Season YYYY-MM",
-                        "name": "season",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLGroupResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/global/counts": {
             "get": {
                 "description": "Returns global tracking counts used by legacy clients.",
@@ -1669,16 +1592,124 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/cached": {
+        "/v2/clan/search": {
             "get": {
-                "description": "Returns ClashKing's cached version of the clan response. The data may be several hours old.",
+                "description": "Finds clans by name or exact tag with comma-separated filters, range bounds, and cursor pagination.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get a cached clan profile",
+                "summary": "Search clans",
+                "parameters": [
+                    {
+                        "maxLength": 100,
+                        "minLength": 2,
+                        "type": "string",
+                        "description": "Clan name or exact tag",
+                        "name": "query",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Comma-separated location IDs",
+                        "name": "locationIds",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Comma-separated war league IDs",
+                        "name": "warLeagueIds",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Minimum clan level",
+                        "name": "clanLevel[min]",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Maximum clan level",
+                        "name": "clanLevel[max]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 0,
+                        "type": "integer",
+                        "description": "Minimum member count",
+                        "name": "members[min]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 0,
+                        "type": "integer",
+                        "description": "Maximum member count",
+                        "name": "members[max]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 25,
+                        "description": "Maximum results to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cursor returned by the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchClanResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/cached": {
+            "get": {
+                "description": "Returns a stored clan profile when live data is unnecessary. Values may be several hours behind the official API.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Read a recently cached clan profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -1706,14 +1737,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/history/changes": {
             "get": {
-                "description": "Returns description or clan-level changes. Values are strings or integers according to type.",
+                "description": "Returns stored description or clan-level changes with optional inclusive time bounds. Each value keeps its natural string or integer type.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan change history",
+                "summary": "Review changes to a clan's profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -1776,16 +1807,164 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/join-leave": {
+        "/v2/clan/{clan_tag}/history/leaderboards": {
             "get": {
-                "description": "Returns join and leave history for a single clan tag. available and uniquePlayers are all-time totals; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns dated clan placements and points for one required leaderboard type, with optional inclusive time bounds.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan join-leave history",
+                "summary": "Review a clan's leaderboard history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "clan_home_points",
+                            "clan_builder_base_points",
+                            "clan_capital_points"
+                        ],
+                        "type": "string",
+                        "description": "Leaderboard type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include snapshots at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include snapshots at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 250,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum snapshots to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLeaderboardHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/history/legends": {
+            "get": {
+                "description": "Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Review a clan's final Legend finishers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include seasons at or after this ISO-8601 time",
+                        "name": "time[after]",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only include seasons at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 250,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum finishers to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLegendHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/join-leave": {
+            "get": {
+                "description": "Returns stored joins and leaves for one clan. Time filters affect returned events, while available and uniquePlayers remain all-time totals.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Review a clan's membership changes",
                 "parameters": [
                     {
                         "type": "string",
@@ -1838,131 +2017,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/clan/{clan_tag}/leaderboard-history/{leaderboard_type}": {
-            "get": {
-                "description": "Returns typed dated placements for clan Home Village, Builder Base, or Capital leaderboards.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Leaderboard"
-                ],
-                "summary": "Get a clan's leaderboard history",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "clan_home_points",
-                            "clan_builder_base_points",
-                            "clan_capital_points"
-                        ],
-                        "type": "string",
-                        "description": "Canonical clan leaderboard type",
-                        "name": "leaderboard_type",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanLeaderboardHistoryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/clan/{clan_tag}/legend-history": {
-            "get": {
-                "description": "Returns normalized historical Legend finishers for one clan, ordered by best rank and then newest season.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Leaderboard"
-                ],
-                "summary": "Get a clan's final Legend finishers",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "maximum": 1000,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 200,
-                        "description": "Result limit",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanLegendHistoryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v2/clan/{clan_tag}/rankings": {
             "get": {
-                "description": "Returns Home Village, Builder Base, and Clan Capital current points with every stored global/location placement.",
+                "description": "Returns current Home Village, Builder Base, and Clan Capital scores with every available global and local leaderboard position.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get rankings of a clan",
+                "summary": "View a clan's current leaderboard positions",
                 "parameters": [
                     {
                         "type": "string",
@@ -1990,14 +2054,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/records": {
             "get": {
-                "description": "Returns the highest tracked clan-points and war-win-streak records for a clan.",
+                "description": "Returns the clan's highest tracked points and longest war win streak, including when each record was reached.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get clan records",
+                "summary": "View a clan's tracked records",
                 "parameters": [
                     {
                         "type": "string",
@@ -2025,14 +2089,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/warlog": {
             "get": {
-                "description": "Returns wars stored in ClashKing's history.",
+                "description": "Returns stored wars in the official clan war-log shape, with optional type and end-time filters for paging historical results.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get a clan war log",
+                "summary": "Official API-compatible war log from stored war history",
                 "parameters": [
                     {
                         "type": "string",
@@ -2098,14 +2162,14 @@ const docTemplate = `{
         },
         "/v2/clan/{clan_tag}/wars": {
             "get": {
-                "description": "Returns previous wars for a clan rebuilt from SQL war rows, attacks, and missed attacks.",
+                "description": "Returns complete stored war details, including members and attacks, filtered by war type and inclusive end-time boundaries.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Clan"
                 ],
-                "summary": "Get stored clan wars",
+                "summary": "Complete stored wars for a clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -2115,33 +2179,35 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Start Unix timestamp. Defaults to all history.",
-                        "name": "timestamp_start",
+                        "enum": [
+                            "cwl",
+                            "random",
+                            "friendly"
+                        ],
+                        "type": "string",
+                        "description": "War type",
+                        "name": "type",
                         "in": "query"
                     },
                     {
-                        "type": "integer",
-                        "description": "End Unix timestamp",
-                        "name": "timestamp_end",
+                        "type": "string",
+                        "description": "Only include wars ending at or after this ISO-8601 time",
+                        "name": "time[after]",
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only include wars ending at or before this ISO-8601 time",
+                        "name": "time[before]",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "Maximum number of wars. Max 250.",
+                        "default": 15,
+                        "description": "Maximum wars to return",
                         "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "War type filter. Repeatable. Values: random, friendly, cwl, all.",
-                        "name": "war_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated war type filter. Values: random,friendly,cwl.",
-                        "name": "war_types",
                         "in": "query"
                     }
                 ],
@@ -2150,6 +2216,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.WarListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -2352,91 +2424,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/cwl/league-thresholds": {
+        "/v2/cwl/{clan_tag}/group": {
             "get": {
-                "description": "Returns the static CWL promotion and demotion thresholds list.",
+                "description": "Returns the requested CWL group with its roster, rounds, and wars, or the clan's most recent stored season when omitted.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "War \u0026 CWL"
                 ],
-                "summary": "Promo and demotion thresholds for CWL leagues",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLThresholdResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/cwl/leagues/{league_id}/rankings": {
-            "get": {
-                "description": "Returns only persisted standings for one season, league, and war size. Empty standings are a successful empty result until Tracking has computed them.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Persisted CWL league rankings",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "CWL league ID",
-                        "name": "league_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "CWL season (YYYY-MM)",
-                        "name": "season",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "CWL war size",
-                        "name": "war_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.CWLLeagueRankingsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/cwl/{clan_tag}": {
-            "get": {
-                "description": "Returns the requested season, or the most recent stored season when season is omitted.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CWL"
-                ],
-                "summary": "Get a stored CWL group",
+                "summary": "View a clan's stored CWL group",
                 "parameters": [
                     {
                         "type": "string",
@@ -2470,14 +2467,14 @@ const docTemplate = `{
         },
         "/v2/cwl/{clan_tag}/ranking-history": {
             "get": {
-                "description": "Returns typed CWL group snapshots for a clan. A group without persisted standings returns its roster and lifecycle data with no synthetic ranking.",
+                "description": "Returns every stored CWL group containing the clan. Rosters and rounds are historical snapshots; rankings appear only when separately saved.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "War \u0026 CWL"
                 ],
-                "summary": "CWL group history for a clan",
+                "summary": "Browse a clan's stored CWL groups",
                 "parameters": [
                     {
                         "type": "string",
@@ -2505,13 +2502,14 @@ const docTemplate = `{
         },
         "/v2/cwl/{clan_tag}/seasons": {
             "get": {
+                "description": "Lists every stored CWL season containing the clan, with its league, team size, state, and available group standing.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "CWL"
+                    "War \u0026 CWL"
                 ],
-                "summary": "List stored CWL seasons for a clan",
+                "summary": "List a clan's stored CWL seasons",
                 "parameters": [
                     {
                         "type": "string",
@@ -2519,6 +2517,14 @@ const docTemplate = `{
                         "name": "clan_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 12,
+                        "description": "Maximum seasons to return",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2526,6 +2532,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.CWLSeasonsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     }
                 }
@@ -3271,6 +3283,61 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.PublicClanLeaderboardResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/leaderboard/cwl/{league_id}": {
+            "get": {
+                "description": "Returns the saved leaderboard for one CWL season, league, and team size, ordered by global rank and then group rank.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Rank CWL clans within a league",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "CWL league ID",
+                        "name": "league_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "CWL season (YYYY-MM)",
+                        "name": "season",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "CWL team size",
+                        "name": "team_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.CWLLeagueRankingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -5023,16 +5090,104 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/player/{player_tag}/battlelog/history": {
+        "/v2/player/search": {
             "get": {
-                "description": "Returns historical returned battlelogs for a player, including farming hits when present.",
+                "description": "Finds players by name or exact tag with comma-separated filters and cursor pagination.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player battlelog history",
+                "summary": "Search players",
+                "parameters": [
+                    {
+                        "maxLength": 100,
+                        "minLength": 2,
+                        "type": "string",
+                        "description": "Player name or exact tag",
+                        "name": "query",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Comma-separated clan tags",
+                        "name": "clanTags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Comma-separated league tier IDs",
+                        "name": "leagueIds",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Comma-separated town hall levels",
+                        "name": "townhallLevels",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 25,
+                        "description": "Maximum results to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cursor returned by the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.SearchPlayerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/battlelog/history": {
+            "get": {
+                "description": "Returns previously observed battle logs for the player, including farming attacks when those results were available during tracking.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Browse a player's saved battle history",
                 "parameters": [
                     {
                         "type": "string",
@@ -5090,14 +5245,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/cwl/history": {
             "get": {
-                "description": "Returns player-centric CWL seasons from normalized roster, completed war lineup, and attack facts. Clan totals and placements are returned only when persisted standings or complete war facts support them.",
+                "description": "Returns each season containing the player, with their clan, league, team size, attacks, missed attacks, results, stars, and placements.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "Player"
                 ],
-                "summary": "CWL group history for a player",
+                "summary": "Review a player's CWL season history",
                 "parameters": [
                     {
                         "type": "string",
@@ -5105,6 +5260,14 @@ const docTemplate = `{
                         "name": "player_tag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 6,
+                        "description": "Maximum seasons to return",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5112,6 +5275,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.CWLPlayerHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
                     },
                     "500": {
@@ -5125,14 +5294,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/history/changes": {
             "get": {
-                "description": "Returns stored player profile changes of the requested type.",
+                "description": "Returns stored changes of one required type, such as upgrades or trophies, with optional inclusive time bounds.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player change history",
+                "summary": "Review changes to a player's profile",
                 "parameters": [
                     {
                         "type": "string",
@@ -5208,14 +5377,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/history/stats": {
             "get": {
-                "description": "Returns stored typed positive stat changes for a player over an inclusive ISO-8601 time range, newest first.",
+                "description": "Returns positive changes for one required activity type over an inclusive time range, newest first and limited to stored observations.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player stat changes",
+                "summary": "Track a player's activity gains",
                 "parameters": [
                     {
                         "type": "string",
@@ -5289,14 +5458,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave": {
             "get": {
-                "description": "Returns join and leave history for a single player tag. available is the all-time event total; date filters only affect returned items. Date filters use ISO-8601 values such as 2026-05-01T00:00:00Z.",
+                "description": "Returns stored clan joins and leaves for one player. Time filters affect returned events, while available remains the all-time total.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player join-leave history",
+                "summary": "Review a player's clan movements",
                 "parameters": [
                     {
                         "type": "string",
@@ -5351,14 +5520,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave/shared": {
             "get": {
-                "description": "Returns clans two players shared, total shared minutes per clan, and each shared time range.",
+                "description": "Returns every clan the two players shared, including their total overlap and the exact stored time ranges together.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get shared player join-leave clan totals",
+                "summary": "Find clans shared by two players",
                 "parameters": [
                     {
                         "type": "string",
@@ -5399,14 +5568,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/join-leave/totals": {
             "get": {
-                "description": "Returns total minutes and join visit counts for each clan a player spent time in across all stored join-leave history.",
+                "description": "Totals the player's stored time and visits for every clan, making long-term clan membership easy to compare.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player join-leave clan totals",
+                "summary": "Measure a player's time in each clan",
                 "parameters": [
                     {
                         "type": "string",
@@ -5545,14 +5714,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/ranked/{season}/battlelog": {
             "get": {
-                "description": "Returns player ranked season placement plus recent ranked battlelog rows.",
+                "description": "Returns the player's placement for one ranked season together with the recent battles saved for that season.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player ranked battlelog",
+                "summary": "Review a player's ranked season battles",
                 "parameters": [
                     {
                         "type": "string",
@@ -5599,14 +5768,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/ranked/{season}/group": {
             "get": {
-                "description": "Returns ranked group data for the group containing the requested player.",
+                "description": "Returns the complete ranked group containing the player for one season, including every stored member and placement.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player ranked group",
+                "summary": "View a player's ranked season group",
                 "parameters": [
                     {
                         "type": "string",
@@ -5647,14 +5816,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/rankings": {
             "get": {
-                "description": "Returns current Home Village and Builder Base trophy rankings plus the player's retained official ranking location.",
+                "description": "Returns current Home Village and Builder Base trophy positions plus the player's official ranking location when it is known.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get current player rankings",
+                "summary": "View a player's current leaderboard positions",
                 "parameters": [
                     {
                         "type": "string",
@@ -5692,16 +5861,57 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/player/{player_tag}/war/attacks": {
+        "/v2/player/{player_tag}/timers": {
             "get": {
-                "description": "Returns stored attacks and defenses involving a player, most recent first.",
+                "description": "Returns active regular-war, CWL, and Capital Raid timers currently stored for the player.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player war attacks",
+                "summary": "View a player's active timers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player tag",
+                        "name": "player_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PlayerTimersResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/player/{player_tag}/war/attacks": {
+            "get": {
+                "description": "Returns stored attacks made by or against the player, with optional war type and inclusive time filters, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Player"
+                ],
+                "summary": "Browse a player's war attacks and defenses",
                 "parameters": [
                     {
                         "type": "string",
@@ -5767,14 +5977,14 @@ const docTemplate = `{
         },
         "/v2/player/{player_tag}/war/stats": {
             "get": {
-                "description": "Returns wars in which the player was rostered, with their attacks and defenses. Empty attack and defense arrays are retained so missed attacks can be derived from attacksPerMember.",
+                "description": "Returns wars where the player appeared, including both sides and every attack involving them. Empty attack lists reveal missed opportunities.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Player"
                 ],
-                "summary": "Get player war history",
+                "summary": "Review a player's complete war history",
                 "parameters": [
                     {
                         "type": "string",
@@ -7685,112 +7895,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            }
-        },
-        "/v2/search/clan": {
-            "post": {
-                "description": "Searches the clan Elasticsearch alias by name or exact tag with optional filters and cursor pagination.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Search clans",
-                "parameters": [
-                    {
-                        "description": "Clan search query",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchClanQuery"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchClanResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "415": {
-                        "description": "Unsupported Media Type",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                },
-                "x-http-method": "QUERY"
-            }
-        },
-        "/v2/search/player": {
-            "post": {
-                "description": "Searches the player Elasticsearch alias by name or exact tag with optional filters and cursor pagination.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Search"
-                ],
-                "summary": "Search players",
-                "parameters": [
-                    {
-                        "description": "Player search query",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchPlayerQuery"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.SearchPlayerResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "415": {
-                        "description": "Unsupported Media Type",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                },
-                "x-http-method": "QUERY"
             }
         },
         "/v2/search/{guild_id}/banned-players": {
@@ -9952,13 +10056,14 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
+                "description": "Returns the saved bonus-medal recipients for one server, clan, and CWL season so an existing award plan can be reviewed.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "CWL"
+                    "Server Clans"
                 ],
-                "summary": "Get stored CWL bonus recipients",
+                "summary": "View saved CWL bonus recipients",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9997,6 +10102,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
+                "description": "Replaces the saved bonus-medal recipients for one server, clan, and CWL season with the submitted player list.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10004,9 +10110,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CWL"
+                    "Server Clans"
                 ],
-                "summary": "Replace stored CWL bonus recipients",
+                "summary": "Replace saved CWL bonus recipients",
                 "parameters": [
                     {
                         "type": "integer",
@@ -13595,233 +13701,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/v2/war/clan/stats": {
+        "/v2/war/{clan_tag}/previous/{endtime}": {
             "get": {
-                "description": "Returns the number of wars for the requested clan tags.",
+                "description": "Returns the stored clan war ending nearest the supplied Clash time, allowing a ten-minute difference in either direction.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "War"
+                    "War \u0026 CWL"
                 ],
-                "summary": "Clan war stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Single clan tag",
-                        "name": "clan_tag",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarStatsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/clans/warhits": {
-            "post": {
-                "description": "Returns war hit rows for the requested clan tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Clan warhits stats",
-                "parameters": [
-                    {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarClanTagsBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ClanWarHitsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/players/warhits": {
-            "post": {
-                "description": "Returns war hit rows for the requested player tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Player warhits stats",
-                "parameters": [
-                    {
-                        "description": "Player tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarPlayersBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.PlayerWarHitsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/stats": {
-            "get": {
-                "description": "Returns the number of wars for the requested clan tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Clan war stats",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "Clan tags",
-                        "name": "clan_tags",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Single clan tag",
-                        "name": "clan_tag",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarStatsResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/war-summary": {
-            "post": {
-                "description": "Returns current war summary data for multiple clan tags.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get full war summary for multiple clans",
-                "parameters": [
-                    {
-                        "description": "Clan tags",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarClanTagsBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarSummaryListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/{clan_tag}/previous": {
-            "get": {
-                "description": "Returns previous wars for a clan tag, optionally filtered to CWL.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Previous wars for a clan",
+                "summary": "Find a stored war by end time",
                 "parameters": [
                     {
                         "type": "string",
@@ -13831,139 +13720,10 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Start timestamp",
-                        "name": "timestamp_start",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "End timestamp",
-                        "name": "timestamp_end",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include CWL wars",
-                        "name": "include_cwl",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of results",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/{clan_tag}/war-summary": {
-            "get": {
-                "description": "Returns current war summary data for a single clan tag.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get war summary for a clan",
-                "parameters": [
-                    {
                         "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
+                        "description": "War end time in Clash format, such as 20260820T120000.000Z",
+                        "name": "endtime",
                         "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarSummaryResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/war/{clanTag}/basic": {
-            "get": {
-                "description": "Returns the current or most recent non-CWL war for a clan.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get current or recent war",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clanTag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/war/{clanTag}/previous": {
-            "get": {
-                "description": "Returns the stored previous war near the supplied Clash API end time.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War"
-                ],
-                "summary": "Get previous war by end time",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clanTag",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "War end time in Clash format",
-                        "name": "endTime",
-                        "in": "query",
                         "required": true
                     }
                 ],
@@ -13982,6 +13742,41 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/war/{clan_tag}/war-summary": {
+            "get": {
+                "description": "Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War \u0026 CWL"
+                ],
+                "summary": "View a clan's current war summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.WarSummaryResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -15782,6 +15577,9 @@ const docTemplate = `{
                     "type": "integer",
                     "x-nullable": true
                 },
+                "warLeague": {
+                    "$ref": "#/definitions/modelsv2.LeagueReference"
+                },
                 "wars": {
                     "allOf": [
                         {
@@ -15804,10 +15602,6 @@ const docTemplate = `{
                 "clan": {
                     "$ref": "#/definitions/modelsv2.CWLPlayerHistoryClan"
                 },
-                "cwlLeagueId": {
-                    "type": "integer",
-                    "x-nullable": true
-                },
                 "missedAttacks": {
                     "type": "integer"
                 },
@@ -15822,12 +15616,12 @@ const docTemplate = `{
                 "season": {
                     "type": "string"
                 },
-                "townHallLevel": {
-                    "type": "integer"
-                },
-                "warSize": {
+                "teamSize": {
                     "type": "integer",
                     "x-nullable": true
+                },
+                "townHallLevel": {
+                    "type": "integer"
                 }
             }
         },
@@ -16014,34 +15808,6 @@ const docTemplate = `{
                 },
                 "tag": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.CWLThresholdItem": {
-            "type": "object",
-            "properties": {
-                "demote": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "promo": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.CWLThresholdResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLThresholdItem"
-                    }
                 }
             }
         },
@@ -16260,20 +16026,40 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ClanLeaderboardHistoryItem": {
+            "type": "object",
+            "properties": {
+                "builderBasePoints": {
+                    "type": "integer"
+                },
+                "capitalPoints": {
+                    "type": "integer"
+                },
+                "clanPoints": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryLocationReference"
+                },
+                "members": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.ClanLeaderboardHistoryResponse": {
             "type": "object",
             "properties": {
-                "clanTag": {
-                    "type": "string"
-                },
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.LeaderboardEntityHistoryItem"
+                        "$ref": "#/definitions/modelsv2.ClanLeaderboardHistoryItem"
                     }
-                },
-                "type": {
-                    "$ref": "#/definitions/modelsv2.LeaderboardHistoryType"
                 }
             }
         },
@@ -16288,13 +16074,42 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ClanLegendHistoryItem": {
+            "type": "object",
+            "properties": {
+                "attackWins": {
+                    "type": "integer"
+                },
+                "defenseWins": {
+                    "type": "integer"
+                },
+                "expLevel": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "trophies": {
+                    "type": "integer"
+                }
+            }
+        },
         "modelsv2.ClanLegendHistoryResponse": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/modelsv2.LegendHistoryItem"
+                        "$ref": "#/definitions/modelsv2.ClanLegendHistoryItem"
                     }
                 }
             }
@@ -16467,37 +16282,6 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
-                }
-            }
-        },
-        "modelsv2.ClanWarHitResult": {
-            "type": "object",
-            "properties": {
-                "clan_tag": {
-                    "type": "string"
-                },
-                "players": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.PlayerWarHitResult"
-                    }
-                },
-                "wars": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarHitWar"
-                    }
-                }
-            }
-        },
-        "modelsv2.ClanWarHitsResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.ClanWarHitResult"
                     }
                 }
             }
@@ -18672,6 +18456,59 @@ const docTemplate = `{
                 "PlayerStatTypeCapitalGoldDonated"
             ]
         },
+        "modelsv2.PlayerTimer": {
+            "type": "object",
+            "properties": {
+                "clans": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "type": {
+                    "enum": [
+                        "war",
+                        "cwl",
+                        "capital"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.PlayerTimerType"
+                        }
+                    ]
+                },
+                "warTag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.PlayerTimerType": {
+            "type": "string",
+            "enum": [
+                "war",
+                "cwl",
+                "capital"
+            ],
+            "x-enum-varnames": [
+                "PlayerTimerTypeWar",
+                "PlayerTimerTypeCWL",
+                "PlayerTimerTypeCapital"
+            ]
+        },
+        "modelsv2.PlayerTimersResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.PlayerTimer"
+                    }
+                }
+            }
+        },
         "modelsv2.PlayerUpgradePreferencesPatchRequest": {
             "type": "object",
             "required": [
@@ -18916,43 +18753,6 @@ const docTemplate = `{
                 },
                 "townhallLevel": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.PlayerWarHitResult": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "stats": {
-                    "$ref": "#/definitions/modelsv2.WarHitStats"
-                },
-                "tag": {
-                    "type": "string"
-                },
-                "timeRange": {
-                    "$ref": "#/definitions/modelsv2.TimeRange"
-                },
-                "townhallLevel": {
-                    "type": "integer"
-                },
-                "wars": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarHitWar"
-                    }
-                }
-            }
-        },
-        "modelsv2.PlayerWarHitsResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.PlayerWarHitResult"
-                    }
                 }
             }
         },
@@ -20571,56 +20371,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.SearchClanFilters": {
-            "type": "object",
-            "properties": {
-                "clan_level": {
-                    "$ref": "#/definitions/modelsv2.SearchIntegerRange"
-                },
-                "cwl_league_ids": {
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "location_ids": {
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "members": {
-                    "$ref": "#/definitions/modelsv2.SearchIntegerRange"
-                }
-            }
-        },
-        "modelsv2.SearchClanQuery": {
-            "type": "object",
-            "required": [
-                "query"
-            ],
-            "properties": {
-                "cursor": {
-                    "type": "string"
-                },
-                "filters": {
-                    "$ref": "#/definitions/modelsv2.SearchClanFilters"
-                },
-                "limit": {
-                    "type": "integer",
-                    "default": 25,
-                    "maximum": 200,
-                    "minimum": 1
-                },
-                "query": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 2
-                }
-            }
-        },
         "modelsv2.SearchClanResponse": {
             "type": "object",
             "properties": {
@@ -20664,27 +20414,14 @@ const docTemplate = `{
         "modelsv2.SearchCursorPage": {
             "type": "object",
             "properties": {
-                "has_more": {
+                "hasMore": {
                     "type": "boolean"
                 },
                 "limit": {
                     "type": "integer"
                 },
-                "next_cursor": {
+                "nextCursor": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.SearchIntegerRange": {
-            "type": "object",
-            "properties": {
-                "max": {
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "min": {
-                    "type": "integer",
-                    "minimum": 0
                 }
             }
         },
@@ -20733,57 +20470,6 @@ const docTemplate = `{
                 },
                 "tag": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.SearchPlayerFilters": {
-            "type": "object",
-            "properties": {
-                "clan_tags": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "league_ids": {
-                    "type": "array",
-                    "maxItems": 5,
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "townhall_levels": {
-                    "type": "array",
-                    "maxItems": 100,
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "modelsv2.SearchPlayerQuery": {
-            "type": "object",
-            "required": [
-                "query"
-            ],
-            "properties": {
-                "cursor": {
-                    "type": "string"
-                },
-                "filters": {
-                    "$ref": "#/definitions/modelsv2.SearchPlayerFilters"
-                },
-                "limit": {
-                    "type": "integer",
-                    "default": 25,
-                    "maximum": 200,
-                    "minimum": 1
-                },
-                "query": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 2
                 }
             }
         },
@@ -22663,17 +22349,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.TimeRange": {
-            "type": "object",
-            "properties": {
-                "end": {
-                    "type": "integer"
-                },
-                "start": {
-                    "type": "integer"
-                }
-            }
-        },
         "modelsv2.TrackingDatabaseMetrics": {
             "type": "object",
             "properties": {
@@ -23302,17 +22977,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.WarClanTagsBody": {
-            "type": "object",
-            "properties": {
-                "clan_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "modelsv2.WarCompletedDailyItem": {
             "type": "object",
             "properties": {
@@ -23338,87 +23002,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.WarHitBucket": {
-            "type": "object",
-            "properties": {
-                "byEnemyTownhall": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/modelsv2.WarMatchupStats"
-                    }
-                },
-                "byEnemyTownhallDef": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/modelsv2.WarMatchupStats"
-                    }
-                },
-                "missedAttacks": {
-                    "type": "integer"
-                },
-                "missedDefenses": {
-                    "type": "integer"
-                },
-                "starsCount": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "starsCountDef": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "totalAttacks": {
-                    "type": "integer"
-                },
-                "totalDefenses": {
-                    "type": "integer"
-                },
-                "warsCounts": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.WarHitStats": {
-            "type": "object",
-            "properties": {
-                "all": {
-                    "$ref": "#/definitions/modelsv2.WarHitBucket"
-                },
-                "cwl": {
-                    "$ref": "#/definitions/modelsv2.WarHitBucket"
-                },
-                "friendly": {
-                    "$ref": "#/definitions/modelsv2.WarHitBucket"
-                },
-                "random": {
-                    "$ref": "#/definitions/modelsv2.WarHitBucket"
-                }
-            }
-        },
-        "modelsv2.WarHitWar": {
-            "type": "object",
-            "properties": {
-                "members": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarMember"
-                    }
-                },
-                "missedAttacks": {
-                    "type": "integer"
-                },
-                "missedDefenses": {
-                    "type": "integer"
-                },
-                "war_data": {
-                    "$ref": "#/definitions/modelsv2.WarResponse"
-                }
-            }
-        },
         "modelsv2.WarListResponse": {
             "type": "object",
             "properties": {
@@ -23426,26 +23009,6 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/modelsv2.WarResponse"
-                    }
-                }
-            }
-        },
-        "modelsv2.WarMatchupStats": {
-            "type": "object",
-            "properties": {
-                "averageDestruction": {
-                    "type": "number"
-                },
-                "averageStars": {
-                    "type": "number"
-                },
-                "count": {
-                    "type": "integer"
-                },
-                "starsCount": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
                     }
                 }
             }
@@ -23476,17 +23039,6 @@ const docTemplate = `{
                 },
                 "townhallLevel": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.WarPlayersBody": {
-            "type": "object",
-            "properties": {
-                "players": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -23528,31 +23080,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.WarStatsItem": {
-            "type": "object",
-            "properties": {
-                "clan_tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "war_count": {
-                    "type": "integer"
-                }
-            }
-        },
-        "modelsv2.WarStatsResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarStatsItem"
-                    }
-                }
-            }
-        },
         "modelsv2.WarSummaryInfo": {
             "type": "object",
             "properties": {
@@ -23564,17 +23091,6 @@ const docTemplate = `{
                 },
                 "state": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.WarSummaryListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarSummaryResponse"
-                    }
                 }
             }
         },

@@ -172,16 +172,30 @@ func ensureCWLLeagueIDs(c *fiber.Ctx, a apptypes.Deps, clanTag string) error {
 	if len(groups) == 0 {
 		return nil
 	}
+	peerAssignments, err := loadCWLPeerLeagueAssignments(c, a, groups)
+	if err != nil {
+		return err
+	}
+	for index := range groups {
+		if groups[index].leagueID != 0 {
+			continue
+		}
+		if leagueID, ok := peerAssignments[groups[index].cwlID]; ok {
+			groups[index].leagueID = leagueID
+		}
+	}
 	wars, err := loadCWLLeagueBackfillWars(c, a, groups)
 	if err != nil {
 		return err
 	}
-	leagueAssignments := map[string]int{}
-	if hasLeagueHistory {
+	leagueAssignments := peerAssignments
+	if hasLeagueHistory || len(peerAssignments) > 0 {
 		for index := range groups {
 			groups[index].rank, groups[index].complete = calculateCWLLeagueBackfillRank(clanTag, groups[index], wars)
 		}
-		leagueAssignments = cwlLeagueAssignments(groups, history)
+		for cwlID, leagueID := range cwlLeagueAssignments(groups, history, hasLeagueHistory) {
+			leagueAssignments[cwlID] = leagueID
+		}
 	}
 	warSizeAssignments := cwlWarSizeAssignments(groups, wars)
 	if len(leagueAssignments) == 0 && len(warSizeAssignments) == 0 && !hasLeagueHistory {
@@ -230,6 +244,82 @@ func ensureCWLLeagueIDs(c *fiber.Ctx, a apptypes.Deps, clanTag string) error {
 		}
 	}
 	return tx.Commit(c.UserContext())
+}
+
+func loadCWLPeerLeagueAssignments(
+	c *fiber.Ctx,
+	a apptypes.Deps,
+	groups []cwlLeagueBackfillGroup,
+) (map[string]int, error) {
+	clanTags := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, clanTag := range group.clanTags {
+			if _, ok := seen[clanTag]; ok {
+				continue
+			}
+			seen[clanTag] = struct{}{}
+			clanTags = append(clanTags, clanTag)
+		}
+	}
+	if len(clanTags) == 0 {
+		return map[string]int{}, nil
+	}
+
+	rows, err := a.Store.SQL.Query(c.UserContext(), `
+		SELECT clan_tag, seasons
+		FROM cwl_league_history
+		WHERE clan_tag = ANY($1)
+	`, clanTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	histories := make(map[string]map[string]int)
+	for rows.Next() {
+		var clanTag string
+		var historyJSON []byte
+		if err := rows.Scan(&clanTag, &historyJSON); err != nil {
+			return nil, err
+		}
+		history := map[string]int{}
+		if err := json.Unmarshal(historyJSON, &history); err != nil {
+			return nil, err
+		}
+		histories[clanTag] = history
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	assignments := make(map[string]int)
+	for _, group := range groups {
+		if group.leagueID != 0 || group.month == "" {
+			continue
+		}
+		votes := make([]int, 0, len(group.clanTags))
+		for _, clanTag := range group.clanTags {
+			leagueID := histories[clanTag][group.month]
+			if leagueID >= cwlUnrankedLeagueID && leagueID <= cwlHighestLeagueID {
+				votes = append(votes, leagueID)
+			}
+		}
+		if leagueID, ok := majorityCWLLeagueID(votes); ok {
+			assignments[group.cwlID] = leagueID
+		}
+	}
+	return assignments, nil
+}
+
+func majorityCWLLeagueID(votes []int) (int, bool) {
+	counts := make(map[int]int)
+	for _, leagueID := range votes {
+		counts[leagueID]++
+		if counts[leagueID] > len(votes)/2 {
+			return leagueID, true
+		}
+	}
+	return 0, false
 }
 
 func loadCWLLeagueBackfillGroups(c *fiber.Ctx, a apptypes.Deps, clanTag string) ([]cwlLeagueBackfillGroup, error) {
@@ -465,7 +555,11 @@ func calculateCWLSeasonSummary(clanTag string, group cwlLeagueBackfillGroup, war
 	return cwlSeasonSummary{}, false
 }
 
-func cwlLeagueAssignments(groups []cwlLeagueBackfillGroup, history map[string]int) map[string]int {
+func cwlLeagueAssignments(
+	groups []cwlLeagueBackfillGroup,
+	history map[string]int,
+	hasLeagueHistory bool,
+) map[string]int {
 	assignments := map[string]int{}
 	for index := range groups {
 		group := &groups[index]
@@ -475,23 +569,23 @@ func cwlLeagueAssignments(groups []cwlLeagueBackfillGroup, history map[string]in
 		if group.month == "" || group.month >= cwlBackfillEndMonth {
 			continue
 		}
-		if group.month <= cwlDirectHistoryEndMonth {
+		directHistoryMonth := group.month <= cwlDirectHistoryEndMonth
+		if directHistoryMonth {
 			group.leagueID = history[group.month]
-			if group.leagueID == 0 {
-				group.leagueID = cwlUnrankedLeagueID
-			}
-		} else {
-			if index == 0 || !followingCWLSeason(groups[index-1], *group) {
-				break
-			}
-			prior := groups[index-1]
-			if !prior.complete || prior.leagueID == 0 {
-				break
-			}
-			group.leagueID = nextCWLLeagueID(prior.leagueID, prior.rank, len(prior.clanTags), prior.month)
 		}
 		if group.leagueID == 0 {
-			break
+			if index > 0 && followingCWLSeason(groups[index-1], *group) {
+				prior := groups[index-1]
+				if prior.complete && prior.leagueID != 0 {
+					group.leagueID = nextCWLLeagueID(prior.leagueID, prior.rank, len(prior.clanTags), prior.month)
+				}
+			}
+		}
+		if group.leagueID == 0 && directHistoryMonth && hasLeagueHistory {
+			group.leagueID = cwlUnrankedLeagueID
+		}
+		if group.leagueID == 0 {
+			continue
 		}
 		assignments[group.cwlID] = group.leagueID
 	}

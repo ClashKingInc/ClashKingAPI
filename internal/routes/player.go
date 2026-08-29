@@ -16,8 +16,8 @@ import (
 )
 
 // playerWarAttacks godoc
-// @Summary Get player war attacks
-// @Description Returns stored attacks and defenses involving a player, most recent first.
+// @Summary Browse a player's war attacks and defenses
+// @Description Returns stored attacks made by or against the player, with optional war type and inclusive time filters, newest first.
 // @Tags Player
 // @Produce json
 // @Param player_tag path string true "Player tag"

@@ -96,7 +96,7 @@ func shortlink(a apptypes.Deps) fiber.Handler {
 // warStatsLegacy godoc
 // @Summary Get legacy war stats
 // @Description Returns scoped war hit-rate stats for players.
-// @Tags War
+// @Tags War & CWL
 // @Produce json
 // @Param player_tags query []string false "Player tags"
 // @Param clan_tags query []string false "Clan tags"

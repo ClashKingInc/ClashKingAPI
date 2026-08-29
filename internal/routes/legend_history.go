@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
@@ -14,8 +15,8 @@ import (
 const (
 	legendHistoryDefaultLimit     = 25
 	legendHistoryMaximumLimit     = 200
-	clanLegendHistoryDefaultLimit = 200
-	clanLegendHistoryMaximumLimit = 1000
+	clanLegendHistoryDefaultLimit = 50
+	clanLegendHistoryMaximumLimit = 250
 )
 
 const legendHistoryColumns = `
@@ -49,11 +50,22 @@ const legendPlayerHistoryQuery = `
 `
 
 const legendClanHistoryQuery = `
-	SELECT ` + legendHistoryColumns + `
-	FROM legend_history
-	WHERE clan_tag = $1
-	ORDER BY rank, season DESC
-	LIMIT $2
+	SELECT season, player_tag, player_name, exp_level, trophies, attack_wins, defense_wins, rank
+	FROM (
+		SELECT *, CASE
+			WHEN season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$'
+			 AND pg_input_is_valid(substring(season FROM 4), 'timestamp with time zone')
+				THEN substring(season FROM 4)::timestamptz
+			WHEN season ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+				THEN (season || '-01')::timestamptz
+			ELSE NULL
+		END AS season_time
+		FROM legend_history
+		WHERE clan_tag = $1
+	) AS history
+	WHERE season_time >= $2 AND season_time <= $3
+	ORDER BY season_time DESC, rank
+	LIMIT $4
 `
 
 type legendHistoryDB interface {
@@ -205,22 +217,24 @@ func playerLegendHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLook
 }
 
 // clanLegendHistory godoc
-// @Summary Get a clan's final Legend finishers
-// @Description Returns normalized historical Legend finishers for one clan, ordered by best rank and then newest season.
-// @Tags Leaderboard
+// @Summary Review a clan's final Legend finishers
+// @Description Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.
+// @Tags Clan
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
-// @Param limit query int false "Result limit" default(200) minimum(1) maximum(1000)
+// @Param time[after] query string false "Only include seasons at or after this ISO-8601 time"
+// @Param time[before] query string false "Only include seasons at or before this ISO-8601 time"
+// @Param limit query int false "Maximum finishers to return" default(50) minimum(1) maximum(250)
 // @Success 200 {object} modelsv2.ClanLegendHistoryResponse
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 500 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
-// @Router /v2/clan/{clan_tag}/legend-history [get]
+// @Router /v2/clan/{clan_tag}/history/legends [get]
 func clanLegendHistory(a apptypes.Deps) fiber.Handler {
-	return clanLegendHistoryHandler(configuredLegendHistoryDB(a), legendLeagueTiers(a))
+	return clanLegendHistoryHandler(configuredLegendHistoryDB(a))
 }
 
-func clanLegendHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLookup) fiber.Handler {
+func clanLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tag := clanFixTag(c.Params("clan_tag"))
 		if tag == "" {
@@ -228,17 +242,39 @@ func clanLegendHistoryHandler(db legendHistoryDB, leagues legendLeagueTierLookup
 		}
 		limit, ok := clanLegendHistoryLimit(c.Query("limit"))
 		if !ok {
-			return apptypes.Error(fiber.StatusBadRequest, "limit must be between 1 and 1000")
+			return apptypes.Error(fiber.StatusBadRequest, "limit must be between 1 and 250")
+		}
+		after, before, err := v2TimeWindowFromQuery(c, time.Unix(0, 0).UTC(), time.Unix(9999999999, 0).UTC())
+		if err != nil {
+			return err
 		}
 		if db == nil {
 			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
 		}
-		items, err := queryLegendHistory(c.UserContext(), db, leagues, legendClanHistoryQuery, tag, limit)
+		items, err := queryClanLegendHistory(c.UserContext(), db, tag, after, before, limit)
 		if err != nil {
 			return err
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLegendHistoryResponse{Items: items})
 	}
+}
+
+func queryClanLegendHistory(ctx context.Context, db legendHistoryDB, tag string, after, before time.Time, limit int) ([]modelsv2.ClanLegendHistoryItem, error) {
+	rows, err := db.Query(ctx, legendClanHistoryQuery, tag, after, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []modelsv2.ClanLegendHistoryItem{}
+	for rows.Next() {
+		var item modelsv2.ClanLegendHistoryItem
+		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.ExpLevel, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func queryLegendHistory(

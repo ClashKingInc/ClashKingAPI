@@ -571,7 +571,7 @@ func rewriteRef(value any) any {
 
 func orderedTags(doc map[string]any) []any {
 	primary := []string{
-		"Player", "Clan", "War", "CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links",
+		"Player", "Clan", "War & CWL", "Leaderboard", "Counts", "Stats", "Search", "Dates", "Links",
 	}
 	operationTags := map[string]bool{}
 	paths, _ := doc["paths"].(map[string]any)

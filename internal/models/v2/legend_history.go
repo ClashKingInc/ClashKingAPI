@@ -34,5 +34,16 @@ type PlayerLegendHistoryResponse struct {
 }
 
 type ClanLegendHistoryResponse struct {
-	Items []LegendHistoryItem `json:"items"`
+	Items []ClanLegendHistoryItem `json:"items"`
+}
+
+type ClanLegendHistoryItem struct {
+	Season      string `json:"season"`
+	Tag         string `json:"tag"`
+	Name        string `json:"name"`
+	ExpLevel    int    `json:"expLevel"`
+	Trophies    int    `json:"trophies"`
+	AttackWins  int    `json:"attackWins"`
+	DefenseWins int    `json:"defenseWins"`
+	Rank        int    `json:"rank"`
 }

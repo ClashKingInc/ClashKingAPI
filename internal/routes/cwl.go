@@ -14,17 +14,24 @@ import (
 )
 
 // cwlSeasons godoc
-// @Summary List stored CWL seasons for a clan
-// @Tags CWL
+// @Summary List a clan's stored CWL seasons
+// @Description Lists every stored CWL season containing the clan, with its league, team size, state, and available group standing.
+// @Tags War & CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
+// @Param limit query int false "Maximum seasons to return" default(12) minimum(1)
 // @Success 200 {object} modelsv2.CWLSeasonsResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
 // @Router /v2/cwl/{clan_tag}/seasons [get]
 func cwlSeasons(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))
 		if clanTag == "" {
 			return apptypes.Error(http.StatusBadRequest, "invalid clan tag")
+		}
+		limit, err := v2QueryInt(c, "limit", 12)
+		if err != nil || limit < 1 {
+			return apptypes.Error(http.StatusBadRequest, "limit must be a positive integer")
 		}
 		if err := ensureCWLLeagueIDs(c, a, clanTag); err != nil {
 			return err
@@ -33,14 +40,9 @@ func cwlSeasons(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		wars, err := loadCWLLeagueBackfillWars(c, a, groups)
-		if err != nil {
-			return err
-		}
-		catalog := newReferenceCatalog(a)
-		items := make([]modelsv2.CWLSeasonItem, 0, len(groups))
+		selected := make([]cwlLeagueBackfillGroup, 0, min(limit, len(groups)))
 		seenSeasons := make(map[string]struct{}, len(groups))
-		for index := len(groups) - 1; index >= 0; index-- {
+		for index := len(groups) - 1; index >= 0 && len(selected) < limit; index-- {
 			group := groups[index]
 			if group.state != "ended" {
 				continue
@@ -49,6 +51,15 @@ func cwlSeasons(a apptypes.Deps) fiber.Handler {
 				continue
 			}
 			seenSeasons[group.season] = struct{}{}
+			selected = append(selected, group)
+		}
+		wars, err := loadCWLLeagueBackfillWars(c, a, selected)
+		if err != nil {
+			return err
+		}
+		catalog := newReferenceCatalog(a)
+		items := make([]modelsv2.CWLSeasonItem, 0, len(selected))
+		for _, group := range selected {
 			item := modelsv2.CWLSeasonItem{Season: group.season, State: group.state}
 			if group.warSize > 0 {
 				value := group.warSize
@@ -72,15 +83,15 @@ func cwlSeasons(a apptypes.Deps) fiber.Handler {
 }
 
 // storedCWL godoc
-// @Summary Get a stored CWL group
-// @Description Returns the requested season, or the most recent stored season when season is omitted.
-// @Tags CWL
+// @Summary View a clan's stored CWL group
+// @Description Returns the requested CWL group with its roster, rounds, and wars, or the clan's most recent stored season when omitted.
+// @Tags War & CWL
 // @Produce json
 // @Param clan_tag path string true "Clan tag"
 // @Param season query string false "CWL season (YYYY-MM or YYYY-MM-DD)"
 // @Success 200 {object} modelsv2.CWLResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
-// @Router /v2/cwl/{clan_tag} [get]
+// @Router /v2/cwl/{clan_tag}/group [get]
 func storedCWL(a apptypes.Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		clanTag := warFixTag(c.Params("clan_tag"))

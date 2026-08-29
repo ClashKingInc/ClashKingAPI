@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -168,8 +169,9 @@ func TestPlayerSearchPaginatesWithEncryptedPITCursorAndEnrichesClan(t *testing.T
 	defer clash.Close()
 
 	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods(), ErrorHandler: apptypes.ErrorHandler})
-	app.Add(apptypes.MethodQuery, "/v2/search/player", searchPlayers(apptypes.Deps{Search: search, Clash: clash}))
-	first := searchTestRequest(t, app, "/v2/search/player", `{"query":"Magic","filters":{"clan_tags":["#VY2J0LL"],"league_ids":[105000034],"townhall_levels":[17]},"limit":1}`)
+	app.Get("/v2/player/search", searchPlayers(apptypes.Deps{Search: search, Clash: clash}))
+	firstURL := "/v2/player/search?query=Magic&clanTags=%23VY2J0LL&leagueIds=105000034&townhallLevels=17&limit=1"
+	first := searchTestRequest(t, app, firstURL)
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, body = %s", first.StatusCode, first.Body)
 	}
@@ -183,8 +185,7 @@ func TestPlayerSearchPaginatesWithEncryptedPITCursorAndEnrichesClan(t *testing.T
 		t.Fatalf("expected continuation cursor: %#v", first.Response.Pagination)
 	}
 
-	secondBody := `{"query":"Magic","filters":{"clan_tags":["#VY2J0LL"],"league_ids":[105000034],"townhall_levels":[17]},"limit":1,"cursor":` + mustJSON(t, *first.Response.Pagination.NextCursor) + `}`
-	second := searchTestRequest(t, app, "/v2/search/player", secondBody)
+	second := searchTestRequest(t, app, firstURL+"&cursor="+url.QueryEscape(*first.Response.Pagination.NextCursor))
 	if second.StatusCode != http.StatusOK || second.Response.Pagination.HasMore || second.Response.Pagination.NextCursor != nil {
 		t.Fatalf("unexpected second page: status=%d body=%s", second.StatusCode, second.Body)
 	}
@@ -234,9 +235,8 @@ func TestClanSearchUsesAliasFiltersAndOfficialReferenceShapes(t *testing.T) {
 	defer clash.Close()
 
 	app := fiber.New(fiber.Config{RequestMethods: apptypes.APIRequestMethods(), ErrorHandler: apptypes.ErrorHandler})
-	app.Add(apptypes.MethodQuery, "/v2/search/clan", searchClans(apptypes.Deps{Search: search, Clash: clash}))
-	req := httptest.NewRequest(apptypes.MethodQuery, "/v2/search/clan", strings.NewReader(`{"query":"Clash","filters":{"location_ids":[32000249],"cwl_league_ids":[48000018],"clan_level":{"min":20},"members":{"min":40,"max":50}}}`))
-	req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	app.Get("/v2/clan/search", searchClans(apptypes.Deps{Search: search, Clash: clash}))
+	req := httptest.NewRequest(http.MethodGet, "/v2/clan/search?query=Clash&locationIds=32000249&warLeagueIds=48000018&clanLevel%5Bmin%5D=20&members%5Bmin%5D=40&members%5Bmax%5D=50", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("execute request: %v", err)
@@ -278,10 +278,9 @@ type searchPlayerTestResponse struct {
 	Response   modelsv2.SearchPlayerResponse
 }
 
-func searchTestRequest(t *testing.T, app *fiber.App, path, body string) searchPlayerTestResponse {
+func searchTestRequest(t *testing.T, app *fiber.App, path string) searchPlayerTestResponse {
 	t.Helper()
-	req := httptest.NewRequest(apptypes.MethodQuery, path, strings.NewReader(body))
-	req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("execute request: %v", err)
@@ -298,13 +297,4 @@ func searchTestRequest(t *testing.T, app *fiber.App, path, body string) searchPl
 		}
 	}
 	return result
-}
-
-func mustJSON(t *testing.T, value string) string {
-	t.Helper()
-	raw, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("marshal value: %v", err)
-	}
-	return string(raw)
 }

@@ -1466,6 +1466,47 @@ components:
                         $ref: '#/components/schemas/modelsv2.ClanLeaderboardHistoryItem'
                     type: array
             type: object
+        modelsv2.ClanLeaderboardHistorySummaryResponse:
+            properties:
+                defaultWindowDays:
+                    type: integer
+                earliest:
+                    type: string
+                latest:
+                    type: string
+                rollingWindows:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.ClanLeaderboardRollingWindow'
+                    type: array
+                seasons:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.ClanLeaderboardSeasonSummary'
+                    type: array
+            type: object
+        modelsv2.ClanLeaderboardRollingWindow:
+            properties:
+                after:
+                    type: string
+                before:
+                    type: string
+                days:
+                    type: integer
+            type: object
+        modelsv2.ClanLeaderboardSeasonSummary:
+            properties:
+                after:
+                    type: string
+                before:
+                    type: string
+                bestRank:
+                    type: integer
+                daysInTop200:
+                    type: integer
+                peakPoints:
+                    type: integer
+                season:
+                    type: string
+            type: object
         modelsv2.ClanLeagueRef:
             properties:
                 id:
@@ -1498,6 +1539,28 @@ components:
                     items:
                         $ref: '#/components/schemas/modelsv2.ClanLegendHistoryItem'
                     type: array
+            type: object
+        modelsv2.ClanLegendHistorySummaryResponse:
+            properties:
+                seasons:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.ClanLegendSeasonSummary'
+                    type: array
+                topFinishes:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.ClanLegendHistoryItem'
+                    type: array
+            type: object
+        modelsv2.ClanLegendSeasonSummary:
+            properties:
+                after:
+                    type: string
+                before:
+                    type: string
+                playerCount:
+                    type: integer
+                season:
+                    type: string
             type: object
         modelsv2.ClanListItem:
             properties:
@@ -7477,6 +7540,54 @@ paths:
             summary: Review a clan's leaderboard history
             tags:
                 - Clan
+    /v2/clan/{clan_tag}/history/leaderboards/summary:
+        get:
+            description: Returns selectable seasons for Home and Builder leaderboards, or available dates and rolling windows for Capital.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+                - description: Leaderboard type
+                  in: query
+                  name: type
+                  required: true
+                  schema:
+                    enum:
+                        - clan_home_points
+                        - clan_builder_base_points
+                        - clan_capital_points
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ClanLeaderboardHistorySummaryResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Internal Server Error
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            summary: Summarize a clan's leaderboard history
+            tags:
+                - Clan
     /v2/clan/{clan_tag}/history/legends:
         get:
             description: Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.
@@ -7531,6 +7642,44 @@ paths:
                                 $ref: '#/components/schemas/modelsv2.ErrorResponse'
                     description: Service Unavailable
             summary: Review a clan's final Legend finishers
+            tags:
+                - Clan
+    /v2/clan/{clan_tag}/history/legends/summary:
+        get:
+            description: Lists every queryable Legend season and the clan's ten best all-time finishes. Players may appear more than once.
+            parameters:
+                - description: Clan tag
+                  in: path
+                  name: clan_tag
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ClanLegendHistorySummaryResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Internal Server Error
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            summary: Summarize a clan's Legend history
             tags:
                 - Clan
     /v2/clan/{clan_tag}/join-leave:

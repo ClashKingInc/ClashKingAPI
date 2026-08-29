@@ -1,5 +1,7 @@
 package modelsv2
 
+import "time"
+
 type LeaderboardHistoryType string
 
 const (
@@ -90,4 +92,27 @@ type ClanLeaderboardHistoryItem struct {
 
 type ClanLeaderboardHistoryResponse struct {
 	Items []ClanLeaderboardHistoryItem `json:"items"`
+}
+
+type ClanLeaderboardSeasonSummary struct {
+	Season       string    `json:"season"`
+	After        time.Time `json:"after"`
+	Before       time.Time `json:"before"`
+	DaysInTop200 int       `json:"daysInTop200"`
+	BestRank     int       `json:"bestRank"`
+	PeakPoints   int       `json:"peakPoints"`
+}
+
+type ClanLeaderboardRollingWindow struct {
+	Days   int       `json:"days"`
+	After  time.Time `json:"after"`
+	Before time.Time `json:"before"`
+}
+
+type ClanLeaderboardHistorySummaryResponse struct {
+	Seasons           []ClanLeaderboardSeasonSummary `json:"seasons,omitempty"`
+	Earliest          *time.Time                     `json:"earliest,omitempty"`
+	Latest            *time.Time                     `json:"latest,omitempty"`
+	RollingWindows    []ClanLeaderboardRollingWindow `json:"rollingWindows,omitempty"`
+	DefaultWindowDays *int                           `json:"defaultWindowDays,omitempty"`
 }

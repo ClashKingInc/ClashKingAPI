@@ -1,5 +1,7 @@
 package modelsv2
 
+import "time"
+
 type LegendHistoryClan struct {
 	Tag       string           `json:"tag,omitempty"`
 	Name      string           `json:"name,omitempty"`
@@ -35,6 +37,18 @@ type PlayerLegendHistoryResponse struct {
 
 type ClanLegendHistoryResponse struct {
 	Items []ClanLegendHistoryItem `json:"items"`
+}
+
+type ClanLegendSeasonSummary struct {
+	Season      string    `json:"season"`
+	After       time.Time `json:"after"`
+	Before      time.Time `json:"before"`
+	PlayerCount int       `json:"playerCount"`
+}
+
+type ClanLegendHistorySummaryResponse struct {
+	Seasons     []ClanLegendSeasonSummary `json:"seasons"`
+	TopFinishes []ClanLegendHistoryItem   `json:"topFinishes"`
 }
 
 type ClanLegendHistoryItem struct {

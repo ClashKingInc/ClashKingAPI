@@ -68,6 +68,33 @@ const legendClanHistoryQuery = `
 	LIMIT $4
 `
 
+const legendClanHistorySummarySeasonsQuery = `
+	SELECT season, season_time, COUNT(*)
+	FROM (
+		SELECT season, CASE
+			WHEN season ~ '^v2-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$'
+			 AND pg_input_is_valid(substring(season FROM 4), 'timestamp with time zone')
+				THEN substring(season FROM 4)::timestamptz
+			WHEN season ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+				THEN (season || '-01')::timestamptz
+			ELSE NULL
+		END AS season_time
+		FROM legend_history
+		WHERE clan_tag = $1
+	) AS history
+	WHERE season_time IS NOT NULL
+	GROUP BY season, season_time
+	ORDER BY season_time DESC
+`
+
+const legendClanHistorySummaryTopQuery = `
+	SELECT season, player_tag, player_name, exp_level, trophies, attack_wins, defense_wins, rank
+	FROM legend_history
+	WHERE clan_tag = $1
+	ORDER BY rank, trophies DESC, season DESC
+	LIMIT 10
+`
+
 type legendHistoryDB interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
@@ -257,6 +284,81 @@ func clanLegendHistoryHandler(db legendHistoryDB) fiber.Handler {
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLegendHistoryResponse{Items: items})
 	}
+}
+
+// clanLegendHistorySummary godoc
+// @Summary Summarize a clan's Legend history
+// @Description Lists every queryable Legend season and the clan's ten best all-time finishes. Players may appear more than once.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Success 200 {object} modelsv2.ClanLegendHistorySummaryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 503 {object} modelsv2.ErrorResponse
+// @Router /v2/clan/{clan_tag}/history/legends/summary [get]
+func clanLegendHistorySummary(a apptypes.Deps) fiber.Handler {
+	return clanLegendHistorySummaryHandler(configuredLegendHistoryDB(a))
+}
+
+func clanLegendHistorySummaryHandler(db legendHistoryDB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		if tag == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid clan_tag")
+		}
+		if db == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "Legend history is unavailable")
+		}
+		seasons, err := queryClanLegendHistorySummarySeasons(c.UserContext(), db, tag)
+		if err != nil {
+			return err
+		}
+		topFinishes, err := queryClanLegendHistoryTopFinishes(c.UserContext(), db, tag)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLegendHistorySummaryResponse{
+			Seasons: seasons, TopFinishes: topFinishes,
+		})
+	}
+}
+
+func queryClanLegendHistorySummarySeasons(ctx context.Context, db legendHistoryDB, tag string) ([]modelsv2.ClanLegendSeasonSummary, error) {
+	rows, err := db.Query(ctx, legendClanHistorySummarySeasonsQuery, tag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []modelsv2.ClanLegendSeasonSummary{}
+	for rows.Next() {
+		var item modelsv2.ClanLegendSeasonSummary
+		if err := rows.Scan(&item.Season, &item.After, &item.PlayerCount); err != nil {
+			return nil, err
+		}
+		item.Before = item.After
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func queryClanLegendHistoryTopFinishes(ctx context.Context, db legendHistoryDB, tag string) ([]modelsv2.ClanLegendHistoryItem, error) {
+	rows, err := db.Query(ctx, legendClanHistorySummaryTopQuery, tag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []modelsv2.ClanLegendHistoryItem{}
+	for rows.Next() {
+		var item modelsv2.ClanLegendHistoryItem
+		if err := rows.Scan(&item.Season, &item.Tag, &item.Name, &item.ExpLevel, &item.Trophies, &item.AttackWins, &item.DefenseWins, &item.Rank); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func queryClanLegendHistory(ctx context.Context, db legendHistoryDB, tag string, after, before time.Time, limit int) ([]modelsv2.ClanLegendHistoryItem, error) {

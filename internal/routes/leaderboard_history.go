@@ -12,6 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var clanCapitalLeaderboardRollingWindowDays = []int{30, 90, 180}
+
+const clanLeaderboardDefaultRollingWindowDays = 180
+
 const playerTrophyHistoryColumns = `
 	player_tag,
 	player_name,
@@ -451,6 +455,148 @@ func clanLeaderboardHistoryHandler(
 		}
 		return apptypes.JSON(c, fiber.StatusOK, modelsv2.ClanLeaderboardHistoryResponse{Items: items})
 	}
+}
+
+// clanLeaderboardHistorySummary godoc
+// @Summary Summarize a clan's leaderboard history
+// @Description Returns selectable seasons for Home and Builder leaderboards, or available dates and rolling windows for Capital.
+// @Tags Clan
+// @Produce json
+// @Param clan_tag path string true "Clan tag"
+// @Param type query string true "Leaderboard type" Enums(clan_home_points,clan_builder_base_points,clan_capital_points)
+// @Success 200 {object} modelsv2.ClanLeaderboardHistorySummaryResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Failure 503 {object} modelsv2.ErrorResponse
+// @Router /v2/clan/{clan_tag}/history/leaderboards/summary [get]
+func clanLeaderboardHistorySummary(a apptypes.Deps) fiber.Handler {
+	return clanLeaderboardHistorySummaryHandler(configuredLeaderboardHistoryDB(a))
+}
+
+func clanLeaderboardHistorySummaryHandler(db leaderboardHistoryDB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tag := clanFixTag(c.Params("clan_tag"))
+		if tag == "" {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid clan_tag")
+		}
+		leaderboardType, ok := clanLeaderboardHistoryType(c.Query("type"))
+		if !ok {
+			return apptypes.Error(fiber.StatusBadRequest, "invalid type")
+		}
+		if db == nil {
+			return apptypes.Error(fiber.StatusServiceUnavailable, "leaderboard history is unavailable")
+		}
+
+		response, err := queryClanLeaderboardHistorySummary(c.UserContext(), db, leaderboardType, tag)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, fiber.StatusOK, response)
+	}
+}
+
+func queryClanLeaderboardHistorySummary(
+	ctx context.Context,
+	db leaderboardHistoryDB,
+	leaderboardType modelsv2.LeaderboardHistoryType,
+	tag string,
+) (modelsv2.ClanLeaderboardHistorySummaryResponse, error) {
+	query := clanLeaderboardHistorySummaryQuery(leaderboardType)
+	rows, err := db.Query(ctx, query, tag)
+	if err != nil {
+		return modelsv2.ClanLeaderboardHistorySummaryResponse{}, err
+	}
+	defer rows.Close()
+
+	response := modelsv2.ClanLeaderboardHistorySummaryResponse{}
+	if leaderboardType == modelsv2.LeaderboardHistoryTypeClanCapitalPoints {
+		if rows.Next() {
+			var earliest, latest *time.Time
+			if err := rows.Scan(&earliest, &latest); err != nil {
+				return response, err
+			}
+			response.Earliest, response.Latest = earliest, latest
+			if earliest != nil && latest != nil {
+				defaultDays := clanLeaderboardDefaultRollingWindowDays
+				response.DefaultWindowDays = &defaultDays
+				response.RollingWindows = clanLeaderboardRollingWindows(*earliest, *latest)
+			}
+		}
+		return response, rows.Err()
+	}
+
+	response.Seasons = []modelsv2.ClanLeaderboardSeasonSummary{}
+	bySeason := map[string]*modelsv2.ClanLeaderboardSeasonSummary{}
+	seasonIndexes := map[string]int{}
+	for rows.Next() {
+		var date time.Time
+		var bestRank, peakPoints int
+		if err := rows.Scan(&date, &bestRank, &peakPoints); err != nil {
+			return response, err
+		}
+		seasonID := clashy.GenSeasonDate(date)
+		item := bySeason[seasonID]
+		if item == nil {
+			season, err := clashy.GetSeasonByID(seasonID)
+			if err != nil {
+				return response, err
+			}
+			item = &modelsv2.ClanLeaderboardSeasonSummary{
+				Season: seasonID, After: leaderboardHistoryDateStart(season.StartTime), Before: leaderboardHistoryDateStart(season.EndTime).Add(-time.Nanosecond),
+				BestRank: bestRank, PeakPoints: peakPoints,
+			}
+			bySeason[seasonID] = item
+			seasonIndexes[seasonID] = len(response.Seasons)
+			response.Seasons = append(response.Seasons, *item)
+		}
+		item.DaysInTop200++
+		if bestRank < item.BestRank {
+			item.BestRank = bestRank
+		}
+		if peakPoints > item.PeakPoints {
+			item.PeakPoints = peakPoints
+		}
+		response.Seasons[seasonIndexes[seasonID]] = *item
+	}
+	return response, rows.Err()
+}
+
+func leaderboardHistoryDateStart(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func clanLeaderboardHistorySummaryQuery(leaderboardType modelsv2.LeaderboardHistoryType) string {
+	var table, points string
+	switch leaderboardType {
+	case modelsv2.LeaderboardHistoryTypeClanHomePoints:
+		table, points = "leaderboard_history_clan_home", "clan_points"
+	case modelsv2.LeaderboardHistoryTypeClanBuilderBasePoints:
+		table, points = "leaderboard_history_clan_builder_base", "builder_base_points"
+	case modelsv2.LeaderboardHistoryTypeClanCapitalPoints:
+		return `SELECT MIN(date), MAX(date)
+			FROM leaderboard_history_clan_capital
+			WHERE clan_tag = $1`
+	default:
+		return ""
+	}
+	return `SELECT date, MIN(rank), MAX(` + points + `)
+		FROM ` + table + `
+		WHERE clan_tag = $1
+		GROUP BY date
+		ORDER BY date DESC`
+}
+
+func clanLeaderboardRollingWindows(earliest, latest time.Time) []modelsv2.ClanLeaderboardRollingWindow {
+	windows := make([]modelsv2.ClanLeaderboardRollingWindow, 0, len(clanCapitalLeaderboardRollingWindowDays))
+	for _, days := range clanCapitalLeaderboardRollingWindowDays {
+		after := latest.AddDate(0, 0, -(days - 1))
+		if after.Before(earliest) {
+			after = earliest
+		}
+		windows = append(windows, modelsv2.ClanLeaderboardRollingWindow{Days: days, After: after, Before: latest})
+	}
+	return windows
 }
 
 func queryClanLeaderboardHistory(

@@ -60,6 +60,16 @@ func (rows *legendHistoryTestRows) Next() bool {
 
 func (rows *legendHistoryTestRows) Scan(dest ...any) error {
 	row := rows.items[rows.cursor-1]
+	if len(dest) == 7 {
+		*dest[0].(*string) = row.season
+		*dest[1].(*string) = row.playerTag
+		*dest[2].(*string) = row.playerName
+		*dest[3].(*int) = row.trophies
+		*dest[4].(*int) = row.attackWins
+		*dest[5].(*int) = row.defenseWins
+		*dest[6].(*int) = row.rank
+		return nil
+	}
 	*dest[0].(*string) = row.season
 	*dest[1].(*string) = row.playerTag
 	*dest[2].(*string) = row.playerName

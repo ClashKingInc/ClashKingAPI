@@ -1,5 +1,7 @@
 package modelsv2
 
+import "time"
+
 type LeaderboardHistoryType string
 
 const (
@@ -90,4 +92,17 @@ type ClanLeaderboardHistoryItem struct {
 
 type ClanLeaderboardHistoryResponse struct {
 	Items []ClanLeaderboardHistoryItem `json:"items"`
+}
+
+type ClanLeaderboardSeasonSummary struct {
+	Season       string    `json:"season"`
+	After        time.Time `json:"after"`
+	Before       time.Time `json:"before"`
+	DaysInTop200 int       `json:"daysInTop200"`
+	BestRank     int       `json:"bestRank"`
+	PeakPoints   int       `json:"peakPoints"`
+}
+
+type ClanLeaderboardHistorySummaryResponse struct {
+	Seasons []ClanLeaderboardSeasonSummary `json:"seasons"`
 }

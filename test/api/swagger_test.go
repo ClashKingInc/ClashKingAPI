@@ -1204,12 +1204,14 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/player/{player_tag}/battlelog/history",
 		"/v2/player/{player_tag}/legend-history",
 		"/v2/clan/{clan_tag}/history/legends",
+		"/v2/clan/{clan_tag}/history/legends/summary",
 		"/v2/legends/history/{season}",
 		"/v2/player/{player_tag}/ranked/{season}/battlelog",
 		"/v2/player/{player_tag}/ranked/{season}/group",
 		"/v2/player/{player_tag}/history/changes",
 		"/v2/player/{player_tag}/leaderboard-history/{leaderboard_type}",
 		"/v2/clan/{clan_tag}/history/leaderboards",
+		"/v2/clan/{clan_tag}/history/leaderboards/summary",
 		"/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}",
 		"/v2/leaderboard/league/{league_tier_id}",
 		"/v2/leaderboard/townhalls/{townhall_level}",
@@ -1346,6 +1348,14 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	assertParameterEnum(t, clanLeaderboardGet["parameters"], "type", []any{"clan_home_points", "clan_builder_base_points", "clan_capital_points"})
 	assertQueryParameterSchemaValue(t, clanLeaderboardGet["parameters"], "limit", "default", float64(50))
 	assertQueryParameterSchemaValue(t, clanLeaderboardGet["parameters"], "limit", "maximum", float64(250))
+	clanLeaderboardSummaryPath := paths["/v2/clan/{clan_tag}/history/leaderboards/summary"].(map[string]any)
+	clanLeaderboardSummaryGet := clanLeaderboardSummaryPath["get"].(map[string]any)
+	assertTags(t, clanLeaderboardSummaryGet, []string{"Clan"})
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/leaderboards/summary"); !reflect.DeepEqual(got, []string{"type"}) {
+		t.Fatalf("clan leaderboard summary query params = %v", got)
+	}
+	assertRequiredParameter(t, clanLeaderboardSummaryGet["parameters"].([]any), "type", "query")
+	assertParameterEnum(t, clanLeaderboardSummaryGet["parameters"], "type", []any{"clan_home_points", "clan_builder_base_points", "clan_capital_points"})
 	for _, definition := range []string{
 		"modelsv2.LegendSeasonHistoryResponse",
 		"modelsv2.PlayerLegendHistoryResponse",
@@ -1379,13 +1389,16 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		}
 	}
 	clanLegendItemProps := swaggerDefinitionProperties(t, definitions, "modelsv2.ClanLegendHistoryItem")
-	if len(clanLegendItemProps) != 8 {
+	if len(clanLegendItemProps) != 7 {
 		t.Fatalf("expected compact clan Legend item, got %v", clanLegendItemProps)
 	}
-	for _, field := range []string{"season", "tag", "name", "expLevel", "trophies", "attackWins", "defenseWins", "rank"} {
+	for _, field := range []string{"season", "tag", "name", "trophies", "attackWins", "defenseWins", "rank"} {
 		if _, exists := clanLegendItemProps[field]; !exists {
 			t.Fatalf("expected clan Legend item field %s", field)
 		}
+	}
+	if _, exists := clanLegendItemProps["expLevel"]; exists {
+		t.Fatal("clan Legend history exposes expLevel")
 	}
 	clanLegendPath := paths["/v2/clan/{clan_tag}/history/legends"].(map[string]any)
 	clanLegendGet := clanLegendPath["get"].(map[string]any)
@@ -1395,6 +1408,15 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 	}
 	assertQueryParameterSchemaValue(t, clanLegendGet["parameters"], "limit", "default", float64(50))
 	assertQueryParameterSchemaValue(t, clanLegendGet["parameters"], "limit", "maximum", float64(250))
+	clanLegendSummaryPath := paths["/v2/clan/{clan_tag}/history/legends/summary"].(map[string]any)
+	clanLegendSummaryGet := clanLegendSummaryPath["get"].(map[string]any)
+	assertTags(t, clanLegendSummaryGet, []string{"Clan"})
+	if got := swaggerQueryParams(t, paths, "/v2/clan/{clan_tag}/history/legends/summary"); !reflect.DeepEqual(got, []string{"top"}) {
+		t.Fatalf("clan Legend summary query params = %v", got)
+	}
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "default", float64(10))
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "minimum", float64(1))
+	assertQueryParameterSchemaValue(t, clanLegendSummaryGet["parameters"], "top", "maximum", float64(50))
 	snapshotPath := paths["/v2/leaderboard/history/{leaderboard_type}/{location_id}/{date}"].(map[string]any)
 	snapshotGet := snapshotPath["get"].(map[string]any)
 	assertParameterEnum(t, snapshotGet["parameters"], "leaderboard_type", []any{

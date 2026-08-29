@@ -1887,6 +1887,65 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/clan/{clan_tag}/history/leaderboards/summary": {
+            "get": {
+                "description": "Returns selectable Clash seasons with exact history bounds and performance summaries for Home, Builder, or Capital leaderboards.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Summarize a clan's leaderboard history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "clan_home_points",
+                            "clan_builder_base_points",
+                            "clan_capital_points"
+                        ],
+                        "type": "string",
+                        "description": "Leaderboard type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLeaderboardHistorySummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/clan/{clan_tag}/history/legends": {
             "get": {
                 "description": "Returns players who finished Legend seasons with the clan, ordered by newest season and then final rank.",
@@ -1932,6 +1991,62 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ClanLegendHistoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/clan/{clan_tag}/history/legends/summary": {
+            "get": {
+                "description": "Lists every queryable Legend season and the clan's ten best all-time finishes. Players may appear more than once.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Clan"
+                ],
+                "summary": "Summarize a clan's Legend history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of best finishes to return",
+                        "name": "top",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ClanLegendHistorySummaryResponse"
                         }
                     },
                     "400": {
@@ -16023,6 +16138,40 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.ClanLeaderboardHistorySummaryResponse": {
+            "type": "object",
+            "properties": {
+                "seasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanLeaderboardSeasonSummary"
+                    }
+                }
+            }
+        },
+        "modelsv2.ClanLeaderboardSeasonSummary": {
+            "type": "object",
+            "properties": {
+                "after": {
+                    "type": "string"
+                },
+                "before": {
+                    "type": "string"
+                },
+                "bestRank": {
+                    "type": "integer"
+                },
+                "daysInTop200": {
+                    "type": "integer"
+                },
+                "peakPoints": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.ClanLeagueRef": {
             "type": "object",
             "properties": {
@@ -16041,9 +16190,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "defenseWins": {
-                    "type": "integer"
-                },
-                "expLevel": {
                     "type": "integer"
                 },
                 "name": {
@@ -16071,6 +16217,66 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.ClanLegendHistoryItem"
                     }
+                }
+            }
+        },
+        "modelsv2.ClanLegendHistorySummaryResponse": {
+            "type": "object",
+            "properties": {
+                "seasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanLegendSeasonSummary"
+                    }
+                },
+                "topFinishes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/modelsv2.ClanLegendTopFinish"
+                    }
+                }
+            }
+        },
+        "modelsv2.ClanLegendSeasonSummary": {
+            "type": "object",
+            "properties": {
+                "after": {
+                    "type": "string"
+                },
+                "before": {
+                    "type": "string"
+                },
+                "playerCount": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.ClanLegendTopFinish": {
+            "type": "object",
+            "properties": {
+                "attackWins": {
+                    "type": "integer"
+                },
+                "defenseWins": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "season": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "trophies": {
+                    "type": "integer"
                 }
             }
         },

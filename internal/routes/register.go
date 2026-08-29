@@ -342,7 +342,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/leaderboard/cwl/:league_id", cwlLeagueRankings(a))
 	app.Get("/v2/cwl/:clan_tag/seasons", cwlSeasons(a))
 	app.Get("/v2/cwl/:clan_tag/group", storedCWL(a))
-	app.Get("/v2/war/:clan_tag/war-summary", warSummarySingle(a))
+	app.Get("/v2/war/:clan_tag/basic", basicWar(a))
 	app.Get("/v2/war/:clan_tag/previous/:endtime", warPreviousAtTime(a))
 	app.Get("/v2/player/:player_tag/war/attacks", playerWarAttacks(a))
 	app.Get("/v2/player/:player_tag/war/stats", playerWarStats(a))

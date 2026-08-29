@@ -286,21 +286,6 @@ func cwlLeagueRankings(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// warSummarySingle godoc
-// @Summary View a clan's current war summary
-// @Description Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.
-// @Tags War & CWL
-// @Produce json
-// @Param clan_tag path string true "Clan tag"
-// @Success 200 {object} modelsv2.WarSummaryResponse
-// @Failure 500 {object} modelsv2.ErrorResponse
-// @Router /v2/war/{clan_tag}/war-summary [get]
-func warSummarySingle(a apptypes.Deps) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		return apptypes.JSON(c, fiber.StatusOK, currentWarSummary(c.UserContext(), a, c.Params("clan_tag")))
-	}
-}
-
 const cwlHistorySelect = `
 	SELECT g.season, g.cwl_league_id, g.state, g.war_size, g.rounds,
 	       gc.clan_tag, gc.name, gc.clan_level, gc.badge_token,
@@ -370,22 +355,26 @@ type cwlPlayerHistorySeed struct {
 }
 
 func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string, limit int) ([]modelsv2.CWLPlayerHistoryItem, error) {
-	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerHistorySelect, playerTag, limit)
+	seeds, err := loadCWLPlayerHistorySeeds(c, a, playerTag, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	seeds := make([]cwlPlayerHistorySeed, 0)
-	for rows.Next() {
-		seed, err := scanCWLPlayerHistorySeed(rows)
+	missingClans := make(map[string]struct{})
+	for _, seed := range seeds {
+		if seed.LeagueID == 0 {
+			missingClans[seed.Item.Clan.Tag] = struct{}{}
+		}
+	}
+	for clanTag := range missingClans {
+		if err := ensureCWLLeagueIDs(c, a, clanTag); err != nil {
+			return nil, err
+		}
+	}
+	if len(missingClans) > 0 {
+		seeds, err = loadCWLPlayerHistorySeeds(c, a, playerTag, limit)
 		if err != nil {
 			return nil, err
 		}
-		seeds = append(seeds, seed)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 
 	items := make([]modelsv2.CWLPlayerHistoryItem, 0, len(seeds))
@@ -424,6 +413,28 @@ func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string, limit 
 		items = append(items, seed.Item)
 	}
 	return items, nil
+}
+
+func loadCWLPlayerHistorySeeds(c *fiber.Ctx, a apptypes.Deps, playerTag string, limit int) ([]cwlPlayerHistorySeed, error) {
+	rows, err := a.Store.SQL.Query(c.UserContext(), cwlPlayerHistorySelect, playerTag, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seeds := make([]cwlPlayerHistorySeed, 0)
+	for rows.Next() {
+		seed, err := scanCWLPlayerHistorySeed(rows)
+		if err != nil {
+			return nil, err
+		}
+		seeds = append(seeds, seed)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return seeds, nil
 }
 
 func scanCWLPlayerHistorySeed(row cwlHistoryScanner) (cwlPlayerHistorySeed, error) {

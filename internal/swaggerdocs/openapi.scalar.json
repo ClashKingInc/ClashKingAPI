@@ -1012,6 +1012,43 @@
         },
         "type": "object"
       },
+      "modelsv2.BasicWarClan": {
+        "properties": {
+          "publicWarLog": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "modelsv2.BasicWarResponse": {
+        "properties": {
+          "clan": {
+            "$ref": "#/components/schemas/modelsv2.BasicWarClan"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "opponent": {
+            "$ref": "#/components/schemas/modelsv2.BasicWarClan"
+          },
+          "preparationStartTime": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "warTag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "modelsv2.BattlelogArmiesResponse": {
         "properties": {
           "battle_type": {
@@ -1480,32 +1517,6 @@
         },
         "type": "object"
       },
-      "modelsv2.CWLClan": {
-        "properties": {
-          "badgeUrls": {
-            "$ref": "#/components/schemas/modelsv2.WarBadgeURLs"
-          },
-          "clanLevel": {
-            "type": "integer"
-          },
-          "members": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.CWLMember"
-            },
-            "type": "array"
-          },
-          "name": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
-          },
-          "warLeague": {
-            "$ref": "#/components/schemas/modelsv2.CWLLeague"
-          }
-        },
-        "type": "object"
-      },
       "modelsv2.CWLClanHistoryResponse": {
         "properties": {
           "clanTag": {
@@ -1516,26 +1527,6 @@
               "$ref": "#/components/schemas/modelsv2.CWLHistoryItem"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.CWLClanRanking": {
-        "properties": {
-          "destruction": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "rounds": {
-            "$ref": "#/components/schemas/modelsv2.CWLRankingRounds"
-          },
-          "stars": {
-            "type": "integer"
-          },
-          "tag": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -1577,35 +1568,6 @@
         },
         "type": "object"
       },
-      "modelsv2.CWLGroupResponse": {
-        "properties": {
-          "clan_rankings": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.CWLClanRanking"
-            },
-            "type": "array"
-          },
-          "clans": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.CWLClan"
-            },
-            "type": "array"
-          },
-          "rounds": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.CWLRound"
-            },
-            "type": "array"
-          },
-          "season": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "modelsv2.CWLGroupRound": {
         "properties": {
           "warTags": {
@@ -1640,17 +1602,6 @@
           },
           "warSize": {
             "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.CWLLeague": {
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -1803,7 +1754,15 @@
             ]
           },
           "warLeague": {
-            "$ref": "#/components/schemas/modelsv2.LeagueReference"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/modelsv2.LeagueReference"
+              }
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "wars": {
             "allOf": [
@@ -9332,46 +9291,6 @@
           },
           "warStartTime": {
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.WarSummaryInfo": {
-        "properties": {
-          "bypass": {
-            "type": "boolean"
-          },
-          "currentWarInfo": {
-            "$ref": "#/components/schemas/modelsv2.WarResponse"
-          },
-          "state": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.WarSummaryResponse": {
-        "properties": {
-          "clan_tag": {
-            "type": "string"
-          },
-          "isInCwl": {
-            "type": "boolean"
-          },
-          "isInWar": {
-            "type": "boolean"
-          },
-          "league_info": {
-            "$ref": "#/components/schemas/modelsv2.CWLGroupResponse"
-          },
-          "war_info": {
-            "$ref": "#/components/schemas/modelsv2.WarSummaryInfo"
-          },
-          "war_league_infos": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.WarResponse"
-            },
-            "type": "array"
           }
         },
         "type": "object"
@@ -26017,6 +25936,58 @@
         ]
       }
     },
+    "/v2/war/{clan_tag}/basic": {
+      "get": {
+        "description": "Returns the stored active war schedule, participants, timing, type, optional CWL tag, and known public-war-log visibility.",
+        "parameters": [
+          {
+            "description": "Clan tag",
+            "in": "path",
+            "name": "clan_tag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.BasicWarResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "View a clan's scheduled war",
+        "tags": [
+          "War \u0026 CWL"
+        ]
+      }
+    },
     "/v2/war/{clan_tag}/previous/{endtime}": {
       "get": {
         "description": "Returns the stored clan war ending nearest the supplied Clash time, allowing a ten-minute difference in either direction.",
@@ -26073,48 +26044,6 @@
           }
         },
         "summary": "Find a stored war by end time",
-        "tags": [
-          "War \u0026 CWL"
-        ]
-      }
-    },
-    "/v2/war/{clan_tag}/war-summary": {
-      "get": {
-        "description": "Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.",
-        "parameters": [
-          {
-            "description": "Clan tag",
-            "in": "path",
-            "name": "clan_tag",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.WarSummaryResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "View a clan's current war summary",
         "tags": [
           "War \u0026 CWL"
         ]

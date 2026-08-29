@@ -126,6 +126,29 @@ func TestCWLPlayerHistoryResponseUsesDedicatedCamelCaseShape(t *testing.T) {
 	}
 }
 
+func TestCWLPlayerHistoryKeepsUnknownWarLeagueExplicit(t *testing.T) {
+	raw, err := json.Marshal(modelsv2.CWLPlayerHistoryResponse{
+		Items: []modelsv2.CWLPlayerHistoryItem{{
+			Season: "2025-08",
+			Clan: modelsv2.CWLPlayerHistoryClan{
+				Tag: "#CLAN", Name: "Clan", BadgeURLs: modelsv2.WarBadgeURLs{},
+			},
+			Attacks: []modelsv2.CWLPlayerHistoryAttack{},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	clan := decoded["items"].([]any)[0].(map[string]any)["clan"].(map[string]any)
+	if value, exists := clan["warLeague"]; !exists || value != nil {
+		t.Fatalf("unknown warLeague must be explicit null: %s", raw)
+	}
+}
+
 func TestCWLPlayerHistoryAttackIsCompactAndOmitsAttackerIdentity(t *testing.T) {
 	raw, err := json.Marshal(modelsv2.CWLPlayerHistoryAttack{
 		WarTag: "#WAR", Round: 3,

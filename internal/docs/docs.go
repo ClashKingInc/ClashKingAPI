@@ -13701,6 +13701,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/war/{clan_tag}/basic": {
+            "get": {
+                "description": "Returns the stored active war schedule, participants, timing, type, optional CWL tag, and known public-war-log visibility.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "War \u0026 CWL"
+                ],
+                "summary": "View a clan's scheduled war",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Clan tag",
+                        "name": "clan_tag",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.BasicWarResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/war/{clan_tag}/previous/{endtime}": {
             "get": {
                 "description": "Returns the stored clan war ending nearest the supplied Clash time, allowing a ten-minute difference in either direction.",
@@ -13742,41 +13783,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/war/{clan_tag}/war-summary": {
-            "get": {
-                "description": "Returns a compact summary of the clan's current war, including state, opponent, scores, attacks, timing, and team size.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "War \u0026 CWL"
-                ],
-                "summary": "View a clan's current war summary",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Clan tag",
-                        "name": "clan_tag",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/modelsv2.WarSummaryResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/modelsv2.ErrorResponse"
                         }
@@ -14795,6 +14801,41 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.BasicWarClan": {
+            "type": "object",
+            "properties": {
+                "publicWarLog": {
+                    "type": "boolean",
+                    "x-nullable": true
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "modelsv2.BasicWarResponse": {
+            "type": "object",
+            "properties": {
+                "clan": {
+                    "$ref": "#/definitions/modelsv2.BasicWarClan"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "opponent": {
+                    "$ref": "#/definitions/modelsv2.BasicWarClan"
+                },
+                "preparationStartTime": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "warTag": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.BattlelogArmiesResponse": {
             "type": "object",
             "properties": {
@@ -15263,32 +15304,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.CWLClan": {
-            "type": "object",
-            "properties": {
-                "badgeUrls": {
-                    "$ref": "#/definitions/modelsv2.WarBadgeURLs"
-                },
-                "clanLevel": {
-                    "type": "integer"
-                },
-                "members": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLMember"
-                    }
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tag": {
-                    "type": "string"
-                },
-                "warLeague": {
-                    "$ref": "#/definitions/modelsv2.CWLLeague"
-                }
-            }
-        },
         "modelsv2.CWLClanHistoryResponse": {
             "type": "object",
             "properties": {
@@ -15300,26 +15315,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/modelsv2.CWLHistoryItem"
                     }
-                }
-            }
-        },
-        "modelsv2.CWLClanRanking": {
-            "type": "object",
-            "properties": {
-                "destruction": {
-                    "type": "number"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "rounds": {
-                    "$ref": "#/definitions/modelsv2.CWLRankingRounds"
-                },
-                "stars": {
-                    "type": "integer"
-                },
-                "tag": {
-                    "type": "string"
                 }
             }
         },
@@ -15360,35 +15355,6 @@ const docTemplate = `{
                 }
             }
         },
-        "modelsv2.CWLGroupResponse": {
-            "type": "object",
-            "properties": {
-                "clan_rankings": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLClanRanking"
-                    }
-                },
-                "clans": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLClan"
-                    }
-                },
-                "rounds": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.CWLRound"
-                    }
-                },
-                "season": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                }
-            }
-        },
         "modelsv2.CWLGroupRound": {
             "type": "object",
             "properties": {
@@ -15424,17 +15390,6 @@ const docTemplate = `{
                 },
                 "warSize": {
                     "type": "integer"
-                }
-            }
-        },
-        "modelsv2.CWLLeague": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
                 }
             }
         },
@@ -15578,7 +15533,12 @@ const docTemplate = `{
                     "x-nullable": true
                 },
                 "warLeague": {
-                    "$ref": "#/definitions/modelsv2.LeagueReference"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.LeagueReference"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "wars": {
                     "allOf": [
@@ -23077,46 +23037,6 @@ const docTemplate = `{
                 },
                 "warStartTime": {
                     "type": "string"
-                }
-            }
-        },
-        "modelsv2.WarSummaryInfo": {
-            "type": "object",
-            "properties": {
-                "bypass": {
-                    "type": "boolean"
-                },
-                "currentWarInfo": {
-                    "$ref": "#/definitions/modelsv2.WarResponse"
-                },
-                "state": {
-                    "type": "string"
-                }
-            }
-        },
-        "modelsv2.WarSummaryResponse": {
-            "type": "object",
-            "properties": {
-                "clan_tag": {
-                    "type": "string"
-                },
-                "isInCwl": {
-                    "type": "boolean"
-                },
-                "isInWar": {
-                    "type": "boolean"
-                },
-                "league_info": {
-                    "$ref": "#/definitions/modelsv2.CWLGroupResponse"
-                },
-                "war_info": {
-                    "$ref": "#/definitions/modelsv2.WarSummaryInfo"
-                },
-                "war_league_infos": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/modelsv2.WarResponse"
-                    }
                 }
             }
         },

@@ -64,7 +64,7 @@ type CWLPlayerHistoryClan struct {
 	Tag        string                     `json:"tag"`
 	Name       string                     `json:"name"`
 	BadgeURLs  WarBadgeURLs               `json:"badgeUrls"`
-	WarLeague  *LeagueReference           `json:"warLeague,omitempty"`
+	WarLeague  *LeagueReference           `json:"warLeague" extensions:"x-nullable"`
 	Wars       *CWLPlayerHistoryWarRecord `json:"wars" extensions:"x-nullable"`
 	TotalStars *int                       `json:"totalStars" extensions:"x-nullable"`
 	Placement  *CWLPlayerClanPlacement    `json:"placement" extensions:"x-nullable"`
@@ -168,6 +168,20 @@ type WarResponse struct {
 
 type WarListResponse struct {
 	Items []WarResponse `json:"items"`
+}
+
+type BasicWarClan struct {
+	Tag          string `json:"tag"`
+	PublicWarLog *bool  `json:"publicWarLog" extensions:"x-nullable"`
+}
+
+type BasicWarResponse struct {
+	Clan                 BasicWarClan `json:"clan"`
+	Opponent             BasicWarClan `json:"opponent"`
+	PreparationStartTime string       `json:"preparationStartTime"`
+	EndTime              string       `json:"endTime"`
+	Type                 string       `json:"type"`
+	WarTag               *string      `json:"warTag,omitempty"`
 }
 
 type WarWeeklyHitrateItem struct {

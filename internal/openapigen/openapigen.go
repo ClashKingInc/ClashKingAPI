@@ -21,7 +21,7 @@ const (
 - Ratelimit is largely 30 req/sec, 5 req/sec on post & large requests
 - Largely 300 second cache
 - Not perfect, stats are collected by polling the Official API
-- [ClashKing Discord](https://discord.gg/clashking) | [API Developers](https://discord.gg/clashapi)
+- [ClashKing Discord](https://discord.gg/mCQkUBpUta) | [API Developers](https://discord.gg/clashapi)
 
 This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it.
 For more information see [Supercell's Fan Content Policy](https://supercell.com/fan-content-policy)`

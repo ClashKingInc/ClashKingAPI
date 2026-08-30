@@ -79,6 +79,28 @@ func TestLegacyFullWarOmitsSyntheticTypeAndKeepsMembers(t *testing.T) {
 	}
 }
 
+func TestLegacyCWLWarIncludesBothStartTimeFields(t *testing.T) {
+	start := time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC)
+	war := wararchive.War{
+		Type: "cwl", State: "warEnded", TeamSize: 1, AttacksPerMember: 1,
+		PreparationStartTime: start.Add(-24 * time.Hour), StartTime: &start, EndTime: start.Add(24 * time.Hour),
+		Clan:     wararchive.Clan{Tag: "#A", Members: []wararchive.Member{{Tag: "#P"}}},
+		Opponent: wararchive.Clan{Tag: "#B", Members: []wararchive.Member{{Tag: "#Q"}}},
+	}
+	want := "20260802T000000.000Z"
+	previousWar := legacyWar(war, true)
+	if previousWar.StartTime != want || previousWar.WarStartTime != want {
+		t.Fatalf("previous CWL start times = startTime %q, warStartTime %q", previousWar.StartTime, previousWar.WarStartTime)
+	}
+	playerWar, ok := buildPlayerWarHit("#P", war)
+	if !ok {
+		t.Fatal("expected player war hit")
+	}
+	if playerWar.WarData.StartTime != want || playerWar.WarData.WarStartTime != want {
+		t.Fatalf("player CWL start times = startTime %q, warStartTime %q", playerWar.WarData.StartTime, playerWar.WarData.WarStartTime)
+	}
+}
+
 func TestProcessPlayerJoinLeaveMirrorsLegacyCorrection(t *testing.T) {
 	first := time.Date(2024, 4, 5, 0, 0, 0, 0, time.UTC)
 	events := []joinLeaveRow{

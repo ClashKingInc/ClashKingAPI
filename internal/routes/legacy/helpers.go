@@ -79,6 +79,9 @@ func legacyWar(source wararchive.War, includeMembers bool) legacymodels.War {
 		Clan:     legacyWarClan(source.Clan, source.Opponent, includeMembers),
 		Opponent: legacyWarClan(source.Opponent, source.Clan, includeMembers),
 	}
+	if source.StartTime != nil {
+		war.StartTime = clashTime(*source.StartTime)
+	}
 	if source.Type == "cwl" {
 		war.Tag = source.WarTag
 		if source.StartTime != nil {
@@ -87,9 +90,6 @@ func legacyWar(source wararchive.War, includeMembers bool) legacymodels.War {
 	} else {
 		attacksPerMember := source.AttacksPerMember
 		war.AttacksPerMember = &attacksPerMember
-		if source.StartTime != nil {
-			war.StartTime = clashTime(*source.StartTime)
-		}
 	}
 	return war
 }

@@ -46,6 +46,12 @@ type TrackingTargetProgress struct {
 	EstimatedLoopCompletion   *time.Time `json:"estimated_loop_completion,omitempty"`
 }
 
+// TrackingLatestError is the most recently reported domain error and when it was observed.
+type TrackingLatestError struct {
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // TrackingDomainState is the latest operational observation for one script/domain pair.
 type TrackingDomainState struct {
 	Script                      string                  `json:"script"`
@@ -55,7 +61,7 @@ type TrackingDomainState struct {
 	IntervalEnd                 time.Time               `json:"interval_end"`
 	IntervalDurationSeconds     float64                 `json:"interval_duration_seconds"`
 	LastSuccess                 *time.Time              `json:"last_success,omitempty"`
-	LatestError                 *string                 `json:"latest_error,omitempty"`
+	LatestError                 *TrackingLatestError    `json:"latest_error" extensions:"x-nullable"`
 	RequestCount                int64                   `json:"request_count"`
 	RequestsPerSecond           float64                 `json:"requests_per_second"`
 	ErrorCount                  int64                   `json:"error_count"`
@@ -67,22 +73,15 @@ type TrackingDomainState struct {
 	AverageProcessingDurationMS float64                 `json:"average_processing_duration_ms"`
 	QueueDepth                  int                     `json:"queue_depth"`
 	Database                    TrackingDatabaseMetrics `json:"database"`
-	Targets                     TrackingTargetProgress  `json:"targets"`
+	Targets                     *TrackingTargetProgress `json:"targets" extensions:"x-nullable"`
 	Health                      TrackingHealth          `json:"health"`
 }
 
-// TrackingGlobalClansProgress keeps the two global clan loops directly addressable.
-type TrackingGlobalClansProgress struct {
-	Priority    *TrackingTargetProgress `json:"priority,omitempty"`
-	NonPriority *TrackingTargetProgress `json:"non_priority,omitempty"`
-}
-
 type TrackingOperationsSummaryResponse struct {
-	GeneratedAt       time.Time                   `json:"generated_at"`
-	StaleAfterSeconds int                         `json:"stale_after_seconds"`
-	Processes         []TrackingProcessState      `json:"processes"`
-	Domains           []TrackingDomainState       `json:"domains"`
-	GlobalClans       TrackingGlobalClansProgress `json:"globalclans"`
+	GeneratedAt       time.Time              `json:"generated_at"`
+	StaleAfterSeconds int                    `json:"stale_after_seconds"`
+	Processes         []TrackingProcessState `json:"processes"`
+	Domains           []TrackingDomainState  `json:"domains"`
 }
 
 // TrackingProcessPoint is one bounded chart bucket for a tracking process.
@@ -117,7 +116,7 @@ type TrackingDomainPoint struct {
 	AverageProcessingDurationMS float64                 `json:"average_processing_duration_ms"`
 	QueueDepth                  int                     `json:"queue_depth"`
 	Database                    TrackingDatabaseMetrics `json:"database"`
-	Targets                     TrackingTargetProgress  `json:"targets"`
+	Targets                     *TrackingTargetProgress `json:"targets" extensions:"x-nullable"`
 	ReportedHealthy             bool                    `json:"reported_healthy"`
 }
 

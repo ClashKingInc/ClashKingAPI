@@ -23230,7 +23230,12 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "targets": {
-                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "timestamp": {
                     "type": "string"
@@ -23297,7 +23302,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "latest_error": {
-                    "type": "string"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.TrackingLatestError"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "processing_count": {
                     "type": "integer"
@@ -23318,24 +23328,18 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "targets": {
-                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "write_count": {
                     "type": "integer"
                 },
                 "writes_per_second": {
                     "type": "number"
-                }
-            }
-        },
-        "modelsv2.TrackingGlobalClansProgress": {
-            "type": "object",
-            "properties": {
-                "non_priority": {
-                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
-                },
-                "priority": {
-                    "$ref": "#/definitions/modelsv2.TrackingTargetProgress"
                 }
             }
         },
@@ -23362,6 +23366,17 @@ const docTemplate = `{
                 }
             }
         },
+        "modelsv2.TrackingLatestError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
         "modelsv2.TrackingOperationsSummaryResponse": {
             "type": "object",
             "properties": {
@@ -23373,9 +23388,6 @@ const docTemplate = `{
                 },
                 "generated_at": {
                     "type": "string"
-                },
-                "globalclans": {
-                    "$ref": "#/definitions/modelsv2.TrackingGlobalClansProgress"
                 },
                 "processes": {
                     "type": "array",

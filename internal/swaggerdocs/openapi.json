@@ -9045,7 +9045,15 @@
             "type": "number"
           },
           "targets": {
-            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+              }
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "timestamp": {
             "type": "string"
@@ -9112,7 +9120,15 @@
             "type": "string"
           },
           "latest_error": {
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/modelsv2.TrackingLatestError"
+              }
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "processing_count": {
             "type": "integer"
@@ -9133,24 +9149,21 @@
             "type": "string"
           },
           "targets": {
-            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
+              }
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "write_count": {
             "type": "integer"
           },
           "writes_per_second": {
             "type": "number"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.TrackingGlobalClansProgress": {
-        "properties": {
-          "non_priority": {
-            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
-          },
-          "priority": {
-            "$ref": "#/components/schemas/modelsv2.TrackingTargetProgress"
           }
         },
         "type": "object"
@@ -9178,6 +9191,17 @@
         },
         "type": "object"
       },
+      "modelsv2.TrackingLatestError": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "modelsv2.TrackingOperationsSummaryResponse": {
         "properties": {
           "domains": {
@@ -9188,9 +9212,6 @@
           },
           "generated_at": {
             "type": "string"
-          },
-          "globalclans": {
-            "$ref": "#/components/schemas/modelsv2.TrackingGlobalClansProgress"
           },
           "processes": {
             "items": {

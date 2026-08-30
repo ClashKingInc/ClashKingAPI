@@ -1,12 +1,14 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
@@ -87,10 +89,11 @@ func TestTrackingDomainCalculationsStayInAPI(t *testing.T) {
 	previousCycle := int64(2)
 	previousProcessed := 40
 	latestError := "proxy timeout"
+	latestErrorAt := now.Add(-3 * time.Second)
 	raw := trackingRawDomain{
 		intervalStart: now.Add(-10 * time.Second), intervalEnd: now,
-		runID: 1, script: "globalclans", name: globalClansPriority,
-		lastError: &latestError, requests: 50, writes: 20, errors: 5,
+		runID: 1, script: "globalclans", name: "globalclans.priority",
+		lastError: &latestError, lastReadyChange: &latestErrorAt, requests: 50, writes: 20, errors: 5,
 		requestLatencyMS: 1_000, queueDepth: 7, reportedHealthy: true,
 		processingCount: 10, totalProcessTimeMS: 500,
 		storeBatches: 4, storeRowsRequested: 30, storeRowsAffected: 28, storeDurationMS: 200,
@@ -105,11 +108,76 @@ func TestTrackingDomainCalculationsStayInAPI(t *testing.T) {
 	if got.WritesPerSecond != 2 || got.Database.AverageStoreDurationMS != 50 {
 		t.Fatalf("write/store metrics = writes/s %v, store duration %v", got.WritesPerSecond, got.Database.AverageStoreDurationMS)
 	}
-	if got.Targets.TargetsPerSecond != 1 || got.Targets.CompletionPercentage != 50 {
+	if got.Targets == nil || got.Targets.TargetsPerSecond != 1 || got.Targets.CompletionPercentage != 50 {
 		t.Fatalf("target metrics = %+v", got.Targets)
 	}
 	if got.Targets.EstimatedSecondsRemaining == nil || *got.Targets.EstimatedSecondsRemaining != 50 {
 		t.Fatalf("target ETA = %+v", got.Targets)
+	}
+	if got.LatestError == nil || got.LatestError.Message != latestError || !got.LatestError.Timestamp.Equal(latestErrorAt) {
+		t.Fatalf("latest error = %+v", got.LatestError)
+	}
+}
+
+func TestTrackingQueueOnlyDomainHasMetricsWithoutTargetProgress(t *testing.T) {
+	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	latestError := "queue worker timeout"
+	latestErrorAt := now.Add(-5 * time.Second)
+	raw := trackingRawDomain{
+		intervalStart: now.Add(-20 * time.Second), intervalEnd: now,
+		runID: 3, script: "reminders", name: "reminders.mobile-reconciliation",
+		requests: 40, writes: 10, errors: 2, requestLatencyMS: 800,
+		queueDepth: 12, reportedHealthy: false, processingCount: 5,
+		totalProcessTimeMS: 250, targetCount: 0, lastError: &latestError,
+		lastReadyChange: &latestErrorAt,
+	}
+	got := buildTrackingDomainState(raw, now)
+	if got.Domain != raw.name || got.Targets != nil {
+		t.Fatalf("queue domain = %+v; want arbitrary name and null target progress", got)
+	}
+	if got.QueueDepth != 12 || got.ProcessingCount != 5 || got.AverageProcessingDurationMS != 50 || got.RequestsPerSecond != 2 || got.WritesPerSecond != .5 || got.ErrorCount != 2 || got.AverageRequestLatencyMS != 20 {
+		t.Fatalf("queue metrics = %+v", got)
+	}
+	if got.Health.Stale || got.Health.Healthy || got.Health.AgeSeconds != 0 || got.LatestError == nil || !got.LatestError.Timestamp.Equal(latestErrorAt) {
+		t.Fatalf("queue freshness/error = health %+v, error %+v", got.Health, got.LatestError)
+	}
+	payload, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"targets":null`) {
+		t.Fatalf("queue domain JSON = %s; want explicit null target progress", payload)
+	}
+}
+
+func TestTrackingArbitraryDomainNameIsPreserved(t *testing.T) {
+	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	for _, domain := range []string{
+		"globalclans.priority", "globalclans.non_priority",
+		"war-discovery.active", "war-discovery.dormant", "war-discovery.finalization",
+		"cwl.groups", "war-archiver",
+		"reminders.events", "reminders.war-jobs", "reminders.mobile-reconciliation", "reminders.raid", "reminders.fixed",
+		"mobilepush.events", "trackedplayers", "future-domain.with_any-name",
+	} {
+		raw := trackingRawDomain{intervalStart: now.Add(-time.Second), intervalEnd: now, script: "worker", name: domain, reportedHealthy: true}
+		if got := buildTrackingDomainState(raw, now); got.Domain != domain {
+			t.Errorf("domain %q became %q", domain, got.Domain)
+		}
+	}
+}
+
+func TestTrackingDomainFailureMakesFreshProcessUnhealthy(t *testing.T) {
+	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	processes := []modelsv2.TrackingProcessState{{
+		Script: "reminders", Health: trackingHealth(true, now, now),
+	}}
+	domains := []modelsv2.TrackingDomainState{
+		{Script: "reminders", Domain: "reminders.events", Health: trackingHealth(true, now, now)},
+		{Script: "reminders", Domain: "reminders.raid", Health: trackingHealth(false, now, now)},
+	}
+	rollUpTrackingProcessHealth(processes, domains)
+	if processes[0].Health.Healthy || processes[0].Health.Stale || processes[0].Health.ReportedHealthy {
+		t.Fatalf("fresh process with failed domain should be unhealthy: %+v", processes[0].Health)
 	}
 }
 

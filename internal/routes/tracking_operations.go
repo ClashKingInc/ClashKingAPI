@@ -17,10 +17,8 @@ import (
 )
 
 const (
-	trackingStaleAfter     = 2 * time.Minute
-	trackingQueryTimeout   = 10 * time.Second
-	globalClansPriority    = "globalclans.priority"
-	globalClansNonPriority = "globalclans.non_priority"
+	trackingStaleAfter   = 2 * time.Minute
+	trackingQueryTimeout = 10 * time.Second
 )
 
 var trackingSeriesNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
@@ -44,6 +42,7 @@ type trackingRawDomain struct {
 	script, name                                 string
 	lastSuccess                                  *time.Time
 	lastError                                    *string
+	lastReadyChange                              *time.Time
 	requests, writes, errors                     int64
 	requestLatencyMS                             float64
 	queueDepth                                   int
@@ -80,7 +79,7 @@ const latestTrackingDomainsQuery = `
 	WITH latest AS (
 		SELECT DISTINCT ON (script, name)
 			interval_start, interval_end, run_id, script, name, last_success,
-			last_error, requests, writes, errors, request_latency_ms, queue_depth,
+			last_error, last_ready_change, requests, writes, errors, request_latency_ms, queue_depth,
 			healthy, processing_count, total_process_time_ms, store_batches,
 			store_rows_requested, store_rows_affected, store_duration_ms,
 			target_count, target_cycle, target_processed
@@ -88,7 +87,7 @@ const latestTrackingDomainsQuery = `
 		ORDER BY script, name, interval_end DESC, run_id DESC
 	)
 	SELECT latest.interval_start, latest.interval_end, latest.run_id,
-		latest.script, latest.name, latest.last_success, latest.last_error,
+		latest.script, latest.name, latest.last_success, latest.last_error, latest.last_ready_change,
 		latest.requests, latest.writes, latest.errors, latest.request_latency_ms,
 		latest.queue_depth, latest.healthy, latest.processing_count,
 		latest.total_process_time_ms, latest.store_batches,
@@ -178,26 +177,13 @@ func trackingOperationsSummary(a apptypes.Deps) fiber.Handler {
 		if err := group.Wait(); err != nil {
 			return err
 		}
+		rollUpTrackingProcessHealth(processes, domains)
 
 		response := modelsv2.TrackingOperationsSummaryResponse{
 			GeneratedAt:       now,
 			StaleAfterSeconds: int(trackingStaleAfter / time.Second),
 			Processes:         processes,
 			Domains:           domains,
-		}
-		for index := range domains {
-			domain := &domains[index]
-			if domain.Script != "globalclans" {
-				continue
-			}
-			switch domain.Domain {
-			case globalClansPriority:
-				progress := domain.Targets
-				response.GlobalClans.Priority = &progress
-			case globalClansNonPriority:
-				progress := domain.Targets
-				response.GlobalClans.NonPriority = &progress
-			}
 		}
 		return apptypes.JSON(c, http.StatusOK, response)
 	}
@@ -340,7 +326,7 @@ func loadLatestTrackingDomains(ctx context.Context, pool *pgxpool.Pool, now time
 		var raw trackingRawDomain
 		if err := rows.Scan(
 			&raw.intervalStart, &raw.intervalEnd, &raw.runID, &raw.script, &raw.name,
-			&raw.lastSuccess, &raw.lastError, &raw.requests, &raw.writes, &raw.errors,
+			&raw.lastSuccess, &raw.lastError, &raw.lastReadyChange, &raw.requests, &raw.writes, &raw.errors,
 			&raw.requestLatencyMS, &raw.queueDepth, &raw.reportedHealthy,
 			&raw.processingCount, &raw.totalProcessTimeMS, &raw.storeBatches,
 			&raw.storeRowsRequested, &raw.storeRowsAffected, &raw.storeDurationMS,
@@ -363,6 +349,14 @@ func buildTrackingDomainState(raw trackingRawDomain, now time.Time) modelsv2.Tra
 		previous = &trackingTargetSnapshot{runID: *raw.previousRunID, count: *raw.previousTargetCount, cycle: *raw.previousTargetCycle, processed: *raw.previousTargetProcessed}
 	}
 	targetRate := safeRate(float64(trackingTargetDelta(current, previous)), durationSeconds)
+	var latestError *modelsv2.TrackingLatestError
+	if raw.lastError != nil {
+		timestamp := raw.intervalEnd
+		if raw.lastReadyChange != nil {
+			timestamp = *raw.lastReadyChange
+		}
+		latestError = &modelsv2.TrackingLatestError{Message: *raw.lastError, Timestamp: timestamp}
+	}
 	return modelsv2.TrackingDomainState{
 		Script:                      raw.script,
 		Domain:                      raw.name,
@@ -371,7 +365,7 @@ func buildTrackingDomainState(raw trackingRawDomain, now time.Time) modelsv2.Tra
 		IntervalEnd:                 raw.intervalEnd,
 		IntervalDurationSeconds:     roundMetric(durationSeconds),
 		LastSuccess:                 raw.lastSuccess,
-		LatestError:                 raw.lastError,
+		LatestError:                 latestError,
 		RequestCount:                raw.requests,
 		RequestsPerSecond:           safeRate(float64(raw.requests), durationSeconds),
 		ErrorCount:                  raw.errors,
@@ -390,6 +384,27 @@ func buildTrackingDomainState(raw trackingRawDomain, now time.Time) modelsv2.Tra
 		},
 		Targets: trackingTargetProgress(current, targetRate, now, now.Sub(raw.intervalEnd) > trackingStaleAfter),
 		Health:  trackingHealth(raw.reportedHealthy, raw.intervalEnd, now),
+	}
+}
+
+func rollUpTrackingProcessHealth(processes []modelsv2.TrackingProcessState, domains []modelsv2.TrackingDomainState) {
+	domainsHealthy := make(map[string]bool, len(processes))
+	domainsReportedHealthy := make(map[string]bool, len(processes))
+	for _, process := range processes {
+		domainsHealthy[process.Script] = true
+		domainsReportedHealthy[process.Script] = true
+	}
+	for _, domain := range domains {
+		if _, ok := domainsHealthy[domain.Script]; !ok {
+			continue
+		}
+		domainsHealthy[domain.Script] = domainsHealthy[domain.Script] && domain.Health.Healthy
+		domainsReportedHealthy[domain.Script] = domainsReportedHealthy[domain.Script] && domain.Health.ReportedHealthy
+	}
+	for index := range processes {
+		process := &processes[index]
+		process.Health.ReportedHealthy = process.Health.ReportedHealthy && domainsReportedHealthy[process.Script]
+		process.Health.Healthy = !process.Health.Stale && process.Health.Healthy && domainsHealthy[process.Script]
 	}
 }
 
@@ -424,8 +439,11 @@ func trackingTargetDelta(current trackingTargetSnapshot, previous *trackingTarge
 	return int64(previousRemainder) + completedCycles*int64(current.count) + int64(current.processed)
 }
 
-func trackingTargetProgress(snapshot trackingTargetSnapshot, rate float64, now time.Time, stale bool) modelsv2.TrackingTargetProgress {
-	progress := modelsv2.TrackingTargetProgress{
+func trackingTargetProgress(snapshot trackingTargetSnapshot, rate float64, now time.Time, stale bool) *modelsv2.TrackingTargetProgress {
+	if snapshot.count <= 0 {
+		return nil
+	}
+	progress := &modelsv2.TrackingTargetProgress{
 		TargetCount:          snapshot.count,
 		CurrentCycle:         snapshot.cycle,
 		ProcessedTargets:     snapshot.processed,

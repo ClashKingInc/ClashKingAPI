@@ -47,7 +47,7 @@ func (r *Reader) LoadIDs(ctx context.Context, pool *pgxpool.Pool, warIDs []strin
 		numericIDs = append(numericIDs, int32(value))
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT w.war_id::text, w.archive_pack_id, w.archive_offset, w.archive_compressed_bytes, p.payload
+		SELECT w.war_id::text, w.war_type, w.archive_pack_id, w.archive_offset, w.archive_compressed_bytes, p.payload
 		FROM wars AS w
 		LEFT JOIN war_archive_pending AS p ON p.war_id = w.war_id AND p.end_time = w.end_time
 		WHERE w.war_id = ANY($1::integer[])
@@ -59,7 +59,7 @@ func (r *Reader) LoadIDs(ctx context.Context, pool *pgxpool.Pool, warIDs []strin
 	refs := make([]Ref, 0, len(warIDs))
 	for rows.Next() {
 		var ref Ref
-		if err := rows.Scan(&ref.WarID, &ref.PackID, &ref.Offset, &ref.CompressedBytes, &ref.Pending); err != nil {
+		if err := rows.Scan(&ref.WarID, &ref.WarType, &ref.PackID, &ref.Offset, &ref.CompressedBytes, &ref.Pending); err != nil {
 			return nil, err
 		}
 		refs = append(refs, ref)
@@ -125,6 +125,7 @@ func (r *Reader) Load(ctx context.Context, refs []Ref) (map[string]War, error) {
 			if err := json.Unmarshal(ref.Pending, &war); err != nil {
 				return nil, fmt.Errorf("decode pending war %s: %w", ref.WarID, err)
 			}
+			applyRefMetadata(&war, ref)
 			result[ref.WarID] = war
 			continue
 		}
@@ -227,10 +228,17 @@ func (r *Reader) loadOne(ctx context.Context, ref Ref) (War, error) {
 	if err := json.Unmarshal(raw, &war); err != nil {
 		return War{}, fmt.Errorf("decode archived war %s: %w", ref.WarID, err)
 	}
+	applyRefMetadata(&war, ref)
 	if war.Clan.Tag == "" || war.Opponent.Tag == "" || war.EndTime.IsZero() {
 		return War{}, errors.New("archived war is missing required reconstruction fields")
 	}
 	return war, nil
+}
+
+func applyRefMetadata(war *War, ref Ref) {
+	if ref.WarType != "" {
+		war.Type = ref.WarType
+	}
 }
 
 func SortedIDs(values map[string]War) []string {

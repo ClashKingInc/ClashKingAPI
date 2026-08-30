@@ -52,6 +52,7 @@ type Attack struct {
 
 type Ref struct {
 	WarID           string
+	WarType         string
 	PackID          *int64
 	Offset          *int64
 	CompressedBytes *int

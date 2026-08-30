@@ -20,7 +20,7 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 
 func TestReaderUsesExactRangeAndReconstructsWar(t *testing.T) {
 	war := War{
-		Type: "random", State: "warended", TeamSize: 5, AttacksPerMember: 2,
+		State: "warended", TeamSize: 5, AttacksPerMember: 2,
 		PreparationStartTime: time.Unix(1, 0).UTC(), EndTime: time.Unix(2, 0).UTC(),
 		Clan: Clan{Tag: "#A", Members: []Member{}}, Opponent: Clan{Tag: "#B", Members: []Member{}},
 	}
@@ -51,12 +51,15 @@ func TestReaderUsesExactRangeAndReconstructsWar(t *testing.T) {
 		t.Fatal(err)
 	}
 	packID, offset, length := int64(42), int64(len(prefix)), len(frame)
-	result, err := reader.Load(context.Background(), []Ref{{WarID: "war-one", PackID: &packID, Offset: &offset, CompressedBytes: &length}})
+	result, err := reader.Load(context.Background(), []Ref{{WarID: "war-one", WarType: "cwl", PackID: &packID, Offset: &offset, CompressedBytes: &length}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result["war-one"].Clan.Tag != "#A" || result["war-one"].Opponent.Tag != "#B" {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+	if result["war-one"].Type != "cwl" {
+		t.Fatalf("archive metadata type = %q, want cwl", result["war-one"].Type)
 	}
 }
 
@@ -69,11 +72,11 @@ func TestReaderPrefersPendingPayloadWithoutHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := reader.Load(context.Background(), []Ref{{WarID: "pending", Pending: []byte(payload)}})
+	result, err := reader.Load(context.Background(), []Ref{{WarID: "pending", WarType: "random", Pending: []byte(payload)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.EqualFold(result["pending"].Type, "cwl") {
+	if !strings.EqualFold(result["pending"].Type, "random") {
 		t.Fatalf("unexpected pending war: %#v", result)
 	}
 }

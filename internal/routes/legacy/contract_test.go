@@ -54,6 +54,9 @@ func TestBuildPlayerWarHitMatchesLegacyNestedShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	warData := decoded["war_data"].(map[string]any)
+	if warData["type"] != "random" {
+		t.Fatalf("war_data type = %#v, want random", warData["type"])
+	}
 	if _, exists := warData["clan"].(map[string]any)["members"]; exists {
 		t.Fatal("war_data unexpectedly exposed clan members")
 	}

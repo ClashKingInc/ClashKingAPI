@@ -182,15 +182,16 @@ type PlayerLeaderboardResponse struct {
 }
 
 type PublicClanLeaderboardItem struct {
-	Tag          string          `json:"tag"`
-	Name         string          `json:"name"`
-	LocationID   *int            `json:"location_id,omitempty"`
-	BadgeURL     string          `json:"badge_url"`
-	BadgeURLs    PublicBadgeURLs `json:"badgeUrls"`
-	Donations    int             `json:"donations,omitempty"`
-	WarWins      int             `json:"war_wins,omitempty"`
-	WarWinStreak int             `json:"war_win_streak"`
-	Rank         *int64          `json:"rank,omitempty"`
+	Tag              string          `json:"tag"`
+	Name             string          `json:"name"`
+	LocationID       *int            `json:"location_id,omitempty"`
+	BadgeURL         string          `json:"badge_url"`
+	BadgeURLs        PublicBadgeURLs `json:"badgeUrls"`
+	Donations        int             `json:"donations,omitempty"`
+	WarWins          int             `json:"war_wins,omitempty"`
+	CapitalGoldTotal int64           `json:"capital_gold_total,omitempty"`
+	WarWinStreak     int             `json:"war_win_streak"`
+	Rank             *int64          `json:"rank,omitempty"`
 }
 
 type PublicClanLeaderboardResponse struct {

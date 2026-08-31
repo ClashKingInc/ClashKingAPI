@@ -84,7 +84,7 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 		locationID := c.Query("location_id")
 		query := `
 			SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
-				public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+				public_war_log, war_wins, war_win_streak, clan_points, capital_gold_total, member_count, badge_token,
 				troops_donated, troops_received, members, last_active
 			FROM basic_clan
 		`
@@ -156,7 +156,7 @@ func legacyClanFixTag(tag string) string {
 func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
-			public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+			public_war_log, war_wins, war_win_streak, clan_points, capital_gold_total, member_count, badge_token,
 			troops_donated, troops_received, members, last_active
 		FROM basic_clan
 		WHERE tag = $1
@@ -167,7 +167,7 @@ func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, err
 func v2CachedClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanCachedResponse, error) {
 	row := a.Store.SQL.QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
-			public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token,
+			public_war_log, war_wins, war_win_streak, clan_points, capital_gold_total, member_count, badge_token,
 			troops_donated, troops_received, members, last_active
 		FROM basic_clan
 		WHERE tag = $1
@@ -184,23 +184,24 @@ type basicClanScanner interface {
 }
 
 type basicClanData struct {
-	tag           string
-	name          string
-	description   string
-	level         int
-	locationID    pgtype.Int4
-	cwlLeague     int
-	capitalLeague pgtype.Int4
-	publicWarLog  bool
-	warWins       int
-	warWinStreak  int
-	clanPoints    int
-	memberCount   int
-	badge         string
-	donated       int
-	received      int
-	members       any
-	lastActive    pgtype.Timestamptz
+	tag              string
+	name             string
+	description      string
+	level            int
+	locationID       pgtype.Int4
+	cwlLeague        int
+	capitalLeague    pgtype.Int4
+	publicWarLog     bool
+	warWins          int
+	warWinStreak     int
+	clanPoints       int
+	capitalGoldTotal int64
+	memberCount      int
+	badge            string
+	donated          int
+	received         int
+	members          any
+	lastActive       pgtype.Timestamptz
 }
 
 func clanDecodeJSONValue(raw []byte, fallback any) any {
@@ -219,7 +220,7 @@ func scanBasicClanData(row basicClanScanner) (basicClanData, error) {
 	var locationID, capitalLeague pgtype.Int4
 	var membersRaw []byte
 	var lastActive pgtype.Timestamptz
-	if err := row.Scan(&data.tag, &data.name, &data.description, &data.level, &locationID, &data.cwlLeague, &capitalLeague, &data.publicWarLog, &data.warWins, &data.warWinStreak, &data.clanPoints, &data.memberCount, &data.badge, &data.donated, &data.received, &membersRaw, &lastActive); err != nil {
+	if err := row.Scan(&data.tag, &data.name, &data.description, &data.level, &locationID, &data.cwlLeague, &capitalLeague, &data.publicWarLog, &data.warWins, &data.warWinStreak, &data.clanPoints, &data.capitalGoldTotal, &data.memberCount, &data.badge, &data.donated, &data.received, &membersRaw, &lastActive); err != nil {
 		return basicClanData{}, err
 	}
 	data.locationID = locationID
@@ -239,31 +240,33 @@ func scanBasicClan(row basicClanScanner) (map[string]any, error) {
 
 func basicClanMap(data basicClanData) map[string]any {
 	item := map[string]any{
-		"tag":             data.tag,
-		"name":            data.name,
-		"description":     data.description,
-		"clan_level":      data.level,
-		"clanLevel":       data.level,
-		"cwl_league_id":   data.cwlLeague,
-		"public_war_log":  data.publicWarLog,
-		"publicWarLog":    data.publicWarLog,
-		"war_wins":        data.warWins,
-		"warWins":         data.warWins,
-		"war_win_streak":  data.warWinStreak,
-		"warWinStreak":    data.warWinStreak,
-		"clan_points":     data.clanPoints,
-		"clanPoints":      data.clanPoints,
-		"member_count":    data.memberCount,
-		"memberCount":     data.memberCount,
-		"badge_token":     data.badge,
-		"badge_url":       badgeURL(data.badge, 512),
-		"badgeUrls":       badgeURLs(data.badge),
-		"troops_donated":  data.donated,
-		"troopsDonated":   data.donated,
-		"troops_received": data.received,
-		"troopsReceived":  data.received,
-		"members":         data.members,
-		"warLeague":       map[string]any{"id": data.cwlLeague},
+		"tag":                data.tag,
+		"name":               data.name,
+		"description":        data.description,
+		"clan_level":         data.level,
+		"clanLevel":          data.level,
+		"cwl_league_id":      data.cwlLeague,
+		"public_war_log":     data.publicWarLog,
+		"publicWarLog":       data.publicWarLog,
+		"war_wins":           data.warWins,
+		"warWins":            data.warWins,
+		"war_win_streak":     data.warWinStreak,
+		"warWinStreak":       data.warWinStreak,
+		"clan_points":        data.clanPoints,
+		"clanPoints":         data.clanPoints,
+		"capital_gold_total": data.capitalGoldTotal,
+		"capitalGoldTotal":   data.capitalGoldTotal,
+		"member_count":       data.memberCount,
+		"memberCount":        data.memberCount,
+		"badge_token":        data.badge,
+		"badge_url":          badgeURL(data.badge, 512),
+		"badgeUrls":          badgeURLs(data.badge),
+		"troops_donated":     data.donated,
+		"troopsDonated":      data.donated,
+		"troops_received":    data.received,
+		"troopsReceived":     data.received,
+		"members":            data.members,
+		"warLeague":          map[string]any{"id": data.cwlLeague},
 	}
 	if data.locationID.Valid {
 		item["location_id"] = data.locationID.Int32
@@ -294,17 +297,18 @@ func cachedClanResponse(data basicClanData, a apptypes.Deps) modelsv2.ClanCached
 			Medium: badgeURL(data.badge, 200),
 			Large:  badgeURL(data.badge, 512),
 		},
-		Description:    data.description,
-		ClanLevel:      data.level,
-		ClanPoints:     data.clanPoints,
-		WarLeague:      warLeague,
-		PublicWarLog:   data.publicWarLog,
-		WarWins:        data.warWins,
-		WarWinStreak:   data.warWinStreak,
-		MemberCount:    data.memberCount,
-		TroopsDonated:  data.donated,
-		TroopsReceived: data.received,
-		Members:        cachedClanMembers(data.members),
+		Description:      data.description,
+		ClanLevel:        data.level,
+		ClanPoints:       data.clanPoints,
+		CapitalGoldTotal: data.capitalGoldTotal,
+		WarLeague:        warLeague,
+		PublicWarLog:     data.publicWarLog,
+		WarWins:          data.warWins,
+		WarWinStreak:     data.warWinStreak,
+		MemberCount:      data.memberCount,
+		TroopsDonated:    data.donated,
+		TroopsReceived:   data.received,
+		Members:          cachedClanMembers(data.members),
 	}
 	if data.locationID.Valid {
 		if location, ok := searchLocations()[int(data.locationID.Int32)]; ok {

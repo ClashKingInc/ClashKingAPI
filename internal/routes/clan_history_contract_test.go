@@ -168,10 +168,11 @@ func TestCachedClanResponseEnrichesStoredReferencesAndNormalizesMembers(t *testi
 	lastActive := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
 	response := cachedClanResponse(basicClanData{
 		tag: "#CLAN", name: "Clan", cwlLeague: cwlUnrankedLeagueID,
-		locationID:    pgtype.Int4{Int32: 32000087, Valid: true},
-		capitalLeague: pgtype.Int4{Int32: 85000015, Valid: true},
-		lastActive:    pgtype.Timestamptz{Time: lastActive, Valid: true},
-		members:       []any{map[string]any{"tag": "#P1", "name": "Player", "town_hall": float64(17)}},
+		capitalGoldTotal: 9876543210,
+		locationID:       pgtype.Int4{Int32: 32000087, Valid: true},
+		capitalLeague:    pgtype.Int4{Int32: 85000015, Valid: true},
+		lastActive:       pgtype.Timestamptz{Time: lastActive, Valid: true},
+		members:          []any{map[string]any{"tag": "#P1", "name": "Player", "town_hall": float64(17)}},
 	}, apptypes.Deps{})
 	if response.Location == nil || response.Location.ID != 32000087 || response.Location.Name == "" || response.Location.CountryCode == "" {
 		t.Fatalf("cached location was not enriched: %#v", response.Location)
@@ -181,6 +182,9 @@ func TestCachedClanResponseEnrichesStoredReferencesAndNormalizesMembers(t *testi
 	}
 	if response.CapitalLeague == nil || response.CapitalLeague.ID != 85000015 {
 		t.Fatalf("cached capital league missing: %#v", response.CapitalLeague)
+	}
+	if response.CapitalGoldTotal != 9876543210 {
+		t.Fatalf("cached capital gold total = %d", response.CapitalGoldTotal)
 	}
 	if response.LastActive == nil || !response.LastActive.Equal(lastActive) || len(response.Members) != 1 || response.Members[0].TownHallLevel != 17 {
 		t.Fatalf("cached scalar/member fields were not preserved: %#v", response)

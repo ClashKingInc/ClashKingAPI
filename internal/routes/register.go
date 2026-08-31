@@ -82,6 +82,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/leaderboard/townhalls/:townhall_level", leaderboardTownhalls(a))
 	app.Get("/v2/leaderboard/:location_id/clan/donations", leaderboardClanDonations(a))
 	app.Get("/v2/leaderboard/:location_id/clan/war-wins", leaderboardClanWarWins(a))
+	app.Get("/v2/leaderboard/:location_id/clan/capital-gold", leaderboardClanCapitalGold(a))
 	app.Get("/v2/leaderboard/clan/win-streak", leaderboardClanWinStreak(a))
 	app.Get("/v2/leaderboard/:league_tier_id/trophy-buckets", leaderboardTrophyBuckets(a))
 	app.Get("/v2/counts", countsOverview(a))

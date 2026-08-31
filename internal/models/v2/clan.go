@@ -35,21 +35,22 @@ type ClanCachedMember struct {
 
 // ClanCachedResponse is a potentially several-hours-old clan profile cached by ClashKing.
 type ClanCachedResponse struct {
-	Name           string             `json:"name"`
-	Tag            string             `json:"tag"`
-	BadgeURLs      ClanBadgeURLs      `json:"badgeUrls"`
-	Description    string             `json:"description"`
-	ClanLevel      int                `json:"clanLevel"`
-	ClanPoints     int                `json:"clanPoints"`
-	Location       *SearchLocation    `json:"location,omitempty"`
-	WarLeague      ClanLeagueRef      `json:"warLeague"`
-	CapitalLeague  *ClanLeagueRef     `json:"capitalLeague,omitempty"`
-	PublicWarLog   bool               `json:"publicWarLog"`
-	WarWins        int                `json:"warWins"`
-	WarWinStreak   int                `json:"warWinStreak"`
-	MemberCount    int                `json:"memberCount"`
-	TroopsDonated  int                `json:"troopsDonated"`
-	TroopsReceived int                `json:"troopsReceived"`
-	LastActive     *time.Time         `json:"lastActive,omitempty"`
-	Members        []ClanCachedMember `json:"members"`
+	Name             string             `json:"name"`
+	Tag              string             `json:"tag"`
+	BadgeURLs        ClanBadgeURLs      `json:"badgeUrls"`
+	Description      string             `json:"description"`
+	ClanLevel        int                `json:"clanLevel"`
+	ClanPoints       int                `json:"clanPoints"`
+	CapitalGoldTotal int64              `json:"capitalGoldTotal"`
+	Location         *SearchLocation    `json:"location,omitempty"`
+	WarLeague        ClanLeagueRef      `json:"warLeague"`
+	CapitalLeague    *ClanLeagueRef     `json:"capitalLeague,omitempty"`
+	PublicWarLog     bool               `json:"publicWarLog"`
+	WarWins          int                `json:"warWins"`
+	WarWinStreak     int                `json:"warWinStreak"`
+	MemberCount      int                `json:"memberCount"`
+	TroopsDonated    int                `json:"troopsDonated"`
+	TroopsReceived   int                `json:"troopsReceived"`
+	LastActive       *time.Time         `json:"lastActive,omitempty"`
+	Members          []ClanCachedMember `json:"members"`
 }

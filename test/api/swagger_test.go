@@ -627,7 +627,7 @@ func TestBuildDocOmitsRemovedRoutesAndKeepsV2JoinLeave(t *testing.T) {
 			t.Fatalf("expected ClanCachedResponse not to expose legacy field %s", field)
 		}
 	}
-	for _, field := range []string{"name", "tag", "badgeUrls", "clanPoints", "memberCount", "members", "location", "warLeague", "capitalLeague", "troopsDonated", "troopsReceived", "warWinStreak"} {
+	for _, field := range []string{"name", "tag", "badgeUrls", "clanPoints", "capitalGoldTotal", "memberCount", "members", "location", "warLeague", "capitalLeague", "troopsDonated", "troopsReceived", "warWinStreak"} {
 		if _, exists := clanBasicProperties[field]; !exists {
 			t.Fatalf("expected ClanCachedResponse to expose %s", field)
 		}
@@ -1246,6 +1246,7 @@ func TestBuildDocIncludesPublicStatsSectionsFirst(t *testing.T) {
 		"/v2/leaderboard/townhalls/{townhall_level}",
 		"/v2/leaderboard/{location_id}/clan/donations",
 		"/v2/leaderboard/{location_id}/clan/war-wins",
+		"/v2/leaderboard/{location_id}/clan/capital-gold",
 		"/v2/leaderboard/clan/win-streak",
 		"/v2/leaderboard/{league_tier_id}/trophy-buckets",
 		"/v2/counts",

@@ -3892,6 +3892,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/v2/leaderboard/{location_id}/clan/capital-gold": {
+            "get": {
+                "description": "Returns clans with the highest lifetime Capital Gold deposits for a location.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Leaderboard"
+                ],
+                "summary": "Get clan Capital Gold leaderboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Location ID",
+                        "name": "location_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Result limit, max 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.PublicClanLeaderboardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/modelsv2.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/leaderboard/{location_id}/clan/donations": {
             "get": {
                 "description": "Returns top donation clans for a location.",
@@ -16583,6 +16630,9 @@ const docTemplate = `{
                 "badgeUrls": {
                     "$ref": "#/definitions/modelsv2.ClanBadgeURLs"
                 },
+                "capitalGoldTotal": {
+                    "type": "integer"
+                },
                 "capitalLeague": {
                     "$ref": "#/definitions/modelsv2.ClanLeagueRef"
                 },
@@ -19630,6 +19680,9 @@ const docTemplate = `{
                 },
                 "badge_url": {
                     "type": "string"
+                },
+                "capital_gold_total": {
+                    "type": "integer"
                 },
                 "donations": {
                     "type": "integer"

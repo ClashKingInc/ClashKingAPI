@@ -222,6 +222,10 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			capitalLeagueID = clan.CapitalLeague.ID
 		}
 		badgeToken := serverClanBadgeToken(firstNonEmpty(clan.Badge.Large, clan.Badge.Medium, clan.Badge.Small, clan.Badge.URL()))
+		var capitalGoldTotal int64
+		if clan.ClanCapital != nil {
+			capitalGoldTotal = clan.ClanCapital.ClanGoldSinkTotal
+		}
 
 		tx, err := rt.Store.SQL.Begin(c.UserContext())
 		if err != nil {
@@ -232,11 +236,11 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 			INSERT INTO basic_clan (
 				tag, name, description, clan_level, location_id, cwl_league_id,
 				capital_league_id, public_war_log, war_wins, war_win_streak,
-				clan_points, member_count, badge_token, troops_donated,
+				clan_points, capital_gold_total, member_count, badge_token, troops_donated,
 				troops_received, members, last_active
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11, $12, $13, $14, $15, $16::jsonb, now()
+				$11, $12, $13, $14, $15, $16, $17::jsonb, now()
 			)
 			ON CONFLICT (tag) DO UPDATE SET
 				name = EXCLUDED.name,
@@ -249,6 +253,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 				war_wins = EXCLUDED.war_wins,
 				war_win_streak = EXCLUDED.war_win_streak,
 				clan_points = EXCLUDED.clan_points,
+				capital_gold_total = EXCLUDED.capital_gold_total,
 				member_count = EXCLUDED.member_count,
 				badge_token = EXCLUDED.badge_token,
 				troops_donated = EXCLUDED.troops_donated,
@@ -257,7 +262,7 @@ func addServerClan(rt apptypes.Deps) apptypes.HandlerFunc {
 				last_active = now()
 		`, clan.Tag, clan.Name, clan.Description, clan.Level, locationID, cwlLeagueID,
 			capitalLeagueID, clan.PublicWarLog, clan.WarWins, clan.WarWinStreak,
-			clan.Points, clan.MemberCount, badgeToken, troopsDonated, troopsReceived, membersJSON); err != nil {
+			clan.Points, capitalGoldTotal, clan.MemberCount, badgeToken, troopsDonated, troopsReceived, membersJSON); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(c.UserContext(), `

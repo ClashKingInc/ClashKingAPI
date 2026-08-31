@@ -668,6 +668,21 @@ func leaderboardClanWarWins(a apptypes.Deps) fiber.Handler {
 	return clanLeaderboard(a, "war_wins")
 }
 
+// leaderboardClanCapitalGold godoc
+// @Summary Get clan Capital Gold leaderboard
+// @Description Returns clans with the highest lifetime Capital Gold deposits for a location.
+// @Tags Leaderboard
+// @Produce json
+// @Param location_id path int true "Location ID"
+// @Param limit query int false "Result limit, max 500"
+// @Success 200 {object} modelsv2.PublicClanLeaderboardResponse
+// @Failure 400 {object} modelsv2.ErrorResponse
+// @Failure 500 {object} modelsv2.ErrorResponse
+// @Router /v2/leaderboard/{location_id}/clan/capital-gold [get]
+func leaderboardClanCapitalGold(a apptypes.Deps) fiber.Handler {
+	return clanLeaderboard(a, "capital_gold_total")
+}
+
 // leaderboardClanWinStreak godoc
 // @Summary Get clan win streak leaderboard
 // @Description Returns top clan win streaks.
@@ -1425,12 +1440,7 @@ func clanLeaderboard(a apptypes.Deps, kind string) fiber.Handler {
 			return apptypes.Error(fiber.StatusBadRequest, "invalid location_id")
 		}
 		limit := clamp(queryInt(c, "limit", 500), 1, 500)
-		orderColumn := "l.location_donated_rank"
-		valueColumn := "c.troops_donated"
-		if kind == "war_wins" {
-			orderColumn = "l.location_war_wins_rank"
-			valueColumn = "c.war_wins"
-		}
+		orderColumn, valueColumn := clanLeaderboardColumns(kind)
 		query := `
 			SELECT c.tag, c.name, c.location_id, c.badge_token, ` + valueColumn + `, c.war_win_streak, ` + orderColumn + `
 			FROM clan_leaderboards l
@@ -1452,12 +1462,24 @@ func clanLeaderboard(a apptypes.Deps, kind string) fiber.Handler {
 	}
 }
 
+func clanLeaderboardColumns(kind string) (orderColumn, valueColumn string) {
+	switch kind {
+	case "war_wins":
+		return "l.location_war_wins_rank", "c.war_wins"
+	case "capital_gold_total":
+		return "l.location_capital_gold_rank", "c.capital_gold_total"
+	default:
+		return "l.location_donated_rank", "c.troops_donated"
+	}
+}
+
 func scanClanLeaderboard(rows pgx.Rows, valueKey string) ([]map[string]any, error) {
 	items := []map[string]any{}
 	for rows.Next() {
 		var tag, name, badgeToken string
 		var locationID pgtype.Int4
-		var value, streak int
+		var value int64
+		var streak int
 		var rank pgtype.Int8
 		if err := rows.Scan(&tag, &name, &locationID, &badgeToken, &value, &streak, &rank); err != nil {
 			return nil, err

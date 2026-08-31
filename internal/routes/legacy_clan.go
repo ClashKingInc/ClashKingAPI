@@ -95,7 +95,7 @@ func clanSearch(a apptypes.Deps) fiber.Handler {
 		}
 		query += ` ORDER BY member_count DESC LIMIT $` + strconv.Itoa(len(args)+1)
 		args = append(args, limit)
-		rows, err := a.Store.SQL.Query(c.UserContext(), query, args...)
+		rows, err := a.Store.Queries().Query(c.UserContext(), query, args...)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ func legacyClanFixTag(tag string) string {
 }
 
 func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, error) {
-	row := a.Store.SQL.QueryRow(c.UserContext(), `
+	row := a.Store.Queries().QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
 			public_war_log, war_wins, war_win_streak, clan_points, capital_gold_total, member_count, badge_token,
 			troops_donated, troops_received, members, last_active
@@ -165,7 +165,7 @@ func v1BasicClan(c *fiber.Ctx, a apptypes.Deps, tag string) (map[string]any, err
 }
 
 func v2CachedClan(c *fiber.Ctx, a apptypes.Deps, tag string) (modelsv2.ClanCachedResponse, error) {
-	row := a.Store.SQL.QueryRow(c.UserContext(), `
+	row := a.Store.Queries().QueryRow(c.UserContext(), `
 		SELECT tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id,
 			public_war_log, war_wins, war_win_streak, clan_points, capital_gold_total, member_count, badge_token,
 			troops_donated, troops_received, members, last_active

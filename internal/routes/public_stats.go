@@ -1449,7 +1449,7 @@ func clanLeaderboard(a apptypes.Deps, kind string) fiber.Handler {
 			ORDER BY ` + orderColumn + `
 			LIMIT $2
 		`
-		rows, err := a.Store.SQL.Query(c.UserContext(), query, locationID, limit)
+		rows, err := a.Store.Queries().Query(c.UserContext(), query, locationID, limit)
 		if err != nil {
 			return err
 		}

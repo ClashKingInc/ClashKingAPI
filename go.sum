@@ -8,8 +8,6 @@ github.com/buger/jsonparser v1.1.2 h1:frqHqw7otoVbk5M8LlE/L7HTnIq2v9RX6EJ48i9AxJ
 github.com/buger/jsonparser v1.1.2/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/clashkinginc/clashy.go v0.1.13 h1:qzuYat2eW6HEF0Oy9Iip6Zzy43XuNo+TBb+fLAA7YWw=
 github.com/clashkinginc/clashy.go v0.1.13/go.mod h1:sI4kNkV/ooRDN49UvH4a1tmdbrkacmLZKgA1ATJYbp8=
-github.com/clashkinginc/clashy.go v0.1.15-0.20260831171408-739835308c5a h1:TIl8CU3LJTcKXxrGrzTVwmGfJy1V10rVsWZSm2vkcQ4=
-github.com/clashkinginc/clashy.go v0.1.15-0.20260831171408-739835308c5a/go.mod h1:sI4kNkV/ooRDN49UvH4a1tmdbrkacmLZKgA1ATJYbp8=
 github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

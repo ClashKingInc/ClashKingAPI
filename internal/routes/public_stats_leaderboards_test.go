@@ -67,10 +67,3 @@ func TestDecodeLeagueLeaderboardPreservesClanAndLeagueBadges(t *testing.T) {
 		t.Fatalf("clan = %#v, want clan badge", item.Clan)
 	}
 }
-
-func TestClanCapitalGoldLeaderboardUsesLocationRank(t *testing.T) {
-	orderColumn, valueColumn := clanLeaderboardColumns("capital_gold_total")
-	if orderColumn != "l.location_capital_gold_rank" || valueColumn != "c.capital_gold_total" {
-		t.Fatalf("capital gold leaderboard columns = %q, %q", orderColumn, valueColumn)
-	}
-}

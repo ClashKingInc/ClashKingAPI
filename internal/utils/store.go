@@ -7,12 +7,26 @@ import (
 	"time"
 
 	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type SQLQueryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 type Store struct {
 	SQL        *pgxpool.Pool
+	Queryer    SQLQueryer
 	WarArchive *wararchive.Reader
+}
+
+func (s *Store) Queries() SQLQueryer {
+	if s.Queryer != nil {
+		return s.Queryer
+	}
+	return s.SQL
 }
 
 func (s *Store) AuthUserExists(ctx context.Context, userID string) (bool, error) {

@@ -36,16 +36,20 @@ func legacyDiscordLinksRequest(t *testing.T, body string, handler fiber.Handler)
 
 func TestLegacyDiscordLinksHandlerMatchesContract(t *testing.T) {
 	var received []string
-	handler := discordLinksHandler(func(_ context.Context, tags []string) (map[string]json.Number, error) {
-		received = append([]string(nil), tags...)
-		return map[string]json.Number{"#G002": "123456789012345678"}, nil
+	handler := discordLinksHandler(func(_ context.Context, discordIDs []string) (map[string]json.Number, error) {
+		received = append([]string(nil), discordIDs...)
+		return map[string]json.Number{
+			"#G002":    "123456789012345678",
+			"#SECOND":  "123456789012345678",
+			"#ANOTHER": "234567890123456789",
+		}, nil
 	})
-	response, payload := legacyDiscordLinksRequest(t, `[" goO-2 ","#missing","goO-2"]`, handler)
+	response, payload := legacyDiscordLinksRequest(t, `[123456789012345678,"234567890123456789",123456789012345678]`, handler)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.StatusCode, payload)
 	}
-	if !reflect.DeepEqual(received, []string{"#G002", "#MISSING"}) {
-		t.Fatalf("lookup tags = %#v", received)
+	if !reflect.DeepEqual(received, []string{"123456789012345678", "234567890123456789"}) {
+		t.Fatalf("lookup Discord IDs = %#v", received)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.UseNumber()
@@ -53,20 +57,8 @@ func TestLegacyDiscordLinksHandlerMatchesContract(t *testing.T) {
 	if err := decoder.Decode(&result); err != nil {
 		t.Fatal(err)
 	}
-	if result["#G002"] != json.Number("123456789012345678") || result["#MISSING"] != nil {
+	if result["#G002"] != json.Number("123456789012345678") || result["#SECOND"] != json.Number("123456789012345678") || result["#ANOTHER"] != json.Number("234567890123456789") {
 		t.Fatalf("response = %#v", result)
-	}
-}
-
-func TestLegacyDiscordLinkTagMatchesCocPyNormalization(t *testing.T) {
-	for input, expected := range map[string]string{
-		" goO-2 ": "#G002",
-		"%23ABC":  "#23ABC",
-		"":        "#",
-	} {
-		if result := legacyDiscordLinkTag(input); result != expected {
-			t.Fatalf("legacyDiscordLinkTag(%q) = %q, want %q", input, result, expected)
-		}
 	}
 }
 
@@ -80,7 +72,9 @@ func TestLegacyDiscordLinksHandlerValidatesBodyAndPropagatesErrors(t *testing.T)
 		{body: ``, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, nil }, status: http.StatusUnprocessableEntity},
 		{body: `{}`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, nil }, status: http.StatusUnprocessableEntity},
 		{body: `null`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, nil }, status: http.StatusUnprocessableEntity},
-		{body: `["#A"]`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, lookupErr }, status: http.StatusInternalServerError},
+		{body: `["#PLAYER"]`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, nil }, status: http.StatusUnprocessableEntity},
+		{body: `[123.5]`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, nil }, status: http.StatusUnprocessableEntity},
+		{body: `[123456789012345678]`, lookup: func(context.Context, []string) (map[string]json.Number, error) { return nil, lookupErr }, status: http.StatusInternalServerError},
 	} {
 		response, _ := legacyDiscordLinksRequest(t, test.body, discordLinksHandler(test.lookup))
 		if response.StatusCode != test.status {
@@ -91,17 +85,17 @@ func TestLegacyDiscordLinksHandlerValidatesBodyAndPropagatesErrors(t *testing.T)
 
 func TestQueryDiscordLinksUsesVisibleNumericLinks(t *testing.T) {
 	db := &legacyTestDB{rows: []pgx.Rows{&legacyTestRows{values: [][]any{{"#A", "123456789012345678"}}}}}
-	result, err := queryDiscordLinks(context.Background(), db, []string{"#A", "#B"})
+	result, err := queryDiscordLinks(context.Background(), db, []string{"123456789012345678", "234567890123456789"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result["#A"] != json.Number("123456789012345678") {
 		t.Fatalf("result = %#v", result)
 	}
-	if len(db.queries) != 1 || !strings.Contains(db.queries[0], "hidden = false") || !strings.Contains(db.queries[0], "user_id ~") {
+	if len(db.queries) != 1 || !strings.Contains(db.queries[0], "hidden = false") || !strings.Contains(db.queries[0], "user_id = ANY") {
 		t.Fatalf("query did not enforce public Discord links: %q", db.queries)
 	}
-	if !reflect.DeepEqual(db.args[0], []any{[]string{"#A", "#B"}}) {
+	if !reflect.DeepEqual(db.args[0], []any{[]string{"123456789012345678", "234567890123456789"}}) {
 		t.Fatalf("query args = %#v", db.args[0])
 	}
 }

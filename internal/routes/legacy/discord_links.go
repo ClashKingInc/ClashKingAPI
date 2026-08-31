@@ -28,59 +28,62 @@ func discordLinks(deps apptypes.Deps) fiber.Handler {
 
 func discordLinksHandler(lookup discordLinksLookup) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var requested []string
-		if len(c.Body()) == 0 || json.Unmarshal(c.Body(), &requested) != nil || requested == nil {
-			return fiber.NewError(http.StatusUnprocessableEntity, "body must be an array of player tags")
-		}
-
-		result := make(map[string]*json.Number, len(requested))
-		tags := make([]string, 0, len(requested))
-		for _, raw := range requested {
-			tag := legacyDiscordLinkTag(raw)
-			if _, exists := result[tag]; exists {
-				continue
-			}
-			result[tag] = nil
-			tags = append(tags, tag)
-		}
-		if len(tags) == 0 {
-			return apptypes.JSON(c, http.StatusOK, result)
-		}
-
-		found, err := lookup(c.UserContext(), tags)
+		discordIDs, err := legacyDiscordIDs(c.Body())
 		if err != nil {
 			return err
 		}
-		for tag, userID := range found {
-			if _, requested := result[tag]; requested {
-				value := userID
-				result[tag] = &value
-			}
+		if len(discordIDs) == 0 {
+			return apptypes.JSON(c, http.StatusOK, map[string]json.Number{})
 		}
-		return apptypes.JSON(c, http.StatusOK, result)
+
+		found, err := lookup(c.UserContext(), discordIDs)
+		if err != nil {
+			return err
+		}
+		return apptypes.JSON(c, http.StatusOK, found)
 	}
 }
 
-func legacyDiscordLinkTag(raw string) string {
-	tag := tagCharacters.ReplaceAllString(strings.ToUpper(raw), "")
-	tag = strings.ReplaceAll(tag, "O", "0")
-	return "#" + tag
+func legacyDiscordIDs(body []byte) ([]string, error) {
+	var rawIDs []json.RawMessage
+	if len(body) == 0 || json.Unmarshal(body, &rawIDs) != nil || rawIDs == nil {
+		return nil, fiber.NewError(http.StatusUnprocessableEntity, "body must be an array of Discord IDs")
+	}
+	result := make([]string, 0, len(rawIDs))
+	seen := make(map[string]struct{}, len(rawIDs))
+	for _, rawID := range rawIDs {
+		value := strings.TrimSpace(string(rawID))
+		if strings.HasPrefix(value, `"`) {
+			if err := json.Unmarshal(rawID, &value); err != nil {
+				return nil, fiber.NewError(http.StatusUnprocessableEntity, "Discord IDs must be 15-20 digit numbers")
+			}
+			value = strings.TrimSpace(value)
+		}
+		if len(value) < 15 || len(value) > 20 || strings.Trim(value, "0123456789") != "" {
+			return nil, fiber.NewError(http.StatusUnprocessableEntity, "Discord IDs must be 15-20 digit numbers")
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result, nil
 }
 
-func queryDiscordLinks(ctx context.Context, db discordLinksDB, tags []string) (map[string]json.Number, error) {
+func queryDiscordLinks(ctx context.Context, db discordLinksDB, discordIDs []string) (map[string]json.Number, error) {
 	rows, err := db.Query(ctx, `
 		SELECT tag, user_id
 		FROM player_links
-		WHERE tag = ANY($1::text[])
+		WHERE user_id = ANY($1::text[])
 		  AND hidden = false
-		  AND user_id ~ '^[0-9]{15,20}$'
-	`, tags)
+	`, discordIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string]json.Number, len(tags))
+	result := make(map[string]json.Number)
 	for rows.Next() {
 		var tag, rawUserID string
 		if err := rows.Scan(&tag, &rawUserID); err != nil {

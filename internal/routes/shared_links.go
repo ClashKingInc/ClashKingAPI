@@ -21,6 +21,7 @@ import (
 const (
 	sharedLinksMaxIdentifiers    = 100
 	sharedLinksRequestsPerMinute = 120
+	sharedLinksInvalidToken      = "Invalid developer API token"
 )
 
 var sharedLinksDiscordIDPattern = regexp.MustCompile(`^[1-9][0-9]{14,19}$`)
@@ -62,32 +63,36 @@ func postSharedLinks(a apptypes.Deps) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		applicationID, err := authenticateSharedLinksApplication(c.UserContext(), db, c.Get(fiber.HeaderAuthorization))
-		if err != nil {
-			return err
-		}
-		if !allowSharedLinksRequest(applicationID, time.Now().UTC()) {
-			return apptypes.Error(http.StatusTooManyRequests, "Shared-links request limit exceeded")
-		}
-
-		var request modelsv2.SharedLinksLookupRequest
-		if err := apptypes.DecodeJSON(c, &request); err != nil {
-			return err
-		}
-		discordIDs, playerTags, err := validateSharedLinksLookupRequest(request)
-		if err != nil {
-			return err
-		}
-		if err := recordSharedLinksLookup(c.UserContext(), db, applicationID, len(discordIDs)+len(playerTags)); err != nil {
-			return err
-		}
-		items, err := querySharedLinks(c.UserContext(), db, discordIDs, playerTags)
-		if err != nil {
-			return err
-		}
-		c.Set(fiber.HeaderCacheControl, "no-store")
-		return apptypes.JSON(c, http.StatusOK, modelsv2.SharedLinksLookupResponse{Items: items})
+		return executeSharedLinksLookup(c, db)
 	}
+}
+
+func executeSharedLinksLookup(c *fiber.Ctx, db sharedLinksDB) error {
+	applicationID, err := authenticateSharedLinksApplication(c.UserContext(), db, c.Get(fiber.HeaderAuthorization))
+	if err != nil {
+		return err
+	}
+	if !allowSharedLinksRequest(applicationID, time.Now().UTC()) {
+		return apptypes.Error(http.StatusTooManyRequests, "Shared-links request limit exceeded")
+	}
+
+	var request modelsv2.SharedLinksLookupRequest
+	if err := apptypes.DecodeJSON(c, &request); err != nil {
+		return err
+	}
+	discordIDs, playerTags, err := validateSharedLinksLookupRequest(request)
+	if err != nil {
+		return err
+	}
+	if err := recordSharedLinksLookup(c.UserContext(), db, applicationID, len(discordIDs)+len(playerTags)); err != nil {
+		return err
+	}
+	items, err := querySharedLinks(c.UserContext(), db, discordIDs, playerTags)
+	if err != nil {
+		return err
+	}
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	return apptypes.JSON(c, http.StatusOK, modelsv2.SharedLinksLookupResponse{Items: items})
 }
 
 func sharedLinksSQL(a apptypes.Deps) (sharedLinksDB, error) {
@@ -100,7 +105,7 @@ func sharedLinksSQL(a apptypes.Deps) (sharedLinksDB, error) {
 func authenticateSharedLinksApplication(ctx context.Context, db sharedLinksDB, authorization string) (string, error) {
 	token := sharedLinksBearerToken(authorization)
 	if token == "" || len(token) > 512 {
-		return "", apptypes.Error(http.StatusUnauthorized, "Invalid developer API token")
+		return "", apptypes.Error(http.StatusUnauthorized, sharedLinksInvalidToken)
 	}
 	hash := sha256.Sum256([]byte(token))
 	var applicationID uuid.UUID
@@ -112,7 +117,7 @@ func authenticateSharedLinksApplication(ctx context.Context, db sharedLinksDB, a
 		RETURNING application_id
 	`, hash[:]).Scan(&applicationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", apptypes.Error(http.StatusUnauthorized, "Invalid developer API token")
+		return "", apptypes.Error(http.StatusUnauthorized, sharedLinksInvalidToken)
 	}
 	if err != nil {
 		return "", err
@@ -130,7 +135,7 @@ func recordSharedLinksLookup(ctx context.Context, db sharedLinksDB, applicationI
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return apptypes.Error(http.StatusUnauthorized, "Invalid developer API token")
+		return apptypes.Error(http.StatusUnauthorized, sharedLinksInvalidToken)
 	}
 	return nil
 }

@@ -3,7 +3,10 @@ package routes
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,10 +14,65 @@ import (
 
 	modelsv2 "github.com/ClashKingInc/ClashKingAPI/internal/models/v2"
 	apptypes "github.com/ClashKingInc/ClashKingAPI/internal/utils"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+func TestExecuteSharedLinksLookupReturnsCombinedItems(t *testing.T) {
+	applicationID := uuid.MustParse("019d0000-0000-7000-8000-000000000001")
+	resetSharedLinksRateLimits()
+	db := &sharedLinksTestDB{
+		queryRow: func(context.Context, string, ...any) pgx.Row {
+			return sharedLinksTestRow{scan: func(dest ...any) error {
+				*dest[0].(*uuid.UUID) = applicationID
+				return nil
+			}}
+		},
+		exec: func(context.Context, string, ...any) (pgconn.CommandTag, error) {
+			return pgconn.NewCommandTag("UPDATE 1"), nil
+		},
+		query: func(context.Context, string, ...any) (pgx.Rows, error) {
+			return &sharedLinksTestRows{items: []modelsv2.SharedLink{{
+				IsVerified: true,
+				PlayerTag:  "#2PP",
+				UserID:     "123456789012345678",
+			}}}, nil
+		},
+	}
+	app := fiber.New()
+	app.Post("/", func(c *fiber.Ctx) error { return executeSharedLinksLookup(c, db) })
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{
+		"discord_ids":["123456789012345678"],
+		"player_tags":["#2PP"]
+	}`))
+	request.Header.Set(fiber.HeaderAuthorization, "Bearer ck_dev_secret")
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	if got := response.Header.Get(fiber.HeaderCacheControl); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	var payload modelsv2.SharedLinksLookupResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != 1 || payload.Items[0].PlayerTag != "#2PP" || !payload.Items[0].IsVerified {
+		t.Fatalf("response = %#v", payload)
+	}
+}
+
+func TestSharedLinksSQLRequiresConfiguredStore(t *testing.T) {
+	_, err := sharedLinksSQL(apptypes.Deps{})
+	assertSharedLinksAppErrorStatus(t, err, http.StatusServiceUnavailable)
+}
 
 func TestValidateSharedLinksLookupRequestNormalizesAndDeduplicates(t *testing.T) {
 	discordIDs, playerTags, err := validateSharedLinksLookupRequest(modelsv2.SharedLinksLookupRequest{
@@ -185,9 +243,7 @@ func TestQuerySharedLinksReturnsOnlyVisibleLinks(t *testing.T) {
 }
 
 func TestSharedLinksRateLimitIsPerApplicationAndResets(t *testing.T) {
-	sharedLinksRateLimits.Lock()
-	sharedLinksRateLimits.windows = make(map[string]sharedLinksRateWindow)
-	sharedLinksRateLimits.Unlock()
+	resetSharedLinksRateLimits()
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	for index := 0; index < sharedLinksRequestsPerMinute; index++ {
 		if !allowSharedLinksRequest("app-one", now) {
@@ -203,6 +259,12 @@ func TestSharedLinksRateLimitIsPerApplicationAndResets(t *testing.T) {
 	if !allowSharedLinksRequest("app-one", now.Add(time.Minute)) {
 		t.Fatal("application limit did not reset after one minute")
 	}
+}
+
+func resetSharedLinksRateLimits() {
+	sharedLinksRateLimits.Lock()
+	sharedLinksRateLimits.windows = make(map[string]sharedLinksRateWindow)
+	sharedLinksRateLimits.Unlock()
 }
 
 func assertSharedLinksAppErrorStatus(t *testing.T, err error, status int) {

@@ -192,6 +192,13 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 func TestSharedLinksDocUsesLinksTagDeveloperTokenAndItemsEnvelope(t *testing.T) {
 	doc := buildSwaggerDoc(t)
 	paths := swaggerPaths(t, doc)
+	assertSharedLinksOperationDoc(t, paths)
+	assertSharedLinksSchemaDoc(t, swaggerDefinitions(t, doc))
+	assertConnectedAppPathsRemoved(t, paths)
+}
+
+func assertSharedLinksOperationDoc(t *testing.T, paths map[string]any) {
+	t.Helper()
 	path, ok := paths["/v2/links/shared"].(map[string]any)
 	if !ok {
 		t.Fatal("expected /v2/links/shared path")
@@ -212,8 +219,10 @@ func TestSharedLinksDocUsesLinksTagDeveloperTokenAndItemsEnvelope(t *testing.T) 
 	if _, ok := requirement["DeveloperToken"]; !ok {
 		t.Fatalf("shared links security = %#v", security)
 	}
+}
 
-	definitions := swaggerDefinitions(t, doc)
+func assertSharedLinksSchemaDoc(t *testing.T, definitions map[string]any) {
+	t.Helper()
 	response := definitions["modelsv2.SharedLinksLookupResponse"].(map[string]any)
 	properties := response["properties"].(map[string]any)
 	if _, ok := properties["items"]; !ok {
@@ -234,7 +243,10 @@ func TestSharedLinksDocUsesLinksTagDeveloperTokenAndItemsEnvelope(t *testing.T) 
 			t.Fatalf("shared link schema exposes obsolete %s: %#v", name, itemProperties)
 		}
 	}
+}
 
+func assertConnectedAppPathsRemoved(t *testing.T, paths map[string]any) {
+	t.Helper()
 	for _, obsolete := range []string{
 		"/v2/links/shared/applications/{application_id}",
 		"/v2/links/shared/grants",

@@ -277,6 +277,39 @@ func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *t
 	}
 }
 
+func TestSharedLinksDeveloperRouteIsRegisteredBeforeGenericPersonalLinks(t *testing.T) {
+	app := newRegisteredRoutesTestApp()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	sharedIndex := registeredRouteIndex(app, fiber.MethodPost, "/v2/links/shared")
+	personalIndex := registeredRouteIndex(app, fiber.MethodPost, "/v2/links/:id")
+	if sharedIndex < 0 || personalIndex < 0 {
+		t.Fatal("expected shared and personal POST link routes to be registered")
+	}
+	if sharedIndex >= personalIndex {
+		t.Fatal("expected static shared-link route before generic personal route")
+	}
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{fiber.MethodGet, "/v2/links/shared/applications/:application_id"},
+		{fiber.MethodGet, "/v2/links/shared/grants"},
+		{fiber.MethodGet, "/v2/links/shared/grants/:application_id"},
+		{fiber.MethodPut, "/v2/links/shared/grants/:application_id"},
+		{fiber.MethodDelete, "/v2/links/shared/grants/:application_id"},
+		{fiber.MethodGet, "/v2/admin/developer-applications"},
+		{fiber.MethodPost, "/v2/admin/developer-applications"},
+		{fiber.MethodGet, "/v2/admin/developer-applications/:application_id"},
+		{fiber.MethodPatch, "/v2/admin/developer-applications/:application_id"},
+		{fiber.MethodDelete, "/v2/admin/developer-applications/:application_id"},
+	} {
+		if registeredRouteIndex(app, route.method, route.path) < 0 {
+			t.Fatalf("expected %s %s to be registered", route.method, route.path)
+		}
+	}
+}
+
 func TestServerLogMethodsAreRegistered(t *testing.T) {
 	app := newRegisteredRoutesTestApp()
 	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })

@@ -2104,6 +2104,92 @@ components:
                         type: string
                     type: array
             type: object
+        modelsv2.DeveloperApplication:
+            properties:
+                application_id:
+                    type: string
+                application_name:
+                    type: string
+                connect_url:
+                    type: string
+                contact_email:
+                    type: string
+                created_at:
+                    type: string
+                created_by_admin_id:
+                    type: string
+                developer_name:
+                    type: string
+                redirect_uri:
+                    type: string
+                revoked_at:
+                    type: string
+                token_last_used_at:
+                    type: string
+                token_prefix:
+                    type: string
+                updated_at:
+                    type: string
+            type: object
+        modelsv2.DeveloperApplicationCreateRequest:
+            properties:
+                application_name:
+                    type: string
+                contact_email:
+                    type: string
+                created_by_admin_id:
+                    type: string
+                developer_name:
+                    type: string
+                redirect_uri:
+                    type: string
+            type: object
+        modelsv2.DeveloperApplicationCreateResponse:
+            properties:
+                api_token:
+                    type: string
+                application_id:
+                    type: string
+                application_name:
+                    type: string
+                connect_url:
+                    type: string
+                contact_email:
+                    type: string
+                created_at:
+                    type: string
+                created_by_admin_id:
+                    type: string
+                developer_name:
+                    type: string
+                redirect_uri:
+                    type: string
+                revoked_at:
+                    type: string
+                token_last_used_at:
+                    type: string
+                token_prefix:
+                    type: string
+                updated_at:
+                    type: string
+            type: object
+        modelsv2.DeveloperApplicationUpdateRequest:
+            properties:
+                application_name:
+                    type: string
+                contact_email:
+                    type:
+                        - string
+                        - "null"
+                developer_name:
+                    type:
+                        - string
+                        - "null"
+                redirect_uri:
+                    type:
+                        - string
+                        - "null"
+            type: object
         modelsv2.DisableCountdownRequest:
             properties:
                 clan_tag:
@@ -5369,6 +5455,113 @@ components:
                 total:
                     type: integer
             type: object
+        modelsv2.SharedLink:
+            properties:
+                discord_id:
+                    type: string
+                player_tag:
+                    type: string
+            type: object
+        modelsv2.SharedLinksAccount:
+            properties:
+                hidden:
+                    type: boolean
+                name:
+                    type: string
+                player_tag:
+                    type: string
+            type: object
+        modelsv2.SharedLinksApplication:
+            properties:
+                developer_name:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+            type: object
+        modelsv2.SharedLinksApplicationResponse:
+            properties:
+                application:
+                    $ref: '#/components/schemas/modelsv2.SharedLinksApplication'
+                redirect_uri:
+                    type: string
+            type: object
+        modelsv2.SharedLinksConnection:
+            properties:
+                application:
+                    $ref: '#/components/schemas/modelsv2.SharedLinksApplication'
+                grant:
+                    $ref: '#/components/schemas/modelsv2.SharedLinksGrant'
+            type: object
+        modelsv2.SharedLinksConnectionsResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.SharedLinksConnection'
+                    type: array
+            type: object
+        modelsv2.SharedLinksConsentResponse:
+            properties:
+                accounts:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.SharedLinksAccount'
+                    type: array
+                application:
+                    $ref: '#/components/schemas/modelsv2.SharedLinksApplication'
+                grant:
+                    allOf:
+                        - $ref: '#/components/schemas/modelsv2.SharedLinksGrant'
+                    type:
+                        - object
+                        - "null"
+            type: object
+        modelsv2.SharedLinksGrant:
+            properties:
+                access_mode:
+                    enum:
+                        - selected
+                        - all_current_and_future
+                    type: string
+                connected_at:
+                    type: string
+                selected_player_tags:
+                    items:
+                        type: string
+                    type: array
+                updated_at:
+                    type: string
+            type: object
+        modelsv2.SharedLinksGrantRequest:
+            properties:
+                access_mode:
+                    enum:
+                        - selected
+                        - all_current_and_future
+                    type: string
+                player_tags:
+                    items:
+                        type: string
+                    type: array
+            type: object
+        modelsv2.SharedLinksLookupRequest:
+            properties:
+                discord_ids:
+                    items:
+                        type: string
+                    type: array
+                player_tags:
+                    items:
+                        type: string
+                    type: array
+            type: object
+        modelsv2.SharedLinksLookupResponse:
+            properties:
+                links:
+                    items:
+                        $ref: '#/components/schemas/modelsv2.SharedLink'
+                    type: array
+            type: object
         modelsv2.StatsArmiesQuery:
             properties:
                 dates:
@@ -6761,6 +6954,192 @@ paths:
             summary: Get guild activity summary
             tags:
                 - Activity & Inactivity
+    /v2/admin/developer-applications:
+        get:
+            description: Returns developer applications managed by the ClashKing AdminPanel. Requires the internal bot service token.
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/modelsv2.DeveloperApplication'
+                                type: array
+                    description: OK
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: List developer applications
+            tags:
+                - Admin Developer Applications
+        post:
+            description: Creates one read-only application. The plaintext API token is returned only by this response and is never stored.
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/modelsv2.DeveloperApplicationCreateRequest'
+                description: Application metadata
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.DeveloperApplicationCreateResponse'
+                    description: Created
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: Create a developer application
+            tags:
+                - Admin Developer Applications
+    /v2/admin/developer-applications/{application_id}:
+        delete:
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+            security:
+                - ApiKeyAuth: []
+            summary: Revoke a developer application
+            tags:
+                - Admin Developer Applications
+        get:
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.DeveloperApplication'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+            security:
+                - ApiKeyAuth: []
+            summary: Get a developer application
+            tags:
+                - Admin Developer Applications
+        patch:
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/modelsv2.DeveloperApplicationUpdateRequest'
+                description: Editable metadata
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.DeveloperApplication'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+            security:
+                - ApiKeyAuth: []
+            summary: Update a developer application
+            tags:
+                - Admin Developer Applications
     /v2/admin/tracking/summary:
         get:
             description: Returns the latest API-derived operational state for every tracking script and domain. Requires the admin service token.
@@ -10365,6 +10744,249 @@ paths:
             summary: Add or reassign a server member link
             tags:
                 - Links
+    /v2/links/shared:
+        post:
+            description: Returns verified Discord ID and player-tag pairs covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/modelsv2.SharedLinksLookupRequest'
+                description: Discord IDs and player tags
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.SharedLinksLookupResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Too Many Requests
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: Look up shared Discord links
+            tags:
+                - Shared Links
+    /v2/links/shared/applications/{application_id}:
+        get:
+            description: Returns the public application identity used by the connected-app consent page. When redirect_uri is supplied, it must exactly match the application's registered URI.
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+                - description: Exact registered redirect URI
+                  in: query
+                  name: redirect_uri
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.SharedLinksApplicationResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            summary: Get a shared-links application
+            tags:
+                - Shared Links
+    /v2/links/shared/grants:
+        get:
+            description: Returns the authenticated user's active read-only application grants.
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.SharedLinksConnectionsResponse'
+                    description: OK
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: List connected shared-links applications
+            tags:
+                - Shared Links
+    /v2/links/shared/grants/{application_id}:
+        delete:
+            description: Revokes the current user's grant and removes its stored selected-account rows. The operation is idempotent.
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: Revoke shared-links access
+            tags:
+                - Shared Links
+        get:
+            description: Returns the active application, the authenticated user's verified accounts, and any current read-only grant.
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.SharedLinksGrant'
+                    description: OK
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: Get shared-links consent details
+            tags:
+                - Shared Links
+        put:
+            description: Grants an application read access to selected verified accounts or all current and future verified accounts.
+            parameters:
+                - description: Application ID
+                  in: path
+                  name: application_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/modelsv2.SharedLinksGrantRequest'
+                description: Grant selection
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.SharedLinksConsentResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Bad Request
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Unauthorized
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Not Found
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/modelsv2.ErrorResponse'
+                    description: Service Unavailable
+            security:
+                - ApiKeyAuth: []
+            summary: Grant shared-links access
+            tags:
+                - Shared Links
     /v2/me:
         get:
             description: Returns the authenticated user's current profile information.
@@ -16993,6 +17615,7 @@ tags:
     - name: Links
     - name: Achievements
     - name: Activity & Inactivity
+    - name: Admin Developer Applications
     - name: Admin Tracking
     - name: App Authentication
     - name: Bases
@@ -17025,5 +17648,6 @@ tags:
     - name: Server Settings
     - name: Server Strikes
     - name: Server Tickets
+    - name: Shared Links
     - name: Web Authentication
     - name: Other

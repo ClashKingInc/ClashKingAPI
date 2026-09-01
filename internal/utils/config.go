@@ -36,6 +36,7 @@ type Config struct {
 	LandingOrigin                string
 	DashboardOrigin              string
 	ConnectOrigin                string
+	AppOrigin                    string
 	WebAllowedOrigins            []string
 	DiscordRedirectURI           string
 	DiscordClientID              string
@@ -70,7 +71,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	landingOrigin, dashboardOrigin, connectOrigin := webOrigins(os.Getenv)
+	landingOrigin, dashboardOrigin, connectOrigin, appOrigin := webOrigins(os.Getenv)
 	cfg := Config{
 		TimescaleURL:                 buildTimescaleURL(os.Getenv),
 		ValkeyAddress:                buildValkeyAddress(os.Getenv),
@@ -95,7 +96,8 @@ func Load() (Config, error) {
 		LandingOrigin:                landingOrigin,
 		DashboardOrigin:              dashboardOrigin,
 		ConnectOrigin:                connectOrigin,
-		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin, connectOrigin),
+		AppOrigin:                    appOrigin,
+		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin, connectOrigin, appOrigin),
 		DiscordRedirectURI:           appendOriginPath(dashboardOrigin, "/auth/callback"),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
@@ -143,11 +145,12 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func webOrigins(getenv func(string) string) (landing, dashboard, connect string) {
+func webOrigins(getenv func(string) string) (landing, dashboard, connect, app string) {
 	landing = normalizeOrigin(getenv("CLASHKING_LANDING_ORIGIN"))
 	dashboard = normalizeOrigin(getenv("CLASHKING_DASHBOARD_ORIGIN"))
 	connect = normalizeOrigin(firstNonEmpty(getenv("CLASHKING_CONNECT_ORIGIN"), "https://connect.clashk.ing"))
-	return landing, dashboard, connect
+	app = normalizeOrigin(firstNonEmpty(getenv("CLASHKING_APP_ORIGIN"), "https://app.clashk.ing"))
+	return landing, dashboard, connect, app
 }
 
 func (c Config) Addr() string {

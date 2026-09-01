@@ -42,11 +42,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Put("/v2/links/shared/grants/:application_id", wrap(putSharedLinksGrant(a)))
 	app.Delete("/v2/links/shared/grants/:application_id", wrap(deleteSharedLinksGrant(a)))
 	app.Post("/v2/links/shared", postSharedLinks(a))
-	app.Get("/v2/admin/developer-applications", authBot(a, listDeveloperApplications(a)))
-	app.Post("/v2/admin/developer-applications", authBot(a, createDeveloperApplication(a)))
-	app.Get("/v2/admin/developer-applications/:application_id", authBot(a, getDeveloperApplication(a)))
-	app.Patch("/v2/admin/developer-applications/:application_id", authBot(a, updateDeveloperApplication(a)))
-	app.Delete("/v2/admin/developer-applications/:application_id", authBot(a, revokeDeveloperApplication(a)))
 
 	// Register the static server path before the generic two-parameter link paths.
 	// Fiber dispatches in registration order, so DELETE/PATCH would otherwise match

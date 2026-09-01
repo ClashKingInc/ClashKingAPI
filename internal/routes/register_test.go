@@ -14,6 +14,9 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 
 	paths := registeredRoutePaths(app)
 	for _, path := range []string{
+		"/discord_links",
+		"/v2/admin/developer-applications",
+		"/v2/admin/developer-applications/:application_id",
 		"/v1/*",
 		"/ck/bulk",
 		"/assets",
@@ -298,11 +301,6 @@ func TestSharedLinksDeveloperRouteIsRegisteredBeforeGenericPersonalLinks(t *test
 		{fiber.MethodGet, "/v2/links/shared/grants/:application_id"},
 		{fiber.MethodPut, "/v2/links/shared/grants/:application_id"},
 		{fiber.MethodDelete, "/v2/links/shared/grants/:application_id"},
-		{fiber.MethodGet, "/v2/admin/developer-applications"},
-		{fiber.MethodPost, "/v2/admin/developer-applications"},
-		{fiber.MethodGet, "/v2/admin/developer-applications/:application_id"},
-		{fiber.MethodPatch, "/v2/admin/developer-applications/:application_id"},
-		{fiber.MethodDelete, "/v2/admin/developer-applications/:application_id"},
 	} {
 		if registeredRouteIndex(app, route.method, route.path) < 0 {
 			t.Fatalf("expected %s %s to be registered", route.method, route.path)

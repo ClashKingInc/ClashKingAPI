@@ -64,38 +64,3 @@ type SharedLink struct {
 type SharedLinksLookupResponse struct {
 	Links []SharedLink `json:"links"`
 }
-
-type DeveloperApplication struct {
-	ApplicationID    string     `json:"application_id"`
-	ApplicationName  string     `json:"application_name"`
-	DeveloperName    *string    `json:"developer_name"`
-	ContactEmail     *string    `json:"contact_email"`
-	RedirectURI      *string    `json:"redirect_uri"`
-	TokenPrefix      string     `json:"token_prefix"`
-	TokenLastUsedAt  *time.Time `json:"token_last_used_at"`
-	CreatedByAdminID string     `json:"created_by_admin_id"`
-	ConnectURL       string     `json:"connect_url"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	RevokedAt        *time.Time `json:"revoked_at"`
-}
-
-type DeveloperApplicationCreateRequest struct {
-	ApplicationName  string  `json:"application_name"`
-	DeveloperName    *string `json:"developer_name,omitempty"`
-	ContactEmail     *string `json:"contact_email,omitempty"`
-	RedirectURI      *string `json:"redirect_uri,omitempty"`
-	CreatedByAdminID string  `json:"created_by_admin_id"`
-}
-
-type DeveloperApplicationUpdateRequest struct {
-	ApplicationName *string `json:"application_name,omitempty"`
-	DeveloperName   *string `json:"developer_name,omitempty" extensions:"x-nullable"`
-	ContactEmail    *string `json:"contact_email,omitempty" extensions:"x-nullable"`
-	RedirectURI     *string `json:"redirect_uri,omitempty" extensions:"x-nullable"`
-}
-
-type DeveloperApplicationCreateResponse struct {
-	DeveloperApplication
-	APIToken string `json:"api_token"`
-}

@@ -14,6 +14,9 @@ func TestRegisterOmitsRemovedRoutesAndKeepsV2Routes(t *testing.T) {
 
 	paths := registeredRoutePaths(app)
 	for _, path := range []string{
+		"/discord_links",
+		"/v2/admin/developer-applications",
+		"/v2/admin/developer-applications/:application_id",
 		"/v1/*",
 		"/ck/bulk",
 		"/assets",
@@ -273,6 +276,34 @@ func TestServerLinkMutationsAreRegisteredBeforeGenericPersonalLinkMutations(t *t
 		}
 		if serverIndex >= personalIndex {
 			t.Fatalf("expected static server %s route before generic personal route", method)
+		}
+	}
+}
+
+func TestSharedLinksDeveloperRouteIsRegisteredBeforeGenericPersonalLinks(t *testing.T) {
+	app := newRegisteredRoutesTestApp()
+	Register(app, apptypes.Deps{}, func(next fiber.Handler) fiber.Handler { return next })
+
+	sharedIndex := registeredRouteIndex(app, fiber.MethodPost, "/v2/links/shared")
+	personalIndex := registeredRouteIndex(app, fiber.MethodPost, "/v2/links/:id")
+	if sharedIndex < 0 || personalIndex < 0 {
+		t.Fatal("expected shared and personal POST link routes to be registered")
+	}
+	if sharedIndex >= personalIndex {
+		t.Fatal("expected static shared-link route before generic personal route")
+	}
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{fiber.MethodGet, "/v2/links/shared/applications/:application_id"},
+		{fiber.MethodGet, "/v2/links/shared/grants"},
+		{fiber.MethodGet, "/v2/links/shared/grants/:application_id"},
+		{fiber.MethodPut, "/v2/links/shared/grants/:application_id"},
+		{fiber.MethodDelete, "/v2/links/shared/grants/:application_id"},
+	} {
+		if registeredRouteIndex(app, route.method, route.path) < 0 {
+			t.Fatalf("expected %s %s to be registered", route.method, route.path)
 		}
 	}
 }

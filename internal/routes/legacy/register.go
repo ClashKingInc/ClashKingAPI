@@ -7,7 +7,6 @@ import (
 
 // Register mounts the intentionally isolated, removable legacy API surface.
 func Register(app *fiber.App, deps apptypes.Deps) {
-	app.Post("/discord_links", discordLinks(deps))
 	app.Get("/player/:player_tag/warhits", playerWarHits(deps))
 	app.Get("/player/:player_tag/join-leave", playerJoinLeave(deps))
 	app.Get("/clan/:clan_tag/join-leave", clanJoinLeave(deps))

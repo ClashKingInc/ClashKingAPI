@@ -59,7 +59,7 @@ func RegisterRoutes(app *fiber.App) error {
 		return c.Send(openAPIJSON)
 	}))
 	app.Get("/openapi.yaml", NoStore(func(c *fiber.Ctx) error {
-		c.Type("yaml")
+		c.Set(fiber.HeaderContentType, "application/yaml")
 		return c.Send(openAPIYAML)
 	}))
 	app.Get("/openapi.scalar.json", NoStore(func(c *fiber.Ctx) error {

@@ -35,6 +35,7 @@ type Config struct {
 	WebTokenAudience             string
 	LandingOrigin                string
 	DashboardOrigin              string
+	ConnectOrigin                string
 	WebAllowedOrigins            []string
 	DiscordRedirectURI           string
 	DiscordClientID              string
@@ -69,8 +70,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	landingOrigin := normalizeOrigin(os.Getenv("CLASHKING_LANDING_ORIGIN"))
-	dashboardOrigin := normalizeOrigin(os.Getenv("CLASHKING_DASHBOARD_ORIGIN"))
+	landingOrigin, dashboardOrigin, connectOrigin := webOrigins(os.Getenv)
 	cfg := Config{
 		TimescaleURL:                 buildTimescaleURL(os.Getenv),
 		ValkeyAddress:                buildValkeyAddress(os.Getenv),
@@ -94,7 +94,8 @@ func Load() (Config, error) {
 		WebTokenAudience:             firstNonEmpty(os.Getenv("WEB_TOKEN_AUDIENCE"), "clashking-web"),
 		LandingOrigin:                landingOrigin,
 		DashboardOrigin:              dashboardOrigin,
-		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin),
+		ConnectOrigin:                connectOrigin,
+		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin, connectOrigin),
 		DiscordRedirectURI:           appendOriginPath(dashboardOrigin, "/auth/callback"),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
@@ -142,6 +143,13 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+func webOrigins(getenv func(string) string) (landing, dashboard, connect string) {
+	landing = normalizeOrigin(getenv("CLASHKING_LANDING_ORIGIN"))
+	dashboard = normalizeOrigin(getenv("CLASHKING_DASHBOARD_ORIGIN"))
+	connect = normalizeOrigin(firstNonEmpty(getenv("CLASHKING_CONNECT_ORIGIN"), "https://connect.clashk.ing"))
+	return landing, dashboard, connect
+}
+
 func (c Config) Addr() string {
 	return net.JoinHostPort(c.ListenHost, strconv.Itoa(c.ListenPort))
 }
@@ -158,6 +166,7 @@ func (c Config) validate() error {
 		"CLASHKING_PROXY_INTERNAL_ORIGIN": c.ProxyOrigin,
 		"CLASHKING_LANDING_ORIGIN":        c.LandingOrigin,
 		"CLASHKING_DASHBOARD_ORIGIN":      c.DashboardOrigin,
+		"CLASHKING_CONNECT_ORIGIN":        c.ConnectOrigin,
 	}
 	var missing []string
 	for key, value := range required {

@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestWebOriginsIncludeStandaloneConnectHost(t *testing.T) {
+	values := map[string]string{
+		"CLASHKING_LANDING_ORIGIN":   "https://clashk.ing/",
+		"CLASHKING_DASHBOARD_ORIGIN": "https://dash.clashk.ing/",
+	}
+
+	landing, dashboard, connect := webOrigins(func(key string) string { return values[key] })
+	if landing != "https://clashk.ing" || dashboard != "https://dash.clashk.ing" {
+		t.Fatalf("webOrigins() = %q, %q, %q", landing, dashboard, connect)
+	}
+	if connect != "https://connect.clashk.ing" {
+		t.Fatalf("connect origin = %q, want https://connect.clashk.ing", connect)
+	}
+}
+
 func TestBuildTimescaleURLFromCoolifyVariables(t *testing.T) {
 	values := map[string]string{
 		"TIMESCALE_HOST":     "timescale",

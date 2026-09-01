@@ -4302,7 +4302,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns verified Discord ID and player-tag pairs covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.",
+                "description": "Returns Discord ID and player-tag pairs with current verification and visibility metadata when covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4455,7 +4455,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Returns the active application, the authenticated user's verified accounts, and any current read-only grant.",
+                "description": "Returns the active application, the authenticated user's linked accounts with verification and visibility metadata, and any current read-only grant.",
                 "produces": [
                     "application/json"
                 ],
@@ -4505,7 +4505,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Grants an application read access to selected verified accounts or all current and future verified accounts.",
+                "description": "Grants an application read access to selected linked accounts or all current and future linked accounts.",
                 "consumes": [
                     "application/json"
                 ],
@@ -22690,6 +22690,12 @@ const docTemplate = `{
                 "discord_id": {
                     "type": "string"
                 },
+                "hidden": {
+                    "type": "boolean"
+                },
+                "is_verified": {
+                    "type": "boolean"
+                },
                 "player_tag": {
                     "type": "string"
                 }
@@ -22699,6 +22705,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "hidden": {
+                    "type": "boolean"
+                },
+                "is_verified": {
                     "type": "boolean"
                 },
                 "name": {

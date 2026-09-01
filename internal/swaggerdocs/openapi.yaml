@@ -5373,12 +5373,18 @@ components:
             properties:
                 discord_id:
                     type: string
+                hidden:
+                    type: boolean
+                is_verified:
+                    type: boolean
                 player_tag:
                     type: string
             type: object
         modelsv2.SharedLinksAccount:
             properties:
                 hidden:
+                    type: boolean
+                is_verified:
                     type: boolean
                 name:
                     type: string
@@ -10474,7 +10480,7 @@ paths:
                 - Links
     /v2/links/shared:
         post:
-            description: Returns verified Discord ID and player-tag pairs covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.
+            description: Returns Discord ID and player-tag pairs with current verification and visibility metadata when covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.
             requestBody:
                 content:
                     application/json:
@@ -10625,7 +10631,7 @@ paths:
             tags:
                 - Shared Links
         get:
-            description: Returns the active application, the authenticated user's verified accounts, and any current read-only grant.
+            description: Returns the active application, the authenticated user's linked accounts with verification and visibility metadata, and any current read-only grant.
             parameters:
                 - description: Application ID
                   in: path
@@ -10664,7 +10670,7 @@ paths:
             tags:
                 - Shared Links
         put:
-            description: Grants an application read access to selected verified accounts or all current and future verified accounts.
+            description: Grants an application read access to selected linked accounts or all current and future linked accounts.
             parameters:
                 - description: Application ID
                   in: path

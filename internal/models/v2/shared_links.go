@@ -19,9 +19,10 @@ type SharedLinksApplicationResponse struct {
 }
 
 type SharedLinksAccount struct {
-	PlayerTag string `json:"player_tag"`
-	Name      string `json:"name"`
-	Hidden    bool   `json:"hidden"`
+	PlayerTag  string `json:"player_tag"`
+	Name       string `json:"name"`
+	IsVerified bool   `json:"is_verified"`
+	Hidden     bool   `json:"hidden"`
 }
 
 type SharedLinksGrant struct {
@@ -57,8 +58,10 @@ type SharedLinksLookupRequest struct {
 }
 
 type SharedLink struct {
-	DiscordID string `json:"discord_id"`
-	PlayerTag string `json:"player_tag"`
+	DiscordID  string `json:"discord_id"`
+	PlayerTag  string `json:"player_tag"`
+	IsVerified bool   `json:"is_verified"`
+	Hidden     bool   `json:"hidden"`
 }
 
 type SharedLinksLookupResponse struct {

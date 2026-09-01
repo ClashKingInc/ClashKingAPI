@@ -86,10 +86,10 @@ func getSharedLinksApplication(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// getSharedLinksConsent returns the current user's verified accounts and existing grant.
+// getSharedLinksConsent returns the current user's linked accounts and existing grant.
 //
 // @Summary Get shared-links consent details
-// @Description Returns the active application, the authenticated user's verified accounts, and any current read-only grant.
+// @Description Returns the active application, the authenticated user's linked accounts with verification and visibility metadata, and any current read-only grant.
 // @Tags Shared Links
 // @Produce json
 // @Security ApiKeyAuth
@@ -121,7 +121,7 @@ func getSharedLinksConsent(a apptypes.Deps) fiber.Handler {
 // putSharedLinksGrant creates or replaces the current user's read-only grant.
 //
 // @Summary Grant shared-links access
-// @Description Grants an application read access to selected verified accounts or all current and future verified accounts.
+// @Description Grants an application read access to selected linked accounts or all current and future linked accounts.
 // @Tags Shared Links
 // @Accept json
 // @Produce json
@@ -223,10 +223,10 @@ func listSharedLinksConnections(a apptypes.Deps) fiber.Handler {
 	}
 }
 
-// postSharedLinks looks up verified links covered by active user grants.
+// postSharedLinks looks up links covered by active user grants.
 //
 // @Summary Look up shared Discord links
-// @Description Returns verified Discord ID and player-tag pairs covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.
+// @Description Returns Discord ID and player-tag pairs with current verification and visibility metadata when covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.
 // @Tags Shared Links
 // @Accept json
 // @Produce json
@@ -313,10 +313,10 @@ func loadSharedLinksConsent(ctx context.Context, db sharedLinksDB, applicationID
 
 	accounts := make([]modelsv2.SharedLinksAccount, 0)
 	rows, err := db.Query(ctx, `
-		SELECT links.tag, COALESCE(players.name, links.tag), links.hidden
+		SELECT links.tag, COALESCE(players.name, links.tag), links.is_verified, links.hidden
 		FROM player_links AS links
 		LEFT JOIN basic_player AS players ON players.tag = links.tag
-		WHERE links.user_id = $1 AND links.is_verified = true
+		WHERE links.user_id = $1
 		ORDER BY links.order_index ASC, links.added_at ASC, links.tag ASC
 	`, userID)
 	if err != nil {
@@ -325,7 +325,7 @@ func loadSharedLinksConsent(ctx context.Context, db sharedLinksDB, applicationID
 	defer rows.Close()
 	for rows.Next() {
 		var account modelsv2.SharedLinksAccount
-		if err := rows.Scan(&account.PlayerTag, &account.Name, &account.Hidden); err != nil {
+		if err := rows.Scan(&account.PlayerTag, &account.Name, &account.IsVerified, &account.Hidden); err != nil {
 			return modelsv2.SharedLinksConsentResponse{}, err
 		}
 		accounts = append(accounts, account)
@@ -427,12 +427,12 @@ func replaceSharedLinksGrant(ctx context.Context, db sharedLinksDB, applicationI
 		if err := tx.QueryRow(ctx, `
 			SELECT count(*)
 			FROM player_links
-			WHERE user_id = $1 AND is_verified = true AND tag = ANY($2::text[])
+			WHERE user_id = $1 AND tag = ANY($2::text[])
 		`, userID, playerTags).Scan(&ownedCount); err != nil {
 			return err
 		}
 		if ownedCount != len(playerTags) {
-			return apptypes.Error(http.StatusBadRequest, "player_tags must be verified accounts owned by the current user")
+			return apptypes.Error(http.StatusBadRequest, "player_tags must be linked accounts owned by the current user")
 		}
 	}
 
@@ -619,14 +619,13 @@ func normalizeSharedLinksPlayerTags(rawTags []string) ([]string, error) {
 
 func querySharedLinks(ctx context.Context, db sharedLinksDB, applicationID string, discordIDs, playerTags []string) ([]modelsv2.SharedLink, error) {
 	rows, err := db.Query(ctx, `
-		SELECT DISTINCT links.user_id, links.tag
+		SELECT DISTINCT links.user_id, links.tag, links.is_verified, links.hidden
 		FROM player_links AS links
 		JOIN developer_link_grants AS grants
 			ON grants.application_id = $1::uuid
 			AND grants.user_id = links.user_id
 			AND grants.revoked_at IS NULL
-		WHERE links.is_verified = true
-			AND links.user_id ~ '^[1-9][0-9]{14,19}$'
+		WHERE links.user_id ~ '^[1-9][0-9]{14,19}$'
 			AND (links.user_id = ANY($2::text[]) OR links.tag = ANY($3::text[]))
 			AND (
 				grants.access_mode = 'all_current_and_future'
@@ -649,7 +648,7 @@ func querySharedLinks(ctx context.Context, db sharedLinksDB, applicationID strin
 	links := make([]modelsv2.SharedLink, 0)
 	for rows.Next() {
 		var link modelsv2.SharedLink
-		if err := rows.Scan(&link.DiscordID, &link.PlayerTag); err != nil {
+		if err := rows.Scan(&link.DiscordID, &link.PlayerTag, &link.IsVerified, &link.Hidden); err != nil {
 			return nil, err
 		}
 		links = append(links, link)

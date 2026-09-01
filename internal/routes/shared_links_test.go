@@ -120,7 +120,7 @@ func TestAuthenticateSharedLinksApplicationHashesTokenAndRejectsRevokedApps(t *t
 	}
 }
 
-func TestReplaceSharedLinksGrantChecksCurrentVerifiedOwnership(t *testing.T) {
+func TestReplaceSharedLinksGrantChecksCurrentOwnershipWithoutRequiringVerification(t *testing.T) {
 	applicationID := uuid.MustParse("019d0000-0000-7000-8000-000000000001")
 	grantID := uuid.MustParse("019d0000-0000-7000-8000-000000000002")
 	tx := &sharedLinksTestTx{
@@ -150,20 +150,20 @@ func TestReplaceSharedLinksGrantChecksCurrentVerifiedOwnership(t *testing.T) {
 	if !tx.committed {
 		t.Fatal("grant transaction was not committed")
 	}
-	if len(tx.querySQL) < 2 || !strings.Contains(tx.querySQL[1], "user_id = $1") || !strings.Contains(tx.querySQL[1], "is_verified = true") {
-		t.Fatalf("ownership query must require current user and verification: %#v", tx.querySQL)
+	if len(tx.querySQL) < 2 || !strings.Contains(tx.querySQL[1], "user_id = $1") || strings.Contains(tx.querySQL[1], "is_verified = true") {
+		t.Fatalf("ownership query must require the current user without requiring verification: %#v", tx.querySQL)
 	}
 	if len(tx.execSQL) != 2 || !strings.Contains(tx.execSQL[0], "DELETE FROM developer_link_grant_accounts") || !strings.Contains(tx.execSQL[1], "INSERT INTO developer_link_grant_accounts") {
 		t.Fatalf("selected rows were not replaced transactionally: %#v", tx.execSQL)
 	}
 }
 
-func TestQuerySharedLinksRequiresActiveGrantVerificationAndSelectedMembership(t *testing.T) {
+func TestQuerySharedLinksReturnsVerificationAndVisibilityForGrantedLinks(t *testing.T) {
 	var query string
 	db := &sharedLinksTestDB{
 		query: func(_ context.Context, sql string, _ ...any) (pgx.Rows, error) {
 			query = sql
-			return &sharedLinksTestRows{links: []modelsv2.SharedLink{{DiscordID: "123456789012345678", PlayerTag: "#2PP"}}}, nil
+			return &sharedLinksTestRows{links: []modelsv2.SharedLink{{DiscordID: "123456789012345678", PlayerTag: "#2PP", IsVerified: false, Hidden: true}}}, nil
 		},
 	}
 	links, err := querySharedLinks(
@@ -173,12 +173,13 @@ func TestQuerySharedLinksRequiresActiveGrantVerificationAndSelectedMembership(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(links) != 1 || links[0].PlayerTag != "#2PP" {
+	if len(links) != 1 || links[0].PlayerTag != "#2PP" || links[0].IsVerified || !links[0].Hidden {
 		t.Fatalf("links = %#v", links)
 	}
 	for _, required := range []string{
 		"grants.revoked_at IS NULL",
-		"links.is_verified = true",
+		"links.is_verified",
+		"links.hidden",
 		"grants.access_mode = 'all_current_and_future'",
 		"developer_link_grant_accounts",
 		"accounts.player_tag = links.tag",
@@ -187,8 +188,8 @@ func TestQuerySharedLinksRequiresActiveGrantVerificationAndSelectedMembership(t 
 			t.Fatalf("shared lookup query missing %q: %s", required, query)
 		}
 	}
-	if strings.Contains(query, "links.hidden = false") {
-		t.Fatal("explicit connected-app consent should not inherit the public hidden filter")
+	if strings.Contains(query, "links.is_verified = true") || strings.Contains(query, "links.hidden = false") {
+		t.Fatal("explicit connected-app consent should return verification and visibility metadata without filtering on either")
 	}
 }
 
@@ -305,6 +306,8 @@ func (rows *sharedLinksTestRows) Scan(dest ...any) error {
 	link := rows.links[rows.cursor-1]
 	*dest[0].(*string) = link.DiscordID
 	*dest[1].(*string) = link.PlayerTag
+	*dest[2].(*bool) = link.IsVerified
+	*dest[3].(*bool) = link.Hidden
 	return nil
 }
 

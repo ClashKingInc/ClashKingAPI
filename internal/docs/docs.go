@@ -4726,7 +4726,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.SharedLinksGrant"
+                            "$ref": "#/definitions/modelsv2.SharedLinksConsentResponse"
                         }
                     },
                     "401": {
@@ -4788,7 +4788,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/modelsv2.SharedLinksConsentResponse"
+                            "$ref": "#/definitions/modelsv2.SharedLinksGrant"
                         }
                     },
                     "400": {

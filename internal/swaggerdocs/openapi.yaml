@@ -10910,7 +10910,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/modelsv2.SharedLinksGrant'
+                                $ref: '#/components/schemas/modelsv2.SharedLinksConsentResponse'
                     description: OK
                 "401":
                     content:
@@ -10956,7 +10956,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/modelsv2.SharedLinksConsentResponse'
+                                $ref: '#/components/schemas/modelsv2.SharedLinksGrant'
                     description: OK
                 "400":
                     content:

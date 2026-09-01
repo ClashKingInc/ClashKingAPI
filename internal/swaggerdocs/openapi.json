@@ -15917,7 +15917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksGrant"
+                  "$ref": "#/components/schemas/modelsv2.SharedLinksConsentResponse"
                 }
               }
             },
@@ -15993,7 +15993,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksConsentResponse"
+                  "$ref": "#/components/schemas/modelsv2.SharedLinksGrant"
                 }
               }
             },

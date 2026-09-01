@@ -94,7 +94,7 @@ func getSharedLinksApplication(a apptypes.Deps) fiber.Handler {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param application_id path string true "Application ID"
-// @Success 200 {object} modelsv2.SharedLinksGrant
+// @Success 200 {object} modelsv2.SharedLinksConsentResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse
 // @Failure 503 {object} modelsv2.ErrorResponse
@@ -128,7 +128,7 @@ func getSharedLinksConsent(a apptypes.Deps) fiber.Handler {
 // @Security ApiKeyAuth
 // @Param application_id path string true "Application ID"
 // @Param body body modelsv2.SharedLinksGrantRequest true "Grant selection"
-// @Success 200 {object} modelsv2.SharedLinksConsentResponse
+// @Success 200 {object} modelsv2.SharedLinksGrant
 // @Failure 400 {object} modelsv2.ErrorResponse
 // @Failure 401 {object} modelsv2.ErrorResponse
 // @Failure 404 {object} modelsv2.ErrorResponse

@@ -31,6 +31,13 @@ func TestOpenAPIDocumentIncludesAuthorizationScheme(t *testing.T) {
 	if apiKey["name"] != "Authorization" {
 		t.Fatalf("expected Authorization header name, got %v", apiKey["name"])
 	}
+	developerToken, ok := securitySchemes["DeveloperToken"].(map[string]any)
+	if !ok {
+		t.Fatal("expected DeveloperToken definition")
+	}
+	if developerToken["type"] != "http" || developerToken["scheme"] != "bearer" {
+		t.Fatalf("DeveloperToken scheme = %#v", developerToken)
+	}
 }
 
 func TestScalarUIHandlerServesDefaultDocs(t *testing.T) {
@@ -179,6 +186,75 @@ func TestBuildDocIncludesPublicAndAuthenticatedOperations(t *testing.T) {
 	security, ok := get["security"].([]any)
 	if !ok || len(security) == 0 {
 		t.Fatal("expected /v2/me to preserve ApiKeyAuth security marker")
+	}
+}
+
+func TestSharedLinksDocUsesLinksTagDeveloperTokenAndItemsEnvelope(t *testing.T) {
+	doc := buildSwaggerDoc(t)
+	paths := swaggerPaths(t, doc)
+	assertSharedLinksOperationDoc(t, paths)
+	assertSharedLinksSchemaDoc(t, swaggerDefinitions(t, doc))
+	assertConnectedAppPathsRemoved(t, paths)
+}
+
+func assertSharedLinksOperationDoc(t *testing.T, paths map[string]any) {
+	t.Helper()
+	path, ok := paths["/v2/links/shared"].(map[string]any)
+	if !ok {
+		t.Fatal("expected /v2/links/shared path")
+	}
+	operation, ok := path["post"].(map[string]any)
+	if !ok {
+		t.Fatal("expected POST /v2/links/shared operation")
+	}
+	tags, _ := operation["tags"].([]any)
+	if !reflect.DeepEqual(tags, []any{"Links"}) {
+		t.Fatalf("shared links tags = %#v", tags)
+	}
+	security, _ := operation["security"].([]any)
+	if len(security) != 1 {
+		t.Fatalf("shared links security = %#v", security)
+	}
+	requirement, _ := security[0].(map[string]any)
+	if _, ok := requirement["DeveloperToken"]; !ok {
+		t.Fatalf("shared links security = %#v", security)
+	}
+}
+
+func assertSharedLinksSchemaDoc(t *testing.T, definitions map[string]any) {
+	t.Helper()
+	response := definitions["modelsv2.SharedLinksLookupResponse"].(map[string]any)
+	properties := response["properties"].(map[string]any)
+	if _, ok := properties["items"]; !ok {
+		t.Fatalf("shared links response properties = %#v", properties)
+	}
+	if _, ok := properties["links"]; ok {
+		t.Fatalf("shared links response still exposes links envelope: %#v", properties)
+	}
+	item := definitions["modelsv2.SharedLink"].(map[string]any)
+	itemProperties := item["properties"].(map[string]any)
+	for _, name := range []string{"is_verified", "player_tag", "user_id"} {
+		if _, ok := itemProperties[name]; !ok {
+			t.Fatalf("shared link schema missing %s: %#v", name, itemProperties)
+		}
+	}
+	for _, name := range []string{"hidden", "discord_id"} {
+		if _, ok := itemProperties[name]; ok {
+			t.Fatalf("shared link schema exposes obsolete %s: %#v", name, itemProperties)
+		}
+	}
+}
+
+func assertConnectedAppPathsRemoved(t *testing.T, paths map[string]any) {
+	t.Helper()
+	for _, obsolete := range []string{
+		"/v2/links/shared/applications/{application_id}",
+		"/v2/links/shared/grants",
+		"/v2/links/shared/grants/{application_id}",
+	} {
+		if _, ok := paths[obsolete]; ok {
+			t.Fatalf("obsolete connected-app path remains documented: %s", obsolete)
+		}
 	}
 }
 

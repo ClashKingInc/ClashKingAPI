@@ -6,41 +6,32 @@ import (
 	"testing"
 )
 
-func TestSharedLinksResponsesKeepStableEmptyListsAndNullableGrant(t *testing.T) {
-	payload, err := json.Marshal(SharedLinksConsentResponse{
-		Application: SharedLinksApplication{ID: "app-id", Name: "Example"},
-		Accounts:    []SharedLinksAccount{},
-		Grant:       nil,
-	})
+func TestSharedLinksResponseUsesItemsEnvelopeWithoutVisibilityMetadata(t *testing.T) {
+	payload, err := json.Marshal(SharedLinksLookupResponse{Items: []SharedLink{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(payload)
-	for _, required := range []string{`"accounts":[]`, `"grant":null`} {
-		if !strings.Contains(body, required) {
-			t.Fatalf("response missing %s: %s", required, body)
-		}
+	if string(payload) != `{"items":[]}` {
+		t.Fatalf("empty response = %s", payload)
 	}
 
-	lookup, err := json.Marshal(SharedLinksLookupResponse{Links: []SharedLink{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(lookup) != `{"links":[]}` {
-		t.Fatalf("lookup response = %s", lookup)
-	}
-
-	lookup, err = json.Marshal(SharedLinksLookupResponse{Links: []SharedLink{{
-		DiscordID: "123456789012345678",
-		PlayerTag: "#2PP",
-		Hidden:    true,
+	payload, err = json.Marshal(SharedLinksLookupResponse{Items: []SharedLink{{
+		IsVerified: true,
+		PlayerTag:  "#2PP",
+		UserID:     "123456789012345678",
 	}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{`"is_verified":false`, `"hidden":true`} {
-		if !strings.Contains(string(lookup), required) {
-			t.Fatalf("lookup response missing %s: %s", required, lookup)
+	body := string(payload)
+	for _, required := range []string{`"is_verified":true`, `"player_tag":"#2PP"`, `"user_id":"123456789012345678"`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("response missing %s: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{`"hidden"`, `"discord_id"`, `"links"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("response exposes obsolete field %s: %s", forbidden, body)
 		}
 	}
 }

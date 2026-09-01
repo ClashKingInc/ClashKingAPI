@@ -34,6 +34,9 @@ import (
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
 // @name Authorization
+// @securityDefinitions.apikey DeveloperToken
+// @in header
+// @name Authorization
 type App struct {
 	utils.Deps
 	StartedAt time.Time

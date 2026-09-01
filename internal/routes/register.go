@@ -36,11 +36,6 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 
 	// Register shared-link routes before /v2/links/:id so the developer batch
 	// endpoint is not interpreted as a personal link subject named "shared".
-	app.Get("/v2/links/shared/applications/:application_id", getSharedLinksApplication(a))
-	app.Get("/v2/links/shared/grants", wrap(listSharedLinksConnections(a)))
-	app.Get("/v2/links/shared/grants/:application_id", wrap(getSharedLinksConsent(a)))
-	app.Put("/v2/links/shared/grants/:application_id", wrap(putSharedLinksGrant(a)))
-	app.Delete("/v2/links/shared/grants/:application_id", wrap(deleteSharedLinksGrant(a)))
 	app.Post("/v2/links/shared", postSharedLinks(a))
 
 	// Register the static server path before the generic two-parameter link paths.

@@ -40,22 +40,6 @@ func privacyExport(a apptypes.Deps) fiber.Handler {
 			{"notification_devices", `SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, reminder_timings, raid_reminder_timings, last_seen_at FROM mobile_push_devices WHERE user_id = $1`, true},
 			{"billing_subscription", `SELECT provider, provider_subscription_id, provider_price_id, status, current_period_end, cancel_at_period_end, created_at, updated_at FROM billing_subscriptions WHERE user_id = $1`, true},
 			{"subscription_entitlements", `SELECT active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd, updated_at FROM subscription_entitlements WHERE user_id = $1`, true},
-			{"connected_applications", `
-				SELECT grants.application_id, applications.application_name, grants.access_mode,
-					grants.created_at AS connected_at, grants.updated_at, grants.revoked_at,
-					COALESCE(
-						array_agg(accounts.player_tag ORDER BY accounts.player_tag)
-							FILTER (WHERE accounts.player_tag IS NOT NULL),
-						ARRAY[]::text[]
-					) AS selected_player_tags
-				FROM developer_link_grants AS grants
-				JOIN developer_applications AS applications ON applications.application_id = grants.application_id
-				LEFT JOIN developer_link_grant_accounts AS accounts ON accounts.grant_id = grants.grant_id
-				WHERE grants.user_id = $1
-				GROUP BY grants.application_id, applications.application_name, grants.access_mode,
-					grants.created_at, grants.updated_at, grants.revoked_at
-				ORDER BY grants.updated_at DESC
-			`, true},
 		}
 		for _, item := range queries {
 			rows, err := privacyQuery(c.UserContext(), a, item.optional, item.query, userID)
@@ -89,7 +73,6 @@ func privacyDelete(a apptypes.Deps) fiber.Handler {
 			{"user_recent_searches", `DELETE FROM user_recent_searches WHERE user_id = $1`},
 			{"user_bookmarks", `DELETE FROM user_bookmarks WHERE user_id = $1`},
 			{"user_settings", `DELETE FROM user_settings WHERE user_id = $1`},
-			{"developer_link_grants", `DELETE FROM developer_link_grants WHERE user_id = $1`},
 			{"player_links", `DELETE FROM player_links WHERE user_id = $1`},
 			{"auth_discord_tokens", `DELETE FROM auth_discord_tokens WHERE user_id = $1`},
 			{"auth_refresh_tokens", `DELETE FROM auth_refresh_tokens WHERE user_id = $1`},

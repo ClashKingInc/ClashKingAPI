@@ -207,7 +207,7 @@ func TestCWLQueriesUseFinalTypedSchema(t *testing.T) {
 		"war_tag = ANY($1)",
 		"sqlArchiveWarsContext(c.UserContext(), a, warIDs)",
 		"for _, attack := range member.Attacks",
-		"strings.ToLower(state) != \"ended\"",
+		"strings.EqualFold(state, \"ended\")",
 		"calculateCWLSeasonSummary",
 	} {
 		if !strings.Contains(string(warSource), required) {
@@ -223,5 +223,25 @@ func TestCWLQueriesUseFinalTypedSchema(t *testing.T) {
 		if strings.Contains(string(warSource), removedRoster) {
 			t.Errorf("typed CWL reader still uses removed JSON roster %q", removedRoster)
 		}
+	}
+}
+
+func TestCWLPlayerHistoryLoadsEachSeasonsArchiveOnce(t *testing.T) {
+	raw, err := os.ReadFile("war.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	start := strings.Index(source, "func cwlPlayerWarFacts")
+	end := strings.Index(source, "type cwlHistoryScanner")
+	if start == -1 || end == -1 || end <= start {
+		t.Fatal("could not isolate CWL player history implementation")
+	}
+	historySource := source[start:end]
+	if got := strings.Count(historySource, "sqlArchiveWarsContext("); got != 1 {
+		t.Fatalf("CWL player history archive loads = %d, want 1", got)
+	}
+	if strings.Contains(historySource, "func cwlPlayerEarnedStarsPlacement(c *fiber.Ctx") {
+		t.Fatal("earned-stars placement must use the already-loaded season wars")
 	}
 }

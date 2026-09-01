@@ -3,7 +3,6 @@ package routes
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"math"
 	"net/http"
 	"net/url"
@@ -18,7 +17,6 @@ import (
 	"github.com/ClashKingInc/ClashKingAPI/internal/wararchive"
 	clashy "github.com/clashkinginc/clashy.go"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -386,30 +384,28 @@ func cwlHistoryForPlayer(c *fiber.Ctx, a apptypes.Deps, playerTag string, limit 
 				seed.Item.Clan.WarLeague = &modelsv2.LeagueReference{ID: seed.LeagueID}
 			}
 		}
-		attacks, missedAttacks, actualTeamSize, summary, err := cwlPlayerWarFacts(c, a, seed.CWLID, playerTag, seed.Item.Clan.Tag)
+		facts, err := cwlPlayerWarFacts(c, a, seed.CWLID, playerTag, seed.Item.Clan.Tag)
 		if err != nil {
 			return nil, err
 		}
-		seed.Item.Attacks = attacks
-		seed.Item.MissedAttacks = missedAttacks
+		seed.Item.Attacks = facts.attacks
+		seed.Item.MissedAttacks = facts.missedAttacks
 		if seed.Item.TeamSize == nil {
-			seed.Item.TeamSize = actualTeamSize
+			seed.Item.TeamSize = facts.actualTeamSize
 		}
-		if summary != nil {
-			totalStars := summary.stars
+		if facts.summary != nil {
+			totalStars := facts.summary.stars
 			seed.Item.Clan.TotalStars = &totalStars
-			seed.Item.Clan.Wars = &modelsv2.CWLPlayerHistoryWarRecord{Won: summary.wins, Lost: summary.losses, Tied: summary.ties}
+			seed.Item.Clan.Wars = &modelsv2.CWLPlayerHistoryWarRecord{Won: facts.summary.wins, Lost: facts.summary.losses, Tied: facts.summary.ties}
 			if seed.Item.Clan.Placement == nil {
 				seed.Item.Clan.Placement = &modelsv2.CWLPlayerClanPlacement{}
 			}
-			groupRank := summary.rank
+			groupRank := facts.summary.rank
 			seed.Item.Clan.Placement.Group = &groupRank
 		}
-		placement, err := cwlPlayerEarnedStarsPlacement(c, a, seed.CWLID, playerTag, seed.Item.Clan.Tag)
-		if err != nil {
-			return nil, err
+		if facts.placementAvailable {
+			seed.Item.Placement = cwlPlayerEarnedStarsPlacement(facts.wars, playerTag, seed.Item.Clan.Tag)
 		}
-		seed.Item.Placement = placement
 		items = append(items, seed.Item)
 	}
 	return items, nil
@@ -481,7 +477,16 @@ func scanCWLPlayerHistorySeed(row cwlHistoryScanner) (cwlPlayerHistorySeed, erro
 	return seed, nil
 }
 
-func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) ([]modelsv2.CWLPlayerHistoryAttack, int, *int, *cwlSeasonSummary, error) {
+type cwlPlayerSeasonFacts struct {
+	attacks            []modelsv2.CWLPlayerHistoryAttack
+	missedAttacks      int
+	actualTeamSize     *int
+	summary            *cwlSeasonSummary
+	wars               map[string]wararchive.War
+	placementAvailable bool
+}
+
+func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) (cwlPlayerSeasonFacts, error) {
 	var state string
 	var roundsJSON []byte
 	var clanTags []string
@@ -493,7 +498,7 @@ func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag 
 		GROUP BY g.cwl_id, g.state, g.rounds
 	`, cwlID).Scan(&state, &roundsJSON, &clanTags)
 	if err != nil {
-		return nil, 0, nil, nil, err
+		return cwlPlayerSeasonFacts{}, err
 	}
 	roundTags := decodeCWLRoundTags(roundsJSON)
 	roundByTag := make(map[string]int)
@@ -508,7 +513,7 @@ func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag 
 		}
 	}
 	if len(warTags) == 0 {
-		return []modelsv2.CWLPlayerHistoryAttack{}, 0, nil, nil, nil
+		return cwlPlayerSeasonFacts{attacks: []modelsv2.CWLPlayerHistoryAttack{}}, nil
 	}
 	rows, err := a.Store.SQL.Query(c.UserContext(), `
 		SELECT war_id::text, war_tag, state, size, clan_tag, opponent_tag,
@@ -519,7 +524,7 @@ func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag 
 		  AND lower(state) IN ('warended', 'ended')
 	`, warTags)
 	if err != nil {
-		return nil, 0, nil, nil, err
+		return cwlPlayerSeasonFacts{}, err
 	}
 	defer rows.Close()
 	rounds := make(map[string]int)
@@ -532,18 +537,18 @@ func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag 
 			&warID, &war.tag, &war.state, &war.size, &war.clanTag, &war.opponentTag,
 			&war.clanStars, &war.opponentStars, &war.clanDestruction, &war.opponentDestruction,
 		); err != nil {
-			return nil, 0, nil, nil, err
+			return cwlPlayerSeasonFacts{}, err
 		}
 		rounds[warID] = roundByTag[war.tag]
 		warIDs = append(warIDs, warID)
 		normalizedWars[war.tag] = war
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, nil, nil, err
+		return cwlPlayerSeasonFacts{}, err
 	}
 	wars, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
 	if err != nil {
-		return nil, 0, nil, nil, err
+		return cwlPlayerSeasonFacts{}, err
 	}
 	var summary *cwlSeasonSummary
 	if value, ok := calculateCWLSeasonSummary(clanTag, cwlLeagueBackfillGroup{
@@ -604,52 +609,17 @@ func cwlPlayerWarFacts(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag 
 		}
 		return attacks[i].Round < attacks[j].Round
 	})
-	return attacks, missedAttacks, actualTeamSize, summary, nil
+	return cwlPlayerSeasonFacts{
+		attacks:            attacks,
+		missedAttacks:      missedAttacks,
+		actualTeamSize:     actualTeamSize,
+		summary:            summary,
+		wars:               wars,
+		placementAvailable: strings.EqualFold(state, "ended") && len(warIDs) == len(warTags),
+	}, nil
 }
 
-func cwlPlayerEarnedStarsPlacement(c *fiber.Ctx, a apptypes.Deps, cwlID, playerTag, clanTag string) (*modelsv2.CWLPlayerAttackPlacement, error) {
-	var state string
-	var roundsJSON []byte
-	if err := a.Store.SQL.QueryRow(c.UserContext(), `SELECT state, rounds FROM cwl_groups WHERE cwl_id = $1`, cwlID).Scan(&state, &roundsJSON); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if strings.ToLower(state) != "ended" {
-		return nil, nil
-	}
-	var warTags []string
-	for _, round := range decodeCWLRoundTags(roundsJSON) {
-		for _, tag := range round {
-			if tag != "" && tag != "#0" {
-				warTags = append(warTags, tag)
-			}
-		}
-	}
-	rows, err := a.Store.SQL.Query(c.UserContext(), `SELECT DISTINCT war_id::text FROM wars WHERE war_type = 'cwl' AND war_tag = ANY($1)`, warTags)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var warIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		warIDs = append(warIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(warIDs) != len(warTags) {
-		return nil, nil
-	}
-	wars, err := sqlArchiveWarsContext(c.UserContext(), a, warIDs)
-	if err != nil {
-		return nil, err
-	}
+func cwlPlayerEarnedStarsPlacement(wars map[string]wararchive.War, playerTag, clanTag string) *modelsv2.CWLPlayerAttackPlacement {
 	type entry struct {
 		clan, player string
 		stars        int
@@ -692,10 +662,10 @@ func cwlPlayerEarnedStarsPlacement(c *fiber.Ctx, a apptypes.Deps, cwlID, playerT
 			}
 		}
 		if value.clan == clanTag && value.player == playerTag {
-			return &modelsv2.CWLPlayerAttackPlacement{Clan: clanRank, Group: groupRank}, nil
+			return &modelsv2.CWLPlayerAttackPlacement{Clan: clanRank, Group: groupRank}
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 type cwlHistoryScanner interface {

@@ -5,18 +5,15 @@ import (
 	"testing"
 )
 
-func TestWebOriginsIncludeStandaloneConnectHost(t *testing.T) {
+func TestWebOriginsIncludeLandingDashboardAndAppHosts(t *testing.T) {
 	values := map[string]string{
 		"CLASHKING_LANDING_ORIGIN":   "https://clashk.ing/",
 		"CLASHKING_DASHBOARD_ORIGIN": "https://dash.clashk.ing/",
 	}
 
-	landing, dashboard, connect, app := webOrigins(func(key string) string { return values[key] })
+	landing, dashboard, app := webOrigins(func(key string) string { return values[key] })
 	if landing != "https://clashk.ing" || dashboard != "https://dash.clashk.ing" {
-		t.Fatalf("webOrigins() = %q, %q, %q, %q", landing, dashboard, connect, app)
-	}
-	if connect != "https://connect.clashk.ing" {
-		t.Fatalf("connect origin = %q, want https://connect.clashk.ing", connect)
+		t.Fatalf("webOrigins() = %q, %q, %q", landing, dashboard, app)
 	}
 	if app != "https://app.clashk.ing" {
 		t.Fatalf("app origin = %q, want https://app.clashk.ing", app)
@@ -28,7 +25,7 @@ func TestWebOriginsNormalizeExplicitAppOrigin(t *testing.T) {
 		"CLASHKING_APP_ORIGIN": " https://staging-app.clashk.ing/ ",
 	}
 
-	_, _, _, app := webOrigins(func(key string) string { return values[key] })
+	_, _, app := webOrigins(func(key string) string { return values[key] })
 	if app != "https://staging-app.clashk.ing" {
 		t.Fatalf("app origin = %q, want https://staging-app.clashk.ing", app)
 	}

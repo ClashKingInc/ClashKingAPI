@@ -8185,148 +8185,14 @@
       },
       "modelsv2.SharedLink": {
         "properties": {
-          "discord_id": {
-            "type": "string"
-          },
-          "hidden": {
-            "type": "boolean"
-          },
           "is_verified": {
             "type": "boolean"
           },
           "player_tag": {
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksAccount": {
-        "properties": {
-          "hidden": {
-            "type": "boolean"
           },
-          "is_verified": {
-            "type": "boolean"
-          },
-          "name": {
+          "user_id": {
             "type": "string"
-          },
-          "player_tag": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksApplication": {
-        "properties": {
-          "developer_name": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksApplicationResponse": {
-        "properties": {
-          "application": {
-            "$ref": "#/components/schemas/modelsv2.SharedLinksApplication"
-          },
-          "redirect_uri": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksConnection": {
-        "properties": {
-          "application": {
-            "$ref": "#/components/schemas/modelsv2.SharedLinksApplication"
-          },
-          "grant": {
-            "$ref": "#/components/schemas/modelsv2.SharedLinksGrant"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksConnectionsResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.SharedLinksConnection"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksConsentResponse": {
-        "properties": {
-          "accounts": {
-            "items": {
-              "$ref": "#/components/schemas/modelsv2.SharedLinksAccount"
-            },
-            "type": "array"
-          },
-          "application": {
-            "$ref": "#/components/schemas/modelsv2.SharedLinksApplication"
-          },
-          "grant": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/modelsv2.SharedLinksGrant"
-              }
-            ],
-            "type": [
-              "object",
-              "null"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksGrant": {
-        "properties": {
-          "access_mode": {
-            "enum": [
-              "selected",
-              "all_current_and_future"
-            ],
-            "type": "string"
-          },
-          "connected_at": {
-            "type": "string"
-          },
-          "selected_player_tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "updated_at": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "modelsv2.SharedLinksGrantRequest": {
-        "properties": {
-          "access_mode": {
-            "enum": [
-              "selected",
-              "all_current_and_future"
-            ],
-            "type": "string"
-          },
-          "player_tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           }
         },
         "type": "object"
@@ -8350,7 +8216,7 @@
       },
       "modelsv2.SharedLinksLookupResponse": {
         "properties": {
-          "links": {
+          "items": {
             "items": {
               "$ref": "#/components/schemas/modelsv2.SharedLink"
             },
@@ -10050,6 +9916,12 @@
         "in": "header",
         "name": "Authorization",
         "type": "apiKey"
+      },
+      "DeveloperToken": {
+        "bearerFormat": "ck_dev_...",
+        "description": "Developer API token issued by ClashKing.",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
@@ -15215,7 +15087,7 @@
     },
     "/v2/links/shared": {
       "post": {
-        "description": "Returns Discord ID and player-tag pairs with current verification and visibility metadata when covered by active grants for the authenticated developer application. Unauthorized and nonexistent identifiers are omitted identically.",
+        "description": "Returns visible Discord ID and player-tag pairs for the requested Discord IDs, player tags, or both. Hidden and nonexistent links are omitted identically. Results include both verified and unverified links.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15281,339 +15153,12 @@
         },
         "security": [
           {
-            "ApiKeyAuth": []
+            "DeveloperToken": []
           }
         ],
         "summary": "Look up shared Discord links",
         "tags": [
-          "Shared Links"
-        ]
-      }
-    },
-    "/v2/links/shared/applications/{application_id}": {
-      "get": {
-        "description": "Returns the public application identity used by the connected-app consent page. When redirect_uri is supplied, it must exactly match the application's registered URI.",
-        "parameters": [
-          {
-            "description": "Application ID",
-            "in": "path",
-            "name": "application_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Exact registered redirect URI",
-            "in": "query",
-            "name": "redirect_uri",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksApplicationResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Get a shared-links application",
-        "tags": [
-          "Shared Links"
-        ]
-      }
-    },
-    "/v2/links/shared/grants": {
-      "get": {
-        "description": "Returns the authenticated user's active read-only application grants.",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksConnectionsResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "summary": "List connected shared-links applications",
-        "tags": [
-          "Shared Links"
-        ]
-      }
-    },
-    "/v2/links/shared/grants/{application_id}": {
-      "delete": {
-        "description": "Revokes the current user's grant and removes its stored selected-account rows. The operation is idempotent.",
-        "parameters": [
-          {
-            "description": "Application ID",
-            "in": "path",
-            "name": "application_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "summary": "Revoke shared-links access",
-        "tags": [
-          "Shared Links"
-        ]
-      },
-      "get": {
-        "description": "Returns the active application, the authenticated user's linked accounts with verification and visibility metadata, and any current read-only grant.",
-        "parameters": [
-          {
-            "description": "Application ID",
-            "in": "path",
-            "name": "application_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksConsentResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "summary": "Get shared-links consent details",
-        "tags": [
-          "Shared Links"
-        ]
-      },
-      "put": {
-        "description": "Grants an application read access to selected linked accounts or all current and future linked accounts.",
-        "parameters": [
-          {
-            "description": "Application ID",
-            "in": "path",
-            "name": "application_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/modelsv2.SharedLinksGrantRequest"
-              }
-            }
-          },
-          "description": "Grant selection",
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.SharedLinksGrant"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/modelsv2.ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "summary": "Grant shared-links access",
-        "tags": [
-          "Shared Links"
+          "Links"
         ]
       }
     },
@@ -27729,9 +27274,6 @@
     },
     {
       "name": "Server Tickets"
-    },
-    {
-      "name": "Shared Links"
     },
     {
       "name": "Web Authentication"

@@ -457,7 +457,14 @@ func convertSecuritySchemes(source map[string]any) map[string]any {
 		default:
 			copyKeys(scheme, converted, "type", "name", "in")
 		}
-		if name == "ApiKeyAuth" && converted["description"] == nil {
+		if name == "DeveloperToken" {
+			converted = map[string]any{
+				"type":         "http",
+				"scheme":       "bearer",
+				"bearerFormat": "ck_dev_...",
+				"description":  "Developer API token issued by ClashKing.",
+			}
+		} else if name == "ApiKeyAuth" && converted["description"] == nil {
 			converted["description"] = "Enter `Bearer <access_token>`."
 		}
 		out[name] = converted

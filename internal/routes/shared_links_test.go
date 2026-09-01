@@ -33,6 +33,10 @@ func TestValidateSharedLinksLookupRequestNormalizesAndDeduplicates(t *testing.T)
 }
 
 func TestValidateSharedLinksLookupRequestRejectsInvalidIdentifiers(t *testing.T) {
+	tooMany := make([]string, sharedLinksMaxIdentifiers+1)
+	for index := range tooMany {
+		tooMany[index] = "123456789012345678"
+	}
 	for _, test := range []struct {
 		name    string
 		request modelsv2.SharedLinksLookupRequest
@@ -42,41 +46,13 @@ func TestValidateSharedLinksLookupRequestRejectsInvalidIdentifiers(t *testing.T)
 		{name: "leading-zero Discord ID", request: modelsv2.SharedLinksLookupRequest{DiscordIDs: []string{"012345678901234567"}}},
 		{name: "invalid player alphabet", request: modelsv2.SharedLinksLookupRequest{PlayerTags: []string{"#ABC"}}},
 		{name: "short player tag", request: modelsv2.SharedLinksLookupRequest{PlayerTags: []string{"#2P"}}},
+		{name: "too many identifiers", request: modelsv2.SharedLinksLookupRequest{DiscordIDs: tooMany}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, _, err := validateSharedLinksLookupRequest(test.request)
 			assertSharedLinksAppErrorStatus(t, err, 400)
 		})
 	}
-}
-
-func TestValidateSharedLinksGrantRequestKeepsReadModesExplicit(t *testing.T) {
-	selected, err := validateSharedLinksGrantRequest(modelsv2.SharedLinksGrantRequest{
-		AccessMode: modelsv2.SharedLinksAccessSelected,
-		PlayerTags: []string{"#2PP", "2pp", "#P0Y"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"#2PP", "#P0Y"}; !reflect.DeepEqual(selected, want) {
-		t.Fatalf("selected tags = %#v, want %#v", selected, want)
-	}
-
-	all, err := validateSharedLinksGrantRequest(modelsv2.SharedLinksGrantRequest{
-		AccessMode: modelsv2.SharedLinksAccessAllCurrentAndFuture,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if all == nil || len(all) != 0 {
-		t.Fatalf("dynamic grant tags = %#v, want non-nil empty list", all)
-	}
-
-	_, err = validateSharedLinksGrantRequest(modelsv2.SharedLinksGrantRequest{
-		AccessMode: modelsv2.SharedLinksAccessAllCurrentAndFuture,
-		PlayerTags: []string{"#2PP"},
-	})
-	assertSharedLinksAppErrorStatus(t, err, 400)
 }
 
 func TestSharedLinksBearerTokenRequiresBearerScheme(t *testing.T) {
@@ -90,7 +66,7 @@ func TestSharedLinksBearerTokenRequiresBearerScheme(t *testing.T) {
 	}
 }
 
-func TestAuthenticateSharedLinksApplicationHashesTokenAndRejectsRevokedApps(t *testing.T) {
+func TestAuthenticateSharedLinksApplicationRecordsRequestUsage(t *testing.T) {
 	applicationID := uuid.MustParse("019d0000-0000-7000-8000-000000000001")
 	wantHash := sha256.Sum256([]byte("ck_dev_secret"))
 	var query string
@@ -112,105 +88,99 @@ func TestAuthenticateSharedLinksApplicationHashesTokenAndRejectsRevokedApps(t *t
 	if got != applicationID.String() {
 		t.Fatalf("application ID = %q, want %q", got, applicationID)
 	}
-	if !strings.Contains(query, "token_last_used_at = now()") || !strings.Contains(query, "revoked_at IS NULL") {
-		t.Fatalf("authentication query does not atomically enforce active app and last use: %s", query)
+	for _, required := range []string{"token_last_used_at = now()", "api_request_count = api_request_count + 1", "revoked_at IS NULL"} {
+		if !strings.Contains(query, required) {
+			t.Fatalf("authentication query missing %q: %s", required, query)
+		}
 	}
 	if len(args) != 1 || !reflect.DeepEqual(args[0], wantHash[:]) {
 		t.Fatalf("token hash argument = %#v, want SHA-256 digest", args)
 	}
 }
 
-func TestReplaceSharedLinksGrantChecksCurrentOwnershipWithoutRequiringVerification(t *testing.T) {
-	applicationID := uuid.MustParse("019d0000-0000-7000-8000-000000000001")
-	grantID := uuid.MustParse("019d0000-0000-7000-8000-000000000002")
-	tx := &sharedLinksTestTx{
-		queryRows: []pgx.Row{
-			sharedLinksTestRow{scan: func(dest ...any) error {
-				*dest[0].(*uuid.UUID) = applicationID
-				return nil
-			}},
-			sharedLinksTestRow{scan: func(dest ...any) error {
-				*dest[0].(*int) = 2
-				return nil
-			}},
-			sharedLinksTestRow{scan: func(dest ...any) error {
-				*dest[0].(*uuid.UUID) = grantID
-				return nil
-			}},
+func TestAuthenticateSharedLinksApplicationRejectsUnknownOrRevokedToken(t *testing.T) {
+	db := &sharedLinksTestDB{
+		queryRow: func(context.Context, string, ...any) pgx.Row {
+			return sharedLinksTestRow{scan: func(...any) error { return pgx.ErrNoRows }}
 		},
 	}
-	db := &sharedLinksTestDB{begin: func(context.Context) (pgx.Tx, error) { return tx, nil }}
-	err := replaceSharedLinksGrant(
-		context.Background(), db, applicationID, "123456789012345678",
-		modelsv2.SharedLinksAccessSelected, []string{"#2PP", "#P0Y"},
-	)
-	if err != nil {
+	_, err := authenticateSharedLinksApplication(context.Background(), db, "Bearer ck_dev_revoked")
+	assertSharedLinksAppErrorStatus(t, err, 401)
+}
+
+func TestRecordSharedLinksLookupAddsAcceptedIdentifierCount(t *testing.T) {
+	var query string
+	var args []any
+	db := &sharedLinksTestDB{
+		exec: func(_ context.Context, sql string, values ...any) (pgconn.CommandTag, error) {
+			query = sql
+			args = values
+			return pgconn.NewCommandTag("UPDATE 1"), nil
+		},
+	}
+	if err := recordSharedLinksLookup(context.Background(), db, "019d0000-0000-7000-8000-000000000001", 3); err != nil {
 		t.Fatal(err)
 	}
-	if !tx.committed {
-		t.Fatal("grant transaction was not committed")
+	if !strings.Contains(query, "links_lookup_count = links_lookup_count + $2") || !strings.Contains(query, "revoked_at IS NULL") {
+		t.Fatalf("lookup usage query = %s", query)
 	}
-	if len(tx.querySQL) < 2 || !strings.Contains(tx.querySQL[1], "user_id = $1") || strings.Contains(tx.querySQL[1], "is_verified = true") {
-		t.Fatalf("ownership query must require the current user without requiring verification: %#v", tx.querySQL)
-	}
-	if len(tx.execSQL) != 2 || !strings.Contains(tx.execSQL[0], "DELETE FROM developer_link_grant_accounts") || !strings.Contains(tx.execSQL[1], "INSERT INTO developer_link_grant_accounts") {
-		t.Fatalf("selected rows were not replaced transactionally: %#v", tx.execSQL)
+	if want := []any{"019d0000-0000-7000-8000-000000000001", 3}; !reflect.DeepEqual(args, want) {
+		t.Fatalf("lookup usage args = %#v, want %#v", args, want)
 	}
 }
 
-func TestQuerySharedLinksReturnsVerificationAndVisibilityForGrantedLinks(t *testing.T) {
-	var query string
+func TestRecordSharedLinksLookupRejectsApplicationRevokedAfterAuthentication(t *testing.T) {
 	db := &sharedLinksTestDB{
-		query: func(_ context.Context, sql string, _ ...any) (pgx.Rows, error) {
-			query = sql
-			return &sharedLinksTestRows{links: []modelsv2.SharedLink{{DiscordID: "123456789012345678", PlayerTag: "#2PP", IsVerified: false, Hidden: true}}}, nil
+		exec: func(context.Context, string, ...any) (pgconn.CommandTag, error) {
+			return pgconn.NewCommandTag("UPDATE 0"), nil
 		},
 	}
-	links, err := querySharedLinks(
-		context.Background(), db, "019d0000-0000-7000-8000-000000000001",
+	err := recordSharedLinksLookup(context.Background(), db, "019d0000-0000-7000-8000-000000000001", 1)
+	assertSharedLinksAppErrorStatus(t, err, 401)
+}
+
+func TestQuerySharedLinksReturnsOnlyVisibleLinks(t *testing.T) {
+	var query string
+	var args []any
+	db := &sharedLinksTestDB{
+		query: func(_ context.Context, sql string, values ...any) (pgx.Rows, error) {
+			query = sql
+			args = values
+			return &sharedLinksTestRows{items: []modelsv2.SharedLink{{
+				IsVerified: false,
+				PlayerTag:  "#2PP",
+				UserID:     "123456789012345678",
+			}}}, nil
+		},
+	}
+	items, err := querySharedLinks(
+		context.Background(), db,
 		[]string{"123456789012345678"}, []string{"#2PP"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(links) != 1 || links[0].PlayerTag != "#2PP" || links[0].IsVerified || !links[0].Hidden {
-		t.Fatalf("links = %#v", links)
+	if len(items) != 1 || items[0].PlayerTag != "#2PP" || items[0].IsVerified || items[0].UserID != "123456789012345678" {
+		t.Fatalf("items = %#v", items)
 	}
 	for _, required := range []string{
-		"grants.revoked_at IS NULL",
+		"links.hidden = false",
 		"links.is_verified",
-		"links.hidden",
-		"grants.access_mode = 'all_current_and_future'",
-		"developer_link_grant_accounts",
-		"accounts.player_tag = links.tag",
+		"links.user_id = ANY($1::text[])",
+		"links.tag = ANY($2::text[])",
+		"links.order_index ASC",
 	} {
 		if !strings.Contains(query, required) {
 			t.Fatalf("shared lookup query missing %q: %s", required, query)
 		}
 	}
-	if strings.Contains(query, "links.is_verified = true") || strings.Contains(query, "links.hidden = false") {
-		t.Fatal("explicit connected-app consent should return verification and visibility metadata without filtering on either")
+	for _, forbidden := range []string{"developer_link_grants", "developer_link_grant_accounts", "links.hidden,"} {
+		if strings.Contains(query, forbidden) {
+			t.Fatalf("shared lookup query contains obsolete or exposed field %q: %s", forbidden, query)
+		}
 	}
-}
-
-func TestRevokeSharedLinksGrantDeletesRowsForRevokedGrantIDs(t *testing.T) {
-	var query string
-	db := &sharedLinksTestDB{
-		exec: func(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
-			query = sql
-			return pgconn.NewCommandTag("DELETE 2"), nil
-		},
-	}
-	err := revokeSharedLinksGrant(
-		context.Background(), db,
-		uuid.MustParse("019d0000-0000-7000-8000-000000000001"),
-		"123456789012345678",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(query, "RETURNING grant_id") || !strings.Contains(query, "accounts.grant_id = revoked.grant_id") {
-		t.Fatalf("revocation does not delete selected rows by returned grant ID: %s", query)
+	if want := []any{[]string{"123456789012345678"}, []string{"#2PP"}}; !reflect.DeepEqual(args, want) {
+		t.Fatalf("lookup args = %#v, want %#v", args, want)
 	}
 }
 
@@ -250,7 +220,6 @@ type sharedLinksTestDB struct {
 	query    func(context.Context, string, ...any) (pgx.Rows, error)
 	queryRow func(context.Context, string, ...any) pgx.Row
 	exec     func(context.Context, string, ...any) (pgconn.CommandTag, error)
-	begin    func(context.Context) (pgx.Tx, error)
 }
 
 func (db *sharedLinksTestDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
@@ -274,13 +243,6 @@ func (db *sharedLinksTestDB) Exec(ctx context.Context, sql string, args ...any) 
 	return db.exec(ctx, sql, args...)
 }
 
-func (db *sharedLinksTestDB) Begin(ctx context.Context) (pgx.Tx, error) {
-	if db.begin == nil {
-		return nil, errors.New("unexpected Begin")
-	}
-	return db.begin(ctx)
-}
-
 type sharedLinksTestRow struct {
 	scan func(...any) error
 }
@@ -289,58 +251,23 @@ func (row sharedLinksTestRow) Scan(dest ...any) error { return row.scan(dest...)
 
 type sharedLinksTestRows struct {
 	pgx.Rows
-	links  []modelsv2.SharedLink
+	items  []modelsv2.SharedLink
 	cursor int
 }
 
 func (rows *sharedLinksTestRows) Close()     {}
 func (rows *sharedLinksTestRows) Err() error { return nil }
 func (rows *sharedLinksTestRows) Next() bool {
-	if rows.cursor >= len(rows.links) {
+	if rows.cursor >= len(rows.items) {
 		return false
 	}
 	rows.cursor++
 	return true
 }
 func (rows *sharedLinksTestRows) Scan(dest ...any) error {
-	link := rows.links[rows.cursor-1]
-	*dest[0].(*string) = link.DiscordID
-	*dest[1].(*string) = link.PlayerTag
-	*dest[2].(*bool) = link.IsVerified
-	*dest[3].(*bool) = link.Hidden
-	return nil
-}
-
-type sharedLinksTestTx struct {
-	pgx.Tx
-	queryRows  []pgx.Row
-	querySQL   []string
-	execSQL    []string
-	committed  bool
-	rolledBack bool
-}
-
-func (tx *sharedLinksTestTx) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
-	tx.querySQL = append(tx.querySQL, sql)
-	if len(tx.queryRows) == 0 {
-		return sharedLinksTestRow{scan: func(...any) error { return errors.New("unexpected QueryRow") }}
-	}
-	row := tx.queryRows[0]
-	tx.queryRows = tx.queryRows[1:]
-	return row
-}
-
-func (tx *sharedLinksTestTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
-	tx.execSQL = append(tx.execSQL, sql)
-	return pgconn.NewCommandTag("INSERT 1"), nil
-}
-
-func (tx *sharedLinksTestTx) Commit(context.Context) error {
-	tx.committed = true
-	return nil
-}
-
-func (tx *sharedLinksTestTx) Rollback(context.Context) error {
-	tx.rolledBack = true
+	item := rows.items[rows.cursor-1]
+	*dest[0].(*bool) = item.IsVerified
+	*dest[1].(*string) = item.PlayerTag
+	*dest[2].(*string) = item.UserID
 	return nil
 }

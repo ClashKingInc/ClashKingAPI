@@ -302,8 +302,8 @@ func TestSharedLinksDeveloperRouteIsRegisteredBeforeGenericPersonalLinks(t *test
 		{fiber.MethodPut, "/v2/links/shared/grants/:application_id"},
 		{fiber.MethodDelete, "/v2/links/shared/grants/:application_id"},
 	} {
-		if registeredRouteIndex(app, route.method, route.path) < 0 {
-			t.Fatalf("expected %s %s to be registered", route.method, route.path)
+		if registeredRouteIndex(app, route.method, route.path) >= 0 {
+			t.Fatalf("obsolete connected-app route is still registered: %s %s", route.method, route.path)
 		}
 	}
 }

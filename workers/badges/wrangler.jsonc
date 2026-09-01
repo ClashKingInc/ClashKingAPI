@@ -2,9 +2,12 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "clashking-badges",
   "main": "src/index.ts",
-  "compatibility_date": "2026-08-26",
+  "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  "cache": {
+    "enabled": true
+  },
   "routes": [
     {
       "pattern": "badges.clashk.ing",
@@ -17,6 +20,15 @@
       "id": "aca44651f2604a208a96cae255265d0b"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "BADGE_CACHE",
+      "id": "3d9b41c7038d48b2a3db7e5609d199d8"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

@@ -90,9 +90,12 @@ function responseCacheKey(
 	size: BadgeSize,
 	format: BadgeFormat,
 ): Request {
-	return new Request(`${url.origin}/${clanTag}.${format}?size=${size}`, {
-		method: "GET",
-	});
+	const cacheVersion =
+		format === "avif" ? `q${AVIF_QUALITY}` : ASSET_CACHE_VERSION;
+	return new Request(
+		`${url.origin}/${clanTag}.${format}?size=${size}&v=${cacheVersion}`,
+		{ method: "GET" },
+	);
 }
 
 function badgeUrl(token: string, pixels: number): string {

@@ -72,6 +72,9 @@ describe("badge asset caching", () => {
 		);
 		expect(first.status).toBe(200);
 		expect(first.headers.get("Content-Type")).toBe("image/png");
+		expect(first.headers.get("Cache-Control")).toBe(
+			"public, max-age=86400, s-maxage=86400",
+		);
 		expect(new Uint8Array(await first.arrayBuffer()).slice(0, 4)).toEqual(
 			new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
 		);

@@ -63,7 +63,13 @@ describe("badge path parsing", () => {
 
 describe("badge asset caching", () => {
 	it("encodes AVIF badges at the configured quality", () => {
-		expect(AVIF_QUALITY).toBe(65);
+		expect(AVIF_QUALITY).toBe(45);
+		expect(assetCacheKey("avif", 200, "token")).toBe(
+			"asset:v1:avif:q45:200:token",
+		);
+		expect(assetCacheKey("png", 200, "token")).toBe(
+			"asset:v1:png:200:token",
+		);
 	});
 
 	it("stores PNGs by token and size and shares the normalized response cache", async () => {

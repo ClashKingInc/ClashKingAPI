@@ -2,7 +2,7 @@ const RESPONSE_CACHE_SECONDS = 86400;
 const TAG_TOKEN_TTL_SECONDS = 86400;
 const NULL_TOKEN_TTL_SECONDS = 300;
 const ASSET_CACHE_VERSION = "v1";
-export const AVIF_QUALITY = 65;
+export const AVIF_QUALITY = 45;
 
 const BADGE_SIZES = {
 	small: 70,
@@ -77,7 +77,9 @@ export function assetCacheKey(
 	pixels: number,
 	token: string,
 ): string {
-	return `asset:${ASSET_CACHE_VERSION}:${format}:${pixels}:${token}`;
+	const formatVersion =
+		format === "avif" ? `${format}:q${AVIF_QUALITY}` : format;
+	return `asset:${ASSET_CACHE_VERSION}:${formatVersion}:${pixels}:${token}`;
 }
 
 export function tokenCacheKey(clanTag: string): string {

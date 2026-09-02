@@ -6,6 +6,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import {
+	AVIF_QUALITY,
 	assetCacheKey,
 	handleBadgeRequest,
 	parseBadgePath,
@@ -61,6 +62,10 @@ describe("badge path parsing", () => {
 });
 
 describe("badge asset caching", () => {
+	it("encodes AVIF badges at the configured quality", () => {
+		expect(AVIF_QUALITY).toBe(65);
+	});
+
 	it("stores PNGs by token and size and shares the normalized response cache", async () => {
 		const mocks = dependencies("png-token");
 		const firstContext = createExecutionContext();

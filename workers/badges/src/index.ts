@@ -2,6 +2,7 @@ const RESPONSE_CACHE_SECONDS = 86400;
 const TAG_TOKEN_TTL_SECONDS = 86400;
 const NULL_TOKEN_TTL_SECONDS = 300;
 const ASSET_CACHE_VERSION = "v1";
+export const AVIF_QUALITY = 65;
 
 const BADGE_SIZES = {
 	small: 70,
@@ -287,7 +288,7 @@ async function loadAvif(
 	}
 
 	const transformed = await env.IMAGES.input(png.stream)
-		.output({ format: "image/avif" })
+		.output({ format: "image/avif", quality: AVIF_QUALITY })
 		.then((result) => result.response());
 	if (!transformed.ok || !transformed.body) {
 		return null;

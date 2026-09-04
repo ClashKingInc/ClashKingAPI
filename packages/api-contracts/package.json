@@ -1,0 +1,43 @@
+{
+  "name": "@clashking/api-contracts",
+  "version": "0.1.0-rc.0",
+  "description": "Browser-safe Effect schemas and endpoint metadata for the ClashKing v2 API",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClashKingInc/ClashKingAPI.git",
+    "directory": "packages/api-contracts"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./expo": {
+      "types": "./dist/expo.d.ts",
+      "import": "./dist/expo.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  },
+  "peerDependencies": {
+    "effect": "4.0.0-rc.112"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  }
+}

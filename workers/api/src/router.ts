@@ -1,0 +1,330 @@
+import {
+  AppConfigResponse,
+  GroupedCountsResponse,
+  GlobalCounts,
+  HomeActivityRequest,
+  HomeActivityResponse,
+  StatsArmiesRequest,
+  StatsArmiesResponse,
+  StatsCwlRequest,
+  StatsItemsRequest,
+  StatsItemsResponse,
+  StatsPerformanceResponse,
+  StatsOverviewResponse,
+  StatsRankedRequest,
+  StatsWarRequest,
+  TenorMediaRequest,
+  TenorMediaResponse,
+} from "@clashking/api-contracts"
+import { Effect, Schema } from "effect"
+
+import { dispatchAdmin } from "./admin.js"
+import { dispatchAuthLifecycle } from "./auth-lifecycle.js"
+import { dispatchAppContentNotifications } from "./app-content-notifications.js"
+import { dispatchBotAdjacentRuntime } from "./bot-adjacent-runtime.js"
+import { dispatchBotRuntime } from "./bot-runtime.js"
+import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
+import { dispatchDashboardRosterConfiguration } from "./dashboard-roster-configuration.js"
+import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
+import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
+import { dispatchPersistentRuntime } from "./persistent-runtime.js"
+import { dispatchPublicData } from "./public-data-runtime.js"
+import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
+import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
+import { dispatchDashboardMisc } from "./dashboard-misc-runtime.js"
+import { dispatchWarExports } from "./war-exports.js"
+import { dispatchMobilePersistence } from "./mobile-persistence.js"
+import { dispatchCdnUpload } from "./cdn-upload.js"
+import { dispatchMedia } from "./media-runtime.js"
+import { dispatchAnnouncementMutations } from "./announcement-mutations.js"
+import { dispatchDashboardRosterBonuses } from "./dashboard-roster-bonuses.js"
+import { dispatchAccountMutations } from "./account-mutations.js"
+import { dispatchLinkMutations } from "./link-mutations.js"
+import { dispatchBillingMutations } from "./billing-runtime.js"
+import { dispatchDashboardRosterSnapshots } from "./dashboard-roster-snapshots.js"
+import { dispatchTicketNotifications } from "./ticket-notifications.js"
+import { dispatchInitialization } from "./initialization.js"
+import { dispatchPublicPlayerExtra } from "./public-player-extra.js"
+import { dispatchPublicClanExtra } from "./public-clan-extra.js"
+import { AuthIdentity, type UserPrincipal } from "./auth.js"
+import { serveAppUpdateManifest } from "./app-updates.js"
+import { loadAppConfig } from "./app-config.js"
+import type { ApiFailure } from "./errors.js"
+import { InvalidRequest, NotFound } from "./errors.js"
+import type { WorkerBindings } from "./environment.js"
+import { TenorResolver } from "./tenor.js"
+import { proxyRequest } from "./proxy.js"
+import { queryHomeActivity } from "./home.js"
+import { readBoundedJson } from "./request-body.js"
+import {
+  queryArmyStats,
+  queryCwlStats,
+  queryGroupedCounts,
+  queryGlobalCounts,
+  queryItemStats,
+  queryRankedStats,
+  queryStatsOverview,
+  queryWarStats,
+} from "./stats.js"
+
+const jsonHeaders = { "content-type": "application/json; charset=utf-8" }
+
+const json = (body: unknown, status = 200): Response =>
+  Response.json(body, { status, headers: jsonHeaders })
+
+export const failureResponse = (failure: ApiFailure, requestId: string): Response => {
+  switch (failure._tag) {
+    case "InvalidRequest":
+      return json({ code: "invalid_request", message: failure.message, request_id: requestId, ...(failure.details === undefined ? {} : { details: failure.details }) }, failure.status ?? 400)
+    case "Unauthenticated":
+      return json({ code: "unauthenticated", message: failure.message, request_id: requestId }, 401)
+    case "Forbidden":
+      return json({ code: "forbidden", message: failure.message, request_id: requestId, ...(failure.reason === undefined ? {} : { reason: failure.reason }) }, 403)
+    case "NotFound":
+      return json({ code: "not_found", message: failure.message, request_id: requestId }, 404)
+    case "RateLimited": {
+      const response = json({ code: "rate_limited", message: failure.message, request_id: requestId }, 429)
+      response.headers.set("retry-after", String(failure.retryAfterSeconds))
+      return response
+    }
+    case "Conflict":
+      return json({ code: "conflict", message: failure.message, request_id: requestId, ...(failure.reason === undefined ? {} : { reason: failure.reason }) }, 409)
+    case "PayloadTooLarge":
+      return json({ code: "payload_too_large", message: failure.message, request_id: requestId }, 413)
+    case "UnprocessableEntity":
+      return json({ code: "unprocessable_entity", message: failure.message, request_id: requestId }, 422)
+    case "DatabaseFailure":
+    case "UpstreamUnavailable":
+      return json({ code: "upstream_unavailable", message: failure.message, request_id: requestId }, 503)
+  }
+}
+
+const decodeJson = <A>(request: Request, schema: Schema.Codec<A, unknown, never, never>) =>
+  Effect.gen(function* () {
+    const contentType = request.headers.get("content-type")?.toLowerCase().trim() ?? ""
+    if (!contentType.startsWith("application/json")) {
+      return yield* new InvalidRequest({
+        message: "Content-Type must be application/json",
+        status: 415,
+      })
+    }
+    return yield* readBoundedJson(request)
+  }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(schema)),
+    Effect.mapError((cause) =>
+      cause instanceof InvalidRequest || cause._tag === "PayloadTooLarge"
+        ? cause
+        : new InvalidRequest({ message: "Request body failed schema validation" }),
+    ),
+  )
+
+export const encodeJson = <A>(schema: Schema.Codec<A, unknown, never, never>, value: A, status = 200) =>
+  Schema.encodeUnknownEffect(schema)(value).pipe(
+    Effect.map((encoded) => json(encoded, status)),
+    Effect.orDie,
+  )
+
+const adminCors = (request: Request, response: Response, bindings: WorkerBindings): Response => {
+  const origin = request.headers.get("origin")
+  if (origin === null) return response
+  const allowed = bindings.ADMIN_ALLOWED_ORIGINS.split(",").map((value) => value.trim())
+  if (!allowed.includes(origin)) return response
+  const headers = new Headers(response.headers)
+  headers.set("access-control-allow-origin", origin)
+  headers.set("access-control-allow-credentials", "true")
+  headers.set("access-control-expose-headers", "X-Request-ID, Retry-After, Content-Disposition")
+  headers.append("vary", "Origin")
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+export const browserCors = (request: Request, response: Response, bindings: WorkerBindings): Response => {
+  const origin = request.headers.get("origin")
+  if (origin === null) return response
+  const allowed = bindings.WEB_ALLOWED_ORIGINS.split(",").map((value) => value.trim())
+  if (!allowed.includes(origin)) return response
+  const headers = new Headers(response.headers)
+  headers.set("access-control-allow-origin", origin)
+  headers.set("access-control-allow-credentials", "true")
+  headers.set("access-control-expose-headers", "X-Request-ID, Retry-After, Content-Disposition")
+  headers.append("vary", "Origin")
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+export const applyCors = (request: Request, response: Response, bindings: WorkerBindings): Response =>
+  new URL(request.url).pathname.startsWith("/v2/admin/")
+    ? adminCors(request, response, bindings)
+    : browserCors(request, response, bindings)
+
+export const adminPreflight = (request: Request, bindings: WorkerBindings): Response => {
+  const response = new Response(null, { status: 204 })
+  const withOrigin = adminCors(request, response, bindings)
+  const headers = new Headers(withOrigin.headers)
+  headers.set("access-control-allow-methods", "DELETE, GET, PATCH, POST, PUT")
+  headers.set("access-control-allow-headers", "Content-Type, X-Requested-With, X-Request-ID, Traceparent, Tracestate")
+  headers.set("access-control-max-age", "86400")
+  return new Response(null, { status: 204, headers })
+}
+
+export const browserPreflight = (request: Request, bindings: WorkerBindings): Response => {
+  const withOrigin = browserCors(request, new Response(null, { status: 204 }), bindings)
+  const headers = new Headers(withOrigin.headers)
+  headers.set("access-control-allow-methods", "DELETE, GET, PATCH, POST, PUT")
+  headers.set("access-control-allow-headers", "Accept, Authorization, Content-Type, X-Device-ID, X-Request-ID, Traceparent, Tracestate")
+  headers.set("access-control-max-age", "86400")
+  return new Response(null, { status: 204, headers })
+}
+
+export const route = (request: Request, bindings: WorkerBindings,
+  onProxyResponse?: (principal: UserPrincipal, request: Request, response: Response) => void,
+) =>
+  Effect.gen(function* () {
+    const url = new URL(request.url)
+    if (request.method === "OPTIONS" && url.pathname.startsWith("/v2/admin/")) {
+      return adminPreflight(request, bindings)
+    }
+    if (request.method === "OPTIONS" && (url.pathname.startsWith("/v2/") || url.pathname.startsWith("/proxy/v1/"))) {
+      return browserPreflight(request, bindings)
+    }
+    if (request.method === "GET" && url.pathname === "/v2/health") {
+      return json({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.0" })
+    }
+    if (request.method === "GET" && url.pathname === "/v2/app/config") {
+      return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
+    }
+    if (request.method === "GET" && url.pathname === "/v2/app/updates/manifest") {
+      return yield* serveAppUpdateManifest(request, bindings)
+    }
+    if (request.method === "POST" && url.pathname === "/v2/home/activity") {
+      const body = yield* decodeJson(request, HomeActivityRequest)
+      const auth = yield* AuthIdentity
+      const principal = yield* auth.requireUserOrBot(request)
+      return yield* encodeJson(HomeActivityResponse, yield* queryHomeActivity(body, principal))
+    }
+    if (request.method === "POST" && url.pathname === "/v2/stats/armies") {
+      const body = yield* decodeJson(request, StatsArmiesRequest)
+      return yield* encodeJson(StatsArmiesResponse, yield* queryArmyStats(body))
+    }
+    if (request.method === "POST" && url.pathname === "/v2/stats/items") {
+      const body = yield* decodeJson(request, StatsItemsRequest)
+      return yield* encodeJson(StatsItemsResponse, yield* queryItemStats(body))
+    }
+    if (request.method === "POST" && url.pathname === "/v2/stats/ranked") {
+      const body = yield* decodeJson(request, StatsRankedRequest)
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryRankedStats(body))
+    }
+    if (request.method === "POST" && url.pathname === "/v2/stats/war") {
+      const body = yield* decodeJson(request, StatsWarRequest)
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryWarStats(body))
+    }
+    if (request.method === "POST" && url.pathname === "/v2/stats/cwl") {
+      const body = yield* decodeJson(request, StatsCwlRequest)
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(body))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/stats/overview") {
+      return yield* encodeJson(StatsOverviewResponse, yield* queryStatsOverview({
+        ...(url.searchParams.get("start_date") === null ? {} : { start_date: url.searchParams.get("start_date") as string }),
+        ...(url.searchParams.get("end_date") === null ? {} : { end_date: url.searchParams.get("end_date") as string }),
+      }))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts") {
+      return yield* encodeJson(GlobalCounts, yield* queryGlobalCounts)
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/players/town-halls") {
+      return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("townhall_level"))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/players/league-tiers") {
+      return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("league_tier_id"))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/clans/locations") {
+      return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("location_id"))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/clans/cwl-leagues") {
+      return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("cwl_league_id"))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/clans/capital-leagues") {
+      return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("capital_league_id"))
+    }
+    if (url.pathname.startsWith("/proxy/v1/")) {
+      const auth = yield* AuthIdentity
+      const principal = yield* auth.requireUserOrBot(request)
+      const response = yield* proxyRequest(request, bindings)
+      if (principal.kind === "user" && onProxyResponse !== undefined) {
+        yield* Effect.sync(() => onProxyResponse(principal, request, response))
+      }
+      return response
+    }
+    if (request.method === "POST" && url.pathname === "/v2/media/tenor/resolve") {
+      const body = yield* decodeJson(request, TenorMediaRequest)
+      const auth = yield* AuthIdentity
+      yield* auth.requireUserOrBot(request)
+      const resolver = yield* TenorResolver
+      return yield* encodeJson(TenorMediaResponse, yield* resolver.resolve(body.url))
+    }
+    const authResponse = yield* dispatchAuthLifecycle(request, bindings)
+    if (authResponse !== undefined) return authResponse
+    const accountResponse = yield* dispatchAccountMutations(request)
+    if (accountResponse !== undefined) return accountResponse
+    const linkResponse = yield* dispatchLinkMutations(request, bindings)
+    if (linkResponse !== undefined) return linkResponse
+    const billingResponse = yield* dispatchBillingMutations(request, bindings)
+    if (billingResponse !== undefined) return billingResponse
+    const adminResponse = yield* dispatchAdmin(request, bindings)
+    if (adminResponse !== undefined) return adminResponse
+    const contentResponse = yield* dispatchAppContentNotifications(request, bindings)
+    if (contentResponse !== undefined) return contentResponse
+    const announcementResponse = yield* dispatchAnnouncementMutations(request)
+    if (announcementResponse !== undefined) return announcementResponse
+    const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
+    if (botAdjacentResponse !== undefined) return botAdjacentResponse
+    const moderationResponse = yield* dispatchBotRuntime(request, bindings)
+    if (moderationResponse !== undefined) return moderationResponse
+    const persistentResponse = yield* dispatchPersistentRuntime(request, bindings)
+    if (persistentResponse !== undefined) return persistentResponse
+    const notificationResponse = yield* dispatchTicketNotifications(request, bindings)
+    if (notificationResponse !== undefined) return notificationResponse
+    const metadataResponse = yield* dispatchPublicMetadata(request, bindings)
+    if (metadataResponse !== undefined) return metadataResponse
+    const publicDataResponse = yield* dispatchPublicData(request, bindings)
+    if (publicDataResponse !== undefined) return publicDataResponse
+    const serverResponse = yield* dispatchDashboardServer(request, bindings)
+    if (serverResponse !== undefined) return serverResponse
+    const bonusResponse = yield* dispatchDashboardRosterBonuses(request)
+    if (bonusResponse !== undefined) return bonusResponse
+    const snapshotResponse = yield* dispatchDashboardRosterSnapshots(request, bindings)
+    if (snapshotResponse !== undefined) return snapshotResponse
+    const aiContextResponse = yield* dispatchDashboardRosterAIContext(request, bindings.AI_ROSTER_MAX_PROMPT_CHARS)
+    if (aiContextResponse !== undefined) return aiContextResponse
+    const aiUsageResponse = yield* dispatchDashboardRosterAIUsage(request, bindings.AI_USAGE_SECRET)
+    if (aiUsageResponse !== undefined) return aiUsageResponse
+    const rosterConfigurationResponse = yield* dispatchDashboardRosterConfiguration(request)
+    if (rosterConfigurationResponse !== undefined) return rosterConfigurationResponse
+    const rosterResponse = yield* dispatchDashboardRoster(request, bindings)
+    if (rosterResponse !== undefined) return rosterResponse
+    const miscResponse = yield* dispatchDashboardMisc(request, bindings)
+    if (miscResponse !== undefined) return miscResponse
+    const exportResponse = yield* dispatchWarExports(request)
+    if (exportResponse !== undefined) return exportResponse
+    const mobileResponse = yield* dispatchMobilePersistence(request, bindings)
+    if (mobileResponse !== undefined) return mobileResponse
+    const uploadResponse = yield* dispatchCdnUpload(request, bindings)
+    if (uploadResponse !== undefined) return uploadResponse
+    const mediaResponse = yield* dispatchMedia(request, bindings)
+    if (mediaResponse !== undefined) return mediaResponse
+    const initializationResponse = yield* dispatchInitialization(request, bindings)
+    if (initializationResponse !== undefined) return initializationResponse
+    const playerExtraResponse = yield* dispatchPublicPlayerExtra(request, bindings)
+    if (playerExtraResponse !== undefined) return playerExtraResponse
+    const clanExtraResponse = yield* dispatchPublicClanExtra(request, bindings)
+    if (clanExtraResponse !== undefined) return clanExtraResponse
+    return yield* new NotFound({ message: "Route not found" })
+  })
+
+export const recoverRoute = (requestId: string) =>
+  Effect.catch((failure: ApiFailure) => Effect.succeed(failureResponse(failure, requestId)))
+
+export const recoverDefect = Effect.catchCause(() => {
+  // Schema defects can carry response tokens and SQL defects can carry bound
+  // parameters. Do not serialize arbitrary causes into application logs.
+  console.error(JSON.stringify({ level: "error", event: "unhandled_effect_failure" }))
+  return Effect.succeed(json({ code: "internal_error", message: "Internal server error" }, 500))
+})

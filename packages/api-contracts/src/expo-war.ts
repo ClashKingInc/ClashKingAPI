@@ -1,0 +1,15 @@
+import { Schema } from "effect"
+import { defineEndpoint, NoBody, NoQuery } from "./endpoint.js"
+import { ErrorResponse } from "./errors.js"
+import { ClanTagPath } from "./expo-common.js"
+
+export const WarBadgeUrls = Schema.Struct({ small: Schema.String, large: Schema.String, medium: Schema.String })
+export const WarAttack = Schema.Struct({ attackerTag: Schema.String, defenderTag: Schema.String, stars: Schema.Number, destructionPercentage: Schema.Number, order: Schema.Number, duration: Schema.Number })
+export const WarMember = Schema.Struct({ tag: Schema.String, name: Schema.String, townhallLevel: Schema.Number, mapPosition: Schema.Number, attacks: Schema.optionalKey(Schema.Array(WarAttack)), opponentAttacks: Schema.optionalKey(Schema.Number), bestOpponentAttack: Schema.optionalKey(WarAttack) })
+export const WarClan = Schema.Struct({ tag: Schema.String, name: Schema.String, badgeUrls: WarBadgeUrls, clanLevel: Schema.Number, attacks: Schema.Number, stars: Schema.Number, destructionPercentage: Schema.Number, members: Schema.Array(WarMember) })
+export const WarResponse = Schema.Struct({ state: Schema.String, teamSize: Schema.Number, attacksPerMember: Schema.optionalKey(Schema.Number), battleModifier: Schema.optionalKey(Schema.String), preparationStartTime: Schema.String, startTime: Schema.optionalKey(Schema.String), endTime: Schema.String, clan: WarClan, opponent: WarClan, warStartTime: Schema.optionalKey(Schema.String), tag: Schema.optionalKey(Schema.String) })
+export const BasicWarResponse = Schema.Struct({ clan: Schema.Struct({ tag: Schema.String, publicWarLog: Schema.NullOr(Schema.Boolean) }), opponent: Schema.Struct({ tag: Schema.String, publicWarLog: Schema.NullOr(Schema.Boolean) }), preparationStartTime: Schema.String, endTime: Schema.String, type: Schema.String, warTag: Schema.optionalKey(Schema.String) })
+const NotFound = [{ status: 404, body: ErrorResponse }] as const
+
+export const WarBasicEndpoint = defineEndpoint({ operationId: "getExpoWarBasic", method: "GET", path: "/v2/war/:clanTag/basic", auth: "public", summary: "Get the current stored war pointer for a clan", body: NoBody, bodyMode: "none", pathParams: ClanTagPath, query: NoQuery, response: Schema.NullOr(BasicWarResponse), responseMode: "json", successStatus: 200 })
+export const WarPreviousEndpoint = defineEndpoint({ operationId: "getExpoPreviousWar", method: "GET", path: "/v2/war/:clanTag/previous/:endTime", auth: "public", summary: "Get a stored war by its end time", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ clanTag: Schema.String, endTime: Schema.String }), query: NoQuery, response: WarResponse, responseMode: "json", successStatus: 200, errors: NotFound })

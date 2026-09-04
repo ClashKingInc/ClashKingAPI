@@ -1,0 +1,23 @@
+import { Effect } from "effect"
+import { describe, expect, it } from "vitest"
+
+import { statsDateWindow } from "./stats.js"
+
+describe("stats date-window validation", () => {
+  it("defaults to the inclusive trailing 30-day window", async () => {
+    const result = await Effect.runPromise(statsDateWindow({}, new Date("2026-09-03T18:00:00Z")))
+    expect(result.start.toISOString()).toBe("2026-08-05T00:00:00.000Z")
+    expect(result.end.toISOString()).toBe("2026-09-03T00:00:00.000Z")
+    expect(result.endExclusive.toISOString()).toBe("2026-09-04T00:00:00.000Z")
+  })
+
+  it("rejects invalid calendar dates and windows over 90 days", async () => {
+    await expect(Effect.runPromise(statsDateWindow({ start_date: "2026-02-30" }))).rejects.toMatchObject({
+      _tag: "InvalidRequest",
+    })
+    await expect(Effect.runPromise(statsDateWindow({
+      start_date: "2026-01-01",
+      end_date: "2026-04-01",
+    }))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+  })
+})

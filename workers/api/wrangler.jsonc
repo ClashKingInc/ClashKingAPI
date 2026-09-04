@@ -1,0 +1,152 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clashking-api-v2",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  // Timescale is private on the single-homed netcup API host. Port 22 is the
+  // existing public TCP probe; PostgreSQL remains bound to loopback only.
+  "placement": { "host": "152.53.82.182:22" },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    // Invocation records and automatic traces contain bearer transcript URLs.
+    // Application logs remain available for non-transcript requests only.
+    "logs": { "enabled": true, "invocation_logs": false },
+    "traces": { "enabled": false }
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MATERIALIZED_VIEW_REFRESHER",
+        "class_name": "MaterializedViewRefresher"
+      },
+      {
+        "name": "SHARED_LINKS_LIMITER",
+        "class_name": "SharedLinksRateLimiter"
+      },
+      {
+        "name": "TICKET_RUNTIME",
+        "class_name": "TicketRuntimeCoordinator"
+      },
+      {
+        "name": "RUNTIME_RECOVERY",
+        "class_name": "RuntimeRecoveryCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MaterializedViewRefresher"]
+    },
+    {
+      "tag": "v2-shared-links-limit",
+      "new_sqlite_classes": ["SharedLinksRateLimiter"]
+    },
+    {
+      "tag": "v3-ticket-runtime",
+      "new_sqlite_classes": ["TicketRuntimeCoordinator"]
+    },
+    {
+      "tag": "v4-runtime-recovery",
+      "new_sqlite_classes": ["RuntimeRecoveryCoordinator"]
+    }
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "API_CACHE",
+      "id": "c453223f6f344d3086c2a15877d1ad51"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "WAR_ARCHIVE",
+      "bucket_name": "clashking-wars"
+    },
+    {
+      "binding": "POSTS",
+      "bucket_name": "clashking-posts"
+    },
+    {
+      "binding": "APP_UPDATES",
+      "bucket_name": "clashking-app-updates"
+    },
+    {
+      "binding": "MEDIA",
+      "bucket_name": "clashking-media"
+    },
+    {
+      "binding": "TICKETING",
+      "bucket_name": "clashking-ticketing"
+    }
+  ],
+  // These are private HTTP origins on the Go service host, not Workers.
+  // Real VPC service IDs and origin connectivity are release prerequisites.
+  "vpc_services": [
+    {
+      "binding": "CLASH_PROXY",
+      "service_id": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "binding": "TRACKING",
+      "service_id": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "binding": "ELASTICSEARCH",
+      "service_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "STRIPE_MONTHLY_PRICE_ID": "",
+    "STRIPE_CHECKOUT_SUCCESS_URL": "",
+    "STRIPE_CHECKOUT_CANCEL_URL": "",
+    "STRIPE_PORTAL_RETURN_URL": "",
+    "ROSTER_REFRESH_COOLDOWN_MINUTES": "15",
+    "AI_ROSTER_MAX_PROMPT_CHARS": "12000",
+    "ELASTICSEARCH_PLAYERS_ALIAS": "clashking_players",
+    "ELASTICSEARCH_CLANS_ALIAS": "clashking_clans",
+    "DISCORD_API_ORIGIN": "https://discord.com/api/v10",
+    "DISCORD_PUBLIC_KEY": "",
+    "DISCORD_APPLICATION_ID": "",
+    "DISCORD_MAIN_APPLICATION_ID": "",
+    "DISCORD_TICKET_NOTIFICATIONS_ENABLED": "false",
+    "DISCORD_REDIRECT_URI": "https://dash.clashk.ing/auth/callback",
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "587",
+    "SMTP_STARTTLS": "true",
+    "SMTP_SSL_TLS": "false",
+    "SMTP_FROM_ADDRESS": "noreply@clashk.ing",
+    "SMTP_REPLY_TO_ADDRESS": "noreply@clashk.ing",
+    "ADMIN_NOTIFICATION_LAB_ENABLED": "false",
+    "CONNECT_PUBLIC_ORIGIN": "https://connect.clashk.ing",
+    "ADMIN_ALLOWED_ORIGINS": "http://localhost:5173",
+    "WEB_ALLOWED_ORIGINS": "http://localhost:3002,http://localhost:8081",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUDIENCE": "",
+    "NATIVE_TOKEN_AUDIENCE": "clashking-native",
+    "WEB_TOKEN_AUDIENCE": "clashking-web",
+    "IOS_MINIMUM_VERSION": "0.0.0",
+    "IOS_STORE_URL": "https://apps.apple.com/app/id0000000000",
+    "ANDROID_MINIMUM_VERSION": "0.0.0",
+    "ANDROID_STORE_URL": "https://play.google.com/store/apps/details?id=ing.clashk",
+    "FORCED_UPDATE_MESSAGE": "A newer version of ClashKing is required.",
+    "POSTS_PUBLIC_ORIGIN": "https://posts.clashk.ing",
+    "APP_UPDATES_PUBLIC_ORIGIN": "https://updates.clashk.ing",
+    "TENOR_ALLOWED_HOSTS": "tenor.com,www.tenor.com",
+    "TENOR_MEDIA_ALLOWED_HOSTS": "media.tenor.com,c.tenor.com"
+  }
+}

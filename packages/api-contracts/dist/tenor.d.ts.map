@@ -1,0 +1,1 @@
+{"version":3,"file":"tenor.d.ts","sourceRoot":"","sources":["../src/tenor.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,QAAQ,CAAA;AAI/B,eAAO,MAAM,iBAAiB;;EAE5B,CAAA;AAEF,eAAO,MAAM,kBAAkB;;;;;;EAM7B,CAAA;AAEF,eAAO,MAAM,kBAAkB;;;;;;;;gBAa7B,CAAA;AAEF,MAAM,MAAM,iBAAiB,GAAG,OAAO,iBAAiB,CAAC,IAAI,CAAA;AAC7D,MAAM,MAAM,kBAAkB,GAAG,OAAO,kBAAkB,CAAC,IAAI,CAAA"}

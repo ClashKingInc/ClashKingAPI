@@ -11,6 +11,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  typescript:
+    name: TypeScript Worker and packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --strict-peer-deps
+
+      - name: Validate contracts, client, and Worker
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:scripts
+          npm run test:durable
+          npm run test:archive-runtime
+          npm run lint
+          npm run openapi:check
+          npm run build
+
+  # --- Build ------------------------------------------------------------------
+  postgres:
+    name: Authoritative PostgreSQL integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout authoritative schema and fixture harness
+        uses: actions/checkout@v6
+        with:
+          repository: ClashKingInc/DevKit
+          ref: ${{ vars.API_SCHEMA_TEST_REF || 'main' }}
+          path: .schema-test
+          token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
+
+      - name: Validate schema fixture checkout
+        run: bash scripts/test-postgres.sh --check .schema-test
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .schema-test/database/go.mod
+          cache: false
+
+      - name: Install pinned Goose and API dependencies
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@v3.26.0
+          npm ci --strict-peer-deps
+          npm run build --workspace @clashking/api-contracts
+
+      - name: Validate database runner wiring
+        run: npm run test:scripts
+
+      - name: Run each suite against a fresh migrated Timescale database
+        run: npm run test:postgres:all -- .schema-test
+
   # --- Build ------------------------------------------------------------------
   build:
     name: Build

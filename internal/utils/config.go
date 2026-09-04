@@ -36,6 +36,7 @@ type Config struct {
 	LandingOrigin                string
 	DashboardOrigin              string
 	AppOrigin                    string
+	AppUpdatesR2Origin           string
 	WebAllowedOrigins            []string
 	DiscordRedirectURI           string
 	DiscordClientID              string
@@ -95,6 +96,7 @@ func Load() (Config, error) {
 		LandingOrigin:                landingOrigin,
 		DashboardOrigin:              dashboardOrigin,
 		AppOrigin:                    appOrigin,
+		AppUpdatesR2Origin:           normalizeOrigin(os.Getenv("APP_UPDATES_R2_ORIGIN")),
 		WebAllowedOrigins:            nonEmptyStrings(landingOrigin, dashboardOrigin, appOrigin),
 		DiscordRedirectURI:           appendOriginPath(dashboardOrigin, "/auth/callback"),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),

@@ -1,0 +1,66 @@
+name: Release API packages
+
+on:
+  push:
+    tags:
+      - "api-packages-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-package-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci --strict-peer-deps
+      - run: node --test scripts/api-package-release.test.mjs
+      - run: npm run typecheck && npm test && npm run lint
+      - run: npm run openapi:check
+      - name: Build and pack the matching package pair before publication
+        id: packages
+        run: node scripts/api-package-release.mjs prepare
+
+      - name: Preserve the exact publication artifacts and manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-packages-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ steps.packages.outputs.directory }}
+          if-no-files-found: error
+
+      - name: Check both registry versions and artifact integrity
+        id: registry
+        env:
+          PACKAGE_DIRECTORY: ${{ steps.packages.outputs.directory }}
+        run: node scripts/api-package-release.mjs check "$PACKAGE_DIRECTORY"
+
+      - name: Publish contracts only if absent
+        if: steps.registry.outputs.contracts != ''
+        env:
+          PACKAGE_TARBALL: ${{ steps.registry.outputs.contracts }}
+        run: npm publish "$PACKAGE_TARBALL" --ignore-scripts --workspaces=false --access public --provenance --tag rc
+
+      - name: Publish client only if absent
+        if: steps.registry.outputs.client != ''
+        env:
+          PACKAGE_TARBALL: ${{ steps.registry.outputs.client }}
+        run: npm publish "$PACKAGE_TARBALL" --ignore-scripts --workspaces=false --access public --provenance --tag rc
+
+      - name: Verify both published versions match the prepared bytes
+        env:
+          PACKAGE_DIRECTORY: ${{ steps.packages.outputs.directory }}
+        run: node scripts/api-package-release.mjs verify "$PACKAGE_DIRECTORY"

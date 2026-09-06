@@ -3,7 +3,7 @@ import { zstdCompressSync } from "node:zlib"
 import { describe, expect, it } from "vitest"
 import { createArchiveDecoder, MAX_ARCHIVE_FRAME_BYTES, MAX_ARCHIVE_JSON_BYTES } from "./war-archive-codec.js"
 
-const dictionary = readFileSync("internal/wararchive/war-json.zdict")
+const dictionary = readFileSync("workers/api/assets/war-json.zdict")
 const module = new WebAssembly.Module(readFileSync("node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm"))
 describe("war archive dictionary codec", () => {
   it("decodes the real archive dictionary, repeatedly without retaining prior output", () => {

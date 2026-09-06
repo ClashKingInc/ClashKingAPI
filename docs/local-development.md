@@ -7,7 +7,7 @@ removed when the command finishes.
 From this API repository, with Node 26, Docker Desktop, and Goose installed:
 
 ```sh
-node scripts/local-api-database.mjs run
+npm run dev
 ```
 
 The launcher creates/reuses the owned `clashking-rewrite-api-dev` container and
@@ -21,8 +21,8 @@ Each startup applies the authoritative sibling `clashking_schemas` retained API
 profile with Goose. Its current ceiling is migration 028. No schema is invented
 in the API launcher, and applied migrations are not rerun.
 
-`Ctrl-C` stops the API process but preserves the database and volume. Running the
-same command again retains settings, account records, and other SQL data. To
+`Ctrl-C` stops the API process but preserves the database and volume. Running
+`npm run dev` again retains settings, account records, and other SQL data. To
 stop the database separately, use `docker stop clashking-rewrite-api-dev`; the
 next launcher invocation starts it again. Do not remove its named volume.
 

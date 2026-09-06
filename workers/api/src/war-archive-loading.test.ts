@@ -8,7 +8,7 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 
 const clan = { tag: "#ABC", name: "Clan", badgeToken: "", clanLevel: 1, attacks: 0, stars: 0, destructionPercentage: 0, members: [] }
 const stored = { state: "warEnded", teamSize: 5, attacksPerMember: 2, preparationStartTime: "2026-01-01T00:00:00Z", startTime: "2026-01-02T00:00:00Z", endTime: "2026-01-03T00:00:00Z", battleModifier: "", clan, opponent: { ...clan, tag: "#DEF" } }
-const dictionary = readFileSync("internal/wararchive/war-json.zdict")
+const dictionary = readFileSync("workers/api/assets/war-json.zdict")
 const fixture = (count: number, padding = "") => {
   const frame = zstdCompressSync(JSON.stringify({ ...stored, padding }), { dictionary })
   let active = 0, peak = 0

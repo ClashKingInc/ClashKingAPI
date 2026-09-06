@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { expect, it } from "vitest"
 import { initializationProxy } from "./initialization.js"
 import type { WorkerBindings } from "./environment.js"
-import { ProxyWarlogResponse, ProxyClanResponse, ProxyCurrentWarResponse, ProxyRankingsResponse } from "../../../packages/api-contracts/src/proxy.js"
+import { ProxyWarlogResponse, ProxyClanResponse, ProxyCurrentWarResponse, ProxyPlayerRankingsEndpoint } from "../../../packages/api-contracts/src/proxy.js"
 
 const bindings = (fetch: (request: Request) => Promise<Response>) => ({ CLASH_PROXY: { fetch } }) as unknown as WorkerBindings
 const schema = Schema.Struct({ tag: Schema.String })
@@ -11,11 +11,12 @@ it("accepts empty clan placeholders only for a no-war response", () => {
   expect(() => Schema.decodeUnknownSync(ProxyCurrentWarResponse)({ state: "inWar", clan: {}, opponent: {} })).toThrow()
 })
 it("accepts leaderboard clan identities without a clan level", () => {
-  const item = { tag: "#PLAYER", name: "Player", rank: 1, clan: { tag: "#CLAN", name: "Clan", badgeUrls: { small: "", medium: "", large: "" } } }
-  expect(Schema.decodeUnknownSync(ProxyRankingsResponse)({ items: [item] })).toEqual({ items: [item] })
+  const item = { tag: "#PLAYER", name: "Player", expLevel: 200, rank: 1, previousRank: 2, trophies: 5000,
+    clan: { tag: "#CLAN", name: "Clan", badgeUrls: { small: "", medium: "", large: "" } } }
+  expect(Schema.decodeUnknownSync(ProxyPlayerRankingsEndpoint.response)({ items: [item] })).toEqual({ items: [item] })
 })
 it("accepts an undeveloped Clan Capital without hall level or districts", () => {
-  expect(Schema.decodeUnknownSync(ProxyClanResponse.fields.clanCapital)({ clanGoldSinkTotal: 0 })).toEqual({})
+  expect(Schema.decodeUnknownSync(ProxyClanResponse.fields.clanCapital)({ clanGoldSinkTotal: 0 })).toEqual({ clanGoldSinkTotal: 0 })
 })
 it("accepts an official war-log opponent without an attack count", async () => {
   const side = { tag: "#TEST", name: "Test", badgeUrls: { small: "", medium: "", large: "" }, clanLevel: 1, stars: 3, destructionPercentage: 100 }

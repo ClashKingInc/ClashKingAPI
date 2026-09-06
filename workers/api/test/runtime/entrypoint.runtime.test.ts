@@ -41,7 +41,7 @@ it("runs the complete fetch entrypoint inside workerd without external services"
     modules: [
       { type: "ESModule", path: "/entrypoint-test/index.js", contents: script },
       { type: "CompiledWasm", path: "/entrypoint-test/zstd.wasm", contents: readFileSync("node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm") },
-      { type: "Data", path: "/entrypoint-test/dictionary.bin", contents: readFileSync("internal/wararchive/war-json.zdict") },
+      { type: "Data", path: "/entrypoint-test/dictionary.bin", contents: readFileSync("workers/api/assets/war-json.zdict") },
     ],
     compatibilityDate: "2026-08-22", compatibilityFlags: ["nodejs_compat"],
     r2Buckets: ["MEDIA", "TICKETING"],

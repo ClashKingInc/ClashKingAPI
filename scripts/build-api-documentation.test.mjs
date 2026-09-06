@@ -36,6 +36,7 @@ test("documentation build includes only current schemas and preserved viewers wi
     const names = await buildApiDocumentation(resolve("."), destination, source)
     assert.deepEqual((await readdir(destination)).sort(), names.sort())
     const document = JSON.parse(await readFile(join(destination, "openapi.json"), "utf8"))
+    assert.equal(Object.keys(document.paths).some(path => path.startsWith("/proxy/v1/")), false)
     assert.ok(document.paths["/v2/home/activity"].post)
     assert.equal(document.paths["/v2/home/activity"].query, undefined)
     assert.deepEqual(Object.keys(document.paths).filter(path => path.startsWith("/v2/admin/")), ["/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries"])

@@ -26,25 +26,20 @@ The interactive reference shows the available routes, what to send, what comes b
 
 ## Project layout
 
-- `workers/api` contains the Effect v4 / TypeScript Cloudflare Worker replacement.
+- `workers/api` contains the Effect v4 / TypeScript Cloudflare Worker API.
 - `packages/api-contracts` owns shared request/response schemas and endpoint definitions.
 - `packages/api-client` provides the typed request client used by the separate consumers.
-- `internal/routes`, `internal/models` and `internal/utils` retain the Go source as
-  the behavior baseline; the Worker does not run or forward requests to Go.
 - `scripts/generate-openapi.mjs` generates the complete internal schema from
   shared contracts. `npm run docs:build` produces the public documentation assets
-  actually served by the Worker; `internal/swaggerdocs` remains the original Go
-  reference, not the new generated output.
+  served by the Worker.
 - `locales` contains messages sent to users in supported languages.
 
-## Local Worker replacement
+## Local development
 
-This independent checkout contains an uncommitted replacement candidate, not
-the currently deployed API. The source comparison is recorded in
-[current-origin reconciliation](docs/current-origin-reconciliation.md). It stays
-on `/v2`, replaces the six QUERY methods with POST, retains Dashboard business
-handlers, and moves Admin business handlers into the API. Dashboard and Admin
-frontends are separate Workers; Bot runtime work remains a separate plan.
+The API runs on Cloudflare Workers with Effect and TypeScript. It stays on
+`/v2`, uses POST for the six former QUERY operations, retains Dashboard business
+handlers, and owns Admin business handlers. Dashboard and Admin frontends are
+separate Workers; Bot runtime work remains a separate plan.
 
 Use Node 26 and npm 12, with the pinned Effect/TypeScript versions:
 
@@ -56,7 +51,6 @@ npm run test:scripts
 npm run test:durable
 npm run test:archive-runtime
 npm run lint
-npm run parity:check
 npm run openapi:check
 npm run build
 ```
@@ -66,9 +60,9 @@ requires the authoritative schema copy's disposable Goose/Timescale harness:
 `npm run test:postgres:all -- /path/to/clashking_schemas`. It never uses an
 inherited production connection. Deferred Bot tests are not active API acceptance.
 
-For interactive Dashboard/App development, use
-`node scripts/local-api-database.mjs run`. This is the recommended persistent
-local database startup; the disposable harness above is for tests only. See
+For interactive Dashboard/App development, use `npm run dev`. It generates the
+contracts and API documentation before starting the persistent local database;
+the disposable harness above is for tests only. See
 [local development and the one-time data handoff](docs/local-development.md)
 before switching an already running temporary database.
 

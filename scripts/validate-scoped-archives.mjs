@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createArchiveDecoder } from '../workers/api/src/war-archive-codec.ts'
 const root = '.local/scoped-import'
-const decode = createArchiveDecoder(new WebAssembly.Module(readFileSync('node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm')), readFileSync('internal/wararchive/war-json.zdict'))
+const decode = createArchiveDecoder(new WebAssembly.Module(readFileSync('node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm')), readFileSync('workers/api/assets/war-json.zdict'))
 const wars = readFileSync(`${root}/wars.jsonl`, 'utf8').trim().split('\n').map(JSON.parse)
 const offsets = JSON.parse(readFileSync(`${root}/local-archive-offsets.json`))
 const packs = {}

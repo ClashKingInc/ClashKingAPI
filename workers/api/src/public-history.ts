@@ -8,7 +8,7 @@ import { badgeUrls } from "./war-archive-model.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import type { WorkerBindings } from "./environment.js"
 import { readBoundedJson } from "./request-body.js"
-import locations from "../../../internal/routes/search_locations.json"
+import locations from "./data/search-locations.json"
 
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Leaderboard history query failed" })
 const kinds = {

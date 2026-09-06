@@ -16,8 +16,8 @@ export function jsonToYaml(value, indent = 0) {
   }).join("\n")
 }
 
-// Admin's moved application routes were not in the Go public specification.
-// Keep the full internal artifact for tooling, but publish only the original
+// Admin application routes are private and are excluded from public docs.
+// Keep the full internal artifact for tooling, but publish only the public
 // two service health reads and remove components used solely by private routes.
 export function publicApiDocument(document) {
   const publicTracking = new Set(["/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries"])

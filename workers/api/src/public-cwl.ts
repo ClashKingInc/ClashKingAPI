@@ -18,7 +18,13 @@ export interface CwlWar {
   clan_tag: string; opponent_tag: string; clan_stars: number; opponent_stars: number;
   clan_destruction_percentage: number; opponent_destruction_percentage: number
 }
-export const StoredCwlRounds = Schema.Array(Schema.Struct({ warTags: Schema.Array(Schema.String) }))
+export const StoredCwlRounds = Schema.Union([
+  Schema.Array(Schema.Array(Schema.String)),
+  Schema.Array(Schema.Struct({ warTags: Schema.Array(Schema.String) })),
+])
+export const decodeStoredCwlRounds = (value: unknown) => Schema.decodeUnknownEffect(StoredCwlRounds)(value).pipe(
+  Effect.map((items): readonly (readonly string[])[] => items.map((item) => "warTags" in item ? item.warTags : item)),
+)
 const validTag = (tag: string) => tag !== "" && tag !== "#0"
 const finished = (state: string) => ["warended", "ended"].includes(state.trim().toLowerCase())
 const month = (season: string) => /^\d{4}-(0[1-9]|1[0-2])(?:-\d{2})?$/u.test(season) && !Number.isNaN(Date.parse(season)) ? season.slice(0, 7) : ""
@@ -35,7 +41,7 @@ export const loadCwlGroups = (clanTag: string) => Effect.gen(function* () {
     JOIN cwl_group_clans all_clans ON all_clans.cwl_id = g.cwl_id WHERE requested.clan_tag = ${clanTag}
     GROUP BY g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size
     ORDER BY CASE WHEN length(g.season) = 7 THEN g.season || '-01' ELSE g.season END, g.cwl_id`.pipe(Effect.mapError(failure))
-  return yield* Effect.forEach(rows, (row) => Schema.decodeUnknownEffect(StoredCwlRounds)(row.rounds).pipe(Effect.map((rounds): CwlGroup => ({ ...row, rounds: rounds.map(round => round.warTags) })), Effect.mapError(failure)))
+  return yield* Effect.forEach(rows, (row) => decodeStoredCwlRounds(row.rounds).pipe(Effect.map((rounds): CwlGroup => ({ ...row, rounds })), Effect.mapError(failure)))
 })
 export const loadCwlWars = (groups: readonly CwlGroup[]) => Effect.gen(function* () {
   const tags = [...new Set(groups.flatMap((group) => group.rounds.flat().filter(validTag)))]

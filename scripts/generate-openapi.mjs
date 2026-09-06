@@ -75,6 +75,9 @@ const normalizedPath = (path) => path.replaceAll(/:([A-Za-z0-9_]+)/gu, "{}")
 const endpoints = new Map()
 for (const endpointMap of endpointMaps) {
   for (const endpoint of Object.values(endpointMap)) {
+    // The proxy is an authenticated transport for first-party clients. Its wire
+    // contract is documented by MockAPI, not as part of ClashKing's public API.
+    if (endpoint.path.startsWith("/proxy/v1/")) continue
     if (endpoint.path.startsWith("/v2/runtime/")) {
       throw new Error(`Deferred bot runtime cannot be advertised in OpenAPI: ${endpoint.operationId}`)
     }

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 import { renderAuthEmail, sendSmtp, smtpOptions } from "./auth-mailer.js"
@@ -19,16 +18,15 @@ describe("auth SMTP security and template parity", () => {
     }
   })
 
-  it("uses the authoritative Go catalog/template and escapes untrusted names", () => {
-    const go = readFileSync(new URL("../../../internal/utils/mailer.go", import.meta.url), "utf8")
+  it("uses the shared catalog and escapes untrusted names", () => {
     for (const kind of ["verification", "password_reset"] as const) {
       const output = renderAuthEmail({ kind, recipient: "reader@example.test", username: '<script>alert("x")</script>', code: "123456", locale: "unsupported" })
       expect(output.html).toContain("&lt;script&gt;")
       expect(output.html).not.toContain("<script>")
       expect(output.html).toContain('<html lang="en">')
+      expect(output.html).toContain('role="presentation"')
+      expect(output.html).toContain("https://assets.clashk.ing/logos/crown-arrow-dark-bg/ClashKing-1.png")
       expect(output.text).toContain("Code: 123456")
-      const literalStyles = [...go.matchAll(/style="([^"]+)"/g)].map((match) => match[1]!)
-      for (const style of literalStyles) expect(output.html).toContain(`style="${style}"`)
     }
   })
 

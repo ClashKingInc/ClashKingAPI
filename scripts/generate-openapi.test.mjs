@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import * as deferred from "@clashking/api-contracts/deferred-runtime"
 
-test("generated OpenAPI excludes every deferred runtime operation and keeps baseline routes", () => {
+test("generated OpenAPI excludes internal transport and deferred runtime operations", () => {
   const directory = mkdtempSync(join(tmpdir(), "clashking-openapi-boundary-"))
   try {
     const output = join(directory, "openapi.json")
@@ -51,11 +51,7 @@ test("generated OpenAPI excludes every deferred runtime operation and keeps base
     const unavailable = builderHall.responses["501"].content["application/json"].schema
     assert.deepEqual(unavailable.properties.code.enum, ["not_implemented"])
     assert.deepEqual(unavailable.properties.message.enum, ["Builder Hall counts are not implemented"])
-    const proxyOperations = Object.entries(document.paths)
-      .filter(([path]) => path.startsWith("/proxy/v1/"))
-      .flatMap(([, methods]) => Object.values(methods))
-    assert.equal(proxyOperations.length, 18)
-    for (const operation of proxyOperations) assert.equal(operation["x-clashking-auth"], "user")
+    assert.equal(Object.keys(document.paths).some(path => path.startsWith("/proxy/v1/")), false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -100,7 +100,7 @@ export async function sendSmtp(options: SMTPTransport.Options, message: nodemail
       await ready
       extensions = await command("EHLO clashk.ing", 250)
     }
-    // Match the existing Go smtp.PlainAuth, exclusively over verified TLS.
+    // Use SMTP AUTH PLAIN exclusively over verified TLS.
     await command(`AUTH PLAIN ${Buffer.from(`\0${auth.user}\0${auth.pass}`).toString("base64")}`, 235)
     if (addresses.some((address) => [...String(address)].some((character) => character.charCodeAt(0) > 127)) && !supports("SMTPUTF8")) throw new Error("SMTPUTF8 unavailable")
     await command(`MAIL FROM:<${mime.envelope.from}>${supports("8BITMIME") ? " BODY=8BITMIME" : ""}${supports("SMTPUTF8") ? " SMTPUTF8" : ""}`, 250)
@@ -194,8 +194,8 @@ class SmtpReplies {
 function unavailable() { return new UpstreamUnavailable({ cause: "SMTP delivery failed", message: "Authentication email could not be sent. Please try again." }) }
 
 export function renderAuthEmail(message: AuthEmailMessage) {
-  // en.json is currently the sole authoritative Go catalog; Go falls back to
-  // English for every unsupported locale too. Reuse its text instead of a fork.
+  // en.json is the authoritative authentication-email catalog. Unsupported
+  // locales currently fall back to English.
   const prefix = `email.${message.kind}.` as const
   const text = (key: keyof typeof catalog) => catalog[key]
   const title = text(`${prefix}heading`)

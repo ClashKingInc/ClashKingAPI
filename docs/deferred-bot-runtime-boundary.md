@@ -23,8 +23,8 @@ history. Archived HTML readers are not mounted.
   treat it as a supported API surface. Package publication remains deferred.
 - Dashboard giveaway reroll no longer checks or enqueues speculative bot
   publication journals. Tests forbid those dependencies and preserve the
-  endpoint's write-access check. Other baseline differences, including entry
-  weighting, remain recorded in `worker-route-inventory-review.md`.
+  endpoint's write-access check. Entry weighting remains unchanged from the
+  accepted rewrite behavior.
 - `DeferredRuntimeBindings` is a separate reference-only type for dormant
   dispatchers and coordinator tests. Active `WorkerBindings`, `WorkerEnvironment`
   and entrypoint handlers contain neither `TICKET_RUNTIME` nor `RUNTIME_RECOVERY`;

@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "clashking-api-v2" generated at 2026-09-05T13:56:28.504Z.

@@ -7,7 +7,7 @@ import { lookupStaticItem } from "./static-metadata.js"
 
 type Group = typeof CurrentCwlGroup.Type
 type War = typeof ProxyWarResponse.Type
-type Member = NonNullable<War["clan"]>["members"][number]
+type Member = NonNullable<NonNullable<War["clan"]>["members"]>[number]
 type GroupMember = Group["clans"][number]["members"][number]
 type Enrichment = typeof CwlMemberEnrichment.Type
 interface Score {
@@ -59,11 +59,12 @@ export const enrichLeagueInfo = (group: Group, wars: readonly War[]): typeof Enr
     if (war.state !== "inWar" && war.state !== "warEnded") continue
     for (const [clan, opponent] of [[war.clan, war.opponent], [war.opponent, war.clan]]) {
       if (!clan) continue
+      if (!clan.tag) continue
       const summary = summaries.get(clan.tag)
       if (!summary) continue
-      summary.stars += clan.stars; summary.wars++
-      const opponents = new Map(opponent?.members.map((member) => [member.tag, member]))
-      for (const member of clan.members) {
+      summary.stars += clan.stars ?? 0; summary.wars++
+      const opponents = new Map((opponent?.members ?? []).map((member) => [member.tag, member]))
+      for (const member of clan.members ?? []) {
         const stats = summary.members.get(member.tag) ?? memberStats(member.townhallLevel)
         summary.members.set(member.tag, stats)
         if (member.townhallLevel > 0) stats.townHall = member.townhallLevel

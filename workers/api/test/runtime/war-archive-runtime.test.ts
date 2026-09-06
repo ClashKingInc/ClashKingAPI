@@ -5,7 +5,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare"
 import { expect, it } from "vitest"
 
 it("decodes the production dictionary inside workerd with static WASM imports", async () => {
-  const dictionary = readFileSync("internal/wararchive/war-json.zdict")
+  const dictionary = readFileSync("workers/api/assets/war-json.zdict")
   const compressed = zstdCompressSync("dictionary round trip", { dictionary })
   const result = await build({
     stdin: { contents: `

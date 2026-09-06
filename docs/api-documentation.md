@@ -1,10 +1,10 @@
 # Public API documentation in the API Worker
 
-The source baseline is freshly fetched Go main
-`cf7371e4a32b4a37afd7c80ff83c72ef29b425e4`, including
-`internal/swaggerdocs/swaggerdocs.go` and its public OpenAPI artifact. The
-templates retain the existing ClashKing presentation, Scalar 1.63.0 and Swagger
-UI 5.32.11. No frontend app or additional Worker is included here.
+The presentation was originally reconciled against API revision
+`cf7371e4a32b4a37afd7c80ff83c72ef29b425e4`. The retired implementation and its
+generated OpenAPI files are no longer kept in this repository. The current
+templates retain the ClashKing presentation, Scalar 1.63.0 and Swagger UI
+5.32.11. No frontend app or additional Worker is included here.
 
 ## Retained behavior
 
@@ -19,11 +19,13 @@ UI 5.32.11. No frontend app or additional Worker is included here.
   runs before SQL/auth/provider service construction, forwards no caller
   headers to the asset binding, and does not accept arbitrary asset paths.
 
-The public schema omits the Admin application's newly moved private operations,
-as the original API reference did. The original two Tracking summary/timeseries
-reads remain documented. Unreferenced schema/security components are removed
-from this public projection as well. The full generated `dist/openapi.json`
-remains available locally for internal tooling; it is not the served file.
+The generated ClashKing schema omits `/proxy/v1/*`; MockAPI owns and documents
+the Clash wire contract used by those authenticated first-party routes. The
+public projection also omits the Admin application's newly moved private
+operations, as the original API reference did. The original two Tracking
+summary/timeseries reads remain documented. Unreferenced schema/security
+components are removed from this public projection as well. The generated
+`dist/openapi.json` remains available locally for tooling; it is not served.
 This is documentation scope, not a substitute for endpoint authorization.
 Feature navigation preserves the original method/path tags and tag order from
 the pinned public specification. A compact checked-in source map and explicit
@@ -33,7 +35,7 @@ operation order using the current path parameter names.
 
 ## Build and verification
 
-`npm run docs:build` builds the current contract package, generates its full
+`npm run docs:build` builds the current contract package, generates ClashKing
 OpenAPI, creates the filtered public JSON/YAML, and copies the preserved viewer
 templates into `workers/api/documentation-assets`. Only four explicitly named
 files are allowed in that directory; an unexpected file fails the build.

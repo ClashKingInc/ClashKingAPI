@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "clashking-api-v2",
+  "name": "clashking-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
@@ -115,7 +115,7 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "STRIPE_MONTHLY_PRICE_ID": "",
     "STRIPE_CHECKOUT_SUCCESS_URL": "",
     "STRIPE_CHECKOUT_CANCEL_URL": "",

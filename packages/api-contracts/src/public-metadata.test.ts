@@ -1,20 +1,18 @@
-import { readFileSync } from "node:fs"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
-import { publicEnumCatalog, publicMetadataEndpoints, GuildSummaryQuery, PublicConfigResponse, MobilePublicConfigResponse } from "./public-metadata.js"
+import { publicEnumCatalog, publicMetadataEndpoints, EnumCatalogResponse, GuildSummaryQuery, PublicConfigResponse, MobilePublicConfigResponse } from "./public-metadata.js"
 
 describe("public metadata contracts", () => {
-  it("preserves every Go enum ID, value, description, scope, and ordering", () => {
-    const source = readFileSync(new URL("../../../internal/models/v2/enums.go", import.meta.url), "utf8")
-    for (const [name, key] of [
-      ["RoleTypeEnums", "role_types"], ["RoleModeEnums", "role_modes"],
-      ["LogTypeEnums", "log_types"], ["CountdownTypeEnums", "countdown_types"],
-    ] as const) {
-      const block = source.match(new RegExp(`var ${name} = \\[\\]EnumValue\\{([\\s\\S]*?)\\n\\}`))?.[1]
-      expect(block).toBeDefined()
-      const values = [...block!.matchAll(/ID: (\d+), Value: "([^"]+)", Description: "([^"]+)", Scope: "([^"]+)"/g)]
-        .map((match) => ({ id: Number(match[1]), value: match[2], description: match[3], scope: match[4] }))
-      expect(publicEnumCatalog[key]).toEqual(values)
+  it("keeps every public enum well formed, uniquely named, and stably ordered", () => {
+    expect(Schema.decodeUnknownSync(EnumCatalogResponse)(publicEnumCatalog)).toEqual(publicEnumCatalog)
+    for (const values of Object.values(publicEnumCatalog)) {
+      expect(values.map(({ id }) => id)).toEqual(values.map((_, index) => index + 1))
+      expect(new Set(values.map(({ value }) => value)).size).toBe(values.length)
+      for (const value of values) {
+        expect(value.value).not.toBe("")
+        expect(value.description).not.toBe("")
+        expect(value.scope).not.toBe("")
+      }
     }
   })
 

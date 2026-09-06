@@ -49,7 +49,7 @@ describe("Go-compatible CWL enrichment", () => {
 
   it("uses only the first attack per CWL participant, with no historical win bonus", () => {
     const war = structuredClone(wars[0]!)
-    const member = war.clan!.members[0]!
+    const member = war.clan!.members![0]!
     const extra = { ...member.attacks![0]!, stars: 2 }
     const changed = { ...war, clan: { ...war.clan!, members: [{ ...member, attacks: [...member.attacks!, extra] }] } }
     const result = enrichLeagueInfo(group, [changed])

@@ -1,22 +1,39 @@
 # Cloudflare API Worker deployment gate
 
-September 4 implementation update: no deployment, provisioning or production
-change is authorized. Infrastructure observations dated September 3 below are
-historical, not freshly verified. The active API excludes deferred bot-runtime
-routes/coordinators; consult `deferred-bot-runtime-boundary.md` and the parent
-task's replacement plan before following older release instructions here.
+The production launch is authorized, but the Worker must not receive the
+`api.clashk.ing` route until the concrete resource, schema, secret, and
+connectivity prerequisites below are satisfied. The active API excludes deferred
+bot-runtime routes/coordinators; consult `deferred-bot-runtime-boundary.md` for
+that ownership boundary.
 
-The TypeScript Worker is a staged replacement and must not receive the production
-`api.clashk.ing` route until the route-parity checklist, schema prerequisites,
-consumer builds, and coordinator approval are complete.
+## Cloudflare Git build settings
+
+Connect `ClashKingInc/ClashKingAPI` with `main` as the production branch and use:
+
+- Project name: `clashking-api`
+- Root directory: repository root
+- Build command: leave blank
+- Deploy command: `npm run worker:deploy`
+- Non-production branch builds: disabled for the initial launch
+- Protect with Cloudflare Access: disabled at the project level
+
+Set `NODE_VERSION=26` and `NPM_VERSION=12` as build variables. The deploy command
+generates the public OpenAPI and Swagger assets before Wrangler uploads the
+Worker. `workers/api/wrangler.jsonc` remains the source of truth for runtime
+bindings and public variables; Cloudflare build variables are available only
+during the build and do not replace Worker runtime configuration.
+
+Do not start the first Git deployment while zero-valued Hyperdrive or VPC service
+IDs remain in the committed Wrangler configuration. The Worker project name in
+Cloudflare must exactly match the Wrangler name.
 
 ## Required infrastructure
 
 - Build public documentation using `npm run docs:build` before preparing the
   API Worker. Its four generated assets belong to `API_DOCUMENTATION` on the
   same Worker, not to the separate Admin/Dashboard frontend. The normal Worker
-  build/dry-run scripts do this automatically. The full internal OpenAPI file
-  must not be uploaded as the public reference; see `api-documentation.md`.
+  build/dry-run scripts do this automatically. See `api-documentation.md` for
+  the generated and served schema boundaries.
 
 - Before first traffic on a freshly migrated database, explicitly populate
   `api_global_counts`, `api_league_tier_counts`, `townhall_counts`, and
@@ -53,8 +70,8 @@ consumer builds, and coordinator approval are complete.
   opt-in `--script internal-api` domain. It requires the shared `API_BOT_TOKEN`
   and a private/loopback listener, exposes only the three retained cache/event
   operations, and does not host Tracking health reads. Those remain SQL reads
-  in this API. See `docs/operational-route-dispositions.md` and the Tracking
-  copy's bridge documentation before choosing its private origin.
+  in this API. Check the Tracking copy's bridge documentation before choosing
+  its private origin.
 - The existing tunnel also serves Admin, Coolify, Dozzle, and staging hostnames.
   Do not start its token on another host or alter shared ingress as part of this
   migration. A disabled installation on `152.53.39.145` was inspected first but
@@ -232,11 +249,11 @@ Historical migration declarations remain until their applied state is known;
 reconcile them under later release authorization without deleting live state
 or reactivating the old runtime merely to satisfy those declarations.
 
-Only after explicit release authorization, validate a non-production Worker
-before any production cutover. Verify Wrangler's placement output and the
+Before the production route cutover, validate a non-production Worker. Verify
+Wrangler's placement output and the
 incoming `cf-placement` request header through an approved diagnostic; the
 current API does not echo it in responses. Verify Hyperdrive
 connectivity, Access 401/403 behavior, exact-origin preflights, all route parity
 tests, and consumer builds. Roll back by removing the staged route or restoring
-the prior route target; the Go deployment remains intact until the coordinator
-authorizes final cutover.
+the prior route target; keep the existing API target available until the Worker
+passes this staged verification.

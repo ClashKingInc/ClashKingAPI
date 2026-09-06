@@ -13,7 +13,7 @@ export const EnumCatalogResponse = Schema.Struct({
   log_types: Schema.Array(EnumValue), countdown_types: Schema.Array(EnumValue),
 })
 
-// Literal port of internal/models/v2/enums.go. Keep IDs, order, copy, and scopes stable.
+// Public API catalog. Keep IDs, order, copy, and scopes stable for clients.
 export const publicEnumCatalog = {
   "role_types": [
     {
@@ -332,4 +332,3 @@ export const publicMetadataEndpoints = {
     query: GuildSummaryQuery,
   }),
 } as const
-

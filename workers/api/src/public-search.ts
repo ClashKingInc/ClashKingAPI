@@ -4,7 +4,7 @@ import { decryptStoredFernet, encryptStoredFernet } from "./fernet.js"
 import { correctTag } from "./home.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls } from "./war-archive-model.js"
-import locations from "../../../internal/routes/search_locations.json"
+import locations from "./data/search-locations.json"
 const JsonValue = Schema.Json
 
 export interface SearchBindings {

@@ -43,7 +43,7 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
     }
     const digest = (value: string) => cryptographic(() => crypto.subtle.digest("SHA-256", encoder.encode(value)).then(hex))
     return AuthCrypto.of({
-      // These formats match internal/routes/auth.go and existing stored rows.
+      // These formats match existing stored authentication rows.
       emailHash: (email) => digest(email.trim().toLowerCase() + env.JWT_ACCESS_SECRET),
       tokenHash: digest,
       codeHash: (emailHash, code) => cryptographic(async () => {

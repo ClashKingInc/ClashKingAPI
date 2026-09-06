@@ -9,7 +9,7 @@ import pg from "pg"
 import { loadLocalApiSecrets } from "./local-api-keychain.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
-const schema = fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
+const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
 const name = process.env.CLASHKING_LOCAL_DB_CONTAINER ?? "clashking-rewrite-api-dev"
 const port = Number(process.env.CLASHKING_LOCAL_DB_PORT ?? "54329")
 if (!/^clashking-rewrite-api-[a-z0-9-]+$/u.test(name) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local database name/port")
@@ -26,7 +26,7 @@ const endpoint = process.env.DOCKER_HOST ?? output("docker", ["context", "inspec
 if (!endpoint.startsWith("unix://") || process.env.DOCKER_HOST && process.env.DOCKER_CONTEXT) throw new Error("Only an unambiguous local Unix-socket Docker context is allowed")
 process.env.DOCKER_HOST = endpoint
 delete process.env.DOCKER_CONTEXT
-const [image, ...migrations] = output("bash", ["-c", 'source "$1"; printf "%s\\n" "$fixture_image" "${fixture_sources[@]}"', "local-profile", join(schema, "scripts/retained-api-profile.sh")]).split("\n")
+const [image, ...migrations] = output("bash", ["-ec", 'source "$1"; printf "%s\\n" "$fixture_image" "${fixture_sources[@]}"', "local-profile", join(schema, "scripts/retained-api-profile.sh")]).split("\n")
 if (!image?.includes("@sha256:") || migrations.at(-1) !== "028_discord_coordination.sql") throw new Error("Unexpected authoritative retained API profile")
 
 function inspect() {

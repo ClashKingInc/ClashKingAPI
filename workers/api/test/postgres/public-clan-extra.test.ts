@@ -14,7 +14,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
 const clanTag = "#PYY8822", groupId = "ClanExtra001"
 const archive = { ...producerWar, warTag: "#CLANWAR", clan: { ...producerWar.clan, tag: clanTag, badgeToken: "fixture-badge" } }
-const packedBytes = zstdCompressSync(Buffer.from(JSON.stringify(archive)), { dictionary: readFileSync(new URL("../../../../internal/wararchive/war-json.zdict", import.meta.url)) })
+const packedBytes = zstdCompressSync(Buffer.from(JSON.stringify(archive)), { dictionary: readFileSync(new URL("../../assets/war-json.zdict", import.meta.url)) })
 const get = vi.fn(async (_key: string, _options: unknown) => ({ body: new ReadableStream(), arrayBuffer: async () => new Uint8Array(packedBytes).buffer }))
 const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, WAR_ARCHIVE: { get } } as unknown as WorkerBindings
 const layer = Layer.merge(databaseLayer(bindings), Layer.succeed(WorkerEnvironment, bindings))

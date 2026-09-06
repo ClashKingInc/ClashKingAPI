@@ -5,6 +5,11 @@ canonical ClashKing `/v2` surface and the actively consumed `/proxy/v1` surface.
 The package contains no environment access, credentials, database code, or
 Node-only runtime imports.
 
+Official Clash wire schemas used by `/proxy/v1` come from the exact
+`@clashking/clash-contract` version generated in MockAPI. This package owns only
+the ClashKing path, authentication, query, and response-transport definitions
+around those imported schemas.
+
 Every endpoint owns its method, path template, authentication mode,
 path/query/body schemas, explicit JSON/multipart/no-body semantics, response
 schema/mode, success status, and any expected business-error statuses. The six

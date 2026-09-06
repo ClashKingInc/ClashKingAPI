@@ -15,7 +15,7 @@ import { correctedJoinLeaveEvents, type JoinLeaveRow } from "./public-join-leave
 import { forEachPlayerWar } from "./war-archive.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls, archiveAttackFacts, clashTime, type ArchiveAttackFact } from "./war-archive-model.js"
-import locations from "../../../internal/routes/search_locations.json"
+import locations from "./data/search-locations.json"
 
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Player public data query failed" })
 const uniqueTags = (rawTags: readonly string[]) => Effect.all([...new Set(rawTags)].map(publicTag)).pipe(Effect.map((tags) => [...new Set(tags)]))

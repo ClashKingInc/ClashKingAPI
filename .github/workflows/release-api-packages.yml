@@ -1,66 +1,62 @@
 name: Release API packages
 
 on:
-  push:
-    tags:
-      - "api-packages-v*"
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to rebuild and upload
+        required: true
+        type: string
 
 permissions:
-  contents: read
-  id-token: write
+  contents: write
 
 concurrency:
-  group: api-package-publication
+  group: api-package-release-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  package:
     runs-on: ubuntu-latest
-    environment: npm
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - uses: actions/setup-node@v6
         with:
           node-version: 26
-          registry-url: https://registry.npmjs.org
           cache: npm
 
       - run: npm ci --strict-peer-deps
       - run: node --test scripts/api-package-release.test.mjs
-      - run: npm run typecheck && npm test && npm run lint
+      - run: npm run typecheck && npm test && npm run test:scripts && npm run lint
       - run: npm run openapi:check
-      - name: Build and pack the matching package pair before publication
+      - name: Record the checked-out release commit
+        run: echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Build and pack the matching release packages
         id: packages
+        env:
+          SOURCE_TAG: ${{ env.RELEASE_TAG }}
         run: node scripts/api-package-release.mjs prepare
 
-      - name: Preserve the exact publication artifacts and manifest
+      - name: Preserve the exact release artifacts and manifest
         uses: actions/upload-artifact@v4
         with:
           name: api-packages-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ steps.packages.outputs.directory }}
           if-no-files-found: error
 
-      - name: Check both registry versions and artifact integrity
-        id: registry
+      - name: Verify and attach immutable archives to the GitHub Release
         env:
           PACKAGE_DIRECTORY: ${{ steps.packages.outputs.directory }}
-        run: node scripts/api-package-release.mjs check "$PACKAGE_DIRECTORY"
-
-      - name: Publish contracts only if absent
-        if: steps.registry.outputs.contracts != ''
-        env:
-          PACKAGE_TARBALL: ${{ steps.registry.outputs.contracts }}
-        run: npm publish "$PACKAGE_TARBALL" --ignore-scripts --workspaces=false --access public --provenance --tag rc
-
-      - name: Publish client only if absent
-        if: steps.registry.outputs.client != ''
-        env:
-          PACKAGE_TARBALL: ${{ steps.registry.outputs.client }}
-        run: npm publish "$PACKAGE_TARBALL" --ignore-scripts --workspaces=false --access public --provenance --tag rc
-
-      - name: Verify both published versions match the prepared bytes
-        env:
-          PACKAGE_DIRECTORY: ${{ steps.packages.outputs.directory }}
-        run: node scripts/api-package-release.mjs verify "$PACKAGE_DIRECTORY"
+          SOURCE_TAG: ${{ env.RELEASE_TAG }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node scripts/api-package-release.mjs verify "$PACKAGE_DIRECTORY"
+          gh release upload "$RELEASE_TAG" "$PACKAGE_DIRECTORY"/*.tgz "$PACKAGE_DIRECTORY/manifest.json" --clobber

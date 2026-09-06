@@ -91,7 +91,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   modules: [
     { type: "ESModule", path: "/local-api/index.js", contents: result.outputFiles[0].text },
     { type: "CompiledWasm", path: "/local-api/zstd.wasm", contents: readFileSync("node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm") },
-    { type: "Data", path: "/local-api/dictionary.bin", contents: readFileSync("internal/wararchive/war-json.zdict") },
+    { type: "Data", path: "/local-api/dictionary.bin", contents: readFileSync("workers/api/assets/war-json.zdict") },
   ],
   compatibilityDate: config.compatibility_date, compatibilityFlags: ["nodejs_compat"],
   hyperdrives: { HYPERDRIVE: database.href },

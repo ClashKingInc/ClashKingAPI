@@ -42,7 +42,7 @@ const enrichClanIcons = (clan: typeof ProxyClanResponse.Type): typeof ProxyClanR
   }
   return { ...clan, ...(clan.warLeague ? { warLeague: enrich(clan.warLeague, "war_leagues") } : {}),
     ...(clan.capitalLeague ? { capitalLeague: enrich(clan.capitalLeague, "capital_leagues") } : {}),
-    memberList: clan.memberList.map((member) => ({ ...member, ...(member.leagueTier ? { leagueTier: enrich(member.leagueTier, "league_tiers") } : {}),
+    memberList: (clan.memberList ?? []).map((member) => ({ ...member,
       ...(member.builderBaseLeague ? { builderBaseLeague: enrich(member.builderBaseLeague, "builder_leagues") } : {}) })) }
 }
 export const initializeMobileAccount = (rawTags: readonly string[], userId: string, bindings: WorkerBindings, now = new Date()) => Effect.gen(function* () {

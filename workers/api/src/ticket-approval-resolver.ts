@@ -45,7 +45,7 @@ export const resolveTicketApproval = (ticket: StaffTicketSnapshot, template: str
   const clash = <A>(kind: "players" | "clans", tag: string, schema: Schema.Codec<A, unknown, never, never>) => Effect.gen(function* () {
     yield* decode(Tag, tag, "Stored ticket Clash tag is invalid")
     const response = yield* Effect.tryPromise({
-      try: () => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${kind}/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000), redirect: "error" })),
+      try: () => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/${kind}/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000), redirect: "error" })),
       catch: cause => new UpstreamUnavailable({ cause, message: "Ticket approval Clash lookup failed" }),
     })
     if (!response.ok) {

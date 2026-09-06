@@ -29,7 +29,7 @@ export const proxyRequest = (request: Request, bindings: WorkerBindings) =>
   Effect.tryPromise({
     try: async () => {
       const incomingUrl = new URL(request.url)
-      const upstreamUrl = new URL(incomingUrl.pathname.slice("/proxy".length) + incomingUrl.search, "https://clash-proxy.internal")
+      const upstreamUrl = new URL(incomingUrl.pathname.slice("/proxy".length) + incomingUrl.search, "http://clash-proxy.internal")
       const headers = new Headers()
       for (const name of requestHeaderAllowlist) {
         const value = request.headers.get(name)

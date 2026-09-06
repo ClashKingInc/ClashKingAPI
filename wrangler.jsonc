@@ -1,16 +1,21 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "clashking-api",
-  "main": "src/index.ts",
+  "main": "workers/api/src/index.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
+  "build": {
+    "command": "npm run docs:build",
+    "cwd": ".",
+    "watch_dir": ["packages", "scripts", "workers/api/src"]
+  },
   "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
   "workers_dev": false,
   "preview_urls": false,
   // Only generated public API reference files, never repository/source output.
   // Worker-first keeps every /v2 route and unknown path in the API router.
   "assets": {
-    "directory": "./documentation-assets",
+    "directory": "./workers/api/documentation-assets",
     "binding": "API_DOCUMENTATION",
     "run_worker_first": true,
     "html_handling": "none",
@@ -42,10 +47,8 @@
       }
     ]
   },
-  // Historical declarations are preserved until their applied state is known.
-  // Bot coordinators are neither bound nor exported by this API candidate.
-  // Do not deploy this candidate before reconciling the v3/v4 history; removing
-  // a binding is not permission to delete Durable Object namespaces or data.
+  // This Worker currently has no Durable Object migration history. Only the
+  // two classes exported and bound by this release are created here.
   "migrations": [
     {
       "tag": "v1",
@@ -54,20 +57,12 @@
     {
       "tag": "v2-shared-links-limit",
       "new_sqlite_classes": ["SharedLinksRateLimiter"]
-    },
-    {
-      "tag": "v3-ticket-runtime",
-      "new_sqlite_classes": ["TicketRuntimeCoordinator"]
-    },
-    {
-      "tag": "v4-runtime-recovery",
-      "new_sqlite_classes": ["RuntimeRecoveryCoordinator"]
     }
   ],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "00000000000000000000000000000000"
+      "id": "aca44651f2604a208a96cae255265d0b"
     }
   ],
   "kv_namespaces": [
@@ -98,20 +93,20 @@
       "bucket_name": "clashking-ticketing"
     }
   ],
-  // These are private HTTP origins on the Go service host, not Workers.
-  // Real VPC service IDs and origin connectivity are release prerequisites.
+  // These origins stay private on the database host and are reached through
+  // the same Cloudflare tunnel as Hyperdrive.
   "vpc_services": [
     {
       "binding": "CLASH_PROXY",
-      "service_id": "00000000-0000-0000-0000-000000000000"
+      "service_id": "01a0786e-ed47-7b00-bbb3-1fc23455f51b"
     },
     {
       "binding": "TRACKING",
-      "service_id": "00000000-0000-0000-0000-000000000000"
+      "service_id": "01a0786f-12e2-7e81-8e5e-57846420f911"
     },
     {
       "binding": "ELASTICSEARCH",
-      "service_id": "00000000-0000-0000-0000-000000000000"
+      "service_id": "01a0786f-3397-71c0-af9e-419ab0a91c08"
     }
   ],
   "vars": {

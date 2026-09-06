@@ -37,7 +37,7 @@ if (clashProxyOrigin && new URL(clashProxyOrigin).origin !== "https://proxy.clas
 }
 // The checked-in config has only full-line comments. Reuse public defaults,
 // never its remote binding definitions, placement, schedules or migrations.
-const config = JSON.parse(readFileSync("workers/api/wrangler.jsonc", "utf8")
+const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8")
   .split("\n").filter(line => !line.trimStart().startsWith("//")).join("\n"))
 const secret = () => randomBytes(32).toString("base64url")
 const localSecret = (name) => {

@@ -36,7 +36,7 @@ const league = (category: string, id: number) => {
 }
 const OfficialLeague = Schema.Struct({ id: Schema.Number, name: Schema.String, iconUrls: Schema.optionalKey(Schema.Struct({ tiny: Schema.optionalKey(Schema.String), small: Schema.optionalKey(Schema.String), medium: Schema.optionalKey(Schema.String) })) })
 export const historicalHomeLeagues = (bindings: WorkerBindings) => Effect.gen(function* () {
-  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request("https://clash-proxy.internal/v1/leagues", { signal, redirect: "error" })), catch: (cause) => cause })
+  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request("http://clash-proxy.internal/v1/leagues", { signal, redirect: "error" })), catch: (cause) => cause })
   if (!response.ok) { yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve()); return new Map<number, typeof OfficialLeague.Type>() }
   const payload = yield* readBoundedJson(response)
   const value = yield* Schema.decodeUnknownEffect(Schema.Struct({ items: Schema.Array(OfficialLeague) }))(payload)

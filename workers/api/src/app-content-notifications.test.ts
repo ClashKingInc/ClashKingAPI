@@ -213,7 +213,7 @@ describe("notification SQL and authorization", () => {
     expect(test.events).toEqual(["committed", "publish"])
     expect(test.trackingRequests).toHaveLength(1)
     const publication = test.trackingRequests[0]!
-    expect(publication.url).toBe("https://tracking.internal/internal/mobile-reminder-config/publish")
+    expect(publication.url).toBe("http://tracking.internal/internal/mobile-reminder-config/publish")
     expect(publication.method).toBe("POST")
     expect(publication.headers.get("authorization")).toBe("Bearer test-private-token")
     expect(await publication.json()).toEqual({ user_id: userId })

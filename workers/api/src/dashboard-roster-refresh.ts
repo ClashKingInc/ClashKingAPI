@@ -17,7 +17,7 @@ export const RosterClashPlayer = Schema.Struct({
  * successful payloads stay explicit upstream failures. */
 export const loadRosterClashPlayer = (bindings: Pick<WorkerBindings, "CLASH_PROXY">, tag: string) => Effect.gen(function* () {
   const response = yield* Effect.tryPromise({
-    try: () => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/players/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
+    try: () => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/players/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash player lookup failed" }),
   })
   if (!response.ok) {

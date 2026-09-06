@@ -146,7 +146,7 @@ interface ClanRankRow { readonly tag: string; readonly clan_level: number; reado
 interface PlayerRanks { global_rank: number | null; local_rank: number | null; location_id: string | null; legend_trophies: number | null }
 
 const fetchLocations = (bindings: WorkerBindings) => Effect.gen(function* () {
-  const response = yield* Effect.tryPromise({ try: () => bindings.CLASH_PROXY.fetch(new Request("https://clash-proxy.internal/v1/locations", { signal: AbortSignal.timeout(15_000) })),
+  const response = yield* Effect.tryPromise({ try: () => bindings.CLASH_PROXY.fetch(new Request("http://clash-proxy.internal/v1/locations", { signal: AbortSignal.timeout(15_000) })),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash locations request failed" }) })
   if (!response.ok) {
     yield* Effect.tryPromise({ try: () => response.body?.cancel() ?? Promise.resolve(), catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash locations response cancellation failed" }) })

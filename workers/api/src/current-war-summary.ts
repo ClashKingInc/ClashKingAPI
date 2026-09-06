@@ -124,7 +124,7 @@ export const isCwlWindow = (now: Date): boolean => now.getTime() >= Date.UTC(now
   now.getTime() < Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 11, 8)
 
 const proxyJson = <A, I>(bindings: WorkerBindings, path: string, schema: Schema.Codec<A, I>) => Effect.gen(function* () {
-  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${path}`, { signal })), catch: (cause) => cause })
+  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/${path}`, { signal })), catch: (cause) => cause })
   if (!response.ok) {
     yield* Effect.tryPromise({ try: () => response.body?.cancel() ?? Promise.resolve(), catch: (cause) => cause })
     return null

@@ -167,7 +167,7 @@ export const compactRecentSnapshot = (type: EntityType, value: unknown): JsonObj
 export const recordSuccessfulProxySearch = (principal: UserPrincipal, pathAndQuery: string, status: number, body: unknown): Effect.Effect<void, DatabaseFailure | Unauthenticated, SqlClient.SqlClient> => Effect.gen(function* () {
   if (status !== 200 || principal.kind !== "user" || principal.userId.trim() === "") return
   let parts: string[]
-  try { parts = new URL(`/${pathAndQuery.replace(/^\/+/, "")}`, "https://clash-proxy.internal").pathname.split("/") } catch { return }
+  try { parts = new URL(`/${pathAndQuery.replace(/^\/+/, "")}`, "http://clash-proxy.internal").pathname.split("/") } catch { return }
   if (parts.length !== 4 || parts[1] !== "v1" || (parts[2] !== "players" && parts[2] !== "clans") || !parts[3]) return
   let tag: string
   try { tag = correctTag(decodeURIComponent(parts[3])) } catch { return }

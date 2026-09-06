@@ -47,7 +47,7 @@ export class GuildActivityStore extends Context.Service<GuildActivityStore, {
         const entries = yield* Effect.forEach(clans, (clan) => Effect.tryPromise({
           try: async () => {
             const response = await bindings.CLASH_PROXY.fetch(new Request(
-              `https://clash-proxy/v1/clans/${encodeURIComponent(clan.tag)}`,
+              `http://clash-proxy/v1/clans/${encodeURIComponent(clan.tag)}`,
             ))
             if (!response.ok) {
               await response.body?.cancel()

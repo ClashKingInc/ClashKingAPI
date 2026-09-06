@@ -508,7 +508,7 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
   const tag = normalizeTag(record(input.body).tag), serverId = serverIdFor(input)
   if (!/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid. Check the tag and try again." })
   const response = yield* Effect.tryPromise({
-    try: () => input.bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/clans/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
+    try: () => input.bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/clans/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash of Clans API is unavailable" }),
   })
   if (!response.ok) {

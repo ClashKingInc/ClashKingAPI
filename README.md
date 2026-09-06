@@ -65,9 +65,10 @@ contracts and API documentation before starting the persistent local database;
 the disposable harness above is for tests only.
 
 Publishing a GitHub release attaches version-matched API contracts and client
-archives plus their integrity manifest. Cloudflare builds `main` with
-`npm run worker:deploy`, which regenerates the OpenAPI and documentation assets
-before deploying the Worker.
+archives plus their integrity manifest. Cloudflare builds production from
+`main` with `npx wrangler deploy`; preview branches use
+`npx wrangler versions upload`. The root Wrangler configuration regenerates the
+OpenAPI and documentation assets before either upload.
 
 ## Using ClashKing data
 

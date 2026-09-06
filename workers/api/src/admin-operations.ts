@@ -870,7 +870,7 @@ const fetchJson = (message: string, request: Request, fetcher?: Fetcher) => Effe
 })
 
 const proxyStats = (input: AdminOperationInput) => {
-  const upstream = new URL("https://clash-proxy.internal/stats")
+  const upstream = new URL("http://clash-proxy.internal/stats")
   for (const [key, value] of Object.entries(asRecord(input.query))) {
     if (value !== undefined) upstream.searchParams.set(key, String(value))
   }

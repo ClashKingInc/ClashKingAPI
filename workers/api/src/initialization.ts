@@ -18,7 +18,7 @@ const proxyFailure = (cause: unknown) => new UpstreamUnavailable({ cause, messag
 export const initializationProxy = <S extends Schema.Codec<unknown, unknown, never, never>>(bindings: WorkerBindings, path: string, schema: S) => Effect.gen(function* () {
   // Workerd supports only manual/follow. Reject redirects via the status check
   // below; redirect:"error" throws before the service binding receives a request.
-  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${path}`, { signal, redirect: "manual", headers: { accept: "application/json" } })), catch: proxyFailure }).pipe(
+  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/${path}`, { signal, redirect: "manual", headers: { accept: "application/json" } })), catch: proxyFailure }).pipe(
     Effect.timeout("20 seconds"), Effect.catch(() => Effect.succeed(undefined)),
   )
   if (response === undefined) return undefined

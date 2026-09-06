@@ -588,7 +588,7 @@ function proxyPlayerName(bindings: WorkerBindings, tag: string): Effect.Effect<s
   return Effect.tryPromise({
     try: async () => {
       const response = await bindings.CLASH_PROXY.fetch(new Request(
-        `https://clash-proxy/v1/players/${encodeURIComponent(tag)}`,
+        `http://clash-proxy/v1/players/${encodeURIComponent(tag)}`,
         { headers: { accept: "application/json" } },
       ))
       if (!response.ok) return tag

@@ -20,7 +20,7 @@ const definitions = [
 
 const playerFacts = (bindings: WorkerBindings, tag: string) => Effect.gen(function* () {
   const response = yield* Effect.tryPromise({
-    try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/players/${encodeURIComponent(tag)}`, {
+    try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/players/${encodeURIComponent(tag)}`, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
     })),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Achievement player lookup failed" }),

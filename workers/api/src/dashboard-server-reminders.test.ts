@@ -15,7 +15,7 @@ describe("Dashboard reminders", () => {
     const fetch = vi.fn(async (request: Request) => { requests.push(request); return Response.json({ published: true }) })
     const bindings = { API_BOT_TOKEN: "test-only", TRACKING: { fetch } } as unknown as WorkerBindings
     await Effect.runPromise(publishReminderChange(bindings, { clan_tag: "#P0Y", type: "roster", action: "updated", reminder_id: "01991412-3895-7000-8000-123456789012" }))
-    expect(requests[0]?.url).toBe("https://tracking.internal/internal/reminder-config/publish")
+    expect(requests[0]?.url).toBe("http://tracking.internal/internal/reminder-config/publish")
     expect(requests[0]?.headers.get("authorization")).toBe("Bearer test-only")
     expect(await requests[0]?.json()).toEqual({ clan_tag: "#P0Y", type: "Roster", action: "updated", reminder_id: "01991412-3895-7000-8000-123456789012" })
   })

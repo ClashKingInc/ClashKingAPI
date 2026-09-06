@@ -38,7 +38,7 @@ export interface ReminderChange { readonly clan_tag: string; readonly type: stri
 export const publishReminderChange = (bindings: DashboardServerOperationInput["bindings"], change: ReminderChange) => Effect.tryPromise({
   try: async (signal) => {
     if (!bindings.API_BOT_TOKEN?.trim()) throw new Error("Tracking token is not configured")
-    const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/reminder-config/publish", {
+    const response = await bindings.TRACKING.fetch(new Request("http://tracking.internal/internal/reminder-config/publish", {
       method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
       body: JSON.stringify({ clan_tag: change.clan_tag, type: change.type === "roster" ? "Roster" : change.type, action: change.action, reminder_id: change.reminder_id }), signal,
     }))

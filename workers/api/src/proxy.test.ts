@@ -30,7 +30,7 @@ describe("proxyRequest", () => {
 
     const response = await Effect.runPromise(proxyRequest(request, bindings))
 
-    expect(captured?.url).toBe("https://clash-proxy.internal/v1/players/%23PLAYER?limit=10")
+    expect(captured?.url).toBe("http://clash-proxy.internal/v1/players/%23PLAYER?limit=10")
     expect(captured?.headers.get("authorization")).toBeNull()
     expect(captured?.headers.get("cookie")).toBeNull()
     expect(captured?.headers.get("if-none-match")).toBe('"old"')

@@ -64,7 +64,7 @@ const linkedAccount = (row: LinkRow): EndpointResponse<typeof LinksVisibilityEnd
 
 const PlayerIdentity = Schema.Struct({ tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number })
 const fetchClash = (bindings: LinkBindings, path: string, body?: { token: string }) => Effect.tryPromise({
-  try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${path}`, {
+  try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/${path}`, {
     signal, method: body === undefined ? "GET" : "POST", headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })),

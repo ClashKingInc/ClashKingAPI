@@ -64,7 +64,7 @@ export const deleteDashboardServerLink = (bindings: LinkBindings, tag: string) =
   const owner = (yield* sql<{ user_id: string | null }>`SELECT user_id FROM player_links WHERE tag=${tag}`)[0]?.user_id
   if (owner === undefined || owner === null) return yield* new NotFound({ message: "Link not found" })
   const response = yield* Effect.tryPromise({
-    try: () => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy/v1/players/${encodeURIComponent(tag)}`)),
+    try: () => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy/v1/players/${encodeURIComponent(tag)}`)),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Failed to verify that the player no longer exists" }),
   })
   yield* Effect.promise(() => response.body?.cancel().catch(() => undefined) ?? Promise.resolve())
@@ -192,7 +192,7 @@ export const refreshTrackingTargets = (bindings: WorkerBindings, tags: readonly 
       const batch = tags.slice(offset, offset + 100)
       const response = yield* Effect.tryPromise({
         try: async (signal) => {
-          const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/verified-players/refresh", {
+          const response = await bindings.TRACKING.fetch(new Request("http://tracking.internal/internal/verified-players/refresh", {
             method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
             body: JSON.stringify({ player_tags: batch }), signal,
           }))

@@ -1824,7 +1824,7 @@ const ClanSnapshot = Schema.Struct({
 })
 
 const loadClanSnapshot = (bindings: WorkerBindings, tag: string) => Effect.tryPromise({
-  try: () => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/clans/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
+  try: () => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/clans/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
   catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash clan lookup failed" }),
 }).pipe(Effect.flatMap((response) => response.ok
   ? Effect.tryPromise({ try: () => response.json() as Promise<unknown>, catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash clan response is invalid" }) })

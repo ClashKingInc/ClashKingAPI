@@ -129,7 +129,7 @@ describe("Bot-adjacent runtime", () => {
       player_tags: ["#P0Y"], expires_at: "2026-09-10T00:00:00.000Z",
     })
     const request = fetch.mock.calls[0]?.[0]
-    expect(request?.url).toBe("https://tracking.internal/internal/verified-players/refresh")
+    expect(request?.url).toBe("http://tracking.internal/internal/verified-players/refresh")
     expect(request?.headers.get("authorization")).toBe("Bearer secret")
     await expect(request?.json()).resolves.toEqual({ player_tags: ["#P0Y"] })
     fetch.mockResolvedValueOnce(new Response(null, { status: 503 }))

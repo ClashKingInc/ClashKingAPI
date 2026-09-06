@@ -50,7 +50,7 @@ describe("public Worker liveness boundary", () => {
     expect(response.status).toBe(200)
     expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8")
     expect(response.headers.get("x-request-id")).toBe("health-fixture")
-    expect(await response.json()).toEqual({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.0" })
+    expect(await response.json()).toEqual({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.4" })
   })
 
   it("does not add a POST compatibility route", async () => {

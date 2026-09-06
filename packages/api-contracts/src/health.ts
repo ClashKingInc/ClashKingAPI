@@ -6,7 +6,7 @@ import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 export const HealthResponse = Schema.Struct({
   status: Schema.Literal("ok"),
   runtime: Schema.Literal("cloudflare-worker"),
-  version: Schema.Literal("0.1.0-rc.0"),
+  version: Schema.Literal("0.1.0-rc.4"),
 })
 
 export const HealthEndpoint = defineEndpoint({

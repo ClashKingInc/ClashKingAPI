@@ -161,7 +161,7 @@ const document = {
   openapi: "3.1.1",
   info: {
     title: "ClashKing API",
-    version: "0.1.0-rc.0",
+    version: "0.1.0-rc.4",
     description: `### Clash of Clans Based API 👑
 
 - No Auth Required, Free to Use

@@ -65,8 +65,6 @@ export const advanceRosterDraft = (operationId: string, interaction: VerifiedRun
   return yield* sql.withTransaction(Effect.gen(function* () {
     // Match identity deletion and bot subject writes; no fake auth account is created.
     yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${interaction.actorId} FOR SHARE`
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${interaction.actorId}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${interaction.actorId} FOR UPDATE`
     yield* lockRosterMembership(sql, scope.server_id, [scope.roster_id])
     const replay = yield* readRosterReceipt(sql, operationId, interaction)
     if (replay !== undefined) return replay

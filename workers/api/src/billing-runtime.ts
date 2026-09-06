@@ -176,8 +176,6 @@ const lockUser = (userId: string) => Effect.gen(function* () {
   if ((yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${userId} FOR UPDATE`).length === 0) {
     return yield* new Unauthenticated({ message: "User session is no longer valid" })
   }
-  yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${userId}) ON CONFLICT DO NOTHING`
-  yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${userId} FOR UPDATE`
 })
 
 export const ensureBillingCustomer = (userId: string, gateway: BillingGateway) => Effect.gen(function* () {

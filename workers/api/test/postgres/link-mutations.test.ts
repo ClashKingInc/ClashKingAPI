@@ -142,7 +142,6 @@ describe("link mutations against authoritative Goose migrations", () => {
     expect(["unlinked", "Unauthenticated"]).toContain(mutations[2])
     expect(yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${id}`).toEqual([])
     expect(yield* sql`SELECT tag FROM player_links WHERE user_id = ${id}`).toEqual([])
-    expect(yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${id}`).toHaveLength(1)
   })))
 
   it("rechecks authenticated identity after an in-flight Clash lookup completes following account deletion", () => run(Effect.gen(function* () {

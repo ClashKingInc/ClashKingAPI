@@ -67,8 +67,6 @@ export const deleteDashboardServerLink = (bindings: LinkBindings, tag: string) =
   if (response.ok) return yield* new OperationConflict({ message: "Player still exists; deletion is not allowed" })
   if (response.status !== 404) return yield* new UpstreamUnavailable({ cause: response.status, message: "Only a Clash 404 permits link deletion" })
   yield* sql.withTransaction(Effect.gen(function* () {
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${owner}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${owner} FOR UPDATE`
     const current = (yield* sql<{ user_id: string | null }>`SELECT user_id FROM player_links WHERE tag=${tag} FOR UPDATE`)[0]
     if (current?.user_id !== owner) return yield* new OperationConflict({ message: "Link changed and can no longer be deleted" })
     yield* sql`DELETE FROM player_links WHERE tag=${tag} AND user_id=${owner}`

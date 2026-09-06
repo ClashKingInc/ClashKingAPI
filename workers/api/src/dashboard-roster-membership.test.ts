@@ -34,8 +34,7 @@ describe("retained Dashboard roster membership guards", () => {
     const { sql, calls } = makeSql(statement => statement.includes("SELECT tag, user_id") ? owners : [])
     expect(await Effect.runPromise(lockRosterAdmissionOwners(sql, ["#B", "#A", "#A"]))).toEqual(new Map([["#A", "20"], ["#B", "10"]]))
     expect(calls.find(call => call.statement.includes("SELECT tag, user_id"))?.statement).toContain("ORDER BY tag FOR UPDATE")
-    expect(calls.filter(call => call.statement.includes("INSERT INTO subject_mutation_locks")).map(call => call.values[0])).toEqual(["10", "20"])
-    expect(calls.filter(call => call.statement.includes("SELECT tag, user_id"))).toHaveLength(2)
+    expect(calls.filter(call => call.statement.includes("SELECT tag, user_id"))).toHaveLength(1)
   })
 
   it("rejects invalid existing per-user limits", async () => {

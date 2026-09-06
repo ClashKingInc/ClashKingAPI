@@ -42,13 +42,6 @@ const lockUser = (principal: ApiPrincipal) => Effect.gen(function* () {
   const rows = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} FOR UPDATE`
   if (rows.length === 0) return yield* new Unauthenticated({ message: "User session is no longer valid" })
 })
-const lockSubjects = (ids: ReadonlyArray<string>) => Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  for (const id of [...new Set(ids)].sort()) {
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${id}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${id} FOR UPDATE`
-  }
-})
 const compactOrder = (userId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   yield* sql`WITH ordered AS (SELECT tag, (row_number() OVER (ORDER BY order_index, added_at, tag) - 1)::integer AS position
@@ -84,7 +77,7 @@ export interface PreparedLink {
 }
 export interface CommittedLink {
   readonly response: EndpointResponse<typeof LinksAddEndpoint>
-  /** Read under the tag/subject locks, including both sides of a transfer. */
+  /** Subjects affected by the committed link or verified transfer. */
   readonly affectedSubjectIds: ReadonlyArray<string>
 }
 
@@ -126,9 +119,7 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
-    // Serialize this subject's order assignment before a new row can be
-    // inserted. The unique player tag decides which concurrent claimant wins.
-    yield* lockSubjects([userId])
+    // The unique player tag decides which concurrent claimant wins.
     let existing = (yield* sql<LinkRow>`SELECT tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login
       FROM player_links WHERE tag = ${playerTag} FOR UPDATE`)[0]
     if (existing === undefined) {
@@ -148,7 +139,6 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
         FROM player_links WHERE tag = ${playerTag} FOR UPDATE`)[0]
       if (existing === undefined) return yield* Effect.die(new Error("Concurrent linked account was not found"))
     }
-    if (existing.user_id !== null && existing.user_id !== userId) yield* lockSubjects([existing.user_id])
     if (existing !== undefined && existing.user_id !== userId && !verifyOwnership) {
       return yield* new LinkOwnershipConflict({ account: { ...player, is_verified: false, hidden: false } })
     }
@@ -185,7 +175,6 @@ export const removeLink = (principal: ApiPrincipal, userId: string, rawTag: stri
   const playerTag = yield* tag(rawTag), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
-    yield* lockSubjects([userId])
     const links = yield* sql<{ tag: string; is_verified: boolean }>`SELECT tag, is_verified FROM player_links WHERE user_id = ${userId} FOR UPDATE`
     const target = links.find((row) => row.tag === playerTag)
     if (target === undefined) return yield* new NotFound({ message: "Clash of Clans account not found or not linked to your profile" })
@@ -203,7 +192,6 @@ export const setLinkVisibility = (principal: ApiPrincipal, userId: string, rawTa
   const playerTag = yield* tag(rawTag), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
-    yield* lockSubjects([userId])
     const rows = yield* sql<LinkRow>`UPDATE player_links SET hidden = ${hidden}, updated_at = now()
       WHERE user_id = ${userId} AND tag = ${playerTag} AND is_verified = true
       RETURNING tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login`
@@ -220,7 +208,6 @@ export const orderLinks = (principal: ApiPrincipal, userId: string, rawTags: Rea
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
-    yield* lockSubjects([userId])
     const links = yield* sql`SELECT tag FROM player_links WHERE user_id = ${userId} AND tag = ANY(${tags}::text[])`
     if (links.length !== tags.length) return yield* new InvalidRequest({ message: "Invalid account tags provided" })
     yield* sql`UPDATE player_links AS links SET order_index = ordered.position::integer - 1, updated_at = now()

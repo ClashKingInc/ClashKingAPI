@@ -31,8 +31,6 @@ export const prepareRosterAction = (
   yield* requireFreshInteraction(interaction)
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${interaction.actorId} FOR SHARE`
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${interaction.actorId}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${interaction.actorId} FOR UPDATE`
     yield* lockRosterMembership(sql, interaction.guildId, [rosterId])
     const replay = yield* readRosterReceipt(sql, undefined, interaction)
     if (replay !== undefined) return replay
@@ -42,8 +40,7 @@ export const prepareRosterAction = (
         AND channel_id = ${interaction.channelId} AND message_id = ${messageId}
         AND state = 'active' AND mode = 'signup' FOR SHARE`)[0]
     if (publication === undefined) return yield* new Forbidden({ message: "This message is not an active roster signup board", reason: "wrong_message" })
-    // Holding the actor mutex stabilizes canonical links without taking tag locks
-    // after a subject lock. No membership is changed during preparation.
+    // Preparation reads the current canonical links without changing membership.
     const accounts = yield* sql<{ tag: string; label: string }>`SELECT link.tag, left(COALESCE(NULLIF(player.name, ''), link.tag), 100) AS label
       FROM player_links link LEFT JOIN basic_player player ON player.tag = link.tag
       JOIN rosters roster ON roster.id = ${rosterId}::uuid

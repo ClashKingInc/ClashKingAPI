@@ -58,14 +58,8 @@ export const listMobileBookmarks = (userId: string, type: EntityType): Runtime<E
   return { items: rows.map(bookmark) }
 })
 
-// Schema migration 013 owns these durable mutex rows. Never delete them when a
-// subject has no bookmarks: bot subjects need not have an authentication account.
-const lockBookmarkSubject = (principal: ApiPrincipal, userId: string) => Effect.gen(function* () {
-  if (principal.kind === "user") yield* lockAuthenticatedUser(userId)
-  const sql = yield* SqlClient.SqlClient
-  yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${userId}) ON CONFLICT (subject_id) DO NOTHING`
-  yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${userId} FOR UPDATE`
-})
+const lockBookmarkSubject = (principal: ApiPrincipal, userId: string) =>
+  principal.kind === "user" ? lockAuthenticatedUser(userId) : Effect.void
 
 const addBookmark = (principal: ApiPrincipal, userId: string, type: EntityType, rawTag: string): Runtime<typeof Bookmark.Type> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient

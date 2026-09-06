@@ -51,7 +51,6 @@ const fixture = (suffix: number, tag: string, enabled = true) => Effect.gen(func
     return {
       links: yield* sql`SELECT to_jsonb(p) AS value,xmin::text AS version FROM player_links p WHERE tag=${tag}`,
       privateData: yield* sql`SELECT data,xmin::text AS version FROM player_upgrades WHERE player_tag=${tag}`,
-      subjectLocks: yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${userId}`,
     }
   })
   return { sql, tag, userId, serverId, requests, discordRequests, dispatch, snapshot,
@@ -117,7 +116,7 @@ describe("Dashboard server-link policy through the real store and canonical link
     expect(yield* current.sql`SELECT data FROM player_upgrades WHERE player_tag=${current.tag}`).toEqual([])
   })))
 
-  it("deletes only after an authoritative Clash404 and uses durable tag and subject mutexes", () => run(Effect.gen(function* () {
+  it("deletes only after an authoritative Clash404 and locks the current link row", () => run(Effect.gen(function* () {
     const current = yield* fixture(8, "#QQQ", false)
     yield* current.sql`INSERT INTO player_links (tag,user_id,source) VALUES (${current.tag},${current.userId},'clashking')`
     const before = yield* current.snapshot()
@@ -128,7 +127,6 @@ describe("Dashboard server-link policy through the real store and canonical link
     current.setPlayerStatus(404)
     expect(yield* current.dispatch("DELETE")).toMatchObject({ status: 200 })
     expect(yield* current.sql`SELECT tag FROM player_links WHERE tag=${current.tag}`).toEqual([])
-    expect(yield* current.sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${current.userId}`).toHaveLength(1)
   })))
 
   it("does not delete a new owner's link when canonical transfer completes during the Clash404 lookup", () => run(Effect.gen(function* () {

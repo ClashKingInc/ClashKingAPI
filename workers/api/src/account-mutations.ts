@@ -71,10 +71,6 @@ export const deleteAccount = (userId: string) => Effect.gen(function* () {
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     const rows = yield* sql<{ email_hash: string | null }>`SELECT email_hash FROM auth_users WHERE user_id = ${userId} FOR UPDATE`
     if (rows.length === 0) return yield* new Unauthenticated({ message: "User session is no longer valid" })
-    // Same lock order as mobile persistence: auth identity, then subject mutex.
-    // Keep the mutex after deletion so waiting writers share the same identity.
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${userId}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${userId} FOR UPDATE`
     const deleted: Record<string, number> = {}
     // Verification rows have no auth FK; they contain a password hash and must
     // be removed using the exact authenticated account hash, never caller input.

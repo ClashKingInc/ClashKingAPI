@@ -19,11 +19,10 @@ beforeAll(() => Effect.runPromise(Effect.gen(function* () {
   yield* sql`INSERT INTO servers (id, name) VALUES (${serverId}, 'Membership locks')`
 }).pipe(Effect.provide(db), Effect.scoped)))
 
-it("holds both linked rows and affected-owner mutexes until admission commits", async () => {
+it("holds linked rows until admission commits", async () => {
   await Effect.runPromise(Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     yield* sql`INSERT INTO player_links (tag, user_id, source) VALUES ('#8P2', '7834567890123456804', 'bot')`
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES ('7834567890123456804')`
   }).pipe(Effect.provide(db), Effect.scoped))
   const ready = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
   const admission = Effect.runPromise(Effect.gen(function* () {
@@ -37,19 +36,16 @@ it("holds both linked rows and affected-owner mutexes until admission commits", 
   void admission.catch(ready.reject)
   try {
     await ready.promise
-    for (const target of ['link', 'subject'] as const) {
-      const outcome = await Effect.runPromise(Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient
-        return yield* sql.withTransaction(target === 'link'
-          ? sql`SELECT tag FROM player_links WHERE tag = '#8P2' FOR UPDATE NOWAIT`
-          : sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = '7834567890123456804' FOR UPDATE NOWAIT`).pipe(
+    const outcome = await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      return yield* sql.withTransaction(
+        sql`SELECT tag FROM player_links WHERE tag = '#8P2' FOR UPDATE NOWAIT`).pipe(
           Effect.map(() => 'unlocked'), Effect.catchTag('SqlError', (error) => {
             expect(error).toMatchObject({ reason: { cause: { code: '55P03' } } })
             return Effect.succeed('locked')
           }))
-      }).pipe(Effect.provide(db), Effect.scoped))
-      expect(outcome).toBe('locked')
-    }
+    }).pipe(Effect.provide(db), Effect.scoped))
+    expect(outcome).toBe('locked')
   } finally {
     release.resolve()
     await admission

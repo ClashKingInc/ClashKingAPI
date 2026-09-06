@@ -7,7 +7,7 @@ const databaseFailure = (cause: unknown) => new DatabaseFailure({ cause, message
 
 /** Call inside the writer transaction, before reading members or changing
  * configuration. Every writer uses canonical rows in UUID order, including
- * removals. A caller holding a subject lock must acquire it before this lock.
+ * removals.
  */
 export const lockRosterMembership = (sql: SqlClient.SqlClient, serverId: string, rosterIds: ReadonlyArray<string>) => Effect.gen(function* () {
   if (rosterIds.some((id) => !uuid.test(id))) return yield* new InvalidRequest({ message: "Invalid roster UUID" })
@@ -32,26 +32,13 @@ export const assertRosterCapacity = (sql: SqlClient.SqlClient, rosterIds: Readon
   if (overfull.length > 0) return yield* new Conflict({ message: "Roster capacity would be exceeded" })
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
-/** Acquire before any roster row, and after an authenticated actor row when
- * applicable. Tag mutexes freeze transfers; subject mutexes freeze the affected
- * owners' other links, including removals that do not acquire tag mutexes.
- */
-export const lockRosterAdmissionOwners = (sql: SqlClient.SqlClient, tags: ReadonlyArray<string>, actorIds: ReadonlyArray<string> = []) => Effect.gen(function* () {
+/** Lock canonical link rows before roster admission reads their owners. */
+export const lockRosterAdmissionOwners = (sql: SqlClient.SqlClient, tags: ReadonlyArray<string>, _actorIds: ReadonlyArray<string> = []) => Effect.gen(function* () {
   const orderedTags = [...new Set(tags)].sort()
   if (orderedTags.some((tag) => !/^#[A-Z0-9]+$/u.test(tag))) return yield* new InvalidRequest({ message: "Invalid roster player tag" })
   const owners = yield* sql<{ tag: string; user_id: string | null }>`SELECT tag, user_id FROM player_links
     WHERE tag = ANY(${orderedTags}::text[]) ORDER BY tag FOR UPDATE`
-  const subjects = [...new Set([...actorIds, ...owners.flatMap((row) => row.user_id === null ? [] : [row.user_id])])].sort()
-  for (const subject of subjects) {
-    yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${subject}) ON CONFLICT (subject_id) DO NOTHING`
-    yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${subject} FOR UPDATE`
-  }
-  // An unlink can finish while we wait for its subject, so use only the reread.
-  const current = yield* sql<{ tag: string; user_id: string | null }>`SELECT tag, user_id FROM player_links WHERE tag = ANY(${orderedTags}::text[])`
-  if (current.some((row) => row.user_id !== null && !subjects.includes(row.user_id))) {
-    return yield* new Conflict({ message: "Roster account ownership changed; retry the admission" })
-  }
-  return new Map(current.flatMap((row) => row.user_id === null ? [] : [[row.tag, row.user_id] as const]))
+  return new Map(owners.flatMap((row) => row.user_id === null ? [] : [[row.tag, row.user_id] as const]))
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
 export const assertRosterMembershipLimits = (sql: SqlClient.SqlClient, rosterIds: ReadonlyArray<string>, affectedOwnerIds?: ReadonlyArray<string>) => Effect.gen(function* () {

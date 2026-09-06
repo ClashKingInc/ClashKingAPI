@@ -54,7 +54,6 @@ const race = (suffix: number, stage: ProviderStage, initialPolicy: boolean, next
     // This separate connection must update the server while the provider is
     // still paused. A held policy row lock fails promptly instead of hanging.
     yield* sql.unsafe("SET LOCAL lock_timeout = '500ms'")
-    expect(yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${userId}`).toEqual([])
     yield* sql`UPDATE servers SET require_api_token_when_linking=${nextPolicy},name='Updated during provider wait' WHERE id=${serverId}`
   }))), Effect.match({ onSuccess: () => ({ ok: true as const }), onFailure: (error) => ({ ok: false as const, error }) }),
   Effect.ensuring(Effect.sync(() => release.resolve())))
@@ -79,7 +78,6 @@ describe("Dashboard server linking keeps provider waits outside the final transa
     expect(yield* current.sql`SELECT require_api_token_when_linking FROM servers WHERE id=${current.serverId}`)
       .toEqual([{ require_api_token_when_linking: true }])
     expect(yield* current.sql`SELECT tag FROM player_links WHERE tag=${current.tag}`).toEqual([])
-    expect(yield* current.sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${current.userId}`).toEqual([])
   })))
 
   it("accepts valid supplied proof when policy changes OFF to ON during verification", () => run(Effect.gen(function* () {

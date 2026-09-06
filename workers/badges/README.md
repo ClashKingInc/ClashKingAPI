@@ -21,33 +21,22 @@ The named sizes remain compatible with existing callers:
 
 Numeric sizes use the nearest larger badge available from the Clash API and resize it to the requested size. The Worker never upscales beyond the upstream 512-pixel badge.
 
-## Optional signed token hint
+## Optional token hint
 
-A trusted API can include a badge token when the Worker's tag-to-token cache and database do not have one:
+The App may send a badge token it already has in one optional header:
 
 ```text
 X-ClashKing-Badge-Token: TOKEN
-X-ClashKing-Badge-Signature: BASE64URL_SIGNATURE
 ```
 
-The signature is an HMAC-SHA256 of these UTF-8 bytes, encoded as unpadded base64url:
+Tokens must contain only ASCII letters, digits, `_`, or `-`, be nonempty, be at most 512 characters, and must not be the placeholder token `null`. Invalid hints are ignored. No signature, shared secret, or additional API response contract is required.
 
-```text
-v1\nTAG_WITHOUT_HASH\nTOKEN
-```
+A hint is used only when the Worker has no positive tag-to-token mapping. When the request reaches the Worker, it can replace a recent missing-tag result or cover a database null/error, and it is stored in KV for one day. It never replaces a known positive mapping and is never written to Postgres. The Dashboard does not use hints.
 
-The tag is uppercase. Both services must use the same `BADGE_HINT_SECRET`, which must be at least 32 characters. Set it as a Worker secret before deploying:
-
-```sh
-npx wrangler secret put BADGE_HINT_SECRET
-```
-
-A valid hint is used only when the Worker has no positive tag-to-token mapping. When the request reaches the Worker, it can replace a recent missing-tag result or cover a database failure, and it is stored in KV for one day. It is never written to Postgres. Invalid hints are ignored.
-
-The hint headers do not change the public cache key and are not included in `Vary`, so cached responses are still shared by tag, format, and size.
+The token header does not change the public cache key and is not included in `Vary`, so cached responses are shared by tag, format, and size. Hints are caller-supplied and are not authenticated; a syntactically valid hint can seed a missing mapping even if it belongs to a different clan.
 
 ## Cache layers
 
 Cloudflare's tiered Workers Cache serves warm public responses before Worker code runs. On a miss, the Worker uses KV for tag-to-token mappings and converted badge files. Positive mappings live for one day, missing mappings live for five minutes, and badge files are reused across clan tags when they share the same token.
 
-Missing-tag placeholder responses are publicly cached for one hour, while missing token mappings remain in KV for five minutes. A cached placeholder can delay a valid signed hint for up to one hour because the public cache answers before the Worker checks hint headers. Database-error placeholders remain uncached.
+Missing-tag placeholder responses are publicly cached for one hour, while missing token mappings remain in KV for five minutes. A cached placeholder can delay a valid token hint for up to one hour because the public cache answers before the Worker checks the token header. Database-error placeholders remain uncached.

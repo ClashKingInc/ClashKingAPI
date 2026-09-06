@@ -21,7 +21,6 @@ declare module "cloudflare:workers" {
 
 const PNG_BASE64 =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-const HINT_SECRET = "badge-hint-test-secret-that-is-at-least-32-characters";
 
 function pngResponse(): Response {
 	const bytes = Uint8Array.from(atob(PNG_BASE64), (character) =>
@@ -37,47 +36,15 @@ function dependencies(
 ): BadgeDependencies & {
 	fetchBadge: ReturnType<typeof vi.fn>;
 	queryBadgeToken: ReturnType<typeof vi.fn>;
-	getBadgeHintSecret: ReturnType<typeof vi.fn>;
 } {
 	return {
 		fetchBadge: vi.fn(async () => pngResponse()),
 		queryBadgeToken: vi.fn(async () => token),
-		getBadgeHintSecret: vi.fn(() => HINT_SECRET),
 	};
 }
 
-async function signHint(clanTag: string, token: string): Promise<string> {
-	const encoder = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		encoder.encode(HINT_SECRET),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	);
-	const signature = new Uint8Array(
-		await crypto.subtle.sign(
-			"HMAC",
-			key,
-			encoder.encode(`v1\n${clanTag}\n${token}`),
-		),
-	);
-	return btoa(String.fromCharCode(...signature))
-		.replace(/\+/g, "-")
-		.replace(/\//g, "_")
-		.replace(/=+$/, "");
-}
-
-function hintedRequest(url: string, clanTag: string, token: string): Promise<Request> {
-	return signHint(clanTag, token).then(
-		(signature) =>
-			new Request(url, {
-				headers: {
-					"X-ClashKing-Badge-Token": token,
-					"X-ClashKing-Badge-Signature": signature,
-				},
-			}),
-	);
+function hintedRequest(url: string, token: string): Request {
+	return new Request(url, { headers: { "X-ClashKing-Badge-Token": token } });
 }
 
 describe("badge request parsing", () => {
@@ -224,13 +191,39 @@ describe("badge asset caching", () => {
 	});
 });
 
-describe("signed token hints", () => {
+describe("token hints", () => {
+	it.each(["", "null", "bad/token", "bad.token", "a".repeat(513)])("ignores invalid token %s", async (token) => {
+		await env.BADGE_CACHE.delete(tokenCacheKey("PRY"));
+		const mocks = dependencies("null");
+		const context = createExecutionContext();
+		const response = await handleBadgeRequest(hintedRequest("https://badges.clashk.ing/PRY.png", token), env, context, mocks);
+		expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600, s-maxage=3600");
+		await response.arrayBuffer();
+		await waitOnExecutionContext(context);
+		expect(await env.BADGE_CACHE.get(tokenCacheKey("PRY"))).toBe("null");
+	});
+
+	it.each(["null", "authoritative-token"])("uses a hint only if the database has no positive token (%s)", async (databaseToken) => {
+		await env.BADGE_CACHE.delete(tokenCacheKey("PUY"));
+		const mocks = dependencies(databaseToken);
+		const context = createExecutionContext();
+		const before = Math.floor(Date.now() / 1000);
+		const response = await handleBadgeRequest(hintedRequest("https://badges.clashk.ing/PUY.png", "App_token-123"), env, context, mocks);
+		expect(response.headers.get("Vary")).toBeNull();
+		expect(response.headers.get("Cache-Control")).toBe("public, max-age=86400, s-maxage=86400");
+		await response.arrayBuffer();
+		await waitOnExecutionContext(context);
+		expect(await env.BADGE_CACHE.get(tokenCacheKey("PUY"))).toBe(databaseToken === "null" ? "App_token-123" : databaseToken);
+		const entries = await env.BADGE_CACHE.list({ prefix: tokenCacheKey("PUY") });
+		expect(entries.keys[0].expiration).toBeGreaterThanOrEqual(before + 86400);
+		expect(entries.keys[0].expiration).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 86400);
+	});
+
 	it("does not inspect or overwrite a positive cached mapping", async () => {
 		await env.BADGE_CACHE.put(tokenCacheKey("PQL"), "cached-token");
 		const mocks = dependencies("database-token");
-		const request = await hintedRequest(
+		const request = hintedRequest(
 			"https://badges.clashk.ing/PQL.png?size=small",
-			"PQL",
 			"different-token",
 		);
 		const context = createExecutionContext();
@@ -239,21 +232,19 @@ describe("signed token hints", () => {
 		await waitOnExecutionContext(context);
 
 		expect(mocks.queryBadgeToken).not.toHaveBeenCalled();
-		expect(mocks.getBadgeHintSecret).not.toHaveBeenCalled();
 		expect(mocks.fetchBadge).toHaveBeenCalledWith("cached-token", 70);
 		expect(await env.BADGE_CACHE.get(tokenCacheKey("PQL"))).toBe(
 			"cached-token",
 		);
 	});
 
-	it("replaces a recent missing mapping with a valid signed hint", async () => {
+	it("replaces a recent missing mapping with a valid token hint", async () => {
 		await env.BADGE_CACHE.put(tokenCacheKey("PJC"), "null", {
 			expirationTtl: 300,
 		});
 		const mocks = dependencies("unused-token");
-		const request = await hintedRequest(
+		const request = hintedRequest(
 			"https://badges.clashk.ing/PJC.png?size=128",
-			"PJC",
 			"hinted-token",
 		);
 		const context = createExecutionContext();
@@ -284,8 +275,7 @@ describe("signed token hints", () => {
 		const response = await handleBadgeRequest(
 			new Request("https://badges.clashk.ing/PVY.avif?size=small", {
 				headers: {
-					"X-ClashKing-Badge-Token": "untrusted-token",
-					"X-ClashKing-Badge-Signature": "invalid",
+					"X-ClashKing-Badge-Token": "invalid/token",
 				},
 			}),
 			env,
@@ -304,9 +294,8 @@ describe("signed token hints", () => {
 	it("uses and stores a valid hint when the database is unavailable", async () => {
 		const mocks = dependencies("unused-token");
 		mocks.queryBadgeToken.mockRejectedValueOnce(new Error("database offline"));
-		const request = await hintedRequest(
+		const request = hintedRequest(
 			"https://badges.clashk.ing/PQY.png?size=256",
-			"PQY",
 			"outage-token",
 		);
 		const context = createExecutionContext();
@@ -352,7 +341,7 @@ describe("CORS", () => {
 		);
 		expect(response.status).toBe(204);
 		expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-		expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+		expect(response.headers.get("Access-Control-Allow-Headers")).toBe(
 			"X-ClashKing-Badge-Token",
 		);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");

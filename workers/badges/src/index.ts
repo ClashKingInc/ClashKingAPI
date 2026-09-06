@@ -3,11 +3,8 @@ const TAG_TOKEN_TTL_SECONDS = 86400;
 const NULL_TOKEN_TTL_SECONDS = 300;
 const MISSING_RESPONSE_CACHE_SECONDS = 3600;
 const ASSET_CACHE_VERSION = "v1";
-const HINT_SIGNATURE_VERSION = "v1";
-const MIN_HINT_SECRET_LENGTH = 32;
 const MAX_BADGE_TOKEN_LENGTH = 512;
 const BADGE_TOKEN_HEADER = "X-ClashKing-Badge-Token";
-const BADGE_SIGNATURE_HEADER = "X-ClashKing-Badge-Signature";
 export const AVIF_QUALITY = 45;
 
 const BADGE_SIZES = {
@@ -42,7 +39,6 @@ type BadgeAsset = {
 export type BadgeDependencies = {
 	fetchBadge: (token: string, pixels: number) => Promise<Response>;
 	queryBadgeToken: (clanTag: string, env: Env) => Promise<string>;
-	getBadgeHintSecret: (env: Env) => string | undefined;
 };
 
 export function parseBadgePath(pathname: string): ParsedBadgePath | null {
@@ -122,11 +118,6 @@ async function queryBadgeToken(clanTag: string, env: Env): Promise<string> {
 	}
 }
 
-function getBadgeHintSecret(env: Env): string | undefined {
-	const secret = Reflect.get(env, "BADGE_HINT_SECRET");
-	return typeof secret === "string" ? secret : undefined;
-}
-
 function logCacheError(event: string, key: string, error: unknown): void {
 	console.error(
 		JSON.stringify({
@@ -160,57 +151,9 @@ function isValidBadgeToken(token: string): boolean {
 	);
 }
 
-function decodeBase64Url(value: string): Uint8Array | null {
-	if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-		return null;
-	}
-
-	const padding = "=".repeat((4 - (value.length % 4)) % 4);
-	try {
-		const decoded = atob(value.replace(/-/g, "+").replace(/_/g, "/") + padding);
-		return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-	} catch {
-		return null;
-	}
-}
-
-async function readSignedBadgeHint(
-	request: Request,
-	clanTag: string,
-	env: Env,
-	dependencies: BadgeDependencies,
-): Promise<string | null> {
+function readBadgeHint(request: Request): string | null {
 	const token = request.headers.get(BADGE_TOKEN_HEADER);
-	const encodedSignature = request.headers.get(BADGE_SIGNATURE_HEADER);
-	if (!token || !encodedSignature || !isValidBadgeToken(token)) {
-		return null;
-	}
-
-	const secret = dependencies.getBadgeHintSecret(env);
-	if (!secret || secret.length < MIN_HINT_SECRET_LENGTH) {
-		return null;
-	}
-
-	const signature = decodeBase64Url(encodedSignature);
-	if (!signature) {
-		return null;
-	}
-
-	const encoder = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		encoder.encode(secret),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["verify"],
-	);
-	const valid = await crypto.subtle.verify(
-		"HMAC",
-		key,
-		signature,
-		encoder.encode(`${HINT_SIGNATURE_VERSION}\n${clanTag}\n${token}`),
-	);
-	return valid ? token : null;
+	return token && isValidBadgeToken(token) ? token : null;
 }
 
 async function resolveBadgeToken(
@@ -233,12 +176,7 @@ async function resolveBadgeToken(
 	}
 
 	if (cached === "null") {
-		const hintedToken = await readSignedBadgeHint(
-			request,
-			clanTag,
-			env,
-			dependencies,
-		);
+		const hintedToken = readBadgeHint(request);
 		if (hintedToken) {
 			storeToken(env, ctx, key, hintedToken);
 			return {
@@ -257,12 +195,7 @@ async function resolveBadgeToken(
 			return { token, responseCacheSeconds: RESPONSE_CACHE_SECONDS };
 		}
 
-		const hintedToken = await readSignedBadgeHint(
-			request,
-			clanTag,
-			env,
-			dependencies,
-		);
+		const hintedToken = readBadgeHint(request);
 		if (hintedToken) {
 			storeToken(env, ctx, key, hintedToken);
 			return {
@@ -282,12 +215,7 @@ async function resolveBadgeToken(
 			}),
 		);
 
-		const hintedToken = await readSignedBadgeHint(
-			request,
-			clanTag,
-			env,
-			dependencies,
-		);
+		const hintedToken = readBadgeHint(request);
 		if (hintedToken) {
 			storeToken(env, ctx, key, hintedToken);
 			return {
@@ -461,7 +389,7 @@ async function loadBadgeAsset(
 const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET, OPTIONS",
-	"Access-Control-Allow-Headers": `${BADGE_TOKEN_HEADER}, ${BADGE_SIGNATURE_HEADER}`,
+	"Access-Control-Allow-Headers": BADGE_TOKEN_HEADER,
 } as const;
 
 function textResponse(
@@ -505,7 +433,6 @@ function imageResponse(
 const DEFAULT_DEPENDENCIES = {
 	fetchBadge,
 	queryBadgeToken,
-	getBadgeHintSecret,
 } satisfies BadgeDependencies;
 
 export async function handleBadgeRequest(

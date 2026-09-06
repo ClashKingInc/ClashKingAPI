@@ -1,6 +1,7 @@
 const RESPONSE_CACHE_SECONDS = 86400;
 const TAG_TOKEN_TTL_SECONDS = 86400;
 const NULL_TOKEN_TTL_SECONDS = 300;
+const MISSING_RESPONSE_CACHE_SECONDS = 3600;
 const ASSET_CACHE_VERSION = "v1";
 const HINT_SIGNATURE_VERSION = "v1";
 const MIN_HINT_SECRET_LENGTH = 32;
@@ -246,7 +247,7 @@ async function resolveBadgeToken(
 			};
 		}
 
-		return { token: "null", responseCacheSeconds: NULL_TOKEN_TTL_SECONDS };
+		return { token: "null", responseCacheSeconds: MISSING_RESPONSE_CACHE_SECONDS };
 	}
 
 	try {
@@ -271,7 +272,7 @@ async function resolveBadgeToken(
 		}
 
 		storeToken(env, ctx, key, "null");
-		return { token: "null", responseCacheSeconds: NULL_TOKEN_TTL_SECONDS };
+		return { token: "null", responseCacheSeconds: MISSING_RESPONSE_CACHE_SECONDS };
 	} catch (error) {
 		console.error(
 			JSON.stringify({

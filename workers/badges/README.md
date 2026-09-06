@@ -42,10 +42,12 @@ The tag is uppercase. Both services must use the same `BADGE_HINT_SECRET`, which
 npx wrangler secret put BADGE_HINT_SECRET
 ```
 
-A valid hint is used only when the Worker has no positive tag-to-token mapping. It can replace a recent missing-tag result or cover a database failure, and it is stored in KV for one day. It is never written to Postgres. Invalid hints are ignored.
+A valid hint is used only when the Worker has no positive tag-to-token mapping. When the request reaches the Worker, it can replace a recent missing-tag result or cover a database failure, and it is stored in KV for one day. It is never written to Postgres. Invalid hints are ignored.
 
 The hint headers do not change the public cache key and are not included in `Vary`, so cached responses are still shared by tag, format, and size.
 
 ## Cache layers
 
 Cloudflare's tiered Workers Cache serves warm public responses before Worker code runs. On a miss, the Worker uses KV for tag-to-token mappings and converted badge files. Positive mappings live for one day, missing mappings live for five minutes, and badge files are reused across clan tags when they share the same token.
+
+Missing-tag placeholder responses are publicly cached for one hour, while missing token mappings remain in KV for five minutes. A cached placeholder can delay a valid signed hint for up to one hour because the public cache answers before the Worker checks hint headers. Database-error placeholders remain uncached.

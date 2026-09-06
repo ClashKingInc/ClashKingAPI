@@ -272,7 +272,13 @@ describe("signed token hints", () => {
 		);
 	});
 
-	it("ignores an invalid signature and keeps the short missing-tag cache", async () => {
+	it.each([false, true])("caches missing-tag responses for one hour with invalid hints (KV hit: %s)", async (cachedMissing) => {
+		await env.BADGE_CACHE.delete(tokenCacheKey("PVY"));
+		await env.BADGE_CACHE.delete(assetCacheKey("png", 70, "null"));
+		await env.BADGE_CACHE.delete(assetCacheKey("avif", 70, "null"));
+		if (cachedMissing) {
+			await env.BADGE_CACHE.put(tokenCacheKey("PVY"), "null", { expirationTtl: 300 });
+		}
 		const mocks = dependencies("null");
 		const context = createExecutionContext();
 		const response = await handleBadgeRequest(
@@ -287,7 +293,7 @@ describe("signed token hints", () => {
 			mocks,
 		);
 		expect(response.headers.get("Cache-Control")).toBe(
-			"public, max-age=300, s-maxage=300",
+			"public, max-age=3600, s-maxage=3600",
 		);
 		await response.arrayBuffer();
 		await waitOnExecutionContext(context);

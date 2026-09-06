@@ -96,7 +96,7 @@ function templateConfiguration(name) {
       document: { getElementById: () => ({ textContent: "fixture CSS" }) },
     })
   }
-  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].at(-1)?.[1]
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/giu)].at(-1)?.[1]
   assert.ok(script)
   let result
   const SwaggerUIBundle = configuration => { result = configuration; return {} }

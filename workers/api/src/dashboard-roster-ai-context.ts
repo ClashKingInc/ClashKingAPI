@@ -6,7 +6,6 @@ import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
-import { lockRosterAIBudget } from "./dashboard-roster-ai-accounting.js"
 import { loadViews, rosterMetrics, viewJson } from "./dashboard-roster-runtime.js"
 
 export const dashboardRosterAIContextRoutes = [{ method: "POST", path: "/v2/roster/ai/context" }] as const
@@ -44,7 +43,6 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {
     const identity = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord' FOR SHARE`
     if (identity.length !== 1) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })
-    yield* lockRosterAIBudget(sql)
     const rows = yield* sql<{ id: string; alias: string; clan_tag: string | null; revision: number; signup_questions: unknown; member_count: number }>`
       SELECT r.id::text, r.alias, r.clan_tag, r.revision::integer, r.signup_questions,
         (SELECT count(*)::integer FROM roster_members member WHERE member.roster_id = r.id) AS member_count

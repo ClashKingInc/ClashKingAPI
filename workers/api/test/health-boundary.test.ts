@@ -11,8 +11,6 @@ vi.mock("../src/database.js", () => ({
     get() { state.database(); throw new Error("Unexpected database access in liveness") },
   })),
 }))
-vi.mock("../src/materialized-view-refresher.js", () => ({ MaterializedViewRefresher: class {} }))
-vi.mock("../src/shared-links-rate-limiter.js", () => ({ SharedLinksRateLimiter: class {} }))
 import worker from "../src/index.js"
 
 const bindings = {

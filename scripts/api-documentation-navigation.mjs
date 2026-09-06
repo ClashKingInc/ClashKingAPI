@@ -28,7 +28,6 @@ const additions = new Map([
   ["POST /v2/server/{}/rosters/{}/discord-identity/refresh", "Roster Builder"],
   ["GET /v2/ticket-transcripts/{}", "Ticket Transcripts"],
   ["GET /v2/ticket-transcripts/{}/attachments/{}", "Ticket Transcripts"],
-  ["POST /v2/tracking/verified-players", "Tracking"],
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
   ?? (path.startsWith("/proxy/v1/") ? "Clash API Proxy" : undefined)

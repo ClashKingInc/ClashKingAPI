@@ -98,10 +98,8 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   kvNamespaces: ["API_CACHE"],
   r2Buckets: ["WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {
-    MATERIALIZED_VIEW_REFRESHER: { className: "MaterializedViewRefresher", useSQLite: true },
-    SHARED_LINKS_LIMITER: { className: "SharedLinksRateLimiter", useSQLite: true },
   },
-  serviceBindings: { CLASH_PROXY: clashProxy, TRACKING: unavailable, ELASTICSEARCH: unavailable },
+  serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: unavailable },
   // Forward Discord requests for real local sign-in. Stripe, FCM and every
   // other outbound provider remain unavailable in this isolated environment.
   outboundService: discordOnly,

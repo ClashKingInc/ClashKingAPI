@@ -8,20 +8,17 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
-import { SharedLinksLimiter } from "./shared-links-limiter.js"
 import { commitServerScopedLink,readServerLinkTokenPolicy,requireServerLinkToken } from "./server-scoped-linking.js"
 import { prepareLink } from "./link-mutations.js"
 
 class OperationConflict extends Data.TaggedError("OperationConflict")<{ readonly message: string }> {}
-class RateLimited extends Data.TaggedError("RateLimited")<{ readonly message: string; readonly retryAfterSeconds: number }> {}
-type OperationFailure = ApiFailure | OperationConflict | RateLimited
+type OperationFailure = ApiFailure | OperationConflict
 
 export const botAdjacentRuntimeRoutes = [
   { method: "POST", path: "/v2/links/shared", operation: "sharedLinksLookup" },
   { method: "POST", path: "/v2/links/server/:serverId", operation: "createServerLink" },
   { method: "DELETE", path: "/v2/links/server/:serverId", operation: "deleteServerLink" },
   { method: "PATCH", path: "/v2/links/:userId/last-login", operation: "updateLinkLastLogin" },
-  { method: "POST", path: "/v2/tracking/verified-players", operation: "refreshVerifiedPlayerTracking" },
   { method: "GET", path: "/v2/server/:serverId/clans-basic", operation: "serverClans" },
   { method: "PUT", path: "/v2/bases/:baseId/votes/:voterId", operation: "upsertBaseVote" },
   { method: "DELETE", path: "/v2/bases/:baseId/votes/:voterId", operation: "removeBaseVote" },
@@ -30,7 +27,6 @@ export const botAdjacentRuntimeRoutes = [
 
 type SharedRequest = typeof botEndpoints.sharedLinksLookup.body.Type
 type LinkMutation = typeof botEndpoints.createServerLink.response.Type
-type TrackingResponse = typeof botEndpoints.refreshVerifiedPlayerTracking.response.Type
 type LinkBindings = Parameters<typeof prepareLink>[3]
 
 const reorderServerLinkOwner = (userId: string) => Effect.gen(function* () {
@@ -71,9 +67,6 @@ export const deleteDashboardServerLink = (bindings: LinkBindings, tag: string) =
   if (response.ok) return yield* new OperationConflict({ message: "Player still exists; deletion is not allowed" })
   if (response.status !== 404) return yield* new UpstreamUnavailable({ cause: response.status, message: "Only a Clash 404 permits link deletion" })
   yield* sql.withTransaction(Effect.gen(function* () {
-    // Match canonical linking/admission order: tag, subject, then link row.
-    yield* sql`INSERT INTO player_link_mutation_locks (tag) VALUES (${tag}) ON CONFLICT (tag) DO NOTHING`
-    yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag=${tag} FOR UPDATE`
     yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${owner}) ON CONFLICT (subject_id) DO NOTHING`
     yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${owner} FOR UPDATE`
     const current = (yield* sql<{ user_id: string | null }>`SELECT user_id FROM player_links WHERE tag=${tag} FOR UPDATE`)[0]
@@ -89,7 +82,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
   readonly createServerLink: (serverId: string, tag: string, userId: string, apiToken?: string) => Effect.Effect<LinkMutation, OperationFailure>
   readonly deleteServerLink: (serverId: string, tag: string) => Effect.Effect<LinkMutation, OperationFailure>
   readonly updateLinkLastLogin: (userId: string) => Effect.Effect<typeof botEndpoints.updateLinkLastLogin.response.Type, OperationFailure>
-  readonly refreshVerifiedPlayerTracking: (userId: string, tags: readonly string[]) => Effect.Effect<TrackingResponse, OperationFailure>
   readonly serverClans: (serverId: string) => Effect.Effect<typeof botEndpoints.serverClans.response.Type, OperationFailure>
   readonly upsertBaseVote: (baseId: string, voterId: string, direction: "up" | "down") => Effect.Effect<typeof botEndpoints.upsertBaseVote.response.Type, OperationFailure>
   readonly removeBaseVote: (baseId: string, voterId: string) => Effect.Effect<void, OperationFailure>
@@ -99,7 +91,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
     const sql = yield* SqlClient.SqlClient
     const bindings = yield* WorkerEnvironment
     const discord = yield* DiscordApi
-    const limiter = yield* SharedLinksLimiter
 
     return BotAdjacentStore.of({
       sharedLinksLookup: (token, body) => Effect.gen(function* () {
@@ -111,8 +102,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         `)
         const applicationId = applications[0]?.application_id
         if (applicationId === undefined) return yield* new Unauthenticated({ message: "Invalid developer API token" })
-        const limit = yield* limiter.consume(applicationId)
-        if (!limit.allowed) return yield* new RateLimited({ message: "Shared-links request limit exceeded", retryAfterSeconds: limit.retryAfterSeconds })
         const discordIds = [...new Set(body.discord_ids ?? [])]
         const tags = yield* input(() => normalizeTags(body.player_tags ?? [], 100))
         if ((body.discord_ids?.length ?? 0) + (body.player_tags?.length ?? 0) > 100 || discordIds.length + tags.length === 0) {
@@ -143,13 +132,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         if (row === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Login timestamp was not returned" })
         return { timestamp: new Date(row.timestamp).toISOString(), updated_count: row.updated_count }
       }),
-      refreshVerifiedPlayerTracking: (userId, tags) => Effect.gen(function* () {
-        const rows = yield* db(sql.unsafe<{ tag: string }>(`SELECT tag FROM player_links
-          WHERE user_id = $1 AND is_verified = true AND (cardinality($2::text[]) = 0 OR tag = ANY($2::text[])) ORDER BY tag`, [userId, [...tags]]))
-        const verified = rows.map(({ tag }) => tag)
-        if (tags.length > 0 && verified.length !== tags.length) return yield* new Forbidden({ message: "Every tracking tag must be a verified account" })
-        return yield* refreshTrackingTargets(bindings, verified)
-      }),
       serverClans: (serverId) => db(sql<{ tag: string; name: string }>`SELECT sc.tag, clan.name
         FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag
         WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
@@ -176,43 +158,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
     })
   }))
 }
-
-export const refreshTrackingTargets = (bindings: WorkerBindings, tags: readonly string[]): Effect.Effect<TrackingResponse, ApiFailure> =>
-  Effect.gen(function* () {
-    yield* input(() => {
-      if (tags.some((tag) => !/^#[0289PYLQGRJCUV]{3,14}$/u.test(tag))) throw new Error("Tracking requires canonical player tags")
-    })
-    // Match the original empty-list no-op: do not write or prune the cache.
-    if (tags.length === 0) return { player_tags: tags, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString() }
-    if (!bindings.API_BOT_TOKEN?.trim()) return yield* new UpstreamUnavailable({ cause: undefined, message: "Tracking API token is not configured" })
-    let earliestExpiry = Number.POSITIVE_INFINITY
-    // Only the private transport is bounded to 100, not the user's verified accounts.
-    // Earlier batches may be written if a later batch fails; replaying ZADD is safe.
-    for (let offset = 0; offset < tags.length; offset += 100) {
-      const batch = tags.slice(offset, offset + 100)
-      const response = yield* Effect.tryPromise({
-        try: async (signal) => {
-          const response = await bindings.TRACKING.fetch(new Request("http://tracking.internal/internal/verified-players/refresh", {
-            method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
-            body: JSON.stringify({ player_tags: batch }), signal,
-          }))
-          if (response.status !== 200) throw new Error(`Tracking returned ${response.status}`)
-          return await response.json() as unknown
-        },
-        catch: (cause) => new UpstreamUnavailable({ cause, message: "Verified player tracking cache is unavailable" }),
-      }).pipe(
-        Effect.timeout("3 seconds"),
-        Effect.flatMap(Schema.decodeUnknownEffect(botEndpoints.refreshVerifiedPlayerTracking.response)),
-        Effect.mapError((cause) => cause instanceof UpstreamUnavailable ? cause : new UpstreamUnavailable({ cause, message: "Tracking response violated its contract" })),
-      )
-      const expiry = Date.parse(response.expires_at)
-      if (response.player_tags.length !== batch.length || !response.player_tags.every((tag, index) => tag === batch[index]) || !Number.isFinite(expiry)) {
-        return yield* new UpstreamUnavailable({ cause: response, message: "Tracking did not acknowledge the requested player targets" })
-      }
-      earliestExpiry = Math.min(earliestExpiry, expiry)
-    }
-    return { player_tags: tags, expires_at: new Date(earliestExpiry).toISOString() }
-  })
 
 export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBindings): Effect.Effect<
   Response | undefined, ApiFailure, AuthIdentity | BotAdjacentStore | ServerAuthorization | SqlClient.SqlClient
@@ -256,12 +201,6 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
         if (principal.kind === "user" && principal.userId !== userId) return yield* new Forbidden({ message: "You can only update your own login" })
         return yield* encode(botEndpoints.updateLinkLastLogin.response, yield* store.updateLinkLastLogin(userId))
       }
-      case "refreshVerifiedPlayerTracking": {
-        const principal = yield* auth.requireUser(request)
-        const body = yield* decodeBody(request, botEndpoints.refreshVerifiedPlayerTracking.body)
-        const tags = yield* input(() => normalizeTags(body.player_tags))
-        return yield* encode(botEndpoints.refreshVerifiedPlayerTracking.response, yield* store.refreshVerifiedPlayerTracking(principal.userId, tags))
-      }
       case "serverClans": {
         const serverId = yield* snowflake("serverId")
         const authorization = yield* ServerAuthorization
@@ -284,11 +223,8 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
       }
     }
   }).pipe(Effect.catch((failure) => {
-    if (failure instanceof OperationConflict || failure instanceof RateLimited) {
-      return Effect.succeed(Response.json({ code: failure instanceof RateLimited ? "rate_limited" : "conflict", message: failure.message }, {
-        status: failure instanceof RateLimited ? 429 : 409,
-        ...(failure instanceof RateLimited ? { headers: { "retry-after": String(failure.retryAfterSeconds) } } : {}),
-      }))
+    if (failure instanceof OperationConflict) {
+      return Effect.succeed(Response.json({ code: "conflict", message: failure.message }, { status: 409 }))
     }
     return Effect.fail(failure)
   }))

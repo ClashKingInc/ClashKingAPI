@@ -41,14 +41,6 @@ export const UpdateLinkLastLoginEndpoint = defineEndpoint({
   responseMode: "json", successStatus: 200, summary: "Record one server timestamp for the subject's verified links",
 })
 
-export const RefreshVerifiedPlayerTrackingEndpoint = defineEndpoint({
-  auth: "user", body: Schema.Struct({ player_tags: Schema.Array(Schema.String) }), bodyMode: "json",
-  method: "POST", operationId: "refreshVerifiedPlayerTracking", path: "/v2/tracking/verified-players",
-  pathParams: NoPathParams, query: NoQuery,
-  response: Schema.Struct({ player_tags: Schema.Array(Schema.String), expires_at: Schema.String }),
-  responseMode: "json", successStatus: 200, summary: "Refresh priority tracking for the user's verified players",
-})
-
 export const UpsertBaseVoteEndpoint = defineEndpoint({
   auth: "bot", body: Schema.Struct({ direction: Schema.Literals(["up", "down"]) }), bodyMode: "json",
   method: "PUT", operationId: "upsertBaseVote", path: "/v2/bases/:baseId/votes/:voterId",
@@ -75,7 +67,6 @@ export const botAdjacentEndpoints = {
   createServerLink: CreateServerLinkEndpoint,
   deleteServerLink: DeleteServerLinkEndpoint,
   updateLinkLastLogin: UpdateLinkLastLoginEndpoint,
-  refreshVerifiedPlayerTracking: RefreshVerifiedPlayerTrackingEndpoint,
   upsertBaseVote: UpsertBaseVoteEndpoint,
   removeBaseVote: RemoveBaseVoteEndpoint,
   recordBaseDownload: RecordBaseDownloadEndpoint,

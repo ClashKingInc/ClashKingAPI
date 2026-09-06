@@ -10,8 +10,6 @@ vi.mock("../src/database.js", () => ({
   databaseLayer: () => Layer.succeed(SqlClient.SqlClient, state.query as unknown as SqlClient.SqlClient),
 }))
 vi.mock("../src/proxy-search-observer.js", () => ({ observeProxySearch: state.observe }))
-vi.mock("../src/materialized-view-refresher.js", () => ({ MaterializedViewRefresher: class {} }))
-vi.mock("../src/shared-links-rate-limiter.js", () => ({ SharedLinksRateLimiter: class {} }))
 import worker from "../src/index.js"
 
 const bindings = {
@@ -68,7 +66,7 @@ describe("actual proxy entrypoint preserves user authentication", () => {
     expect(state.query.mock.calls[0]?.slice(1)).toEqual(["fixture-user"])
     expect(result.upstream).toHaveBeenCalledOnce()
     const forwarded = result.upstream.mock.calls[0]![0]
-    expect(forwarded.url).toBe("https://clash-proxy.internal/v1/players/%23P0Y?fixture=1")
+    expect(forwarded.url).toBe("http://clash-proxy.internal/v1/players/%23P0Y?fixture=1")
     expect(forwarded.headers.has("authorization")).toBe(false)
     expect(state.observe).toHaveBeenCalledExactlyOnceWith(
       { kind: "user", userId: "fixture-user", deviceId: "fixture-device" }, result.request, expect.any(Response),

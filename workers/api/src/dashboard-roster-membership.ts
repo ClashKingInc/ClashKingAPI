@@ -24,17 +24,14 @@ export const lockRosterMembership = (sql: SqlClient.SqlClient, serverId: string,
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
 /** Acquire before any roster row, and after an authenticated actor row when
- * applicable. Tag mutexes freeze transfers; subject mutexes freeze the affected
- * owners' other links, including removals that do not acquire tag mutexes.
+ * applicable. Link-row locks freeze existing transfers; subject mutexes freeze
+ * the affected owners' other links.
  */
 export const lockRosterAdmissionOwners = (sql: SqlClient.SqlClient, tags: ReadonlyArray<string>, actorIds: ReadonlyArray<string> = []) => Effect.gen(function* () {
   const orderedTags = [...new Set(tags)].sort()
   if (orderedTags.some((tag) => !/^#[A-Z0-9]+$/u.test(tag))) return yield* new InvalidRequest({ message: "Invalid roster player tag" })
-  for (const tag of orderedTags) {
-    yield* sql`INSERT INTO player_link_mutation_locks (tag) VALUES (${tag}) ON CONFLICT (tag) DO NOTHING`
-    yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag = ${tag} FOR UPDATE`
-  }
-  const owners = yield* sql<{ tag: string; user_id: string | null }>`SELECT tag, user_id FROM player_links WHERE tag = ANY(${orderedTags}::text[])`
+  const owners = yield* sql<{ tag: string; user_id: string | null }>`SELECT tag, user_id FROM player_links
+    WHERE tag = ANY(${orderedTags}::text[]) ORDER BY tag FOR UPDATE`
   const subjects = [...new Set([...actorIds, ...owners.flatMap((row) => row.user_id === null ? [] : [row.user_id])])].sort()
   for (const subject of subjects) {
     yield* sql`INSERT INTO subject_mutation_locks (subject_id) VALUES (${subject}) ON CONFLICT (subject_id) DO NOTHING`

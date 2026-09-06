@@ -275,28 +275,7 @@ const getPreferences = (principal: UserPrincipal, query: Readonly<Record<string,
     return mapPreferences(row, deviceId, environment, yield* accountRows(principal.userId))
   }))
 
-const publishReminderConfiguration = (userId: string, bindings: AppContentNotificationBindings) =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      if (!bindings.API_BOT_TOKEN?.trim()) throw new Error("Tracking API token is not configured")
-      const response = await bindings.TRACKING.fetch(new Request("http://tracking.internal/internal/mobile-reminder-config/publish", {
-        method: "POST",
-        headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
-        signal,
-      }))
-      if (response.status !== 200) throw new Error(`Tracking returned ${response.status}`)
-      const acknowledgement: unknown = await response.json()
-      if (asRecord(acknowledgement).published !== true) throw new Error("Tracking did not acknowledge publication")
-    },
-    catch: (cause) => new UpstreamUnavailable({ cause, message: "Tracking publication is unavailable" }),
-  }).pipe(
-    Effect.timeout("3 seconds"),
-    // The original API treats this post-commit stream notification as best effort.
-    Effect.catch(() => Effect.logWarning("Mobile reminder publication unavailable after preferences were saved")),
-  )
-
-const putPreferences = (principal: UserPrincipal, body: PreferencesRequest, bindings: AppContentNotificationBindings) =>
+const putPreferences = (principal: UserPrincipal, body: PreferencesRequest) =>
   sqlEffect("Notification preferences update failed", Effect.gen(function* () {
     const deviceId = yield* resolveDeviceId(principal, body.deviceId)
     const environment = body.environment ?? "production"
@@ -318,7 +297,6 @@ const putPreferences = (principal: UserPrincipal, body: PreferencesRequest, bind
         accounts: yield* accountRows(principal.userId),
       }
     }))
-    yield* publishReminderConfiguration(principal.userId, bindings)
     return preferences
   }))
 
@@ -421,7 +399,7 @@ export const dispatchAppContentNotifications = (
         case "registerExpoNotificationDevice": value = yield* registerDevice(principal, body as DeviceRequest, bindings); break
         case "deleteExpoNotificationDevice": value = yield* deleteDevice(principal, query); break
         case "getExpoNotificationPreferences": value = yield* getPreferences(principal, query); break
-        case "putExpoNotificationPreferences": value = yield* putPreferences(principal, body as PreferencesRequest, bindings); break
+        case "putExpoNotificationPreferences": value = yield* putPreferences(principal, body as PreferencesRequest); break
         case "putExpoNotificationAccount": value = yield* putAccount(principal, String(path.playerTag), asRecord(body).enabled === true); break
         default: return yield* new NotFound({ message: "Unknown notification operation" })
       }
@@ -434,5 +412,5 @@ export const dispatchAppContentNotifications = (
 }
 
 export const appContentNotificationInternals = {
-  correctTag, localeFor, mapAnnouncement, mapPreferences, normalizeTimings, publishReminderConfiguration, resolveDeviceId,
+  correctTag, localeFor, mapAnnouncement, mapPreferences, normalizeTimings, resolveDeviceId,
 }

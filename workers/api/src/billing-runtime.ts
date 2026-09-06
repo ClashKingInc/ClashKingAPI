@@ -7,7 +7,6 @@ import { SqlClient } from "effect/unstable/sql"
 import Stripe from "stripe"
 import { AuthIdentity } from "./auth.js"
 import { resolveCheckoutFlag } from "./dashboard-misc-runtime.js"
-import { lockRosterAIBudget } from "./dashboard-roster-ai-accounting.js"
 import type { WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, Unauthenticated, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
@@ -229,9 +228,6 @@ export const projectBillingEvent = (event: typeof Event.Type, gateway: BillingGa
       }
       if ((yield* sql`SELECT event_id FROM billing_webhook_events WHERE provider = 'stripe' AND event_id = ${event.id}`).length > 0) return
       const subscriptions = yield* gateway.subscriptions(customerId)
-      // Match AI authorization/settlement writers. Keep provider I/O outside
-      // the global accounting lock; account/subject locks are already held.
-      yield* lockRosterAIBudget(sql)
       const sorted = [...subscriptions].sort((a, b) => Number(active(b, priceId)) - Number(active(a, priceId)) || b.created - a.created || b.id.localeCompare(a.id))
       const current = sorted[0]
       const previous = yield* sql<{ initial_assignment_applied: boolean }>`SELECT initial_assignment_applied FROM billing_subscriptions WHERE user_id = ${userId}`
@@ -298,7 +294,6 @@ export const dispatchBillingMutations = (request: Request, bindings: BillingBind
     }
     yield* database(sql.withTransaction(Effect.gen(function* () {
       yield* lockUser(principal.userId)
-      yield* lockRosterAIBudget(sql)
       if (serverId === null) yield* sql`DELETE FROM subscription_roster_assignments WHERE user_id = ${principal.userId}`
       else {
         const saved = yield* sql`INSERT INTO subscription_roster_assignments (user_id, server_id)

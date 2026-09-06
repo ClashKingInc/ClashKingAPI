@@ -12,8 +12,7 @@ import type { WorkerBindings } from "../../src/environment.js"
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Run through clashking_schemas/scripts/with-test-timescale.sh")
 const serverId = "1334567890123456789", channelId = "2334567890123456789"
-const trackingEvents: unknown[] = []
-const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, DISCORD_BOT_TOKEN: "test-only", API_BOT_TOKEN: "test-only", TRACKING: { fetch: async (request: Request) => { trackingEvents.push(await request.json()); return Response.json({ published: true }) } } } as WorkerBindings
+const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, DISCORD_BOT_TOKEN: "test-only", API_BOT_TOKEN: "test-only" } as WorkerBindings
 const layer = Layer.mergeAll(databaseLayer(bindings),
   Layer.succeed(DiscordApi, { request: (path) => Effect.succeed(path === "/users/@me" ? { id: "3334567890123456789" } : path === `/channels/${channelId}` ? { id: channelId, guild_id: serverId, type: 0 } : path === `/guilds/${serverId}/webhooks` ? [{ id: "4334567890123456789", type: 1, channel_id: channelId, user: { id: "3334567890123456789" } }] : path === "/webhooks/4334567890123456789" ? { id: "4334567890123456789", type: 1, channel_id: channelId } : []), token: () => Effect.die("Unexpected OAuth") }),
   Layer.succeed(DiscordCredentials, { accessToken: () => Effect.die("Unexpected credentials") }),
@@ -113,7 +112,6 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       expect(raw[0]?.minutes_remaining).toBe(90)
       expect(raw[0]?.data.channel).toBe(channelId)
       yield* execute(dashboardEndpoints.deleteServerReminder, {}, path)
-      expect(trackingEvents.slice(-3)).toEqual(["created","updated","deleted"].map((action) => ({ clan_tag: "#P0Y", type: "Clan Capital", action, reminder_id: created.reminder_id })))
       yield* execute(dashboardEndpoints.deleteServerReminder, {}, path).pipe(Effect.flip, Effect.map((failure) => expect(failure._tag).toBe("NotFound")))
     }).pipe(Effect.provide(layer), Effect.scoped))
   })

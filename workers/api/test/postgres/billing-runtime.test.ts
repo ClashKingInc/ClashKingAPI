@@ -6,7 +6,6 @@ import Stripe from "stripe"
 import { dispatchBillingMutations, ensureBillingCustomer, makeBillingGateway, projectBillingEvent, type BillingGateway } from "../../src/billing-runtime.js"
 import { AuthIdentity } from "../../src/auth.js"
 import { ServerAuthorization } from "../../src/server-authorization.js"
-import { lockRosterAIBudget } from "../../src/dashboard-roster-ai-accounting.js"
 import { dispatchDashboardRosterAIUsage } from "../../src/dashboard-roster-ai-usage.js"
 import { Forbidden, InvalidRequest, Unauthenticated, UpstreamUnavailable } from "../../src/errors.js"
 
@@ -212,46 +211,6 @@ it("accepts a signed Go-model subscription snapshot without relying on its old p
     expect(yield* sql`SELECT payload->>'api_version' AS version, payload->>'created' AS created FROM billing_webhook_events WHERE event_id = 'evt_inherited_snapshot'`)
       .toEqual([{ version: "2026-05-27.dahlia", created: "1700000000" }])
   }).pipe(Effect.provide(f.layer), Effect.scoped))
-})
-
-it.each(["assignment", "webhook"] as const)("%s writes wait for the shared AI accounting mutex and roll back on timeout", async (kind) => {
-  const user = `billing_mutex_${kind}`
-  const boundedUrl = new URL(databaseUrl!)
-  boundedUrl.searchParams.set("options", "-c lock_timeout=100ms")
-  const providerReads = vi.fn(() => Effect.succeed([{ ...subscription(user), status: "canceled" }]))
-  const f = fixture(user, {
-    subscriptions: providerReads,
-    verify: () => Effect.succeed(event(`evt_mutex_${kind}`, user)),
-  }, boundedUrl.toString())
-  const mutation = () => kind === "assignment"
-    ? f.request("subscription/assignment", "PUT", { serverId: serverB })
-    : f.request("stripe/webhook", "POST", { signedByFakeAdapter: true })
-  const holder = PgClient.layer({ url: Redacted.make(databaseUrl!) })
-  await Effect.runPromise(Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient
-    yield* seed(user)
-    yield* sql`INSERT INTO billing_customers (user_id, stripe_customer_id) VALUES (${user}, ${`cus_${user}`})`
-    yield* sql`INSERT INTO subscription_entitlements (user_id, active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd)
-      VALUES (${user}, true, 10, 5)`
-    yield* sql`INSERT INTO subscription_roster_assignments (user_id, server_id) VALUES (${user}, ${serverA})`
-    yield* sql.withTransaction(Effect.gen(function* () {
-      yield* lockRosterAIBudget(sql)
-      // A separately provided Pg layer guarantees a second physical connection.
-      // No sleep or scheduler guess: PostgreSQL's own lock timeout proves contention.
-      const failure = yield* mutation().pipe(Effect.provide(f.layer), Effect.flip)
-      expect(failure._tag).toBe("DatabaseFailure")
-      if (failure._tag !== "DatabaseFailure") throw new Error("Expected a database lock failure")
-      expect(failure.cause).toMatchObject({ reason: { cause: { code: "55P03" } } })
-      // The webhook's provider read already completed while another connection
-      // held the global mutex, so it cannot be running inside that mutex.
-      expect(providerReads).toHaveBeenCalledTimes(kind === "webhook" ? 1 : 0)
-      expect(yield* sql`SELECT active FROM subscription_entitlements WHERE user_id = ${user}`).toEqual([{ active: true }])
-      expect(yield* sql`SELECT server_id FROM subscription_roster_assignments WHERE user_id = ${user}`).toEqual([{ server_id: serverA }])
-      expect(yield* sql`SELECT event_id FROM billing_webhook_events WHERE event_id = ${`evt_mutex_${kind}`}`).toEqual([])
-    }))
-    expect((yield* mutation().pipe(Effect.provide(f.layer)))?.status).toBe(kind === "assignment" ? 204 : 200)
-    expect(yield* sql`SELECT active FROM subscription_entitlements WHERE user_id = ${user}`).toEqual([{ active: kind === "assignment" }])
-  }).pipe(Effect.provide(holder), Effect.scoped))
 })
 
 it("races real AI settlement with billing webhook retries and assignment writes without applying credit twice", async () => {

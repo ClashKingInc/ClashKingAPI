@@ -21,8 +21,6 @@ vi.mock("../src/database.js", async (importOriginal) => {
 })
 // Native Cloudflare base classes are not available in the Node test lane.
 // These exports are unrelated to fetch; the request layer and router remain real.
-vi.mock("../src/materialized-view-refresher.js", () => ({MaterializedViewRefresher:class {}}))
-vi.mock("../src/shared-links-rate-limiter.js", () => ({SharedLinksRateLimiter:class {}}))
 import worker, * as workerExports from "../src/index.js"
 
 const bindings = {
@@ -44,23 +42,8 @@ const request = async (path: string, method = 'GET', origin: string | null = 'ht
 afterEach(()=>{databaseState.mode='healthy';vi.restoreAllMocks()})
 
 describe('actual fetch entrypoint service composition and dispatcher order',()=>{
-  it('schedules only the retained materialized-view refresh, never bot recovery',async()=>{
-    databaseState.mode='throw'
-    const wake=vi.fn(async()=>undefined), refresh=vi.fn(async()=>({ refreshed:true }))
-    const recovery=vi.fn(()=>({wake})), refresher=vi.fn(()=>({refresh}))
-    const tasks:Promise<unknown>[]=[]
-    worker.scheduled({} as ScheduledController,{...bindings,RUNTIME_RECOVERY:{getByName:recovery},
-      MATERIALIZED_VIEW_REFRESHER:{getByName:refresher}} as unknown as WorkerBindings,
-    {waitUntil:(promise:Promise<unknown>)=>tasks.push(promise)} as unknown as ExecutionContext)
-    await Promise.all(tasks)
-    expect(recovery).not.toHaveBeenCalled()
-    expect(wake).not.toHaveBeenCalled()
-    expect(refresher).toHaveBeenCalledExactlyOnceWith('stats-materialized-views',{locationHint:'enam'})
-    expect(refresh).toHaveBeenCalledOnce()
-    expect(tasks).toHaveLength(1)
-  })
   it('exports only the retained API coordinators', () => {
-    expect(Object.keys(workerExports).sort()).toEqual(['MaterializedViewRefresher', 'SharedLinksRateLimiter', 'default'])
+    expect(Object.keys(workerExports).sort()).toEqual(['default'])
   })
   it.each(deferredApiRoutes)('leaves $method $path unmounted without SQL or provider calls', async ({ method, path }) => {
     const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))

@@ -43,24 +43,11 @@ describe("App content and notifications against authoritative Goose migrations",
     }).pipe(Effect.provide(database), Effect.scoped))
   })
 
-  it("stores encrypted tokens, persists raid arrays, publishes after commit, and unregisters only one environment", async () => {
+  it("stores encrypted tokens, persists raid arrays, and unregisters only one environment", async () => {
     const userId = `18446744073709551615-${crypto.randomUUID()}`
     const deviceId = crypto.randomUUID()
-    const publications: Array<unknown> = []
     const bindings = {
-      DATA_ENCRYPTION_KEY: "integration-secret", API_BOT_TOKEN: "integration-private-token",
-      TRACKING: { fetch: async (input: Request) => {
-        expect(input.headers.get("authorization")).toBe("Bearer integration-private-token")
-        publications.push(await input.json())
-        // An independent connection must see committed preferences before acknowledgement.
-        const stored = await Effect.runPromise(Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient
-          return yield* sql`SELECT raid_reminder_timings FROM mobile_push_devices
-            WHERE user_id=${userId} AND device_id=${deviceId} AND environment='sandbox'`
-        }).pipe(Effect.provide(database), Effect.scoped))
-        expect(stored[0]?.raid_reminder_timings).toEqual([15, 4320])
-        return Response.json({ published: true })
-      } },
+      DATA_ENCRYPTION_KEY: "integration-secret",
     } as unknown as WorkerBindings
     const principal = { kind: "user" as const, userId, deviceId }
     const auth = AuthIdentity.of({ requireUser: () => Effect.succeed(principal),
@@ -91,6 +78,5 @@ describe("App content and notifications against authoritative Goose migrations",
       const remaining = yield* sql`SELECT environment FROM mobile_push_devices WHERE user_id=${userId}`
       expect(remaining).toEqual([{ environment: "production" }])
     }).pipe(Effect.provide(database), Effect.scoped))
-    expect(publications).toEqual([{ user_id: userId }])
   })
 })

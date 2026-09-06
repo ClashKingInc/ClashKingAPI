@@ -38,10 +38,8 @@ interface Statement {
   readonly parameters: ReadonlyArray<unknown>
 }
 
-const harness = (reply: (statement: Statement) => ReadonlyArray<unknown> = () => [], identity = principal,
-  publish: (request: Request) => Promise<Response> = async () => Response.json({ published: true })) => {
+const harness = (reply: (statement: Statement) => ReadonlyArray<unknown> = () => [], identity = principal) => {
   const statements: Array<Statement> = []
-  const trackingRequests: Array<Request> = []
   const events: Array<string> = []
   let transactions = 0
   const sql = Object.assign(() => Effect.succeed([]), {
@@ -62,17 +60,11 @@ const harness = (reply: (statement: Statement) => ReadonlyArray<unknown> = () =>
   })
   const run = (request: Request) => Effect.runPromise(dispatchAppContentNotifications(request, {
     DATA_ENCRYPTION_KEY: "local-test-key",
-    API_BOT_TOKEN: "test-private-token",
-    TRACKING: { fetch: async (request: Request) => {
-      events.push("publish")
-      trackingRequests.push(request)
-      return publish(request)
-    } },
   } as AppContentNotificationBindings).pipe(
     Effect.provideService(SqlClient.SqlClient, sql),
     Effect.provideService(AuthIdentity, auth),
   ))
-  return { run, statements, trackingRequests, events, transactions: () => transactions }
+  return { run, statements, events, transactions: () => transactions }
 }
 
 const request = (path: string, method = "GET", body?: unknown) => new Request(`https://api.clashk.ing${path}`, {
@@ -210,46 +202,14 @@ describe("notification SQL and authorization", () => {
     expect(update?.parameters[7]).toBe(true)
     expect(update?.parameters[12]).toEqual([15, 30, 4320])
     expect(test.statements.some(({ query }) => /DELETE|INSERT/u.test(query))).toBe(false)
-    expect(test.events).toEqual(["committed", "publish"])
-    expect(test.trackingRequests).toHaveLength(1)
-    const publication = test.trackingRequests[0]!
-    expect(publication.url).toBe("http://tracking.internal/internal/mobile-reminder-config/publish")
-    expect(publication.method).toBe("POST")
-    expect(publication.headers.get("authorization")).toBe("Bearer test-private-token")
-    expect(await publication.json()).toEqual({ user_id: userId })
+    expect(test.events).toEqual(["committed"])
   })
 
   it("does not publish when the preference transaction fails", async () => {
     const test = harness()
     await expect(test.run(request("/v2/notifications/preferences", "PUT", preferenceBody)))
       .rejects.toMatchObject({ _tag: "NotFound" })
-    expect(test.trackingRequests).toHaveLength(0)
     expect(test.events).toEqual([])
-  })
-
-  it.each([503, 200])("preserves the saved preferences after failed or unacknowledged publication (%s)", async (status) => {
-    const test = harness(({ query }) => query.startsWith("UPDATE") ? [{ device_id: "device-one" }] : [],
-      principal, async () => Response.json({ published: false }, { status }))
-    const response = await test.run(request("/v2/notifications/preferences", "PUT", preferenceBody))
-    expect(response?.status).toBe(200)
-    expect(await response?.json()).toMatchObject({ raidRemindersEnabled: true, reminderTimings: [60, 180] })
-    expect(test.events).toEqual(["committed", "publish"])
-  })
-
-  it.each(["network", "invalid JSON", "timeout"])("returns saved preferences when the follow-up publication has %s failure", async (failure) => {
-    let signal: AbortSignal | undefined
-    const test = harness(({ query }) => query.startsWith("UPDATE") ? [{ device_id: "device-one" }] : [],
-      principal, async (request) => {
-        signal = request.signal
-        if (failure === "network") throw new Error("Unavailable")
-        if (failure === "invalid JSON") return new Response("not JSON")
-        return new Promise<Response>(() => {})
-      })
-    const response = await test.run(request("/v2/notifications/preferences", "PUT", preferenceBody))
-    expect(response?.status).toBe(200)
-    expect(test.events).toEqual(["committed", "publish"])
-    expect(test.statements.filter(({ query }) => query.startsWith("UPDATE mobile_push_devices"))).toHaveLength(1)
-    if (failure === "timeout") expect(signal?.aborted).toBe(true)
   })
 
   it("rejects out-of-granularity raid timings before writing", async () => {

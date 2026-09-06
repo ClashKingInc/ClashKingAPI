@@ -8,7 +8,6 @@ it("keeps deferred coordinator namespaces out of active API binding types", () =
   expectTypeOf<Extract<keyof Cloudflare.Env, "TICKET_RUNTIME" | "RUNTIME_RECOVERY">>().toEqualTypeOf<never>()
   expectTypeOf<Parameters<typeof WorkerEnvironment.layer>[0]>().toEqualTypeOf<WorkerBindings>()
   expectTypeOf<Parameters<typeof worker.fetch>[1]>().toEqualTypeOf<WorkerBindings>()
-  expectTypeOf<Parameters<typeof worker.scheduled>[1]>().toEqualTypeOf<WorkerBindings>()
   expectTypeOf<"TICKET_RUNTIME" extends keyof DeferredRuntimeBindings ? true : false>().toEqualTypeOf<true>()
   expectTypeOf<WorkerBindings extends DeferredRuntimeBindings ? true : false>().toEqualTypeOf<false>()
 })

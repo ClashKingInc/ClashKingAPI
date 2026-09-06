@@ -17,7 +17,6 @@ import { StoredTokenCipher } from "./fernet.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { applyCors, recoverDefect, recoverRoute, route } from "./router.js"
 import { ServerAuthorization } from "./server-authorization.js"
-import { SharedLinksLimiter } from "./shared-links-limiter.js"
 import { GuildActivityStore } from "./public-metadata-runtime.js"
 import { DashboardServerOperations } from "./dashboard-server-runtime.js"
 import { DashboardMiscReads, DashboardPersonalLinks } from "./dashboard-misc-runtime.js"
@@ -25,9 +24,6 @@ import { dashboardMiscExternalLayer } from "./dashboard-misc-external.js"
 import { observeProxySearch } from "./proxy-search-observer.js"
 import { isJsonTranscriptRequest, readJsonTicketTranscript } from "./ticket-json-transcript.js"
 import { isApiDocumentationRequest, serveApiDocumentation } from "./api-documentation.js"
-
-export { MaterializedViewRefresher } from "./materialized-view-refresher.js"
-export { SharedLinksRateLimiter } from "./shared-links-rate-limiter.js"
 
 const liveLayer = (bindings: WorkerBindings) => {
   const environment = WorkerEnvironment.layer(bindings)
@@ -38,7 +34,6 @@ const liveLayer = (bindings: WorkerBindings) => {
     authMailerLayer,
     DiscordApi.layer,
     StoredTokenCipher.layer,
-    SharedLinksLimiter.layer,
   ).pipe(
     Layer.provideMerge(environment),
     Layer.provideMerge(databaseLayer(bindings)),
@@ -94,22 +89,5 @@ export default {
         headers,
       })
     })
-  },
-
-  scheduled(_controller: ScheduledController, bindings: WorkerBindings, context: ExecutionContext): void {
-    const refresher = bindings.MATERIALIZED_VIEW_REFRESHER.getByName(
-      "stats-materialized-views",
-      { locationHint: "enam" },
-    )
-    context.waitUntil(refresher.refresh().then(
-      (result) => console.log(JSON.stringify({ event: "materialized_view_refresh_complete", result })),
-      (failure) => {
-        console.error(JSON.stringify({
-          event: "materialized_view_refresh_failed",
-          failure: failure instanceof Error ? failure.message : String(failure),
-        }))
-        throw failure
-      },
-    ))
   },
 } satisfies ExportedHandler<WorkerBindings>

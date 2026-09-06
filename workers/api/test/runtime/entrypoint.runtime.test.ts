@@ -23,14 +23,13 @@ it("runs the complete fetch entrypoint inside workerd without external services"
         import { Effect } from "effect";
         import { lazyDatabaseLayer } from "./workers/api/src/database.ts";
         export const databaseLayer = () => lazyDatabaseLayer(Effect.die(new Error("Database unavailable in fixture")));
-        export const refreshMaterializedViews = Effect.die(new Error("Unexpected refresh"));
       `, resolveDir: process.cwd(), loader: "js" }))
     } }],
   })
   const script = result.outputFiles[0]?.text
   if (!script) throw new Error("Entrypoint bundle missing")
   const bundleExports = Object.values(result.metafile?.outputs ?? {}).flatMap((output) => output.exports)
-  expect(bundleExports.sort()).toEqual(["MaterializedViewRefresher", "SharedLinksRateLimiter", "default"])
+  expect(bundleExports.sort()).toEqual(["default"])
   const runtime = new Miniflare(convertV4MiniflareOptions({
     handleStructuredLogs: entry => { capturedLogs.push(JSON.stringify(entry)) },
     outboundService: () => {

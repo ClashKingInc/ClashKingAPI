@@ -2,7 +2,7 @@ import { PlayerLeaderboardResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { InvalidRequest, DatabaseFailure, UpstreamUnavailable } from "./errors.js"
-import type { WorkerBindings } from "./environment.js"
+import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls } from "./war-archive-model.js"
 
 const Snapshot = Schema.Struct({
@@ -28,31 +28,41 @@ export const decodeLeaderboardSnapshot = (value: unknown, family: "townhall" | "
   }).pipe(Effect.mapError(snapshotFailure))
 })
 
-export const queryPlayerLeaderboard = (bindings: Pick<WorkerBindings, "TRACKING" | "API_BOT_TOKEN">, family: "townhall" | "league", rawId: string, query: URLSearchParams) => Effect.gen(function* () {
+interface PlayerLeaderboardRow {
+  readonly rank: number
+  readonly tag: string
+  readonly name: string
+  readonly townhall_level: number
+  readonly trophies: number
+  readonly league_id: number | null
+  readonly clan_tag: string | null
+  readonly clan_name: string | null
+  readonly clan_badge_token: string | null
+}
+
+export const queryPlayerLeaderboard = (_bindings: unknown, family: "townhall" | "league", rawId: string, query: URLSearchParams) => Effect.gen(function* () {
   const id = Number(rawId)
   if (!/^\d+$/u.test(rawId) || !Number.isSafeInteger(id) || id < 1) return yield* new InvalidRequest({ message: "Invalid leaderboard identifier" })
-  const value = yield* Effect.tryPromise({ try: async (signal) => {
-    const response = await bindings.TRACKING.fetch(`http://tracking/internal/leaderboards/${family}/${id}`, {
-      headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}` }, signal, redirect: "error",
-    })
-    if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error(`Snapshot reader returned ${response.status}`) }
-    const reader = response.body.getReader(), chunks: Uint8Array[] = []
-    let size = 0
-    try {
-      for (;;) {
-        const chunk = await reader.read()
-        if (chunk.done) break
-        size += chunk.value.byteLength
-        if (size > 4 * 1024 * 1024) throw new Error("Snapshot exceeds supported size")
-        chunks.push(chunk.value)
-      }
-    } finally { await reader.cancel(); reader.releaseLock() }
-    const bytes = new Uint8Array(size)
-    let offset = 0
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
-    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
-  }, catch: snapshotFailure })
-  return yield* decodeLeaderboardSnapshot(value, family, id, leaderboardLimit(query))
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql.unsafe<PlayerLeaderboardRow>(`SELECT row_number() OVER (ORDER BY p.trophies DESC,p.tag)::integer AS rank,
+    p.tag,p.name,p.townhall_level,p.trophies,p.league_id,p.clan_tag,c.name AS clan_name,c.badge_token AS clan_badge_token
+    FROM basic_player p LEFT JOIN basic_clan c ON c.tag=p.clan_tag
+    WHERE ${family === "townhall" ? "p.townhall_level=$1" : "p.league_id=$1"}
+    ORDER BY p.trophies DESC,p.tag LIMIT $2`, [id, leaderboardLimit(query)]).pipe(
+    Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Player leaderboard query failed" })),
+  )
+  const items = rows.map((row) => {
+    const league = row.league_id === null ? undefined : lookupStaticItem("league_tiers", row.league_id)
+    const clanBadge = row.clan_badge_token === null ? undefined : badgeUrls(row.clan_badge_token).medium
+    return {
+      rank: row.rank, tag: row.tag, name: row.name, townhall_level: row.townhall_level, trophies: row.trophies,
+      ...(row.league_id === null ? {} : { league_id: row.league_id }),
+      ...(league === undefined ? {} : { league: { id: league.id, name: league.name, badge: league.iconUrls?.medium ?? "" } }),
+      ...(row.clan_tag === null ? {} : { clan_tag: row.clan_tag }),
+      ...(row.clan_tag === null || clanBadge === undefined ? {} : { clan: { tag: row.clan_tag, ...(row.clan_name === null ? {} : { name: row.clan_name }), badge: clanBadge } }),
+    }
+  })
+  return { items, count: items.length, ...(family === "townhall" ? { townhall_level: id } : { league_tier_id: id }) }
 })
 
 interface ClanLeaderboardRow {

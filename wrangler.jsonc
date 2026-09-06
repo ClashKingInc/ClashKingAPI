@@ -32,33 +32,6 @@
     "logs": { "enabled": true, "invocation_logs": false },
     "traces": { "enabled": false }
   },
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "MATERIALIZED_VIEW_REFRESHER",
-        "class_name": "MaterializedViewRefresher"
-      },
-      {
-        "name": "SHARED_LINKS_LIMITER",
-        "class_name": "SharedLinksRateLimiter"
-      }
-    ]
-  },
-  // This Worker currently has no Durable Object migration history. Only the
-  // two classes exported and bound by this release are created here.
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["MaterializedViewRefresher"]
-    },
-    {
-      "tag": "v2-shared-links-limit",
-      "new_sqlite_classes": ["SharedLinksRateLimiter"]
-    }
-  ],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
@@ -99,10 +72,6 @@
     {
       "binding": "CLASH_PROXY",
       "service_id": "01a0786e-ed47-7b00-bbb3-1fc23455f51b"
-    },
-    {
-      "binding": "TRACKING",
-      "service_id": "01a0786f-12e2-7e81-8e5e-57846420f911"
     },
     {
       "binding": "ELASTICSEARCH",

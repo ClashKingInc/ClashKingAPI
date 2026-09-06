@@ -126,7 +126,6 @@ describe("link mutations against authoritative Goose migrations", () => {
     yield* json(principal, `/links/${id}/%23QPG`, "DELETE")
     yield* json(principal, `/links/${id}/%23QPR`, "DELETE")
     expect(yield* json(principal, `/links/${id}/%23QPR`, "DELETE").pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
-    expect(yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag = '#QPR'`).toHaveLength(1)
   })))
 
   it("does not recreate links when a user mutation races account deletion", () => run(Effect.gen(function* () {
@@ -144,7 +143,6 @@ describe("link mutations against authoritative Goose migrations", () => {
     expect(yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${id}`).toEqual([])
     expect(yield* sql`SELECT tag FROM player_links WHERE user_id = ${id}`).toEqual([])
     expect(yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id = ${id}`).toHaveLength(1)
-    expect(yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag = '#QPJ'`).toHaveLength(1)
   })))
 
   it("rechecks authenticated identity after an in-flight Clash lookup completes following account deletion", () => run(Effect.gen(function* () {

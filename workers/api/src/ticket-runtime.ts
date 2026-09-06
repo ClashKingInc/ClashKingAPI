@@ -210,12 +210,8 @@ const finalizeOpen = (row: OperationRow, interaction: VerifiedRuntimeInteraction
   if (bytes(progress)>30_000) return yield* new Conflict({message:"Ticket answers exceed the durable snapshot limit"})
   if (context.settings.account_apply) {
     if (!progress.accounts.length) return yield* new Conflict({message:"Ticket application requires a selected account"})
-    // Match every canonical account writer: tag mutexes, subject mutex, then
-    // link rows. A form's earlier account list is not current ownership proof.
-    for (const tag of [...new Set(progress.accounts)].sort()) {
-      yield* sql`INSERT INTO player_link_mutation_locks(tag) VALUES(${tag}) ON CONFLICT(tag) DO NOTHING`
-      yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag=${tag} FOR UPDATE`
-    }
+    // Lock the subject and then re-read its current link rows. A form's earlier
+    // account list is not current ownership proof.
     yield* sql`INSERT INTO subject_mutation_locks(subject_id) VALUES(${row.actor_user_id}) ON CONFLICT(subject_id) DO NOTHING`
     yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${row.actor_user_id} FOR UPDATE`
     const current=yield* sql<AccountRow>`SELECT links.tag,player.name,player.townhall_level,details.heroes,details.achievements

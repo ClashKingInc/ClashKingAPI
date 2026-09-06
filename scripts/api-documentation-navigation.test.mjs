@@ -72,7 +72,6 @@ test("new public operations receive explicit feature names and path-level metada
     ["post", "/v2/server/{guild}/rosters/{id}/discord-identity/refresh", "Roster Builder"],
     ["get", "/v2/ticket-transcripts/{capability}", "Ticket Transcripts"],
     ["get", "/v2/ticket-transcripts/{capability}/attachments/{id}", "Ticket Transcripts"],
-    ["post", "/v2/tracking/verified-players", "Tracking"],
   ]
   const paths = Object.fromEntries(additions.map(([method, path]) => [path, {
     [method]: { tags: ["public"], security: [] }, parameters: [{ name: "fixture", in: "header" }],

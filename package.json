@@ -21,7 +21,6 @@
     "docs:build": "npm run openapi:generate && node scripts/build-api-documentation.mjs",
     "lint": "oxlint --deny-warnings --ignore-pattern '**/dist/**' packages workers/api",
     "test": "vitest run",
-    "test:durable": "vitest run --config vitest.durable.config.ts",
     "test:archive-runtime": "npm run docs:build && vitest run --config vitest.archive-runtime.config.ts",
     "test:postgres": "vitest run --config vitest.postgres.config.ts",
     "test:postgres:all": "bash scripts/test-postgres.sh",

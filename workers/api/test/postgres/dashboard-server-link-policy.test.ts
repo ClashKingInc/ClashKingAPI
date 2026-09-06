@@ -51,7 +51,6 @@ const fixture = (suffix: number, tag: string, enabled = true) => Effect.gen(func
     return {
       links: yield* sql`SELECT to_jsonb(p) AS value,xmin::text AS version FROM player_links p WHERE tag=${tag}`,
       privateData: yield* sql`SELECT data,xmin::text AS version FROM player_upgrades WHERE player_tag=${tag}`,
-      tagLocks: yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag=${tag}`,
       subjectLocks: yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${userId}`,
     }
   })
@@ -129,7 +128,6 @@ describe("Dashboard server-link policy through the real store and canonical link
     current.setPlayerStatus(404)
     expect(yield* current.dispatch("DELETE")).toMatchObject({ status: 200 })
     expect(yield* current.sql`SELECT tag FROM player_links WHERE tag=${current.tag}`).toEqual([])
-    expect(yield* current.sql`SELECT tag FROM player_link_mutation_locks WHERE tag=${current.tag}`).toHaveLength(1)
     expect(yield* current.sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${current.userId}`).toHaveLength(1)
   })))
 

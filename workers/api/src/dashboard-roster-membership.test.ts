@@ -29,11 +29,11 @@ describe("retained Dashboard roster membership guards", () => {
     await expect(Effect.runPromise(lockRosterMembership(sql, serverId, [rosterId]))).rejects.toMatchObject({ _tag: "NotFound" })
   })
 
-  it("uses sorted tag locks before sorted owner locks and rereads canonical ownership", async () => {
+  it("locks linked rows before sorted owner locks and rereads canonical ownership", async () => {
     const owners = [{ tag: "#A", user_id: "20" }, { tag: "#B", user_id: "10" }]
     const { sql, calls } = makeSql(statement => statement.includes("SELECT tag, user_id") ? owners : [])
     expect(await Effect.runPromise(lockRosterAdmissionOwners(sql, ["#B", "#A", "#A"]))).toEqual(new Map([["#A", "20"], ["#B", "10"]]))
-    expect(calls.filter(call => call.statement.includes("INSERT INTO player_link_mutation_locks")).map(call => call.values[0])).toEqual(["#A", "#B"])
+    expect(calls.find(call => call.statement.includes("SELECT tag, user_id"))?.statement).toContain("ORDER BY tag FOR UPDATE")
     expect(calls.filter(call => call.statement.includes("INSERT INTO subject_mutation_locks")).map(call => call.values[0])).toEqual(["10", "20"])
     expect(calls.filter(call => call.statement.includes("SELECT tag, user_id"))).toHaveLength(2)
   })

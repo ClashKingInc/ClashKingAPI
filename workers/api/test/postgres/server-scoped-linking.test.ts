@@ -24,7 +24,6 @@ const fixture = (suffix: number) => Effect.gen(function* () {
     return {
       links: yield* sql`SELECT to_jsonb(link) AS value,xmin::text AS row_version FROM player_links link WHERE tag=${playerTag}`,
       upgrades: yield* sql`SELECT data,xmin::text AS row_version FROM player_upgrades WHERE player_tag=${playerTag}`,
-      tagLocks: yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag=${playerTag}`,
       subjectLocks: yield* sql`SELECT subject_id FROM subject_mutation_locks WHERE subject_id=${userId}`,
     }
   })

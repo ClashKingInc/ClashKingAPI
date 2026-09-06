@@ -48,7 +48,6 @@ npm ci
 npm run typecheck
 npm test
 npm run test:scripts
-npm run test:durable
 npm run test:archive-runtime
 npm run lint
 npm run openapi:check

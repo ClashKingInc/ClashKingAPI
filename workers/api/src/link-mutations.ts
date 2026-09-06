@@ -126,14 +126,29 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
-    // A durable tag mutex also serializes claims when player_links has no row.
-    yield* sql`INSERT INTO player_link_mutation_locks (tag) VALUES (${playerTag}) ON CONFLICT (tag) DO NOTHING`
-    yield* sql`SELECT tag FROM player_link_mutation_locks WHERE tag = ${playerTag} FOR UPDATE`
-    const owners = yield* sql<{ user_id: string | null }>`SELECT user_id FROM player_links WHERE tag = ${playerTag}`
-    const previousOwner = owners[0]?.user_id
-    yield* lockSubjects(previousOwner === null || previousOwner === undefined ? [userId] : [userId, previousOwner])
-    const existing = (yield* sql<LinkRow>`SELECT tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login
+    // Serialize this subject's order assignment before a new row can be
+    // inserted. The unique player tag decides which concurrent claimant wins.
+    yield* lockSubjects([userId])
+    let existing = (yield* sql<LinkRow>`SELECT tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login
       FROM player_links WHERE tag = ${playerTag} FOR UPDATE`)[0]
+    if (existing === undefined) {
+      const inserted = yield* sql<{ is_verified: boolean; hidden: boolean }>`INSERT INTO player_links
+        (tag, user_id, source, order_index, is_verified, verified_at)
+        SELECT ${playerTag}, ${userId}, 'clashking', COALESCE(max(order_index) + 1, 0), ${verifyOwnership}, CASE WHEN ${verifyOwnership} THEN now() ELSE NULL END
+        FROM player_links WHERE user_id = ${userId}
+        ON CONFLICT (tag) DO NOTHING RETURNING is_verified, hidden`
+      if (inserted[0] !== undefined) {
+        if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
+        return {response:{
+          message: verifyOwnership ? "Clash of Clans account linked successfully with ownership verification" : "Clash of Clans account linked successfully",
+          account: { ...player, ...inserted[0] },
+        },affectedSubjectIds:[userId]}
+      }
+      existing = (yield* sql<LinkRow>`SELECT tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login
+        FROM player_links WHERE tag = ${playerTag} FOR UPDATE`)[0]
+      if (existing === undefined) return yield* Effect.die(new Error("Concurrent linked account was not found"))
+    }
+    if (existing.user_id !== null && existing.user_id !== userId) yield* lockSubjects([existing.user_id])
     if (existing !== undefined && existing.user_id !== userId && !verifyOwnership) {
       return yield* new LinkOwnershipConflict({ account: { ...player, is_verified: false, hidden: false } })
     }
@@ -152,8 +167,9 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
       FROM player_links WHERE user_id = ${userId}
       ON CONFLICT (tag) DO UPDATE SET source = 'clashking', is_verified = player_links.is_verified OR EXCLUDED.is_verified,
         verified_at = COALESCE(player_links.verified_at, EXCLUDED.verified_at), updated_at = now()
+        WHERE player_links.user_id = EXCLUDED.user_id
       RETURNING is_verified, hidden`
-    if (saved[0] === undefined) return yield* Effect.die(new Error("Linked account was not saved"))
+    if (saved[0] === undefined) return yield* new LinkOwnershipConflict({ account: { ...player, is_verified: false, hidden: false } })
     if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
     return {response:{
       message: verifyOwnership ? "Clash of Clans account linked successfully with ownership verification" : "Clash of Clans account linked successfully",

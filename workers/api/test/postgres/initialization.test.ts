@@ -19,7 +19,8 @@ const player = { tag, name: "Init player", townHallLevel: 18, expLevel: 200, tro
   clan: { tag: clanTag, name: "Init clan", clanLevel: 10, badgeUrls: badges } }
 const clan = { tag: clanTag, name: "Init clan", type: "inviteOnly", description: "", isFamilyFriendly: true, badgeUrls: badges,
   clanLevel: 10, clanPoints: 5000, clanBuilderBasePoints: 0, clanCapitalPoints: 0, requiredTrophies: 0, warFrequency: "always",
-  warWinStreak: 0, warWins: 1, isWarLogPublic: true, members: 1, memberList: [], labels: [] }
+  warWinStreak: 0, warWins: 1, isWarLogPublic: true, members: 1, memberList: [], labels: [],
+  clanCapital: { capitalHallLevel: 0, clanGoldSinkTotal: 0, districts: [] } }
 const fetch = vi.fn(async (request: Request) => {
   const path = decodeURIComponent(new URL(request.url).pathname)
   if (path === `/v1/players/${tag}`) return Response.json(player)

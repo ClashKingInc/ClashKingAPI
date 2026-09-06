@@ -12,6 +12,9 @@ test("generated OpenAPI excludes internal transport and deferred runtime operati
     const output = join(directory, "openapi.json")
     execFileSync(process.execPath, ["scripts/generate-openapi.mjs", output], { stdio: "pipe" })
     const document = JSON.parse(readFileSync(output, "utf8"))
+    assert.match(document.info.description, /### Clash of Clans Based API 👑/)
+    assert.match(document.info.description, /Creator Code: ClashKing/)
+    assert.match(document.info.description, /Supercell's Fan Content Policy/)
     const runtimeDescriptors = [...Object.values(deferred.persistentRuntimeEndpoints),
       ...Object.values(deferred.rosterInteractionEndpoints), deferred.TicketMessageEventEndpoint]
     assert.equal(runtimeDescriptors.length, 19)

@@ -23,7 +23,7 @@ const dependencies=Layer.mergeAll(db,WorkerEnvironment.layer(bindings),
       ?{kind:"bot" as const}:{kind:"user" as const,userId:user})}),
   Layer.succeed(DiscordCredentials,{accessToken:()=>Effect.succeed("fixture-access")}),
   Layer.succeed(DiscordApi,{request:(path:string)=>{
-    if(path==="/users/@me/guilds?limit=200")return Effect.succeed([{id:server,owner:false,permissions:permission}])
+    if(path==="/users/@me/guilds?limit=200&with_counts=true")return Effect.succeed([{id:server,owner:false,permissions:permission}])
     if(path===`/guilds/${server}/members/${user}`||path===`/guilds/${other}/members/${user}`)return Effect.succeed({roles})
     return Effect.die(new Error(`Unexpected Discord path ${path}`))
   },token:()=>Effect.die("Unexpected OAuth mutation")}),
@@ -62,8 +62,18 @@ it("runs all moderation routes through canonical section authorization and real 
   await expect(dispatch("DELETE",`${other}/strikes/${created.strike_id}`)).rejects.toMatchObject({_tag:"Forbidden"})
   expect((await dispatch("DELETE",`${server}/strikes/${created.strike_id}`))?.status).toBe(200)
   expect((await dispatch("DELETE",`${server}/bans/%23P0Y`))?.status).toBe(200)
-  roles=[];await expect(dispatch("GET",`${server}/bans`)).rejects.toMatchObject({_tag:"Forbidden"})
-  for(const bits of ["8","32"]){permission=bits;expect((await dispatch("GET",`${server}/strikes`))?.status).toBe(200)}
+  roles=[]
+  await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient
+    yield* sql`UPDATE discord_cache.dashboard_access SET expires_at=clock_timestamp()-interval '1 second'`
+  }))
+  await expect(dispatch("GET",`${server}/bans`)).rejects.toMatchObject({_tag:"Forbidden"})
+  for(const bits of ["8","32"]){
+    permission=bits
+    await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient
+      yield* sql`UPDATE discord_cache.dashboard_access SET expires_at=clock_timestamp()-interval '1 second'`
+    }))
+    expect((await dispatch("GET",`${server}/strikes`))?.status).toBe(200)
+  }
   permission="0";expect((await dispatch("GET",`${other}/bans`,undefined,true))?.status).toBe(200)
 })
 

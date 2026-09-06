@@ -10,14 +10,14 @@ export declare const BotAccountsEndpoint: import("./endpoint.js").Endpoint<Schem
         readonly hidden: Schema.Boolean;
         readonly added_at: Schema.String;
         readonly verified_at: Schema.optionalKey<Schema.String>;
-        readonly last_login: Schema.NullOr<Schema.String>;
+        readonly last_login: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     }>>;
 }>, readonly []>;
 export declare const BotLinkAccountEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly userId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly player_tag: Schema.String;
-    readonly api_token: Schema.String;
+    readonly api_token: Schema.optionalKey<Schema.String>;
 }>, Schema.Struct<{
     readonly message: Schema.String;
     readonly account: Schema.Struct<{
@@ -79,7 +79,7 @@ export declare const BotDashboardCapabilitiesEndpoint: import("./endpoint.js").E
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly server_id: Schema.String;
     readonly full_access: Schema.Boolean;
-    readonly sections: Schema.$Record<Schema.String, Schema.String>;
+    readonly sections: Schema.$Record<Schema.String, Schema.Literals<readonly ["view", "manage"]>>;
 }>, readonly []>;
 export declare const BotServerWarLeaderboardEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
@@ -165,7 +165,9 @@ export declare const BotServerClanGamesLeaderboardEndpoint: import("./endpoint.j
 }>, readonly []>;
 export declare const BotBansEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
-}>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
+}>, Schema.Struct<{
+    readonly user_id: Schema.optionalKey<Schema.String>;
+}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
         readonly VillageTag: Schema.String;
         readonly VillageName: Schema.String;
@@ -194,10 +196,12 @@ export declare const BotBansEndpoint: import("./endpoint.js").Endpoint<Schema.St
 export declare const BotSaveBanEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
     readonly tag: Schema.String;
-}>, Schema.Struct<{}>, Schema.Struct<{
-    readonly reason: Schema.String;
+}>, Schema.Struct<{
+    readonly user_id: Schema.optionalKey<Schema.String>;
+}>, Schema.Struct<{
+    readonly reason: Schema.NullOr<Schema.String>;
     readonly added_by: Schema.String;
-    readonly image: Schema.String;
+    readonly image: Schema.NullOr<Schema.String>;
 }>, Schema.Struct<{
     readonly status: Schema.String;
     readonly player_tag: Schema.String;
@@ -207,7 +211,9 @@ export declare const BotSaveBanEndpoint: import("./endpoint.js").Endpoint<Schema
 export declare const BotDeleteBanEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
     readonly tag: Schema.String;
-}>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
+}>, Schema.Struct<{
+    readonly user_id: Schema.optionalKey<Schema.String>;
+}>, Schema.Struct<{}>, Schema.Struct<{
     readonly status: Schema.String;
     readonly player_tag: Schema.String;
     readonly player_name: Schema.optionalKey<Schema.String>;
@@ -272,11 +278,11 @@ export declare const BotAddStrikeEndpoint: import("./endpoint.js").Endpoint<Sche
     readonly serverId: Schema.String;
     readonly tag: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
-    readonly reason: Schema.String;
-    readonly added_by: Schema.String;
-    readonly rollover_days: Schema.Number;
-    readonly strike_weight: Schema.Number;
-    readonly image: Schema.String;
+    readonly reason: Schema.optionalKey<Schema.String>;
+    readonly added_by: Schema.optionalKey<Schema.String>;
+    readonly rollover_days: Schema.optionalKey<Schema.Number>;
+    readonly strike_weight: Schema.optionalKey<Schema.Number>;
+    readonly image: Schema.optionalKey<Schema.String>;
 }>, Schema.Struct<{
     readonly status: Schema.String;
     readonly strike_id: Schema.String;
@@ -302,17 +308,8 @@ export declare const BotRostersEndpoint: import("./endpoint.js").Endpoint<Schema
     readonly serverId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
         readonly minTownhall: Schema.NullOr<Schema.Number>;
         readonly maxTownhall: Schema.NullOr<Schema.Number>;
-        readonly rosterRoleId: Schema.NullOr<Schema.String>;
-        readonly memberGroups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signupEnabled: Schema.Boolean;
-            readonly roleId: Schema.NullOr<Schema.String>;
-        }>>;
         readonly databaseId: Schema.optionalKey<Schema.String>;
         readonly id: Schema.String;
         readonly serverId: Schema.String;
@@ -354,17 +351,8 @@ export declare const BotRosterEndpoint: import("./endpoint.js").Endpoint<Schema.
     readonly rosterId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
         readonly minTownhall: Schema.NullOr<Schema.Number>;
         readonly maxTownhall: Schema.NullOr<Schema.Number>;
-        readonly rosterRoleId: Schema.NullOr<Schema.String>;
-        readonly memberGroups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signupEnabled: Schema.Boolean;
-            readonly roleId: Schema.NullOr<Schema.String>;
-        }>>;
         readonly databaseId: Schema.optionalKey<Schema.String>;
         readonly id: Schema.String;
         readonly serverId: Schema.String;
@@ -400,8 +388,6 @@ export declare const BotRosterEndpoint: import("./endpoint.js").Endpoint<Schema.
         readonly createdAt: Schema.String;
         readonly updatedAt: Schema.String;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly memberGroupId: Schema.NullOr<Schema.String>;
-            readonly isSubstitute: Schema.Boolean;
             readonly playerTag: Schema.String;
             readonly playerName: Schema.String;
             readonly clanTag: Schema.NullOr<Schema.String>;
@@ -446,7 +432,7 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly serverId: Schema.String;
         readonly prize: Schema.String;
         readonly channelId: Schema.optionalKey<Schema.String>;
-        readonly status: Schema.String;
+        readonly status: Schema.Literals<readonly ["scheduled", "ongoing", "ended"]>;
         readonly start: Schema.String;
         readonly end: Schema.String;
         readonly winners: Schema.Number;
@@ -457,19 +443,21 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly imageUrl: Schema.optionalKey<Schema.String>;
         readonly profilePictureRequired: Schema.Boolean;
         readonly cocAccountRequired: Schema.Boolean;
-        readonly rolesMode: Schema.String;
+        readonly rolesMode: Schema.Literals<readonly ["allow", "deny", "none"]>;
         readonly roles: Schema.$Array<Schema.String>;
         readonly boosters: Schema.$Array<Schema.Struct<{
             readonly value: Schema.Number;
             readonly roles: Schema.$Array<Schema.String>;
         }>>;
-        readonly entries: Schema.$Array<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+        readonly entries: Schema.$Array<Schema.Union<readonly [Schema.String, Schema.Struct<{
+            readonly user_id: Schema.String;
+        }>]>>;
         readonly winnersList: Schema.$Array<Schema.Struct<{
             readonly userId: Schema.String;
             readonly username: Schema.optionalKey<Schema.String>;
             readonly avatarUrl: Schema.optionalKey<Schema.String>;
             readonly inServer: Schema.Boolean;
-            readonly status: Schema.String;
+            readonly status: Schema.Literals<readonly ["winner", "rerolled"]>;
             readonly timestamp: Schema.optionalKey<Schema.String>;
             readonly reason: Schema.optionalKey<Schema.String>;
         }>>;
@@ -485,7 +473,7 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly serverId: Schema.String;
         readonly prize: Schema.String;
         readonly channelId: Schema.optionalKey<Schema.String>;
-        readonly status: Schema.String;
+        readonly status: Schema.Literals<readonly ["scheduled", "ongoing", "ended"]>;
         readonly start: Schema.String;
         readonly end: Schema.String;
         readonly winners: Schema.Number;
@@ -496,19 +484,21 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly imageUrl: Schema.optionalKey<Schema.String>;
         readonly profilePictureRequired: Schema.Boolean;
         readonly cocAccountRequired: Schema.Boolean;
-        readonly rolesMode: Schema.String;
+        readonly rolesMode: Schema.Literals<readonly ["allow", "deny", "none"]>;
         readonly roles: Schema.$Array<Schema.String>;
         readonly boosters: Schema.$Array<Schema.Struct<{
             readonly value: Schema.Number;
             readonly roles: Schema.$Array<Schema.String>;
         }>>;
-        readonly entries: Schema.$Array<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+        readonly entries: Schema.$Array<Schema.Union<readonly [Schema.String, Schema.Struct<{
+            readonly user_id: Schema.String;
+        }>]>>;
         readonly winnersList: Schema.$Array<Schema.Struct<{
             readonly userId: Schema.String;
             readonly username: Schema.optionalKey<Schema.String>;
             readonly avatarUrl: Schema.optionalKey<Schema.String>;
             readonly inServer: Schema.Boolean;
-            readonly status: Schema.String;
+            readonly status: Schema.Literals<readonly ["winner", "rerolled"]>;
             readonly timestamp: Schema.optionalKey<Schema.String>;
             readonly reason: Schema.optionalKey<Schema.String>;
         }>>;
@@ -524,7 +514,7 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly serverId: Schema.String;
         readonly prize: Schema.String;
         readonly channelId: Schema.optionalKey<Schema.String>;
-        readonly status: Schema.String;
+        readonly status: Schema.Literals<readonly ["scheduled", "ongoing", "ended"]>;
         readonly start: Schema.String;
         readonly end: Schema.String;
         readonly winners: Schema.Number;
@@ -535,19 +525,21 @@ export declare const BotGiveawaysEndpoint: import("./endpoint.js").Endpoint<Sche
         readonly imageUrl: Schema.optionalKey<Schema.String>;
         readonly profilePictureRequired: Schema.Boolean;
         readonly cocAccountRequired: Schema.Boolean;
-        readonly rolesMode: Schema.String;
+        readonly rolesMode: Schema.Literals<readonly ["allow", "deny", "none"]>;
         readonly roles: Schema.$Array<Schema.String>;
         readonly boosters: Schema.$Array<Schema.Struct<{
             readonly value: Schema.Number;
             readonly roles: Schema.$Array<Schema.String>;
         }>>;
-        readonly entries: Schema.$Array<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+        readonly entries: Schema.$Array<Schema.Union<readonly [Schema.String, Schema.Struct<{
+            readonly user_id: Schema.String;
+        }>]>>;
         readonly winnersList: Schema.$Array<Schema.Struct<{
             readonly userId: Schema.String;
             readonly username: Schema.optionalKey<Schema.String>;
             readonly avatarUrl: Schema.optionalKey<Schema.String>;
             readonly inServer: Schema.Boolean;
-            readonly status: Schema.String;
+            readonly status: Schema.Literals<readonly ["winner", "rerolled"]>;
             readonly timestamp: Schema.optionalKey<Schema.String>;
             readonly reason: Schema.optionalKey<Schema.String>;
         }>>;
@@ -568,7 +560,7 @@ export declare const BotGiveawayEndpoint: import("./endpoint.js").Endpoint<Schem
     readonly serverId: Schema.String;
     readonly prize: Schema.String;
     readonly channelId: Schema.optionalKey<Schema.String>;
-    readonly status: Schema.String;
+    readonly status: Schema.Literals<readonly ["scheduled", "ongoing", "ended"]>;
     readonly start: Schema.String;
     readonly end: Schema.String;
     readonly winners: Schema.Number;
@@ -579,19 +571,21 @@ export declare const BotGiveawayEndpoint: import("./endpoint.js").Endpoint<Schem
     readonly imageUrl: Schema.optionalKey<Schema.String>;
     readonly profilePictureRequired: Schema.Boolean;
     readonly cocAccountRequired: Schema.Boolean;
-    readonly rolesMode: Schema.String;
+    readonly rolesMode: Schema.Literals<readonly ["allow", "deny", "none"]>;
     readonly roles: Schema.$Array<Schema.String>;
     readonly boosters: Schema.$Array<Schema.Struct<{
         readonly value: Schema.Number;
         readonly roles: Schema.$Array<Schema.String>;
     }>>;
-    readonly entries: Schema.$Array<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+    readonly entries: Schema.$Array<Schema.Union<readonly [Schema.String, Schema.Struct<{
+        readonly user_id: Schema.String;
+    }>]>>;
     readonly winnersList: Schema.$Array<Schema.Struct<{
         readonly userId: Schema.String;
         readonly username: Schema.optionalKey<Schema.String>;
         readonly avatarUrl: Schema.optionalKey<Schema.String>;
         readonly inServer: Schema.Boolean;
-        readonly status: Schema.String;
+        readonly status: Schema.Literals<readonly ["winner", "rerolled"]>;
         readonly timestamp: Schema.optionalKey<Schema.String>;
         readonly reason: Schema.optionalKey<Schema.String>;
     }>>;
@@ -701,12 +695,10 @@ export declare const BotTicketsEndpoint: import("./endpoint.js").Endpoint<Schema
     readonly serverId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
-        readonly id: Schema.String;
         readonly name: Schema.String;
         readonly server_id: Schema.String;
-        readonly embed_name: Schema.optionalKey<Schema.String>;
+        readonly embed_name: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly components: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
             readonly custom_id: Schema.String;
             readonly label: Schema.String;
             readonly style: Schema.Number;
@@ -730,15 +722,15 @@ export declare const BotTicketsEndpoint: import("./endpoint.js").Endpoint<Schema
             readonly apply_clans: Schema.$Array<Schema.String>;
             readonly roles_to_add: Schema.$Array<Schema.String>;
             readonly roles_to_remove: Schema.$Array<Schema.String>;
-            readonly townhall_requirements: Schema.$Record<Schema.String, Schema.Number>;
-            readonly new_message: Schema.optionalKey<Schema.String>;
+            readonly townhall_requirements: Schema.$Record<Schema.String, Schema.$Record<Schema.String, Schema.Number>>;
+            readonly new_message: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         }>>;
-        readonly open_category: Schema.optionalKey<Schema.String>;
-        readonly sleep_category: Schema.optionalKey<Schema.String>;
-        readonly closed_category: Schema.optionalKey<Schema.String>;
-        readonly status_change_log: Schema.optionalKey<Schema.String>;
-        readonly ticket_button_click_log: Schema.optionalKey<Schema.String>;
-        readonly ticket_close_log: Schema.optionalKey<Schema.String>;
+        readonly open_category: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+        readonly sleep_category: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+        readonly closed_category: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+        readonly status_change_log: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+        readonly ticket_button_click_log: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+        readonly ticket_close_log: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly approve_messages: Schema.$Array<Schema.Struct<{
             readonly name: Schema.String;
             readonly message: Schema.String;
@@ -753,7 +745,79 @@ export declare const BotEmbedsEndpoint: import("./endpoint.js").Endpoint<Schema.
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
         readonly name: Schema.String;
-        readonly data: Schema.$Record<Schema.String, Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+        readonly data: Schema.StructWithRest<Schema.Struct<{
+            readonly content: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+            readonly username: Schema.optionalKey<Schema.String>;
+            readonly avatar_url: Schema.optionalKey<Schema.String>;
+            readonly embeds: Schema.optionalKey<Schema.$Array<Schema.Struct<{
+                readonly title: Schema.optionalKey<Schema.String>;
+                readonly description: Schema.optionalKey<Schema.String>;
+                readonly url: Schema.optionalKey<Schema.String>;
+                readonly timestamp: Schema.optionalKey<Schema.String>;
+                readonly color: Schema.optionalKey<Schema.Number>;
+                readonly footer: Schema.optionalKey<Schema.Struct<{
+                    readonly text: Schema.String;
+                    readonly icon_url: Schema.optionalKey<Schema.String>;
+                }>>;
+                readonly image: Schema.optionalKey<Schema.Struct<{
+                    readonly url: Schema.String;
+                }>>;
+                readonly thumbnail: Schema.optionalKey<Schema.Struct<{
+                    readonly url: Schema.String;
+                }>>;
+                readonly author: Schema.optionalKey<Schema.Struct<{
+                    readonly name: Schema.String;
+                    readonly url: Schema.optionalKey<Schema.String>;
+                    readonly icon_url: Schema.optionalKey<Schema.String>;
+                }>>;
+                readonly fields: Schema.optionalKey<Schema.$Array<Schema.Struct<{
+                    readonly name: Schema.String;
+                    readonly value: Schema.String;
+                    readonly inline: Schema.optionalKey<Schema.Boolean>;
+                }>>>;
+            }>>>;
+            readonly components: Schema.optionalKey<Schema.$Array<Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+            readonly messages: Schema.optionalKey<Schema.$Array<Schema.StructWithRest<Schema.Struct<{
+                readonly data: Schema.StructWithRest<Schema.Struct<{
+                    readonly content: Schema.optionalKey<Schema.NullOr<Schema.String>>;
+                    readonly username: Schema.optionalKey<Schema.String>;
+                    readonly avatar_url: Schema.optionalKey<Schema.String>;
+                    readonly tts: Schema.optionalKey<Schema.Boolean>;
+                    readonly embeds: Schema.optionalKey<Schema.$Array<Schema.Struct<{
+                        readonly title: Schema.optionalKey<Schema.String>;
+                        readonly description: Schema.optionalKey<Schema.String>;
+                        readonly url: Schema.optionalKey<Schema.String>;
+                        readonly timestamp: Schema.optionalKey<Schema.String>;
+                        readonly color: Schema.optionalKey<Schema.Number>;
+                        readonly footer: Schema.optionalKey<Schema.Struct<{
+                            readonly text: Schema.String;
+                            readonly icon_url: Schema.optionalKey<Schema.String>;
+                        }>>;
+                        readonly image: Schema.optionalKey<Schema.Struct<{
+                            readonly url: Schema.String;
+                        }>>;
+                        readonly thumbnail: Schema.optionalKey<Schema.Struct<{
+                            readonly url: Schema.String;
+                        }>>;
+                        readonly author: Schema.optionalKey<Schema.Struct<{
+                            readonly name: Schema.String;
+                            readonly url: Schema.optionalKey<Schema.String>;
+                            readonly icon_url: Schema.optionalKey<Schema.String>;
+                        }>>;
+                        readonly fields: Schema.optionalKey<Schema.$Array<Schema.Struct<{
+                            readonly name: Schema.String;
+                            readonly value: Schema.String;
+                            readonly inline: Schema.optionalKey<Schema.Boolean>;
+                        }>>>;
+                    }>>>;
+                    readonly components: Schema.optionalKey<Schema.$Array<Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+                    readonly attachments: Schema.optionalKey<Schema.$Array<Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+                    readonly allowed_mentions: Schema.optionalKey<Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>;
+                    readonly flags: Schema.optionalKey<Schema.Number>;
+                }>, readonly [Schema.$Record<Schema.String, Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>;
+            }>, readonly [Schema.$Record<Schema.String, Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>>>;
+            readonly application_id: Schema.optionalKey<Schema.String>;
+        }>, readonly [Schema.$Record<Schema.String, Schema.Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>;
     }>>;
     readonly total: Schema.Number;
 }>, readonly []>;

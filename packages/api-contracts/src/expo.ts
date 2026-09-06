@@ -1,4 +1,6 @@
 import { AppConfigEndpoint } from "./app-config.js"
+import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
+export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
   AuthDeleteEndpoint,
   AuthDiscordEndpoint,
@@ -85,6 +87,7 @@ import {
   ClanLocationCountsEndpoint,
   CwlLeagueCountsEndpoint,
   GlobalCountsEndpoint,
+  PlayerBuilderhallCountsEndpoint,
   PlayerLeagueTierCountsEndpoint,
   PlayerTownhallCountsEndpoint,
   StatsOverviewEndpoint,
@@ -136,6 +139,7 @@ export { StatsArmiesEndpoint, StatsArmiesRequest, StatsCwlEndpoint, StatsCwlRequ
   StatsWarEndpoint, StatsWarRequest } from "./stats.js"
 
 export const expoEndpoints = {
+  storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,
   authDiscord: AuthDiscordEndpoint,
@@ -210,6 +214,7 @@ export const expoEndpoints = {
   statsOverview: StatsOverviewEndpoint,
   globalCounts: GlobalCountsEndpoint,
   playerTownhallCounts: PlayerTownhallCountsEndpoint,
+  playerBuilderhallCounts: PlayerBuilderhallCountsEndpoint,
   playerLeagueTierCounts: PlayerLeagueTierCountsEndpoint,
   clanLocationCounts: ClanLocationCountsEndpoint,
   cwlLeagueCounts: CwlLeagueCountsEndpoint,

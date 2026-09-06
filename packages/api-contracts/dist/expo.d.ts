@@ -1,3 +1,4 @@
+export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js";
 export * from "./expo-auth.js";
 export * from "./expo-clan.js";
 export * from "./expo-content.js";
@@ -13,6 +14,132 @@ export { AppConfigEndpoint, AppConfigResponse } from "./app-config.js";
 export type { AnyEndpoint, EndpointRequest, EndpointResponse } from "./endpoint.js";
 export { StatsArmiesEndpoint, StatsArmiesRequest, StatsCwlEndpoint, StatsCwlRequest, StatsItemsEndpoint, StatsItemsRequest, StatsRankedEndpoint, StatsRankedRequest, StatsWarEndpoint, StatsWarRequest } from "./stats.js";
 export declare const expoEndpoints: {
+    readonly storedCwlGroup: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
+        readonly tag: import("effect/Schema").String;
+    }>, import("effect/Schema").Struct<{
+        readonly season: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+        readonly state: import("effect/Schema").String;
+        readonly season: import("effect/Schema").String;
+        readonly warLeague: import("effect/Schema").NullOr<import("effect/Schema").Struct<{
+            readonly id: import("effect/Schema").Number;
+            readonly name: import("effect/Schema").String;
+        }>>;
+        readonly clans: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly tag: import("effect/Schema").String;
+            readonly name: import("effect/Schema").String;
+            readonly clanLevel: import("effect/Schema").Number;
+            readonly badgeUrls: import("effect/Schema").Struct<{
+                readonly small: import("effect/Schema").String;
+                readonly large: import("effect/Schema").String;
+                readonly medium: import("effect/Schema").String;
+            }>;
+            readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly tag: import("effect/Schema").String;
+                readonly name: import("effect/Schema").String;
+                readonly townHallLevel: import("effect/Schema").Number;
+            }>>;
+        }>>;
+        readonly rounds: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly warTags: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
+                readonly state: import("effect/Schema").String;
+                readonly teamSize: import("effect/Schema").Number;
+                readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                readonly battleModifier: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly preparationStartTime: import("effect/Schema").String;
+                readonly startTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly endTime: import("effect/Schema").String;
+                readonly clan: import("effect/Schema").Struct<{
+                    readonly tag: import("effect/Schema").String;
+                    readonly name: import("effect/Schema").String;
+                    readonly badgeUrls: import("effect/Schema").Struct<{
+                        readonly small: import("effect/Schema").String;
+                        readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
+                    }>;
+                    readonly clanLevel: import("effect/Schema").Number;
+                    readonly attacks: import("effect/Schema").Number;
+                    readonly stars: import("effect/Schema").Number;
+                    readonly destructionPercentage: import("effect/Schema").Number;
+                    readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                        readonly tag: import("effect/Schema").String;
+                        readonly name: import("effect/Schema").String;
+                        readonly townhallLevel: import("effect/Schema").Number;
+                        readonly mapPosition: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>>;
+                        readonly opponentAttacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                        readonly bestOpponentAttack: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>;
+                    }>>;
+                }>;
+                readonly opponent: import("effect/Schema").Struct<{
+                    readonly tag: import("effect/Schema").String;
+                    readonly name: import("effect/Schema").String;
+                    readonly badgeUrls: import("effect/Schema").Struct<{
+                        readonly small: import("effect/Schema").String;
+                        readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
+                    }>;
+                    readonly clanLevel: import("effect/Schema").Number;
+                    readonly attacks: import("effect/Schema").Number;
+                    readonly stars: import("effect/Schema").Number;
+                    readonly destructionPercentage: import("effect/Schema").Number;
+                    readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                        readonly tag: import("effect/Schema").String;
+                        readonly name: import("effect/Schema").String;
+                        readonly townhallLevel: import("effect/Schema").Number;
+                        readonly mapPosition: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>>;
+                        readonly opponentAttacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                        readonly bestOpponentAttack: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>;
+                    }>>;
+                }>;
+                readonly warStartTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly season: import("effect/Schema").String;
+            }>, import("effect/Schema").Struct<{
+                readonly tag: import("effect/Schema").String;
+            }>]>>;
+        }>>;
+    }>, {
+        status: number;
+        body: import("effect/Schema").Struct<{
+            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
+            readonly message: import("effect/Schema").String;
+            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly field: import("effect/Schema").String;
+                readonly message: import("effect/Schema").String;
+            }>>>;
+        }>;
+    }[]>;
     readonly appConfig: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly flags: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly key: import("effect/Schema").String;
@@ -2083,6 +2210,14 @@ export declare const expoEndpoints: {
         }>>;
         readonly count: import("effect/Schema").Number;
     }>, readonly []>;
+    readonly playerBuilderhallCounts: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Never, readonly [{
+        readonly status: 501;
+        readonly body: import("effect/Schema").Struct<{
+            readonly code: import("effect/Schema").Literal<"not_implemented">;
+            readonly message: import("effect/Schema").Literal<"Builder Hall counts are not implemented">;
+            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+        }>;
+    }]>;
     readonly playerLeagueTierCounts: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly cwl_league_id: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -2602,7 +2737,7 @@ export declare const expoEndpoints: {
             readonly value: import("effect/Schema").Number;
             readonly target: import("effect/Schema").Number;
             readonly info: import("effect/Schema").String;
-            readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly village: import("effect/Schema").String;
         }>>;
         readonly heroes: import("effect/Schema").$Array<import("effect/Schema").Struct<{
@@ -2780,8 +2915,8 @@ export declare const expoEndpoints: {
         readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly playerTag: import("effect/Schema").String;
             readonly playerName: import("effect/Schema").String;
-            readonly clanTag: import("effect/Schema").String;
-            readonly clanName: import("effect/Schema").String;
+            readonly clanTag: import("effect/Schema").NullOr<import("effect/Schema").String>;
+            readonly clanName: import("effect/Schema").NullOr<import("effect/Schema").String>;
             readonly leagueTrophies: import("effect/Schema").Number;
             readonly attackWinCount: import("effect/Schema").Number;
             readonly attackLoseCount: import("effect/Schema").Number;
@@ -2970,12 +3105,12 @@ export declare const expoEndpoints: {
         readonly requiredBuilderBaseTrophies: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly requiredTownhallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly clanCapital: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
-            readonly capitalHallLevel: import("effect/Schema").Number;
-            readonly districts: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly capitalHallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+            readonly districts: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly id: import("effect/Schema").Number;
                 readonly name: import("effect/Schema").String;
                 readonly districtHallLevel: import("effect/Schema").Number;
-            }>>;
+            }>>>;
         }>>;
         readonly chatLanguage: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
             readonly id: import("effect/Schema").Number;
@@ -3239,10 +3374,10 @@ export declare const expoEndpoints: {
         readonly limit: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly result: import("effect/Schema").String;
+            readonly result: import("effect/Schema").NullOr<import("effect/Schema").String>;
             readonly endTime: import("effect/Schema").String;
             readonly teamSize: import("effect/Schema").Number;
-            readonly attacksPerMember: import("effect/Schema").Number;
+            readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly clan: import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
@@ -3252,22 +3387,22 @@ export declare const expoEndpoints: {
                     readonly large: import("effect/Schema").String;
                 }>;
                 readonly clanLevel: import("effect/Schema").Number;
-                readonly attacks: import("effect/Schema").Number;
+                readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly stars: import("effect/Schema").Number;
                 readonly destructionPercentage: import("effect/Schema").Number;
             }>;
             readonly opponent: import("effect/Schema").Struct<{
-                readonly tag: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly large: import("effect/Schema").String;
                 }>;
                 readonly clanLevel: import("effect/Schema").Number;
-                readonly attacks: import("effect/Schema").Number;
+                readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly stars: import("effect/Schema").Number;
                 readonly destructionPercentage: import("effect/Schema").Number;
+                readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             }>;
         }>>;
         readonly paging: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
@@ -3303,7 +3438,9 @@ export declare const expoEndpoints: {
     }]>;
     readonly proxyCurrentWar: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly clanTag: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
+        readonly state: import("effect/Schema").Literal<"notInWar">;
+    }>, import("effect/Schema").Struct<{
         readonly state: import("effect/Schema").String;
         readonly teamSize: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -3385,7 +3522,7 @@ export declare const expoEndpoints: {
         }>>;
         readonly warStartTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, readonly [{
+    }>]>, readonly [{
         readonly status: 400;
         readonly body: import("effect/Schema").Struct<{
             readonly reason: import("effect/Schema").String;
@@ -3630,7 +3767,6 @@ export declare const expoEndpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -3733,7 +3869,6 @@ export declare const expoEndpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -3836,7 +3971,6 @@ export declare const expoEndpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -3939,7 +4073,6 @@ export declare const expoEndpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -4042,7 +4175,6 @@ export declare const expoEndpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;

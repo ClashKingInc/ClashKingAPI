@@ -1,4 +1,5 @@
-import { ApproveMessages, DecimalSnowflake, RuntimeUUID, TicketApprovePrepareEndpoint } from "@clashking/api-contracts"
+import { ApproveMessages, DecimalSnowflake } from "@clashking/api-contracts"
+import { RuntimeUUID, TicketApprovePrepareEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Context, Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { DiscordApi } from "./discord-api.js"

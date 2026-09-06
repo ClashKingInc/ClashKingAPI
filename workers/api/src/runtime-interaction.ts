@@ -1,4 +1,5 @@
-import { DecimalSnowflake, RuntimeInteractionProof } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { RuntimeInteractionProof } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { Forbidden, InvalidRequest, PayloadTooLarge, Unauthenticated, UpstreamUnavailable } from "./errors.js"
 

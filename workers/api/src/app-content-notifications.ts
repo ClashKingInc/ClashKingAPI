@@ -4,6 +4,7 @@ import {
   NotificationPreferencesRequest,
   NotificationPreferencesResponse,
   expoEndpoints,
+  requireEndpointSuccessStatus,
   type AnyEndpoint,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
@@ -276,20 +277,24 @@ const getPreferences = (principal: UserPrincipal, query: Readonly<Record<string,
 
 const publishReminderConfiguration = (userId: string, bindings: AppContentNotificationBindings) =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       if (!bindings.API_BOT_TOKEN?.trim()) throw new Error("Tracking API token is not configured")
       const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/mobile-reminder-config/publish", {
         method: "POST",
         headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
         body: JSON.stringify({ user_id: userId }),
-        signal: AbortSignal.timeout(10_000),
+        signal,
       }))
       if (response.status !== 200) throw new Error(`Tracking returned ${response.status}`)
       const acknowledgement: unknown = await response.json()
       if (asRecord(acknowledgement).published !== true) throw new Error("Tracking did not acknowledge publication")
     },
-    catch: (cause) => new UpstreamUnavailable({ cause, message: "Preferences were saved, but Tracking notification failed; retry the update" }),
-  })
+    catch: (cause) => new UpstreamUnavailable({ cause, message: "Tracking publication is unavailable" }),
+  }).pipe(
+    Effect.timeout("3 seconds"),
+    // The original API treats this post-commit stream notification as best effort.
+    Effect.catch(() => Effect.logWarning("Mobile reminder publication unavailable after preferences were saved")),
+  )
 
 const putPreferences = (principal: UserPrincipal, body: PreferencesRequest, bindings: AppContentNotificationBindings) =>
   sqlEffect("Notification preferences update failed", Effect.gen(function* () {
@@ -424,7 +429,7 @@ export const dispatchAppContentNotifications = (
     const encoded = yield* Schema.encodeUnknownEffect(match.endpoint.response)(value).pipe(
       Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "App content or notification response violated its contract" })),
     )
-    return Response.json(encoded, { status: match.endpoint.successStatus, headers: { "cache-control": "no-store" } })
+    return Response.json(encoded, { status: requireEndpointSuccessStatus(match.endpoint), headers: { "cache-control": "no-store" } })
   }).pipe(Effect.withSpan(`AppContentNotifications.${match.endpoint.operationId}`))
 }
 

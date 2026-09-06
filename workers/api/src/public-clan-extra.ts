@@ -8,7 +8,7 @@ import { SqlClient } from "effect/unstable/sql"
 import locations from "../../../internal/routes/search_locations.json"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
-import { ensureCwlLeagueIds } from "./public-cwl.js"
+import { ensureCwlLeagueIds, StoredCwlRounds } from "./public-cwl.js"
 import { publicTag } from "./public-war.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls, officialArchiveWar } from "./war-archive-model.js"
@@ -34,8 +34,7 @@ const leagueReference = (category: string, id: number) => {
   return item === undefined ? undefined : { id, name: item.name }
 }
 const league = (category: string, id: number) => leagueReference(category, id) ?? { id, name: "" }
-const roundsSchema = Schema.Array(Schema.Array(Schema.String))
-const rounds = (value: unknown) => Schema.decodeUnknownEffect(roundsSchema)(value).pipe(Effect.mapError(failure))
+const rounds = (value: unknown) => Schema.decodeUnknownEffect(StoredCwlRounds)(value).pipe(Effect.map(items => items.map(item => item.warTags)), Effect.mapError(failure))
 
 interface CachedClan {
   name: string; tag: string; description: string; clan_level: number; clan_points: number; capital_gold_total: string;

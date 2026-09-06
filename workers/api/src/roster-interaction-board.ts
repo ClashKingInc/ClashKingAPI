@@ -1,8 +1,9 @@
-import { DashboardRoster, DecimalSnowflake, RuntimeUUID } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { DeferredRosterBoardData, RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { InvalidRequest } from "./errors.js"
 
-type Roster = typeof DashboardRoster.Type
+type Roster = typeof DeferredRosterBoardData.Type
 type Member = Roster['members'][number]
 export type RosterBoardMode = 'signup' | 'post' | 'static'
 interface Embed {

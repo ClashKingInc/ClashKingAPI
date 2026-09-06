@@ -1,107 +1,102 @@
-import { createRemoteJWKSet, jwtVerify } from "jose"
+import type { AdminUser } from "@clashking/api-contracts"
+import { createRemoteJWKSet, customFetch, jwksCache, jwtVerify, type JWKSCacheInput } from "jose"
 import { Context, Effect, Layer } from "effect"
-import { SqlClient } from "effect/unstable/sql"
 
-import { DatabaseFailure, Forbidden, Unauthenticated } from "./errors.js"
+import { Forbidden, Unauthenticated, UpstreamUnavailable } from "./errors.js"
 import { WorkerEnvironment } from "./environment.js"
 
-export interface AdminPrincipal {
-  readonly active: boolean
-  readonly avatar_url?: string
-  readonly created_at: string
-  readonly display_name: string
-  readonly email: string
-  readonly id: string
-  readonly last_login_at?: string
-  readonly role: "admin" | "owner"
-  readonly updated_at: string
-  readonly username: string
-}
+export type AdminPrincipal = AdminUser
 
-interface AdminPrincipalRow {
-  readonly active: boolean
-  readonly avatar_url: string | null
-  readonly created_at: Date
-  readonly display_name: string
-  readonly email: string
-  readonly id: string
-  readonly last_login_at: Date | null
-  readonly role: "admin" | "owner"
-  readonly updated_at: Date
-  readonly username: string
-}
+// Only public certificate JSON and fetch timestamps are shared. Each request
+// creates its own resolver, so an in-flight fetch never crosses Worker requests.
+export const makeAccessCertificateCache = () => new Map<string, JWKSCacheInput>()
+const certificates = makeAccessCertificateCache()
 
 export class AccessIdentity extends Context.Service<
   AccessIdentity,
   {
     readonly requireAdmin: (
       request: Request,
-      requiredRole: "admin" | "owner",
-    ) => Effect.Effect<AdminPrincipal, DatabaseFailure | Forbidden | Unauthenticated, SqlClient.SqlClient>
+    ) => Effect.Effect<AdminPrincipal, Forbidden | Unauthenticated | UpstreamUnavailable>
   }
 >()("clashking/AccessIdentity") {
-  static readonly layer = Layer.effect(
+  static readonly layerWithCache = (cache: ReturnType<typeof makeAccessCertificateCache>) => Layer.effect(
     AccessIdentity,
     Effect.gen(function* () {
       const env = yield* WorkerEnvironment
-      const issuer = `https://${env.ACCESS_TEAM_DOMAIN}`
-      const jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`))
+      const domain = env.ACCESS_TEAM_DOMAIN?.trim().replace(/\/+$/u, "") ?? ""
+      const audience = env.ACCESS_AUDIENCE?.trim() ?? ""
+      const issuer = domain.startsWith("https://") ? domain : `https://${domain}`
+      let jwks: ReturnType<typeof createRemoteJWKSet> | undefined
 
       const requireAdmin = Effect.fn("AccessIdentity.requireAdmin")(function* (
         request: Request,
-        requiredRole: "admin" | "owner",
       ) {
         if (request.headers.get("x-requested-with") !== "XMLHttpRequest") {
           return yield* new Forbidden({ message: "Admin requests require the AJAX request header" })
         }
-        const assertion = request.headers.get("cf-access-jwt-assertion")
-        if (assertion === null || assertion.length === 0) {
+        if (domain.length === 0 || audience.length === 0) {
+          return yield* new UpstreamUnavailable({
+            cause: new Error("Cloudflare Access team domain and audience are required"),
+            message: "Cloudflare Access verification is not configured",
+          })
+        }
+        const assertion = request.headers.get("cf-access-jwt-assertion")?.trim()
+        if (assertion === undefined || assertion.length === 0) {
           return yield* new Unauthenticated({ message: "Cloudflare Access assertion is required" })
         }
         const claims = yield* Effect.tryPromise({
-          try: () => jwtVerify(assertion, jwks, { issuer, audience: env.ACCESS_AUDIENCE }),
-          catch: () => new Unauthenticated({ message: "Cloudflare Access assertion is invalid" }),
+          try: () => {
+            let cached = cache.get(issuer)
+            if (cached === undefined) {
+              cached = {}
+              if (cache.size >= 8) cache.delete(cache.keys().next().value!)
+              cache.set(issuer, cached)
+            }
+            jwks ??= createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
+              [jwksCache]: cached,
+              [customFetch]: async (...args) => {
+                try {
+                  const response = await fetch(...args)
+                  if (response.status !== 200) {
+                    await response.body?.cancel().catch(() => undefined)
+                    throw new Error("Certificate endpoint returned an unsuccessful response")
+                  }
+                  return response
+                } catch (cause) {
+                  throw new UpstreamUnavailable({ cause, message: "Cloudflare Access signing keys are unavailable" })
+                }
+              },
+            })
+            return jwtVerify(assertion, jwks, { algorithms: ["RS256"], issuer, audience })
+          },
+          catch: (cause) => cause instanceof UpstreamUnavailable ? cause
+            : typeof cause === "object" && cause !== null && "code" in cause &&
+                ["ERR_JWKS_TIMEOUT", "ERR_JWKS_INVALID", "ERR_JOSE_GENERIC"].includes(String(cause.code))
+              ? new UpstreamUnavailable({ cause, message: "Cloudflare Access signing keys are unavailable" })
+              : new Forbidden({ message: "Cloudflare Access assertion is invalid" }),
         })
         const email = typeof claims.payload.email === "string" ? claims.payload.email : ""
-        const subject = claims.payload.sub ?? ""
+        const subject = typeof claims.payload.sub === "string" ? claims.payload.sub : ""
         if (email.length === 0 || subject.length === 0) {
-          return yield* new Unauthenticated({ message: "Cloudflare Access identity is incomplete" })
+          return yield* new Forbidden({ message: "Cloudflare Access identity is incomplete" })
         }
 
-        const sql = yield* SqlClient.SqlClient
-        const rows = yield* sql<AdminPrincipalRow>`
-          UPDATE admin_access_principals
-          SET last_login_at = now()
-          WHERE access_subject = ${subject}
-            AND lower(email) = lower(${email})
-            AND active
-            AND (${requiredRole} = 'admin' OR role = 'owner')
-          RETURNING access_subject AS id, email, username, display_name, avatar_url,
-                    role, active, last_login_at, created_at, updated_at
-        `.pipe(
-          Effect.mapError(
-            (cause) => new DatabaseFailure({ cause, message: "Admin role lookup failed" }),
-          ),
-        )
-        const row = rows[0]
-        if (row === undefined) {
-          return yield* new Forbidden({ message: "Admin access is not active" })
-        }
+        // The configured Access application's admission policy is the Admin
+        // authorization boundary, matching the original Admin backend.
+        const displayName = typeof claims.payload.name === "string" ? claims.payload.name.trim() : ""
         return {
-          id: row.id,
-          email: row.email,
-          username: row.username,
-          display_name: row.display_name,
-          ...(row.avatar_url === null ? {} : { avatar_url: row.avatar_url }),
-          role: row.role,
-          active: row.active,
-          ...(row.last_login_at === null ? {} : { last_login_at: row.last_login_at.toISOString() }),
-          created_at: row.created_at.toISOString(),
-          updated_at: row.updated_at.toISOString(),
+          id: subject,
+          email,
+          username: email,
+          display_name: displayName || email.split("@")[0]!,
+          role: "owner" as const,
+          active: true,
         }
       })
 
       return AccessIdentity.of({ requireAdmin })
     }),
   )
+  static readonly layer = AccessIdentity.layerWithCache(certificates)
 }

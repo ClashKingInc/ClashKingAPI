@@ -1,4 +1,4 @@
-import { RuntimeInteractionProof, RuntimeUUID } from "@clashking/api-contracts"
+import { RuntimeInteractionProof, RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { Forbidden } from "./errors.js"
 import { verifyRuntimeInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"

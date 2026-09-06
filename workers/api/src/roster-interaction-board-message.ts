@@ -1,4 +1,5 @@
-import { DecimalSnowflake, RuntimeUUID } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Schema } from "effect"
 
 const Text = (maximum: number) => Schema.String.check(Schema.isMaxLength(maximum))

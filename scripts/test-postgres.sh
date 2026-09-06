@@ -2,12 +2,17 @@
 set -euo pipefail
 
 fixture_check_only=false
+fixture_keep_going=false
+if [[ ${1:-} == --keep-going ]]; then
+  fixture_keep_going=true
+  shift
+fi
 if [[ ${1:-} == --check ]]; then
   fixture_check_only=true
   shift
 fi
 if [[ $# != 1 ]]; then
-  echo 'Usage: bash scripts/test-postgres.sh [--check] /path/to/clashking_schemas' >&2
+  echo 'Usage: bash scripts/test-postgres.sh [--keep-going] [--check] /path/to/clashking_schemas' >&2
   exit 2
 fi
 if [[ ! -d $1 ]]; then
@@ -29,18 +34,30 @@ cd "$fixture_suite_root"
 # Test files deliberately use deterministic identities. Give each file its own
 # authoritative migrated database, not a shared database polluted by other files.
 fixture_count=0
-# Match Vitest's recursive include, including future nested suites. NUL-delimited
-# paths preserve spaces; each invocation still gets its own disposable database.
+fixture_failures=()
+# Explicit classification prevents archived bot suites from silently becoming
+# retained API requirements. New and missing files fail before any database starts.
 fixture_manifest="$(mktemp)"
 trap 'rm -f -- "$fixture_manifest"' EXIT
 # Finish discovery before starting any database, and propagate traversal errors.
-find workers/api/test/postgres -type f -name '*.test.ts' -print0 > "$fixture_manifest"
+node scripts/list-retained-postgres-suites.mjs > "$fixture_manifest"
 while IFS= read -r -d '' fixture_test; do
   fixture_count=$((fixture_count+1))
-  bash "$fixture_harness" --through 27 -- npm run test:postgres -- "$fixture_test"
+  if bash "$fixture_harness" --profile retained-api -- npm run test:postgres -- "$fixture_test"; then
+    :
+  else
+    fixture_status=$?
+    fixture_failures+=("$fixture_test")
+    if [[ $fixture_keep_going != true ]]; then exit "$fixture_status"; fi
+  fi
 done < "$fixture_manifest"
+if [[ ${#fixture_failures[@]} -gt 0 ]]; then
+  echo "${#fixture_failures[@]} of $fixture_count isolated PostgreSQL suites failed:" >&2
+  printf '%s\n' "${fixture_failures[@]}" >&2
+  exit 1
+fi
 if [[ $fixture_count == 0 ]]; then
   echo 'No PostgreSQL tests found.' >&2
   exit 1
 fi
-echo "Completed $fixture_count isolated PostgreSQL suites at migration 27."
+echo "Completed $fixture_count isolated PostgreSQL suites with the retained-api migration profile."

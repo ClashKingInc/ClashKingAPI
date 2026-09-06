@@ -4,6 +4,7 @@ export type HttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
 
 export type AuthMode =
   | "admin"
+  | "admin-or-bot"
   | "ai-metering"
   | "bot"
   | "developer"
@@ -44,7 +45,8 @@ export interface Endpoint<
   readonly response: Response
   readonly responseMode: "arrayBuffer" | "blob" | "json" | "none" | "response"
   readonly responseContentType?: string
-  readonly successStatus: number
+  /** Null for an error-only endpoint which has no successful response. */
+  readonly successStatus: number | null
   readonly summary: string
 }
 
@@ -65,6 +67,12 @@ export type AnyEndpoint = Endpoint<
   ContractSchema,
   ReadonlyArray<ErrorResponseSpec>
 >
+
+/** Response writers must never fabricate success for an error-only contract. */
+export const requireEndpointSuccessStatus = (endpoint: Pick<AnyEndpoint, "operationId" | "successStatus">): number => {
+  if (endpoint.successStatus === null) throw new Error(`Endpoint ${endpoint.operationId} has no successful response`)
+  return endpoint.successStatus
+}
 
 export interface EndpointRequest<E extends AnyEndpoint> {
   readonly body: E["body"]["Type"]

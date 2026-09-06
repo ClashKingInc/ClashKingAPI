@@ -24,6 +24,7 @@ function fixture(queryOverride?: (query: string, params: ReadonlyArray<unknown>)
     statement.includes("FROM server_clans") ? [{ tag: "#AAA", name: "Clan" }]
       : statement.includes("FROM basic_player") ? players
       : statement.includes("FROM player_war_history") ? [{ war_id: 1 }, { war_id: 2 }]
+      : statement.includes("AS pending FROM wars") ? (params[0] as string[]).map((id) => ({ war_id: String(id), pending: true, payload: null, archive_pack_id: null, archive_offset: null, archive_compressed_bytes: null, war_type: String(id) === "2" ? "friendly" : "random" }))
       : statement.includes("FROM wars w") ? [{ war_id: String(params[0]), war_type: params[0] === "2" ? "friendly" : "random", payload: war, archive_pack_id: null, archive_offset: null, archive_compressed_bytes: null }]
       : statement.includes("AS donated") ? [{ player_tag: "#PYY", donated: "100", received: "50" }]
       : [{ player_tag: "#QYY", clan_games: "4000" }],

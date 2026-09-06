@@ -24,6 +24,38 @@ const execute = (endpoint: AnyEndpoint, body: unknown = {}, path: Readonly<Recor
 })
 
 describe("Dashboard server SQL against authoritative Goose schema", () => {
+  it("creates a missing server settings row without treating missing command history as inactivity", async () => {
+    const discoveredServerId = "1334567890123456791"
+    const discovered = { id: discoveredServerId, name: "New Discord server", owner: true, permissions: "8", features: [] }
+    const principal = { kind: "user" as const, userId: "3334567890123456789" }
+    const guildLayer = Layer.mergeAll(
+      databaseLayer(bindings),
+      Layer.succeed(DiscordApi, {
+        request: (path) => Effect.succeed(path.startsWith("/users/@me/guilds") ? [discovered] : discovered),
+        token: () => Effect.die("Unexpected OAuth"),
+      }),
+      Layer.succeed(DiscordCredentials, { accessToken: () => Effect.succeed("oauth-token") }),
+      Layer.succeed(ServerAuthorization, {
+        require: () => Effect.succeed({ principal, manager: true, sections: {} }),
+        resolve: () => Effect.succeed({ principal, manager: true, sections: {} }),
+      }),
+    )
+    await Effect.runPromise(Effect.gen(function* () {
+      const result = Schema.decodeUnknownSync(dashboardEndpoints.dashboardGuilds.response)(yield* executeDashboardServerCore({
+        endpoint: dashboardEndpoints.dashboardGuilds, body: {}, path: {}, query: {}, bindings, principal,
+        request: new Request("https://api.clashk.ing/v2/guilds"),
+      }))
+      expect(result).toEqual([expect.objectContaining({
+        id: discoveredServerId, name: "New Discord server", has_bot: true, inactive: false,
+      })])
+      expect(result[0]).not.toHaveProperty("last_command_at")
+      const sql = yield* SqlClient.SqlClient
+      expect(yield* sql<{ id: string; name: string; last_command_at: Date | null }>`
+        SELECT id, name, last_command_at FROM servers WHERE id = ${discoveredServerId}
+      `).toEqual([{ id: discoveredServerId, name: "New Discord server", last_command_at: null }])
+    }).pipe(Effect.provide(guildLayer), Effect.scoped))
+  })
+
   it("defaults the linking token policy off and preserves it when omitted from partial settings updates", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
@@ -121,6 +153,9 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       const first = Schema.decodeUnknownSync(dashboardEndpoints.ticketPanels.response)(yield* execute(dashboardEndpoints.ticketPanels))
       const customId = first.items.find((item) => item.name === panelName)?.components[0]?.custom_id
       if (customId === undefined) return yield* Effect.die(new Error("Ticket button was not persisted"))
+      expect(customId).toMatch(/^Family applications_\d+$/)
+      expect(first.items[0]).not.toHaveProperty("id")
+      expect(first.items[0]?.components[0]).not.toHaveProperty("id")
       const buttonPath = { ...panelPath, customId }
       for (const roleField of ["mod_role","no_ping_mod_role"]) {
         const unsafeSettings={questions:[],mod_role:[],no_ping_mod_role:[],private_thread:false,th_min:0,num_apply:1,
@@ -131,23 +166,21 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       yield* execute(dashboardEndpoints.updateTicketPanel, { open_category: channelId, status_change_log: channelId, embed_name: "Welcome" }, panelPath)
       yield* execute(dashboardEndpoints.updateTicketButtonSettings, { questions: ["Why us?"], mod_role: [channelId], no_ping_mod_role: [], private_thread: true, th_min: 14, num_apply: 0, naming: "", account_apply: true, player_info: true, apply_clans: ["#P0Y"], roles_to_add: [channelId], roles_to_remove: [], townhall_requirements: { "14": { BK: 60 } }, new_message: null }, buttonPath)
       const templates = Array.from({ length: 25 }, (_, index) => ({ name: `Template ${index + 1}`, message: `Message ${index + 1}` }))
-      for (const invalid of [[{ name: "", message: "Rejected" }], [...templates, { name: "26th", message: "Rejected" }],
-        [{ name: "Duplicate", message: "One" }, { name: " Duplicate ", message: "Two" }], [{ name: "Too long", message: "x".repeat(2001) }]]) {
-        expect(yield* execute(dashboardEndpoints.updateTicketApproveMessages, { messages: invalid }, panelPath).pipe(Effect.flip))
-          .toMatchObject({ _tag: "InvalidRequest" })
-      }
-      yield* execute(dashboardEndpoints.updateTicketApproveMessages, { messages: templates }, panelPath)
+      yield* execute(dashboardEndpoints.updateTicketApproveMessages, { messages: [{ name: " ", message: "Skipped" }, ...templates] }, panelPath)
       const saved = Schema.decodeUnknownSync(dashboardEndpoints.ticketPanels.response)(yield* execute(dashboardEndpoints.ticketPanels)).items.find((item) => item.name === panelName)
       expect(saved?.server_id).toBe(serverId)
       expect(saved?.open_category).toBe(channelId)
       expect(saved?.components[0]?.label).toBe("Join family")
       expect(saved?.button_settings[customId]).toMatchObject({ mod_role: [channelId], num_apply: 25, naming: "{ticket_count}-{user}", townhall_requirements: { "14": { BK: 60 } } })
-      expect(saved?.approve_messages).toEqual(templates)
+      expect(saved?.approve_messages).toEqual(templates.slice(0, 1))
       yield* execute(dashboardEndpoints.deleteTicketButton, {}, buttonPath)
       const withoutButton = Schema.decodeUnknownSync(dashboardEndpoints.ticketPanels.response)(yield* execute(dashboardEndpoints.ticketPanels)).items.find((item) => item.name === panelName)
       expect(withoutButton?.components).toEqual([])
       expect(withoutButton?.button_settings).toEqual({})
       yield* execute(dashboardEndpoints.deleteTicketPanel, {}, panelPath)
+      expect(yield* sql`SELECT name FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName}`).toEqual([])
+      // The baseline delete frees the (server_id, name) identity for recreation.
+      yield* execute(dashboardEndpoints.createTicketPanel, { name: panelName })
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 

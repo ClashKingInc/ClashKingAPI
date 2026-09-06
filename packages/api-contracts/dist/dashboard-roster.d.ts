@@ -15,8 +15,6 @@ export declare const DashboardRosterSignupQuestion: Schema.Struct<{
     readonly order: Schema.Number;
 }>;
 export declare const DashboardRosterMember: Schema.Struct<{
-    readonly member_group_id: Schema.NullOr<Schema.String>;
-    readonly is_substitute: Schema.Boolean;
     readonly name: Schema.String;
     readonly tag: Schema.String;
     readonly townhall: Schema.Number;
@@ -42,8 +40,6 @@ export declare const DashboardRosterMember: Schema.Struct<{
     readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
 }>;
 export declare const DashboardRosterMemberInput: Schema.Struct<{
-    readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-    readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
     readonly name: Schema.optionalKey<Schema.String>;
     readonly tag: Schema.String;
     readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -63,15 +59,6 @@ export declare const DashboardRosterMemberInput: Schema.Struct<{
     readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
 }>;
 export declare const DashboardRoster: Schema.Struct<{
-    readonly capacity: Schema.Number;
-    readonly roster_role_id: Schema.NullOr<Schema.String>;
-    readonly member_groups: Schema.$Array<Schema.Struct<{
-        readonly id: Schema.String;
-        readonly name: Schema.String;
-        readonly position: Schema.Number;
-        readonly signup_enabled: Schema.Boolean;
-        readonly role_id: Schema.NullOr<Schema.String>;
-    }>>;
     readonly id: Schema.String;
     readonly server_id: Schema.String;
     readonly alias: Schema.String;
@@ -83,8 +70,6 @@ export declare const DashboardRoster: Schema.Struct<{
     readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly group_id: Schema.optionalKey<Schema.String>;
     readonly members: Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.NullOr<Schema.String>;
-        readonly is_substitute: Schema.Boolean;
         readonly name: Schema.String;
         readonly tag: Schema.String;
         readonly townhall: Schema.Number;
@@ -137,8 +122,6 @@ export declare const DashboardRoster: Schema.Struct<{
     readonly revision: Schema.Number;
 }>;
 export declare const DashboardCreateRosterRequest: Schema.Struct<{
-    readonly capacity: Schema.optionalKey<Schema.Number>;
-    readonly roster_role_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly max_accounts_per_user: Schema.optionalKey<Schema.NullOr<Schema.Number>>;
     readonly server_id: Schema.optionalKey<Schema.String>;
     readonly alias: Schema.String;
@@ -148,8 +131,6 @@ export declare const DashboardCreateRosterRequest: Schema.Struct<{
     readonly clan_tag: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly members: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -170,8 +151,6 @@ export declare const DashboardCreateRosterRequest: Schema.Struct<{
     }>>>;
 }>;
 export declare const DashboardUpdateRosterRequest: Schema.Struct<{
-    readonly capacity: Schema.optionalKey<Schema.Number>;
-    readonly roster_role_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly alias: Schema.optionalKey<Schema.String>;
     readonly description: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly roster_type: Schema.optionalKey<Schema.Literals<readonly ["clan", "family"]>>;
@@ -209,15 +188,6 @@ export declare const DashboardCreateRosterResponse: Schema.Struct<{
     readonly message: Schema.String;
     readonly roster_id: Schema.String;
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -229,8 +199,6 @@ export declare const DashboardCreateRosterResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -286,15 +254,6 @@ export declare const DashboardCreateRosterResponse: Schema.Struct<{
 export declare const DashboardUpdateRosterResponse: Schema.Struct<{
     readonly message: Schema.String;
     readonly roster: Schema.optionalKey<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -306,8 +265,6 @@ export declare const DashboardUpdateRosterResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -362,15 +319,6 @@ export declare const DashboardUpdateRosterResponse: Schema.Struct<{
 }>;
 export declare const DashboardGetRosterResponse: Schema.Struct<{
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -382,8 +330,6 @@ export declare const DashboardGetRosterResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -438,15 +384,6 @@ export declare const DashboardGetRosterResponse: Schema.Struct<{
 }>;
 export declare const DashboardRosterListResponse: Schema.Struct<{
     readonly rosters: Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -458,8 +395,6 @@ export declare const DashboardRosterListResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -525,15 +460,6 @@ export declare const DashboardCloneRosterResponse: Schema.Struct<{
     readonly source_server_id: Schema.String;
     readonly members_copied: Schema.Number;
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -545,8 +471,6 @@ export declare const DashboardCloneRosterResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -602,15 +526,6 @@ export declare const DashboardCloneRosterResponse: Schema.Struct<{
 export declare const DashboardRefreshRostersResponse: Schema.Struct<{
     readonly message: Schema.String;
     readonly refreshed_rosters: Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -622,8 +537,6 @@ export declare const DashboardRefreshRostersResponse: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -678,8 +591,6 @@ export declare const DashboardRefreshRostersResponse: Schema.Struct<{
 }>;
 export declare const DashboardManageRosterMembersRequest: Schema.Struct<{
     readonly members: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -699,8 +610,6 @@ export declare const DashboardManageRosterMembersRequest: Schema.Struct<{
         readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
     }>>>;
     readonly add: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -723,15 +632,11 @@ export declare const DashboardManageRosterMembersRequest: Schema.Struct<{
     readonly player_tags: Schema.optionalKey<Schema.$Array<Schema.String>>;
 }>;
 export declare const DashboardUpdateRosterMemberRequest: Schema.Struct<{
-    readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-    readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
     readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
 }>;
 export declare const DashboardRefreshRosterMemberResponse: Schema.Struct<{
     readonly message: Schema.String;
     readonly member: Schema.Struct<{
-        readonly member_group_id: Schema.NullOr<Schema.String>;
-        readonly is_substitute: Schema.Boolean;
         readonly name: Schema.String;
         readonly tag: Schema.String;
         readonly townhall: Schema.Number;
@@ -860,15 +765,6 @@ export declare const DashboardRosterGroup: Schema.Struct<{
     readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
     readonly min_signups: Schema.optionalKey<Schema.Number>;
     readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -880,8 +776,6 @@ export declare const DashboardRosterGroup: Schema.Struct<{
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -956,15 +850,6 @@ export declare const DashboardCreateRosterGroupResponse: Schema.Struct<{
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -976,8 +861,6 @@ export declare const DashboardCreateRosterGroupResponse: Schema.Struct<{
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -1043,15 +926,6 @@ export declare const DashboardGetRosterGroupResponse: Schema.Struct<{
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -1063,8 +937,6 @@ export declare const DashboardGetRosterGroupResponse: Schema.Struct<{
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -1131,15 +1003,6 @@ export declare const DashboardUpdateRosterGroupResponse: Schema.Struct<{
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -1151,8 +1014,6 @@ export declare const DashboardUpdateRosterGroupResponse: Schema.Struct<{
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -1218,15 +1079,6 @@ export declare const DashboardRosterGroupListResponse: Schema.Struct<{
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -1238,8 +1090,6 @@ export declare const DashboardRosterGroupListResponse: Schema.Struct<{
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -1780,8 +1630,6 @@ export declare const DashboardPublicRoster: Schema.Struct<{
 export declare const DashboardCreateRosterEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{
     readonly server_id: Schema.String;
 }>, Schema.Struct<{
-    readonly capacity: Schema.optionalKey<Schema.Number>;
-    readonly roster_role_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly max_accounts_per_user: Schema.optionalKey<Schema.NullOr<Schema.Number>>;
     readonly server_id: Schema.optionalKey<Schema.String>;
     readonly alias: Schema.String;
@@ -1791,8 +1639,6 @@ export declare const DashboardCreateRosterEndpoint: import("./endpoint.js").Endp
     readonly clan_tag: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly members: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -1815,15 +1661,6 @@ export declare const DashboardCreateRosterEndpoint: import("./endpoint.js").Endp
     readonly message: Schema.String;
     readonly roster_id: Schema.String;
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -1835,8 +1672,6 @@ export declare const DashboardCreateRosterEndpoint: import("./endpoint.js").Endp
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -1894,8 +1729,6 @@ export declare const DashboardUpdateRosterEndpoint: import("./endpoint.js").Endp
 }>, Schema.Struct<{
     readonly server_id: Schema.String;
 }>, Schema.Struct<{
-    readonly capacity: Schema.optionalKey<Schema.Number>;
-    readonly roster_role_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly alias: Schema.optionalKey<Schema.String>;
     readonly description: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly roster_type: Schema.optionalKey<Schema.Literals<readonly ["clan", "family"]>>;
@@ -1928,15 +1761,6 @@ export declare const DashboardUpdateRosterEndpoint: import("./endpoint.js").Endp
 }>, Schema.Struct<{
     readonly message: Schema.String;
     readonly roster: Schema.optionalKey<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -1948,8 +1772,6 @@ export declare const DashboardUpdateRosterEndpoint: import("./endpoint.js").Endp
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -2008,15 +1830,6 @@ export declare const DashboardGetRosterEndpoint: import("./endpoint.js").Endpoin
     readonly server_id: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -2028,8 +1841,6 @@ export declare const DashboardGetRosterEndpoint: import("./endpoint.js").Endpoin
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -2097,15 +1908,6 @@ export declare const DashboardListRostersEndpoint: import("./endpoint.js").Endpo
     readonly clan_tag: Schema.optionalKey<Schema.String>;
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly rosters: Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -2117,8 +1919,6 @@ export declare const DashboardListRostersEndpoint: import("./endpoint.js").Endpo
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -2187,15 +1987,6 @@ export declare const DashboardCloneRosterEndpoint: import("./endpoint.js").Endpo
     readonly source_server_id: Schema.String;
     readonly members_copied: Schema.Number;
     readonly roster: Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -2207,8 +1998,6 @@ export declare const DashboardCloneRosterEndpoint: import("./endpoint.js").Endpo
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -2268,15 +2057,6 @@ export declare const DashboardRefreshRostersEndpoint: import("./endpoint.js").En
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly message: Schema.String;
     readonly refreshed_rosters: Schema.$Array<Schema.Struct<{
-        readonly capacity: Schema.Number;
-        readonly roster_role_id: Schema.NullOr<Schema.String>;
-        readonly member_groups: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
-            readonly name: Schema.String;
-            readonly position: Schema.Number;
-            readonly signup_enabled: Schema.Boolean;
-            readonly role_id: Schema.NullOr<Schema.String>;
-        }>>;
         readonly id: Schema.String;
         readonly server_id: Schema.String;
         readonly alias: Schema.String;
@@ -2288,8 +2068,6 @@ export declare const DashboardRefreshRostersEndpoint: import("./endpoint.js").En
         readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly group_id: Schema.optionalKey<Schema.String>;
         readonly members: Schema.$Array<Schema.Struct<{
-            readonly member_group_id: Schema.NullOr<Schema.String>;
-            readonly is_substitute: Schema.Boolean;
             readonly name: Schema.String;
             readonly tag: Schema.String;
             readonly townhall: Schema.Number;
@@ -2348,8 +2126,6 @@ export declare const DashboardManageRosterMembersEndpoint: import("./endpoint.js
     readonly server_id: Schema.String;
 }>, Schema.Struct<{
     readonly members: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -2369,8 +2145,6 @@ export declare const DashboardManageRosterMembersEndpoint: import("./endpoint.js
         readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
     }>>>;
     readonly add: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-        readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-        readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
         readonly name: Schema.optionalKey<Schema.String>;
         readonly tag: Schema.String;
         readonly townhall: Schema.optionalKey<Schema.Number>;
@@ -2400,8 +2174,6 @@ export declare const DashboardUpdateRosterMemberEndpoint: import("./endpoint.js"
 }>, Schema.Struct<{
     readonly server_id: Schema.String;
 }>, Schema.Struct<{
-    readonly member_group_id: Schema.optionalKey<Schema.NullOr<Schema.String>>;
-    readonly is_substitute: Schema.optionalKey<Schema.Boolean>;
     readonly answers: Schema.optionalKey<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
 }>, Schema.Struct<{
     readonly message: Schema.String;
@@ -2422,8 +2194,6 @@ export declare const DashboardRefreshRosterMemberEndpoint: import("./endpoint.js
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly message: Schema.String;
     readonly member: Schema.Struct<{
-        readonly member_group_id: Schema.NullOr<Schema.String>;
-        readonly is_substitute: Schema.Boolean;
         readonly name: Schema.String;
         readonly tag: Schema.String;
         readonly townhall: Schema.Number;
@@ -2517,15 +2287,6 @@ export declare const DashboardCreateRosterGroupEndpoint: import("./endpoint.js")
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -2537,8 +2298,6 @@ export declare const DashboardCreateRosterGroupEndpoint: import("./endpoint.js")
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -2606,15 +2365,6 @@ export declare const DashboardListRosterGroupsEndpoint: import("./endpoint.js").
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -2626,8 +2376,6 @@ export declare const DashboardListRosterGroupsEndpoint: import("./endpoint.js").
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -2698,15 +2446,6 @@ export declare const DashboardGetRosterGroupEndpoint: import("./endpoint.js").En
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -2718,8 +2457,6 @@ export declare const DashboardGetRosterGroupEndpoint: import("./endpoint.js").En
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;
@@ -2797,15 +2534,6 @@ export declare const DashboardUpdateRosterGroupEndpoint: import("./endpoint.js")
         readonly max_accounts_per_user: Schema.optionalKey<Schema.Number>;
         readonly min_signups: Schema.optionalKey<Schema.Number>;
         readonly rosters: Schema.optionalKey<Schema.$Array<Schema.Struct<{
-            readonly capacity: Schema.Number;
-            readonly roster_role_id: Schema.NullOr<Schema.String>;
-            readonly member_groups: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly name: Schema.String;
-                readonly position: Schema.Number;
-                readonly signup_enabled: Schema.Boolean;
-                readonly role_id: Schema.NullOr<Schema.String>;
-            }>>;
             readonly id: Schema.String;
             readonly server_id: Schema.String;
             readonly alias: Schema.String;
@@ -2817,8 +2545,6 @@ export declare const DashboardUpdateRosterGroupEndpoint: import("./endpoint.js")
             readonly clan_badge: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly group_id: Schema.optionalKey<Schema.String>;
             readonly members: Schema.$Array<Schema.Struct<{
-                readonly member_group_id: Schema.NullOr<Schema.String>;
-                readonly is_substitute: Schema.Boolean;
                 readonly name: Schema.String;
                 readonly tag: Schema.String;
                 readonly townhall: Schema.Number;

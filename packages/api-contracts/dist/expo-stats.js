@@ -20,6 +20,19 @@ export const StatsOverviewEndpoint = defineEndpoint({ operationId: "getExpoStats
 export const GlobalCountsEndpoint = defineEndpoint({ operationId: "getExpoGlobalCounts", method: "GET", path: "/v2/counts", auth: "public", summary: "Get global ClashKing counts", body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery, response: GlobalCounts, responseMode: "json", successStatus: 200 });
 const groupedCounts = (operationId, path) => defineEndpoint({ operationId, method: "GET", path, auth: "public", summary: operationId, body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery, response: GroupedCountsResponse, responseMode: "json", successStatus: 200 });
 export const PlayerTownhallCountsEndpoint = groupedCounts("getExpoPlayerTownhallCounts", "/v2/counts/players/town-halls");
+export const PlayerBuilderhallCountsUnavailableResponse = Schema.Struct({
+    code: Schema.Literal("not_implemented"),
+    message: Schema.Literal("Builder Hall counts are not implemented"),
+    request_id: Schema.optionalKey(Schema.String),
+});
+// Preserve the original public 501 route without advertising invented count data.
+export const PlayerBuilderhallCountsEndpoint = defineEndpoint({
+    operationId: "getExpoPlayerBuilderhallCounts", method: "GET", path: "/v2/counts/players/builder-halls",
+    auth: "public", summary: "Builder Hall counts are unavailable (501)",
+    body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery,
+    response: Schema.Never, responseMode: "none", successStatus: null,
+    errors: [{ status: 501, body: PlayerBuilderhallCountsUnavailableResponse }],
+});
 export const PlayerLeagueTierCountsEndpoint = groupedCounts("getExpoPlayerLeagueTierCounts", "/v2/counts/players/league-tiers");
 export const ClanLocationCountsEndpoint = groupedCounts("getExpoClanLocationCounts", "/v2/counts/clans/locations");
 export const CwlLeagueCountsEndpoint = groupedCounts("getExpoCwlLeagueCounts", "/v2/counts/clans/cwl-leagues");

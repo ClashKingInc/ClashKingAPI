@@ -1,4 +1,4 @@
-import { GiveawayPublicationClaimEndpoint, GiveawayPublicationPrepareEndpoint } from "@clashking/api-contracts"
+import { GiveawayPublicationClaimEndpoint, GiveawayPublicationPrepareEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it } from "vitest"

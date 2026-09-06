@@ -14,8 +14,8 @@ if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== 
   throw new Error("Run this suite through clashking_schemas/scripts/with-test-timescale.sh")
 }
 const layer = databaseLayer({ HYPERDRIVE: { connectionString: databaseUrl } } as WorkerBindings)
-const principal: AdminPrincipal = { id: "18446744073709551615", email: "owner@example.test", username: "owner",
-  display_name: "Owner", role: "owner", active: true, created_at: "2026-09-03T00:00:00.000Z", updated_at: "2026-09-03T00:00:00.000Z" }
+const principal: AdminPrincipal = { id: "18446744073709551615", email: "owner@example.test", username: "owner@example.test",
+  display_name: "Owner", role: "owner", active: true }
 const access = AccessIdentity.of({ requireAdmin: () => Effect.succeed(principal) })
 const run = (path: string, method = "GET", body?: unknown) => dispatchAdmin(new Request(`https://api.clashk.ing/v2/admin${path}`, {
   method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
@@ -59,7 +59,7 @@ describe("Admin handlers against authoritative Goose migrations", () => {
       const denied = dispatchAdmin(new Request("https://api.clashk.ing/v2/admin/developer-applications", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ developer_name: name }),
       }), {} as WorkerBindings).pipe(Effect.provideService(AccessIdentity, {
-        requireAdmin: () => Effect.fail(new Forbidden({ message: "Owner required" })),
+        requireAdmin: () => Effect.fail(new Forbidden({ message: "Cloudflare Access assertion is invalid" })),
       }))
       expect((yield* Effect.exit(denied))._tag).toBe("Failure")
       const rollback = yield* Effect.exit(sql.withTransaction(Effect.gen(function* () {
@@ -122,6 +122,27 @@ describe("Admin handlers against authoritative Goose migrations", () => {
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 
+  it.each([400, 409])("does not persist a claimed first-activation key or audit after a %s rejection", async (status) => {
+    const runtime = crypto.randomUUID()
+    const bindings = { APP_UPDATES: { get: async () => ({ json: async () => ({
+      schemaVersion: 1, version: "1.0.1", appVersion: "1.0.1", track: "production", type: "ota",
+      gitSha: "test", createdAt: "2026-09-04T12:00:00Z", platforms: { ios: { runtimeVersion: "wrong-runtime", manifest: {} } },
+    }) }) } } as unknown as WorkerBindings
+    const request = new Request(`https://api.clashk.ing/v2/admin/app-releases/channels/production/ios/${runtime}`, {
+      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        expectedUpdatedAt: null, activeVersion: status === 400 ? null : "1.0.1", rollbackTargetVersion: status === 400 ? "1.0.0" : null,
+        rolloutBasisPoints: 10_000, paused: false, schedule: null,
+      }),
+    })
+    await Effect.runPromise(Effect.gen(function* () {
+      const response = yield* dispatchAdmin(request, bindings).pipe(Effect.provideService(AccessIdentity, access))
+      expect(response?.status).toBe(status)
+      const sql = yield* SqlClient.SqlClient
+      expect(yield* sql`SELECT runtime_version FROM app_update_channels WHERE runtime_version=${runtime}`).toEqual([])
+      expect(yield* sql`SELECT id FROM admin_audit_events WHERE resource_id=${`production/ios/${runtime}`}`).toEqual([])
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+
   it("serializes first channel activation before validating a concurrent downgrade", async () => {
     const runtime = crypto.randomUUID()
     let signalNewer: () => void = () => {}
@@ -136,7 +157,7 @@ describe("Admin handlers against authoritative Goose migrations", () => {
     } } } as unknown as WorkerBindings
     const activate = (version: string) => dispatchAdmin(new Request(`https://api.clashk.ing/v2/admin/app-releases/channels/production/ios/${runtime}`, {
       method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
-        activeVersion: version, rollbackTargetVersion: null, rolloutBasisPoints: 10_000, paused: false, schedule: null,
+        expectedUpdatedAt: null, activeVersion: version, rollbackTargetVersion: null, rolloutBasisPoints: 10_000, paused: false, schedule: null,
       }),
     }), bindings).pipe(Effect.provideService(AccessIdentity, access))
     await Effect.runPromise(Effect.gen(function* () {
@@ -146,6 +167,27 @@ describe("Admin handlers against authoritative Goose migrations", () => {
       const sql = yield* SqlClient.SqlClient
       expect(yield* sql`SELECT active_version FROM app_update_channels WHERE runtime_version=${runtime}`)
         .toEqual([{ active_version: "2.0.1" }])
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+
+  it("rejects the second simultaneous edit based on the same channel revision", async () => {
+    const runtime = crypto.randomUUID()
+    const save = (expectedUpdatedAt: string | null, paused: boolean) => dispatchAdmin(new Request(
+      `https://api.clashk.ing/v2/admin/app-releases/channels/production/ios/${runtime}`, {
+        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
+          expectedUpdatedAt, activeVersion: null, rollbackTargetVersion: null, rolloutBasisPoints: 10_000, paused, schedule: null,
+        }),
+      }), {} as WorkerBindings).pipe(Effect.provideService(AccessIdentity, access))
+    await Effect.runPromise(Effect.gen(function* () {
+      expect((yield* save(null, false))?.status).toBe(200)
+      const sql = yield* SqlClient.SqlClient
+      const original = yield* sql<{ updated_at: Date }>`SELECT updated_at FROM app_update_channels WHERE runtime_version=${runtime}`
+      const revision = original[0]!.updated_at.toISOString()
+      const responses = yield* Effect.all([save(revision, true), save(revision, false)], { concurrency: 2 })
+      expect(responses.map((response) => response!.status).sort()).toEqual([200, 409])
+      const current = yield* sql<{ updated_at: Date }>`SELECT updated_at FROM app_update_channels WHERE runtime_version=${runtime}`
+      expect(current[0]!.updated_at.getTime()).toBeGreaterThan(original[0]!.updated_at.getTime())
+      expect((yield* sql`SELECT id FROM admin_audit_events WHERE resource_id=${`production/ios/${runtime}`}`).length).toBe(2)
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

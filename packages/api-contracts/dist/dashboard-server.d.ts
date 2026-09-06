@@ -642,10 +642,10 @@ export declare const SearchBannedPlayersResponse: Schema.Struct<{
     }>>;
 }>;
 export declare const StrikeRequest: Schema.Struct<{
-    readonly reason: Schema.String;
-    readonly added_by: Schema.String;
+    readonly reason: Schema.optionalKey<Schema.String>;
+    readonly added_by: Schema.optionalKey<Schema.String>;
     readonly rollover_days: Schema.optionalKey<Schema.Number>;
-    readonly strike_weight: Schema.Number;
+    readonly strike_weight: Schema.optionalKey<Schema.Number>;
     readonly image: Schema.optionalKey<Schema.String>;
 }>;
 export declare const Strike: Schema.Struct<{
@@ -942,7 +942,6 @@ export declare const DiscordEmoji: Schema.Struct<{
     readonly animated: Schema.optionalKey<Schema.Boolean>;
 }>;
 export declare const TicketButton: Schema.Struct<{
-    readonly id: Schema.String;
     readonly custom_id: Schema.String;
     readonly label: Schema.String;
     readonly style: Schema.Number;
@@ -978,12 +977,10 @@ export declare const ApproveMessages: Schema.$Array<Schema.Struct<{
     readonly message: Schema.String;
 }>>;
 export declare const TicketPanel: Schema.Struct<{
-    readonly id: Schema.String;
     readonly name: Schema.String;
     readonly server_id: Schema.String;
     readonly embed_name: Schema.optionalKey<Schema.NullOr<Schema.String>>;
     readonly components: Schema.$Array<Schema.Struct<{
-        readonly id: Schema.String;
         readonly custom_id: Schema.String;
         readonly label: Schema.String;
         readonly style: Schema.Number;
@@ -1023,12 +1020,10 @@ export declare const TicketPanel: Schema.Struct<{
 }>;
 export declare const TicketPanelsResponse: Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
-        readonly id: Schema.String;
         readonly name: Schema.String;
         readonly server_id: Schema.String;
         readonly embed_name: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly components: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
             readonly custom_id: Schema.String;
             readonly label: Schema.String;
             readonly style: Schema.Number;
@@ -1755,15 +1750,13 @@ export declare const GuildEndpoint: import("./endpoint.js").Endpoint<Schema.Stru
     readonly id: Schema.String;
     readonly name: Schema.String;
     readonly icon: Schema.NullOr<Schema.String>;
-    readonly owner: Schema.Boolean;
-    readonly permissions: Schema.String;
-    readonly role: Schema.String;
+    readonly owner_id: Schema.NullOr<Schema.String>;
     readonly features: Schema.$Array<Schema.String>;
-    readonly has_bot: Schema.Boolean;
-    readonly member_count: Schema.optionalKey<Schema.Number>;
-    readonly delegated: Schema.Boolean;
-    readonly last_command_at: Schema.optionalKey<Schema.String>;
-    readonly inactive: Schema.Boolean;
+    readonly member_count: Schema.NullOr<Schema.Number>;
+    readonly description: Schema.NullOr<Schema.String>;
+    readonly banner: Schema.NullOr<Schema.String>;
+    readonly premium_tier: Schema.Number;
+    readonly boost_count: Schema.Number;
 }>, readonly []>;
 export declare const ReactivateServerEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
@@ -2021,10 +2014,10 @@ export declare const AddServerStrikeEndpoint: import("./endpoint.js").Endpoint<S
     readonly serverId: Schema.String;
     readonly playerTag: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
-    readonly reason: Schema.String;
-    readonly added_by: Schema.String;
+    readonly reason: Schema.optionalKey<Schema.String>;
+    readonly added_by: Schema.optionalKey<Schema.String>;
     readonly rollover_days: Schema.optionalKey<Schema.Number>;
-    readonly strike_weight: Schema.Number;
+    readonly strike_weight: Schema.optionalKey<Schema.Number>;
     readonly image: Schema.optionalKey<Schema.String>;
 }>, Schema.Struct<{
     readonly status: Schema.String;
@@ -2312,15 +2305,6 @@ export declare const DisableCountdownEndpoint: import("./endpoint.js").Endpoint<
     readonly countdown_type: Schema.Literals<readonly ["clan_games_timer", "cwl_timer", "raid_weekend_timer", "season_end_timer", "season_day_timer", "war_score", "war_timer"]>;
 }>, readonly []>;
 export declare const ServerChannelsEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
-    readonly serverId: Schema.String;
-}>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.$Array<Schema.Struct<{
-    readonly id: Schema.String;
-    readonly name: Schema.String;
-    readonly type: Schema.Literals<readonly ["category", "text", "news", "forum"]>;
-    readonly parent_id: Schema.optionalKey<Schema.String>;
-    readonly parent_name: Schema.optionalKey<Schema.String>;
-}>>, readonly []>;
-export declare const ServerDiscordChannelsEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly serverId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.$Array<Schema.Struct<{
     readonly id: Schema.String;
@@ -2650,12 +2634,10 @@ export declare const TicketPanelsEndpoint: import("./endpoint.js").Endpoint<Sche
     readonly serverId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
-        readonly id: Schema.String;
         readonly name: Schema.String;
         readonly server_id: Schema.String;
         readonly embed_name: Schema.optionalKey<Schema.NullOr<Schema.String>>;
         readonly components: Schema.$Array<Schema.Struct<{
-            readonly id: Schema.String;
             readonly custom_id: Schema.String;
             readonly label: Schema.String;
             readonly style: Schema.Number;

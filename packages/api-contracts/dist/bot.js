@@ -1,17 +1,12 @@
 import { botAdjacentEndpoints } from "./bot-adjacent.js";
-import { persistentRuntimeEndpoints } from "./persistent-runtime.js";
-import { rosterInteractionEndpoints } from "./roster-interaction.js";
-export * from "./roster-interaction.js";
 import { BotClanCachedEndpoint, BotClanCapitalLeaderboardEndpoint, BotClanDonationsLeaderboardEndpoint, BotClanHistoryEndpoint, BotClanJoinLeaveEndpoint, BotClanLegendSummaryEndpoint, BotClanRankingsEndpoint, BotClanRecordsEndpoint, BotClanWarLogEndpoint, BotClanWarsEndpoint, BotClanWarWinsLeaderboardEndpoint, BotClanWinStreakLeaderboardEndpoint, BotCountsEndpoint, BotCurrentWarEndpoint, BotCwlGroupEndpoint, BotCwlLeaderboardEndpoint, BotCwlRankingHistoryEndpoint, BotCwlSeasonsEndpoint, BotLeagueLeaderboardEndpoint, BotLegendSeasonEndpoint, BotPlayerCwlHistoryEndpoint, BotPlayerHistoryEndpoint, BotPlayerLegendHistoryEndpoint, BotPlayerRankingsEndpoint, BotPlayerTimersEndpoint, BotPlayerWarAttacksEndpoint, BotPlayerWarStatsEndpoint, BotPreviousWarEndpoint, BotTownHallLeaderboardEndpoint, } from "./bot-public.js";
 import { BotAccountsEndpoint, BotAddStrikeEndpoint, BotBaseEndpoint, BotBasesEndpoint, BotBansEndpoint, BotDashboardCapabilitiesEndpoint, BotDeleteBanEndpoint, BotDeleteStrikeEndpoint, BotEmbedsEndpoint, BotGiveawayEndpoint, BotGiveawaysEndpoint, BotLinkAccountEndpoint, BotRefreshRosterEndpoint, BotRemindersEndpoint, BotRerollGiveawayEndpoint, BotRosterEndpoint, BotRostersEndpoint, BotSaveBanEndpoint, BotServerClanGamesLeaderboardEndpoint, BotServerClansEndpoint, BotServerDonationsLeaderboardEndpoint, BotServerLegendsLeaderboardEndpoint, BotServerLinksEndpoint, BotServerWarLeaderboardEndpoint, BotStrikeSummaryEndpoint, BotStrikesEndpoint, BotTicketsEndpoint, BotUnlinkAccountEndpoint, } from "./bot-server.js";
-import { ProxyCapitalRaidSeasonsEndpoint, ProxyPlayerEndpoint, } from "./proxy.js";
 export * from "./bot-public.js";
 export * from "./bot-server.js";
 export * from "./bot-adjacent.js";
-export * from "./persistent-runtime.js";
+// Only established API operations belong here. Deferred Discord orchestration
+// schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
-    ...persistentRuntimeEndpoints,
-    ...rosterInteractionEndpoints,
     ...botAdjacentEndpoints,
     accounts: BotAccountsEndpoint,
     addStrike: BotAddStrikeEndpoint,
@@ -53,8 +48,6 @@ export const botEndpoints = {
     playerWarAttacks: BotPlayerWarAttacksEndpoint,
     playerWarStats: BotPlayerWarStatsEndpoint,
     previousWar: BotPreviousWarEndpoint,
-    proxyCapitalRaidSeasons: ProxyCapitalRaidSeasonsEndpoint,
-    proxyPlayer: ProxyPlayerEndpoint,
     refreshRoster: BotRefreshRosterEndpoint,
     reminders: BotRemindersEndpoint,
     rerollGiveaway: BotRerollGiveawayEndpoint,

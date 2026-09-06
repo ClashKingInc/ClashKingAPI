@@ -210,6 +210,19 @@ export declare const PlayerTownhallCountsEndpoint: import("./endpoint.js").Endpo
     }>>;
     readonly count: Schema.Number;
 }>, readonly []>;
+export declare const PlayerBuilderhallCountsUnavailableResponse: Schema.Struct<{
+    readonly code: Schema.Literal<"not_implemented">;
+    readonly message: Schema.Literal<"Builder Hall counts are not implemented">;
+    readonly request_id: Schema.optionalKey<Schema.String>;
+}>;
+export declare const PlayerBuilderhallCountsEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Never, readonly [{
+    readonly status: 501;
+    readonly body: Schema.Struct<{
+        readonly code: Schema.Literal<"not_implemented">;
+        readonly message: Schema.Literal<"Builder Hall counts are not implemented">;
+        readonly request_id: Schema.optionalKey<Schema.String>;
+    }>;
+}]>;
 export declare const PlayerLeagueTierCountsEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
     readonly items: Schema.$Array<Schema.Struct<{
         readonly cwl_league_id: Schema.optionalKey<Schema.Number>;

@@ -1,4 +1,4 @@
-import { RuntimeUUID } from "@clashking/api-contracts"
+import { RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { DatabaseFailure, type ApiFailure } from "./errors.js"

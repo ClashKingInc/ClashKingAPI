@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 export type HttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
-export type AuthMode = "admin" | "ai-metering" | "bot" | "developer" | "public" | "server-manager-read" | "server-manager-write" | "server-read" | "server-write" | "user" | "user-or-bot";
+export type AuthMode = "admin" | "admin-or-bot" | "ai-metering" | "bot" | "developer" | "public" | "server-manager-read" | "server-manager-write" | "server-read" | "server-write" | "user" | "user-or-bot";
 export type ContractSchema = Schema.Codec<unknown, unknown, never, never>;
 export interface ErrorResponseSpec<Status extends number = number, Body extends ContractSchema = ContractSchema> {
     readonly body: Body;
@@ -19,11 +19,14 @@ export interface Endpoint<PathParams extends ContractSchema, Query extends Contr
     readonly response: Response;
     readonly responseMode: "arrayBuffer" | "blob" | "json" | "none" | "response";
     readonly responseContentType?: string;
-    readonly successStatus: number;
+    /** Null for an error-only endpoint which has no successful response. */
+    readonly successStatus: number | null;
     readonly summary: string;
 }
 export declare const defineEndpoint: <PathParams extends ContractSchema, Query extends ContractSchema, Body extends ContractSchema, Response extends ContractSchema, const Errors extends ReadonlyArray<ErrorResponseSpec> = readonly []>(endpoint: Endpoint<PathParams, Query, Body, Response, Errors>) => Endpoint<PathParams, Query, Body, Response, Errors>;
 export type AnyEndpoint = Endpoint<ContractSchema, ContractSchema, ContractSchema, ContractSchema, ReadonlyArray<ErrorResponseSpec>>;
+/** Response writers must never fabricate success for an error-only contract. */
+export declare const requireEndpointSuccessStatus: (endpoint: Pick<AnyEndpoint, "operationId" | "successStatus">) => number;
 export interface EndpointRequest<E extends AnyEndpoint> {
     readonly body: E["body"]["Type"];
     readonly path: E["pathParams"]["Type"];

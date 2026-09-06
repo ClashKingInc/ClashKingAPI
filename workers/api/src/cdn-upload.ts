@@ -1,4 +1,4 @@
-import { dashboardEndpoints } from "@clashking/api-contracts"
+import { dashboardEndpoints, requireEndpointSuccessStatus } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { AuthIdentity } from "./auth.js"
 import { CDN_UPLOAD_EXTENSIONS, MAX_DASHBOARD_UPLOAD, readDashboardMultipart, uploadMediaFile, type MediaUploadBindings } from "./dashboard-upload.js"
@@ -25,5 +25,5 @@ export const dispatchCdnUpload = (request: Request, bindings: MediaUploadBinding
   const response = yield* Schema.decodeUnknownEffect(descriptor.response)(uploaded).pipe(
     Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Invalid upload response" })),
   )
-  return Response.json(response, { status: descriptor.successStatus, headers: { "cache-control": "no-store" } })
+  return Response.json(response, { status: requireEndpointSuccessStatus(descriptor), headers: { "cache-control": "no-store" } })
 })

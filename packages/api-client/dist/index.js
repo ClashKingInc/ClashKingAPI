@@ -8,9 +8,33 @@ export class ResponseDecodeError extends Data.TaggedError("ResponseDecodeError")
 export class RequestBuildError extends Data.TaggedError("RequestBuildError") {
 }
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const fetchWithInterruption = async (fetcher, request, interruption) => {
+    const controller = new AbortController();
+    const signals = [...new Set([request.signal, interruption])];
+    const abort = (event) => {
+        const signal = event.currentTarget;
+        if (!controller.signal.aborted)
+            controller.abort(signal.reason);
+    };
+    for (const signal of signals)
+        signal.addEventListener("abort", abort, { once: true });
+    for (const signal of signals) {
+        if (signal.aborted) {
+            controller.abort(signal.reason);
+            break;
+        }
+    }
+    try {
+        return await fetcher(new Request(request, { signal: controller.signal }));
+    }
+    finally {
+        for (const signal of signals)
+            signal.removeEventListener("abort", abort);
+    }
+};
 export const httpTransport = (fetcher = globalThis.fetch) => ({
     execute: (request) => Effect.tryPromise({
-        try: () => fetcher(request),
+        try: (interruption) => fetchWithInterruption(fetcher, request, interruption),
         catch: (cause) => new TransportError({ cause, message: "ClashKing API transport failed" }),
     }),
 });

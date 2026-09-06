@@ -1,11 +1,13 @@
-import { adminEndpoints, type AnyEndpoint, type HttpMethod } from "@clashking/api-contracts"
+import { adminEndpoints, requireEndpointSuccessStatus, type AnyEndpoint, type HttpMethod } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { AccessIdentity, type AdminPrincipal } from "./access.js"
+import { bearerToken, sameSecret } from "./auth.js"
 import { executeAdminOperation, type AdminOperationInput, type AdminWorkerBindings } from "./admin-operations.js"
+import { executeTrackingRead, parseTrackingQuery } from "./tracking-operations.js"
 import type { ApiFailure } from "./errors.js"
-import { InvalidRequest, UpstreamUnavailable } from "./errors.js"
+import { InvalidRequest, Unauthenticated, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { readDashboardMultipart } from "./dashboard-upload.js"
 
@@ -99,9 +101,6 @@ export const matchAdminRoute = (request: Request): MatchedAdminRoute | undefined
   return undefined
 }
 
-export const requiredAdminRole = (endpoint: Pick<AnyEndpoint, "method" | "operationId">): "admin" | "owner" =>
-  endpoint.method === "GET" && !endpoint.operationId.startsWith("adminLab") ? "admin" : "owner"
-
 const numberQueryFields = new Set(["days", "limit"])
 
 const queryInput = (endpoint: AnyEndpoint, url: URL): Readonly<Record<string, unknown>> => {
@@ -115,10 +114,19 @@ const queryInput = (endpoint: AnyEndpoint, url: URL): Readonly<Record<string, un
   return query
 }
 
-const decode = (schema: AnyEndpoint["body"], value: unknown, label: string) =>
-  Schema.decodeUnknownEffect(schema)(value).pipe(
+const decode = (schema: AnyEndpoint["body"], value: unknown, label: string, strict = false) =>
+  Schema.decodeUnknownEffect(schema, { onExcessProperty: strict ? "error" : "ignore" })(value).pipe(
     Effect.mapError(() => new InvalidRequest({ message: `${label} failed schema validation` })),
   )
+
+const decodeQuery = (endpoint: AnyEndpoint, url: URL) => {
+  const raw = queryInput(endpoint, url)
+  const parsed: Effect.Effect<unknown, InvalidRequest> = endpoint.operationId === "adminTrackingTimeseries"
+    ? Effect.try({ try: () => parseTrackingQuery(raw), catch: cause => cause instanceof InvalidRequest
+      ? cause : new InvalidRequest({ message: "Invalid Tracking query" }) })
+    : Effect.succeed(raw)
+  return parsed.pipe(Effect.flatMap(query => decode(endpoint.query, query, "Query parameters")))
+}
 
 const bodyInput = (request: Request, endpoint: AnyEndpoint) => {
   if (endpoint.bodyMode === "none") return Effect.succeed({})
@@ -129,15 +137,16 @@ const bodyInput = (request: Request, endpoint: AnyEndpoint) => {
   if (!contentType.startsWith("application/json")) {
     return Effect.fail(new InvalidRequest({ message: "Content-Type must be application/json", status: 415 }))
   }
-  return readBoundedJson(request).pipe(Effect.flatMap((body) => decode(endpoint.body, body, "Request body")))
+  const strictDeveloperInput = endpoint.operationId === "adminCreateDeveloperApplication" || endpoint.operationId === "adminUpdateDeveloperApplication"
+  return readBoundedJson(request).pipe(Effect.flatMap((body) => decode(endpoint.body, body, "Request body", strictDeveloperInput)))
 }
 
 const responseFor = (endpoint: AnyEndpoint, value: unknown) => {
   if (value instanceof Response) return Effect.succeed(value)
-  if (endpoint.responseMode === "none") return Effect.succeed(new Response(null, { status: endpoint.successStatus }))
+  if (endpoint.responseMode === "none") return Effect.succeed(new Response(null, { status: requireEndpointSuccessStatus(endpoint) }))
   return Schema.encodeUnknownEffect(endpoint.response)(value).pipe(
     Effect.map((encoded) => Response.json(encoded, {
-      status: endpoint.successStatus,
+      status: requireEndpointSuccessStatus(endpoint),
       headers: { "cache-control": "no-store" },
     })),
     Effect.mapError((cause) => new UpstreamUnavailable({
@@ -154,10 +163,26 @@ export const dispatchAdmin = (
   const match = matchAdminRoute(request)
   if (match === undefined) return Effect.succeed(undefined)
   return Effect.gen(function* () {
+    // These two reads predate the Admin move and also belong to bot callers.
+    // A bot token must never manufacture an Admin principal or grant access to
+    // any other Admin operation. Reuse the normal bearer/digest primitives.
+    const tracking = match.endpoint.operationId === "adminTrackingSummary" ? "summary"
+      : match.endpoint.operationId === "adminTrackingTimeseries" ? "timeseries" : undefined
+    const token = tracking === undefined ? undefined : bearerToken(request)
+    const configured = bindings.API_BOT_TOKEN ?? ""
+    if (tracking !== undefined && token !== undefined && configured.trim().length > 0 &&
+        (yield* sameSecret(token, configured))) {
+      const query = yield* decodeQuery(match.endpoint, new URL(request.url))
+      return yield* responseFor(match.endpoint, yield* executeTrackingRead(tracking, query))
+    }
+    if (tracking !== undefined && !request.headers.has("cf-access-jwt-assertion") &&
+        request.headers.get("x-requested-with") !== "XMLHttpRequest") {
+      return yield* new Unauthenticated({ message: "Authentication token missing" })
+    }
     const access = yield* AccessIdentity
-    const principal = yield* access.requireAdmin(request, requiredAdminRole(match.endpoint))
+    const principal = yield* access.requireAdmin(request)
     const path = yield* decode(match.endpoint.pathParams, match.path, "Path parameters")
-    const query = yield* decode(match.endpoint.query, queryInput(match.endpoint, new URL(request.url)), "Query parameters")
+    const query = yield* decodeQuery(match.endpoint, new URL(request.url))
     const body = yield* bodyInput(request, match.endpoint)
     const input: AdminOperationInput = { request, bindings, principal, path, query, body }
     const value = yield* executeAdminOperation(match.endpoint.operationId, input)

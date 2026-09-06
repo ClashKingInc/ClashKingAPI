@@ -21,7 +21,10 @@ interface WorkerSecrets {
   readonly STRIPE_WEBHOOK_SECRET: string
 }
 
-interface WorkerRuntimeBindings {
+// Retained only to type-check unmounted reference modules and their isolated
+// tests. The active Wrangler configuration supplies no ticket runtime binding;
+// no API dispatcher, export or scheduled handler may use this capability.
+interface DeferredRuntimeReferenceBindings {
   readonly TICKET_RUNTIME: {
     getByName(name: string): { wake(operationId: string): Promise<void> }
   }
@@ -29,7 +32,10 @@ interface WorkerRuntimeBindings {
 
 export type WorkerBindings = {
   readonly [Key in keyof Cloudflare.Env]: Cloudflare.Env[Key] extends string ? string : Cloudflare.Env[Key]
-} & WorkerSecrets & WorkerRuntimeBindings
+} & WorkerSecrets
+
+/** Reference-only capabilities, deliberately absent from the active API environment. */
+export type DeferredRuntimeBindings = WorkerBindings & DeferredRuntimeReferenceBindings
 
 export class WorkerEnvironment extends Context.Service<
   WorkerEnvironment,

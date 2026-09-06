@@ -1,4 +1,5 @@
-import { DecimalSnowflake, RuntimeUUID } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { Forbidden, InvalidRequest } from "./errors.js"
 import type { VerifiedRuntimeInteraction } from "./runtime-interaction.js"

@@ -1,0 +1,31 @@
+# Clash proxy authentication: baseline restored
+
+Reviewed and corrected 2026-09-04 in the independent API checkout. The saved rewrite widened `/proxy/v1/*` from user authentication to user-or-Bot authentication. That was not necessary for the saved Dashboard, Expo, or Admin callers. The active Worker and its shared contracts now preserve the original user-only policy; future Bot proxy access requires a separate decision. No deployed service or original checkout was changed.
+
+## Original policy and the saved change
+
+The immutable API baseline is `90436aa042aa85ab1112ea12f3490787e2104b51`. Its `internal/routes/register.go:229` registers all proxy methods through `wrap(proxyForward(...))`. `main.go:103,141–149` creates the authenticator and delegates `wrap` to it. In non-local mode, `internal/utils/auth.go:73–96,112–131` requires an HS256 access token for the native or web audience and an existing user. It does not accept the configured Bot secret as an alternative. The Go-only local-development bypass at `auth.go:54–72`, and a nil-authenticator test construction, are not production Bot authorization.
+
+The saved API object `3909883e555670f787c11db8d58e0a7c11425c07` changed that registration to `userOrBot(...)`. The alternative wrapper at baseline `internal/routes/authz.go:37–44,423–432` accepts `API_BOT_TOKEN` before the user checks. That expands the callers able to use the entire wildcard, including non-GET forwarding, without a user account. It is a policy change, not a route alias or required TypeScript adaptation.
+
+The Worker inherited the expansion in `workers/api/src/router.ts`. It now calls `AuthIdentity.requireUser` before `proxyRequest`, leaving method/path/query/body/status/header forwarding and user search observation unchanged. `workers/api/src/auth.ts:68–102` validates the native/web JWT and user existence. Its separate `requireUserOrBot` remains available to unrelated established routes; this correction does not change them. The saved Go registration alone was restored to `wrap` as reference-source alignment, not as a fallback service.
+
+## Saved frontend evidence
+
+All consumer references are immutable Git objects listed in `worker-route-alias-review.md`; they are not deployed-traffic evidence.
+
+| Consumer | Original and saved calls | Actual credential path |
+| --- | --- | --- |
+| Dashboard | Original `11ce6764`: `lib/api/clients/player-client.ts:50`, `clan-client.ts:17`, `war-client.ts:18`, and `app/dashboard/links/page.tsx:284` call the player/clan/current-war proxy. Saved `24039b5f`: shared proxy descriptors remain in the client files and links page (`:304`). | Original `lib/api/core/base-client.ts:76–107` and `lib/api/fetch.ts:22–36` obtain the user's access token and send `Bearer`. Saved `lib/api/shared-client.ts:54–81` gets the same session token, refreshing if needed; `core/base-client.ts:28–34` supports an explicitly supplied user token. No Bot credential is required. |
+| Expo | Original `f9c531da`: `expo/src/core/api/client.ts:104–117` builds proxy GET requests and always requires authentication. Saved `9d7fd109`: `expo/src/features/player/data/player-service.ts:197–203` executes `ProxyPlayerEndpoint`; other proxy operations share the same client. | Original client `:205–216` sends the access token provided by `core/app/runtime.ts:134–145`. Saved `core/app/runtime.ts:138–153` wires `TokenService` through `core/api/contract-api.ts:39–78`. `services/auth/token-service.ts:42–57` returns/refreshes the logged-in web/native session token. |
+| Admin | No `/proxy/v1` or proxy game-data descriptor call found in original `a4c1481c` or saved `6e6e4153` runtime `src`. The “Proxy health” page is a different operation: original `src/routes/proxy.tsx:35` calls `/admin/proxy/stats`; saved `:37–41` calls `adminEndpoints.proxyStats`. | Original `src/lib/adminApi.ts:8–17` calls the same-origin Admin service. Saved `src/lib/adminApi.ts:24–27` constructs the Access-aware Admin client. The original server's Bot token at `src/server/adminApi.ts:127–130,847–865` is used for Tracking summary/timeseries, not this proxy wildcard. Proxy statistics use the separate configured `/stats` URL (`:126,835–844`). |
+
+## Contract and test boundary
+
+`packages/api-contracts/src/proxy.ts` now declares all 18 proxy GET descriptors as `auth: "user"`. The two proxy aliases were removed from `botEndpoints`; user-facing exports and Expo descriptors remain. The generic API client can still physically send an arbitrary bearer value, so server authentication—not TypeScript metadata—is the security boundary. No new Bot alternative is silently supplied.
+
+`workers/api/test/proxy-auth-boundary.test.ts` uses the actual Worker entrypoint, router, and JWT verification with fake SQL and upstream services. It checks native/web user forwarding, retained user observation, missing/invalid/Bot-token rejection before SQL or forwarding, and rejection of a removed user. Existing proxy/observer tests cover credential stripping and response ownership. A separate `workers/api/test/runtime/proxy.runtime.test.ts` exercises the unchanged streamed POST forwarding in workerd; Node's request-stream constructor has different duplex requirements, so the runtime check belongs in that lane.
+
+The remaining operational question is whether a later Bot design should obtain game data through this user-facing proxy or a separately authorized backend path. This audit does not approve or implement either option. It did not inspect Bot internals, credentials, schema proposals, production requests, or deployed traffic, and it does not establish complete Go/Worker authentication equivalence beyond the restored caller policy.
+
+Validation: 18 focused proxy/auth/contract tests passed, Worker TypeScript passed, focused lint and `git diff --check` passed. The workerd streamed-POST check passed with only local loopback permission after the sandbox rejected the initial listener (`listen EPERM`); its upstream was a fake service and external requests were blocked. A generated-OpenAPI regression checks all 18 proxy operations remain labeled user-authenticated. Shared output regeneration is coordinated with the other active API corrections; production connectivity and release remain untested and unchanged.

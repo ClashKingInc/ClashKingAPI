@@ -1,5 +1,12 @@
 # Worker route release gates
 
+> **Superseded execution checklist.** Everything below is historical evidence
+> from the archived rewrite. It does not authorize completing bot orchestration
+> in the API or define the current parity target. Use
+> [the pinned route inventory and review findings](worker-route-inventory-review.md)
+> and the root replacement plan. The current checker excludes deferred bot work
+> from requirements and never labels static mounting as behavior-proven.
+
 ## Current checkpoint — 2026-09-04, 07:44 CDT
 
 The generated [route inventory](worker-route-parity.json) records 347 contracted,

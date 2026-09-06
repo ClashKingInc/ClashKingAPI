@@ -2,7 +2,6 @@ import { Context, Data, Effect, Layer, Schema } from "effect"
 import {
   botEndpoints, dashboardEndpoints, DashboardRosterMetricQueryRequest, DashboardRosterViewPreviewRequest, RosterCapacity,
   type DashboardRosterViewSpec, type DashboardRosterViewResultRow, type AnyEndpoint,
-  type RosterMemberGroupSetting,
 } from "@clashking/api-contracts"
 import { SqlClient } from "effect/unstable/sql"
 
@@ -23,7 +22,7 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
 import { readBoundedJson } from "./request-body.js"
 import { hydrateRosterMember, loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
-import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership } from "./roster-interaction-membership.js"
+import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership } from "./dashboard-roster-membership.js"
 
 type RosterAuth = "bot" | "public" | "user-or-bot"
 
@@ -162,9 +161,6 @@ const requireRosterBatch = (body: Record<string, unknown>) => Effect.gen(functio
 })
 
 interface RosterRow {
-  readonly capacity: number
-  readonly roster_role_id: string | null
-  readonly member_groups: ReadonlyArray<typeof RosterMemberGroupSetting.Type>
   readonly alias: string
   readonly clan_tag: string | null
   readonly created_at: Date | string
@@ -194,8 +190,6 @@ interface RosterRow {
 }
 
 interface RosterMemberRow {
-  readonly member_group_id: string | null
-  readonly is_substitute: boolean
   readonly discord_avatar_url: string | null
   readonly discord_user_id: string | null
   readonly discord_username: string | null
@@ -221,8 +215,6 @@ const optional = <K extends string>(key: K, value: unknown) => value === null ||
   : { [key]: value } as Record<K, unknown>
 
 const memberJson = (row: RosterMemberRow) => ({
-  member_group_id: row.member_group_id,
-  is_substitute: row.is_substitute,
   tag: row.tag,
   name: row.name,
   townhall: row.townhall,
@@ -243,8 +235,6 @@ const memberJson = (row: RosterMemberRow) => ({
 })
 
 const builderMemberJson = (row: RosterMemberRow) => ({
-  memberGroupId: row.member_group_id,
-  isSubstitute: row.is_substitute,
   playerTag: row.tag,
   playerName: row.name,
   clanTag: row.current_clan_tag,
@@ -270,7 +260,7 @@ const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
     SELECT tag, name, townhall, trophies, current_clan_name, current_clan_tag,
            league_id, league_name, hero_level_sum, max_percent, war_preference,
            discord_user_id, discord_username, discord_avatar_url, last_online,
-           refreshed_at, signup_answers, member_group_id::text, is_substitute
+           refreshed_at, signup_answers
     FROM roster_members
     WHERE roster_id = ${rosterId}::uuid
     ORDER BY position, tag
@@ -285,12 +275,7 @@ const loadRosters = (
     return yield* new InvalidRequest({ message: "invalid roster_id" })
   }
   return yield* database("Unable to load rosters", sql<RosterRow>`
-  SELECT id::text, server_id, group_id, clan_tag, alias, description, capacity, roster_role_id,
-         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', setting.member_group_id, 'name', account_group.name,
-           'position', setting.position, 'signup_enabled', setting.signup_enabled, 'role_id', setting.role_id)
-           ORDER BY setting.position, setting.member_group_id)
-           FROM roster_member_group_settings setting JOIN roster_member_groups account_group ON account_group.id = setting.member_group_id
-           WHERE setting.roster_id = rosters.id), '[]'::jsonb) AS member_groups,
+  SELECT id::text, server_id, group_id, clan_tag, alias, description,
          roster_type, signup_scope, min_townhall, max_townhall, min_signups,
          max_accounts_per_user, display_column_ids, sort_configuration,
          webhook_id, message_id, image_url, event_start_time, recurrence_days,
@@ -305,9 +290,6 @@ const loadRosters = (
 })
 
 const rosterJson = (row: RosterRow, members: ReadonlyArray<RosterMemberRow>) => ({
-  capacity: row.capacity,
-  roster_role_id: row.roster_role_id,
-  member_groups: row.member_groups,
   id: row.id,
   server_id: row.server_id,
   alias: row.alias,
@@ -603,12 +585,12 @@ const createRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   const id = crypto.randomUUID()
   yield* database("Unable to create roster", sql`
     INSERT INTO rosters (
-      id, server_id, group_id, clan_tag, alias, description, roster_type, signup_scope, capacity, max_accounts_per_user, roster_role_id,
+      id, server_id, group_id, clan_tag, alias, description, roster_type, signup_scope, max_accounts_per_user,
       display_column_ids, sort_configuration, signup_questions, created_at, updated_at
     ) VALUES (
       ${id}::uuid, ${serverId}, NULLIF(${String(body.group_id ?? "")}, ''),
       NULLIF(${String(body.clan_tag ?? "")}, ''), ${alias}, NULLIF(${String(body.description ?? "")}, ''),
-      ${rosterType}, ${signupScope}, ${body.capacity ?? 50}, ${body.max_accounts_per_user ?? null}, ${body.roster_role_id ?? null},
+      ${rosterType}, ${signupScope}, ${body.max_accounts_per_user ?? null},
       ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb, now(), now()
     )
   `)
@@ -641,8 +623,6 @@ const updateRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   }
   yield* database("Unable to update roster", sql`
     UPDATE rosters SET
-      capacity = ${body.capacity ?? row.capacity},
-      roster_role_id = ${body.roster_role_id === undefined ? row.roster_role_id : body.roster_role_id},
       alias = ${String(body.alias ?? row.alias)},
       description = ${body.description === undefined ? row.description : body.description},
       roster_type = ${String(body.roster_type ?? row.roster_type)},
@@ -664,14 +644,13 @@ const updateRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
       revision = revision + 1, updated_at = now()
     WHERE id = ${id}::uuid AND server_id = ${serverId}
   `)
-  if (body.capacity !== undefined || body.max_accounts_per_user !== undefined) yield* assertRosterMembershipLimits(sql, [id])
+  if (body.max_accounts_per_user !== undefined) yield* assertRosterMembershipLimits(sql, [id])
   return json({ message: "Roster updated", roster: yield* loadRosterJson(sql, id, serverId) })
 })
 
 const validateRosterLimits = (body: Record<string, unknown>) =>
-  body.capacity !== undefined && !Schema.is(RosterCapacity)(body.capacity)
-    || body.max_accounts_per_user !== undefined && body.max_accounts_per_user !== null && !Schema.is(RosterCapacity)(body.max_accounts_per_user)
-    ? Effect.fail(new InvalidRequest({ message: "Roster limits must be positive integers; only the per-user limit may be null" }))
+  body.max_accounts_per_user !== undefined && body.max_accounts_per_user !== null && !Schema.is(RosterCapacity)(body.max_accounts_per_user)
+    ? Effect.fail(new InvalidRequest({ message: "Roster per-user limit must be a positive integer or null" }))
     : Effect.void
 
 const deleteRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
@@ -717,38 +696,31 @@ const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
   yield* database("Unable to clone roster", sql`
     INSERT INTO rosters (
       id, server_id, group_id, clan_tag, alias, description, roster_type, signup_scope,
-      min_townhall, max_townhall, min_signups, max_accounts_per_user, capacity, roster_role_id,
+      min_townhall, max_townhall, min_signups, max_accounts_per_user,
       display_column_ids, sort_configuration, webhook_id, message_id, image_url,
       event_start_time, recurrence_days, recurrence_day_of_month, signup_questions,
       created_at, updated_at
     ) VALUES (
       ${id}::uuid, ${targetServerId}, ${sameServer ? row.group_id : null}, ${row.clan_tag}, ${alias}, ${row.description},
       ${row.roster_type}, ${row.signup_scope}, ${row.min_townhall}, ${row.max_townhall},
-      ${row.min_signups}, ${row.max_accounts_per_user}, ${row.capacity}, ${sameServer ? row.roster_role_id : null}, ${row.display_column_ids ?? []},
+      ${row.min_signups}, ${row.max_accounts_per_user}, ${row.display_column_ids ?? []},
       ${JSON.stringify(row.sort_configuration ?? [])}::jsonb, NULL, NULL,
       ${row.image_url}, ${row.event_start_time}, ${row.recurrence_days}, ${row.recurrence_day_of_month},
       ${JSON.stringify(row.signup_questions ?? [])}::jsonb, now(), now()
     )
   `)
   yield* lockRosterMembership(sql, targetServerId, [id])
-  if (sameServer) {
-    yield* database("Unable to clone roster member-group settings", sql`
-      INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id, signup_enabled, position, role_id)
-      SELECT ${id}::uuid, member_group_id, server_id, signup_enabled, position, role_id
-      FROM roster_member_group_settings WHERE roster_id = ${row.id}::uuid
-    `)
-  }
   if (members.length > 0) {
     yield* database("Unable to clone roster members", sql`
       INSERT INTO roster_members (
         roster_id, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
         league_id, league_name, hero_level_sum, max_percent, war_preference,
         discord_user_id, discord_username, discord_avatar_url, last_online,
-        refreshed_at, signup_answers, position, member_group_id, is_substitute
+        refreshed_at, signup_answers, position
       ) SELECT ${id}::uuid, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
                league_id, league_name, hero_level_sum, max_percent, war_preference,
                discord_user_id, discord_username, discord_avatar_url, last_online,
-               refreshed_at, signup_answers, position, CASE WHEN ${sameServer} THEN member_group_id ELSE NULL END, is_substitute
+               refreshed_at, signup_answers, position
         FROM roster_members WHERE roster_id = ${row.id}::uuid
     `)
   }
@@ -1601,9 +1573,6 @@ const builderMissingMembers = (sql: SqlClient.SqlClient, input: DashboardRosterO
 
 const builderRosterJson = (row: RosterRow, members: ReadonlyArray<RosterMemberRow>) => ({
   minTownhall: row.min_townhall, maxTownhall: row.max_townhall,
-  capacity: row.capacity, rosterRoleId: row.roster_role_id,
-  memberGroups: row.member_groups.map((group) => ({ id: group.id, name: group.name, position: group.position,
-    signupEnabled: group.signup_enabled, roleId: group.role_id })),
   id: row.id, serverId: row.server_id, alias: row.alias, description: row.description,
   clanTag: row.clan_tag, displayColumnIds: row.display_column_ids ?? [],
   publicShareId: row.public_share_id, refreshedAt: row.last_refreshed_at === null ? null : iso(row.last_refreshed_at),

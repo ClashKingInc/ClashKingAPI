@@ -4,7 +4,10 @@ import { SqlClient } from "effect/unstable/sql"
 
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
+import { dashboardThreadParentNames } from "./dashboard-discord-cache.js"
+import { discordBotProfile } from "./discord-bot-profile.js"
 import { DiscordCredentials } from "./discord-credentials.js"
+import { seedDiscordAccess } from "./discord-access-cache.js"
 import { discordWebhookAvatar, validateDiscordProfileImage } from "./discord-profile-image.js"
 import { discordDestinationId, validateDiscordDestination } from "./discord-destination.js"
 import { cleanupManagedDiscordResource, compensateCreatedDiscordResource, createCountdownChannel, createLogWebhook, lockServerDiscordResources, recordCreatedDiscordResource } from "./discord-managed-resources.js"
@@ -15,7 +18,7 @@ import { dashboardGiveawayOperationIds, executeDashboardGiveaways } from "./dash
 import { dashboardServerBaseOperationIds, executeDashboardServerBases } from "./dashboard-server-bases.js"
 import { dashboardServerActivityOperationIds, executeDashboardServerActivity } from "./dashboard-server-activity.js"
 import { dashboardServerReadOperationIds, executeDashboardServerReads } from "./dashboard-server-reads.js"
-import { ServerAuthorization, discordGuildManager } from "./server-authorization.js"
+import { ServerAuthorization, discordGuildManager, resolveListedGuildAccess } from "./server-authorization.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited, Unauthenticated, UnprocessableEntity, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
 export const dashboardServerCoreOperationIds = [
@@ -61,10 +64,6 @@ const RawChannel = Schema.Struct({
 const RawBotUser = Schema.Struct({
   id: DecimalSnowflake, username: Schema.optionalKey(Schema.String), global_name: optionalText,
   avatar: optionalText, banner: optionalText,
-})
-const RawBotMember = Schema.Struct({ nick: optionalText, avatar: optionalText, banner: optionalText, bio: optionalText, user: RawBotUser })
-const RawBotApplication = Schema.Struct({
-  name: Schema.String, description: Schema.optionalKey(Schema.String), bot: RawBotUser,
 })
 
 const decodeDiscord = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) =>
@@ -208,13 +207,17 @@ const channelOperation = (input: DashboardServerOperationInput) => Effect.gen(fu
     const roles = yield* rolesFromDiscord(serverId)
     return { server_id: serverId, roles, count: roles.length }
   }
-  const channels = yield* decodeDiscord(Schema.Array(RawChannel), yield* discord.request(`/guilds/${serverId}/channels`))
-  const names = new Map(channels.map((channel) => [channel.id, channel.name]))
   if (input.endpoint.operationId === "serverThreads") {
     const result = yield* decodeDiscord(Schema.Struct({ threads: Schema.Array(RawChannel) }), yield* discord.request(`/guilds/${serverId}/threads/active`))
+    const parentIds = result.threads.flatMap((thread) => thread.parent_id ? [thread.parent_id] : [])
+    const names = yield* dashboardThreadParentNames(input.bindings, serverId, parentIds,
+      () => discord.request(`/guilds/${serverId}/channels`).pipe(Effect.flatMap((raw) => decodeDiscord(Schema.Array(RawChannel), raw)),
+        Effect.map((channels) => new Map(channels.map((channel) => [channel.id, channel.name])))))
     return result.threads.map((thread) => ({ id: thread.id, name: thread.name, parent_channel_id: thread.parent_id ?? "", parent_channel_name: names.get(thread.parent_id ?? "") ?? "", archived: thread.thread_metadata?.archived ?? false }))
       .sort((left, right) => left.parent_channel_name.localeCompare(right.parent_channel_name) || left.name.localeCompare(right.name))
   }
+  const channels = yield* decodeDiscord(Schema.Array(RawChannel), yield* discord.request(`/guilds/${serverId}/channels`))
+  const names = new Map(channels.map((channel) => [channel.id, channel.name]))
   const typeNames: Readonly<Record<number, string>> = { 0: "text", 4: "category", 5: "news", 15: "forum" }
   return channels.filter((channel) => typeNames[channel.type] !== undefined).map((channel) => ({
     id: channel.id, name: channel.name, type: typeNames[channel.type],
@@ -225,34 +228,67 @@ const channelOperation = (input: DashboardServerOperationInput) => Effect.gen(fu
 const guildOperation = (input: DashboardServerOperationInput) => database("Guild information could not be loaded", Effect.gen(function* () {
   const discord = yield* DiscordApi
   const sql = yield* SqlClient.SqlClient
-  const authorization = yield* ServerAuthorization
   const credentials = yield* DiscordCredentials
   const wanted = serverIdFor(input)
+  if (wanted !== "") {
+    const guild = yield* decodeDiscord(Schema.Struct({
+      id: DecimalSnowflake, name: Schema.String, icon: optionalText, owner_id: optionalText,
+      features: Schema.Array(Schema.String), approximate_member_count: Schema.optionalKey(Schema.Number),
+      description: optionalText, banner: optionalText, premium_tier: Schema.Number,
+      premium_subscription_count: Schema.optionalKey(Schema.Number),
+    }), yield* discord.request(`/guilds/${wanted}?with_counts=true`))
+    if (guild.id !== wanted) return yield* new UpstreamUnavailable({ cause: "Guild mismatch", message: "Discord guild identity is invalid" })
+    const asset = (kind: string, hash: string | null | undefined) => hash
+      ? `https://cdn.discordapp.com/${kind}/${guild.id}/${hash}.${hash.startsWith("a_") ? "gif" : "png"}` : null
+    return { id: guild.id, name: guild.name, icon: asset("icons", guild.icon), owner_id: guild.owner_id ?? null,
+      features: guild.features, member_count: guild.approximate_member_count ?? null, description: guild.description ?? null,
+      banner: asset("banners", guild.banner), premium_tier: guild.premium_tier, boost_count: guild.premium_subscription_count ?? 0 }
+  }
   if (input.principal.kind !== "user") return yield* new Forbidden({ message: "A user identity is required to list Discord guilds" })
+  const observedAt = new Date()
   const token = yield* credentials.accessToken(input.principal.userId, input.principal.deviceId)
   const guilds = yield* decodeDiscord(Schema.Array(RawGuild), yield* discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: token }))
   const selected = wanted === "" ? guilds : guilds.filter((guild) => guild.id === wanted)
-  const values = yield* Effect.forEach(selected, (guild) => Effect.gen(function* () {
-    const access = yield* authorization.resolve(input.request, guild.id)
+  const accessByGuild = yield* resolveListedGuildAccess(input.principal, selected.map((guild) => ({
+    id: guild.id, owner: guild.owner ?? false, permissions: guild.permissions ?? "0",
+  })))
+  yield* seedDiscordAccess(input.bindings, input.principal, [...accessByGuild].filter(([, access]) => access.manager || Object.keys(access.sections).length > 0).map(([serverId, access]) => ({
+    serverId, claims: { manager: access.manager, roles: access.discordRoles ?? [] },
+  })), observedAt)
+  const discovered = yield* Effect.forEach(selected, (guild) => Effect.gen(function* () {
+    const access = accessByGuild.get(guild.id)!
     if (!access.manager && Object.keys(access.sections).length === 0) return undefined
     const present = yield* discord.request(`/guilds/${guild.id}`).pipe(Effect.as(true), Effect.catch((failure) => failure instanceof NotFound || failure instanceof Forbidden ? Effect.succeed(false) : Effect.fail(failure)))
-    const rows = yield* sql<{ last_command_at: Date | string | null }>`SELECT last_command_at FROM servers WHERE id = ${guild.id}`
-    const last = rows[0]?.last_command_at ?? null
     const permissions = guild.permissions ?? "0"
     const manager = discordGuildManager({ owner: guild.owner ?? false, permissions })
     const role = guild.owner === true ? "Owner" : (BigInt(permissions) & 8n) !== 0n ? "Administrator" : manager ? "Manager" : "Member"
+    return { guild, manager, permissions, present, role }
+  }), { concurrency: 8 })
+  const visible = discovered.filter((value) => value !== undefined)
+  const installed = visible.filter((value) => value.present)
+  const activity = installed.length === 0 ? [] : yield* sql.unsafe<{ id: string; last_command_at: Date | string | null }>(`
+    WITH discovered(id, name) AS (SELECT * FROM unnest($1::text[], $2::text[])),
+    inserted AS (
+      INSERT INTO servers (id, name) SELECT id, name FROM discovered
+      ON CONFLICT (id) DO NOTHING RETURNING id, last_command_at
+    )
+    SELECT id, last_command_at FROM inserted
+    UNION ALL
+    SELECT stored.id, stored.last_command_at FROM servers stored JOIN discovered USING (id)
+  `, [installed.map((value) => value.guild.id), installed.map((value) => value.guild.name)])
+  const activityByGuild = new Map(activity.map((row) => [row.id, row.last_command_at]))
+  const items = visible.map(({ guild, manager, permissions, present, role }) => {
+    const last = activityByGuild.get(guild.id) ?? null
     return { id: guild.id, name: guild.name, icon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null,
       owner: guild.owner ?? false, permissions, role, features: guild.features ?? [], has_bot: present,
       ...optional("member_count", guild.approximate_member_count), delegated: !manager,
-      ...optional("last_command_at", last === null ? null : iso(last)), inactive: present && (last === null || new Date(last).getTime() < Date.now() - 90 * 86_400_000) }
-  }), { concurrency: 8 })
-  const items = values.filter((value) => value !== undefined)
+      ...optional("last_command_at", last === null ? null : iso(last)), inactive: present && last !== null && new Date(last).getTime() < Date.now() - 90 * 86_400_000 }
+  })
   if (wanted !== "") return yield* requireRow(items, "Guild not found or access denied")
   return items
 }))
 
 const profileOperation = (input: DashboardServerOperationInput) => database("Bot profile operation failed", Effect.gen(function* () {
-  const discord = yield* DiscordApi
   const serverId = serverIdFor(input)
   const body = record(input.body)
   const payload: Record<string, unknown> = {}
@@ -283,18 +319,7 @@ const profileOperation = (input: DashboardServerOperationInput) => database("Bot
     }
     if (Object.keys(payload).length === 0) return yield* new InvalidRequest({ message: "At least one profile field is required" })
   }
-  const member = yield* decodeDiscord(RawBotMember, yield* discord.request(`/guilds/${serverId}/members/@me`, { method: "PATCH", body: payload }))
-  const global = yield* decodeDiscord(RawBotApplication, yield* discord.request("/oauth2/applications/@me"))
-  const userId = member.user.id || global.bot.id
-  const nick = member.nick?.trim() ? member.nick : null
-  const bio = member.bio?.trim() ? member.bio : null
-  const avatar = member.avatar ?? global.bot.avatar
-  const banner = member.banner ?? global.bot.banner
-  return { name: nick ?? global.bot.global_name ?? global.bot.username ?? global.name,
-    avatar_url: avatar ? `https://cdn.discordapp.com/${member.avatar ? `guilds/${serverId}/users/${userId}/avatars` : `avatars/${userId}`}/${avatar}.png?size=512` : null,
-    banner_url: banner ? `https://cdn.discordapp.com/${member.banner ? `guilds/${serverId}/users/${userId}/banners` : `banners/${userId}`}/${banner}.png?size=1024` : null,
-    bio: bio ?? global.description ?? "", name_inherited: nick === null, avatar_inherited: !member.avatar,
-    banner_inherited: !member.banner, bio_inherited: bio === null }
+  return yield* discordBotProfile(input.bindings, serverId, payload)
 }))
 
 const panelOperation = (input: DashboardServerOperationInput) => database("Welcome panel operation failed", Effect.gen(function* () {
@@ -600,6 +625,17 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
     if (type === "reddit_feed" && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
   }
   let created: Effect.Success<ReturnType<typeof createLogWebhook>> | undefined
+  const prepared = operation === "deleteServerLogs" ? undefined : yield* Effect.gen(function* () {
+    const channelId = yield* discordDestinationId(body.channel_id, "channel_id")
+    const threadId = body.thread_id === null || body.thread_id === undefined || body.thread_id === "" ? null : yield* discordDestinationId(body.thread_id, "thread_id")
+    yield* validateDiscordDestination(serverId, channelId, threadId)
+    const user = yield* decodeDiscord(RawBotUser, yield* discord.request("/users/@me"))
+    const hooks = yield* decodeDiscord(Schema.Array(OwnedWebhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+    const reusable = hooks.find((hook) => hook.type === 1 && hook.channel_id === channelId && (hook.user?.id === user.id || hook.application_id === user.id))
+    const profile = reusable === undefined ? record(yield* profileOperation({ ...input, endpoint: dashboardEndpoints.botGuildProfile, body: {} })) : {}
+    const avatar = reusable === undefined ? yield* discordWebhookAvatar(typeof profile.avatar_url === "string" ? profile.avatar_url : null) : undefined
+    return { channelId, threadId, user, webhookId: reusable?.id, name: text(profile.name) || "ClashKing", avatar }
+  })
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)
     if (tag !== null) yield* requireRow(yield* sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`, "Clan not found on this server")
@@ -609,16 +645,17 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
       for (const row of prior) yield* cleanupManagedDiscordResource({ serverId, id: row.webhook_id, type: "webhook", writersSerialized: discordDestinationWritersSerialized })
       return { message: "Server logs deleted successfully", server_id: serverId, ...optional("clan_tag", tag), deleted_log_types: selected }
     }
-    const channelId = yield* discordDestinationId(body.channel_id, "channel_id")
-    const threadId = body.thread_id === null || body.thread_id === undefined || body.thread_id === "" ? null : yield* discordDestinationId(body.thread_id, "thread_id")
-    yield* validateDiscordDestination(serverId, channelId, threadId)
-    const user = yield* decodeDiscord(RawBotUser, yield* discord.request("/users/@me"))
-    const hooks = yield* decodeDiscord(Schema.Array(OwnedWebhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
-    const reusable = hooks.find((hook) => hook.type === 1 && hook.channel_id === channelId && (hook.user?.id === user.id || hook.application_id === user.id))
-    let webhookId = reusable?.id
+    if (prepared === undefined) return yield* Effect.die("Missing log preparation")
+    const { channelId, threadId, user } = prepared
+    let webhookId = prepared.webhookId
     if (webhookId === undefined) {
-      const profile = record(yield* profileOperation({ ...input, endpoint: dashboardEndpoints.botGuildProfile, body: {} }))
-      created = yield* createLogWebhook(serverId, channelId, text(profile.name) || "ClashKing", yield* discordWebhookAvatar(typeof profile.avatar_url === "string" ? profile.avatar_url : null))
+      // Recheck only the creation race while serialized. All profile/avatar and
+      // destination reads above happened without holding the server row lock.
+      const hooks = yield* decodeDiscord(Schema.Array(OwnedWebhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+      webhookId = hooks.find((hook) => hook.type === 1 && hook.channel_id === channelId && (hook.user?.id === user.id || hook.application_id === user.id))?.id
+    }
+    if (webhookId === undefined) {
+      created = yield* createLogWebhook(serverId, channelId, prepared.name, prepared.avatar)
       yield* recordCreatedDiscordResource(created)
       webhookId = created.id
     }

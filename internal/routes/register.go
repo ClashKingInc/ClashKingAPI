@@ -227,7 +227,7 @@ func Register(app *fiber.App, a apptypes.Deps, wrap func(fiber.Handler) fiber.Ha
 	app.Get("/v2/app/posts", listPublishedAppPosts(a))
 	app.Get("/v2/app/config", getAppConfig(a))
 	app.Post("/v2/initialization", wrap(mobileInitialization(a)))
-	app.All("/proxy/v1/*", userOrBot(proxyForward(a, "/proxy/")))
+	app.All("/proxy/v1/*", wrap(proxyForward(a, "/proxy/")))
 
 	app.Post("/v2/roster", rosterWrite(createRoster(a)))
 	app.Get("/v2/roster/missing-members", rosterRead(getMissingMembers(a)))

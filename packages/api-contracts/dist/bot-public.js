@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { StoredCwlGroupEndpoint } from "./stored-cwl.js";
 import { defineEndpoint, NoBody, } from "./endpoint.js";
 const OptionalNumber = Schema.optionalKey(Schema.Number);
 const OptionalString = Schema.optionalKey(Schema.String);
@@ -292,23 +293,6 @@ const CWLMember = Schema.Struct({
     name: Schema.String,
     townHallLevel: Schema.Number,
 });
-const CWLStoredGroupClan = Schema.Struct({
-    tag: Schema.String,
-    name: Schema.String,
-    clanLevel: Schema.Number,
-    badgeUrls: PublicBadgeUrls,
-    members: Schema.Array(CWLMember),
-});
-const CWLStoredWar = Schema.Struct({ ...WarResponse.fields, season: Schema.String });
-const CWLWarPlaceholder = Schema.Struct({ tag: Schema.String });
-const CWLRound = Schema.Struct({ warTags: Schema.Array(Schema.Union([CWLStoredWar, CWLWarPlaceholder])) });
-const CWLResponse = Schema.Struct({
-    state: Schema.String,
-    season: Schema.String,
-    warLeague: Schema.NullOr(LeagueReference),
-    clans: Schema.Array(CWLStoredGroupClan),
-    rounds: Schema.Array(CWLRound),
-});
 const CWLSeasonItem = Schema.Struct({
     season: Schema.String,
     state: Schema.String,
@@ -512,7 +496,7 @@ export const BotClanJoinLeaveEndpoint = publicGet("botClanJoinLeave", "/v2/clan/
 export const BotClanLegendSummaryEndpoint = publicGet("botClanLegendSummary", "/v2/clan/:tag/history/legends/summary", ClashTagPath, Schema.Struct({ top: OptionalNumber }), ClanLegendSummaryResponse, "Get clan Legend summary");
 export const BotCurrentWarEndpoint = publicGet("botCurrentWar", "/v2/war/:tag/basic", ClashTagPath, Schema.Struct({}), BasicWarResponse, "Get current basic war");
 export const BotPreviousWarEndpoint = publicGet("botPreviousWar", "/v2/war/:tag/previous/:endTime", Schema.Struct({ tag: Schema.String, endTime: Schema.String }), Schema.Struct({}), WarResponse, "Get archived war");
-export const BotCwlGroupEndpoint = publicGet("botCwlGroup", "/v2/cwl/:tag/group", ClashTagPath, Schema.Struct({ season: OptionalString }), CWLResponse, "Get stored CWL group");
+export const BotCwlGroupEndpoint = defineEndpoint({ ...StoredCwlGroupEndpoint, operationId: "botCwlGroup" });
 export const BotCwlSeasonsEndpoint = publicGet("botCwlSeasons", "/v2/cwl/:tag/seasons", ClashTagPath, Schema.Struct({ limit: OptionalNumber }), CWLSeasonsResponse, "Get CWL seasons");
 export const BotCwlRankingHistoryEndpoint = publicGet("botCwlRankingHistory", "/v2/cwl/:tag/ranking-history", ClashTagPath, Schema.Struct({}), CWLClanHistoryResponse, "Get clan CWL ranking history");
 export const BotCwlLeaderboardEndpoint = publicGet("botCwlLeaderboard", "/v2/leaderboard/cwl/:leagueId", Schema.Struct({ leagueId: Schema.String }), Schema.Struct({ season: Schema.String, team_size: Schema.Number }), CWLLeagueRankingsResponse, "Get CWL leaderboard");

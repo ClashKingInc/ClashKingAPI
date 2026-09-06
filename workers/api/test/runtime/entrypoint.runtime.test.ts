@@ -2,33 +2,41 @@ import { readFileSync } from "node:fs"
 import { build } from "esbuild"
 import { Miniflare, convertV4MiniflareOptions } from "miniflare"
 import { expect, it } from "vitest"
-import { transcriptStoragePrefix } from "../../src/ticket-transcript-format.js"
+import { jsonTranscriptStoragePrefix } from "../../src/ticket-json-transcript.js"
+import { jsonTranscriptFixture } from "../fixtures/json-transcript.js"
+import { deferredApiRoutes } from "../deferred-runtime-paths.js"
 
 it("runs the complete fetch entrypoint inside workerd without external services", async () => {
   const capturedLogs: string[] = []
+  let outboundRequests = 0
   const result = await build({
-    entryPoints: ["workers/api/src/index.ts"], bundle: true, write: false,
+    entryPoints: ["workers/api/src/index.ts"], bundle: true, write: false, metafile: true,
     format: "esm", platform: "node", external: ["cloudflare:*"],
     banner: { js: 'import { createRequire as fixtureCreateRequire } from "node:module"; const require = fixtureCreateRequire("/entrypoint-test/index.js");' },
     plugins: [{ name: "isolated-runtime-boundaries", setup(builder) {
       builder.onResolve({ filter: /\.wasm$/ }, () => ({ path: "./zstd.wasm", external: true }))
       builder.onResolve({ filter: /\.zdict$/ }, () => ({ path: "./dictionary.bin", external: true }))
-      // Keep the actual service composition and router. A strict SQL sentinel
-      // proves these unauthenticated/validation paths perform no database I/O.
+      // Keep the actual lazy SQL layer, service composition and router. Its
+      // acquisition fails like an unavailable DB; unrelated requests still work.
       builder.onResolve({ filter: /\/database\.js$/ }, () => ({ path: "database", namespace: "fixture" }))
       builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: `
-        import { Effect, Layer } from "effect";
-        import { SqlClient } from "effect/unstable/sql";
-        const sql = new Proxy({}, { get() { throw new Error("Unexpected database access"); } });
-        export const databaseLayer = () => Layer.succeed(SqlClient.SqlClient, sql);
+        import { Effect } from "effect";
+        import { lazyDatabaseLayer } from "./workers/api/src/database.ts";
+        export const databaseLayer = () => lazyDatabaseLayer(Effect.die(new Error("Database unavailable in fixture")));
         export const refreshMaterializedViews = Effect.die(new Error("Unexpected refresh"));
       `, resolveDir: process.cwd(), loader: "js" }))
     } }],
   })
   const script = result.outputFiles[0]?.text
   if (!script) throw new Error("Entrypoint bundle missing")
+  const bundleExports = Object.values(result.metafile?.outputs ?? {}).flatMap((output) => output.exports)
+  expect(bundleExports.sort()).toEqual(["MaterializedViewRefresher", "SharedLinksRateLimiter", "default"])
   const runtime = new Miniflare(convertV4MiniflareOptions({
     handleStructuredLogs: entry => { capturedLogs.push(JSON.stringify(entry)) },
+    outboundService: () => {
+      outboundRequests++
+      throw new Error("Unexpected outbound provider request")
+    },
     modulesRoot: "/entrypoint-test",
     modules: [
       { type: "ESModule", path: "/entrypoint-test/index.js", contents: script },
@@ -37,6 +45,9 @@ it("runs the complete fetch entrypoint inside workerd without external services"
     ],
     compatibilityDate: "2026-08-22", compatibilityFlags: ["nodejs_compat"],
     r2Buckets: ["MEDIA", "TICKETING"],
+    assets: { directory: "workers/api/documentation-assets", binding: "API_DOCUMENTATION", run_worker_first: true,
+      routerConfig: { has_user_worker: true },
+      assetConfig: { html_handling: "none", not_found_handling: "none" } },
     bindings: {
       ACCESS_TEAM_DOMAIN: "fixture.cloudflareaccess.com", ACCESS_AUDIENCE: "fixture-audience",
       JWT_ACCESS_SECRET: "fixture-access-secret", JWT_REFRESH_SECRET: "fixture-refresh-secret", API_BOT_TOKEN: "fixture-bot-token",
@@ -50,8 +61,25 @@ it("runs the complete fetch entrypoint inside workerd without external services"
     },
   }))
   try {
+    for (const [path, status] of [["/", 200], ["/docs", 200], ["/docs/anything", 200], ["/swagger", 307],
+      ["/swagger/index.html", 200], ["/swagger/public", 404], ["/redoc", 307], ["/openapi.json", 200],
+      ["/openapi.scalar.json", 200], ["/openapi.yaml", 200]] as const) {
+      const response = await runtime.dispatchFetch(`https://entrypoint.test${path}`, { redirect: "manual" })
+      expect(response.status, response.status === status ? path : `${path}: ${await response.clone().text()}\n${capturedLogs.join("\n")}`).toBe(status)
+      expect(response.headers.get("cache-control")).toContain("no-store")
+      if (path === "/openapi.json") {
+        const document = await response.json() as { paths: Record<string, Record<string, unknown>> }
+        expect(document.paths["/v2/home/activity"]?.post).toBeDefined()
+        expect(document.paths["/v2/home/activity"]?.query).toBeUndefined()
+        expect(Object.keys(document.paths).filter(path => path.startsWith("/v2/admin/"))).toEqual([
+          "/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries",
+        ])
+      } else await response.body?.cancel()
+    }
+    expect(outboundRequests).toBe(0)
     for (const [method, path, status] of [
       ["GET", "/v2/health", 200],
+      ["GET", "/v2/counts/players/builder-halls", 501],
       ["GET", "/v2/auth/me", 401],
       ["POST", "/v2/auth/web/refresh", 401],
       ["POST", "/v2/auth/web/logout", 204],
@@ -59,9 +87,7 @@ it("runs the complete fetch entrypoint inside workerd without external services"
       ["GET", "/v2/player/%23P0Y/join-leave", 401],
       ["GET", "/v2/player/%23P0Y/ranked/invalid/group", 400],
       ["POST", "/v2/player/%23P0Y/rankings", 404],
-      ["POST", "/v2/runtime/giveaways/runtime-test/entries", 401],
-      ["POST", "/v2/runtime/tickets/accounts", 401],
-      ["POST", "/v2/runtime/tickets/message-events", 401],
+      ...deferredApiRoutes.map(({ method, path }) => [method, path, 404] as const),
       ["PUT", "/v2/billing/subscription/assignment", 401],
       ["POST", "/v2/billing/stripe/checkout", 401],
       ["POST", "/v2/billing/stripe/portal", 401],
@@ -74,11 +100,6 @@ it("runs the complete fetch entrypoint inside workerd without external services"
       ["POST", "/v2/server/123456789012345678/strikes/%23P0Y", 401],
       ["DELETE", "/v2/server/123456789012345678/strikes/strike-id", 401],
       ["GET", "/v2/server/123456789012345678/rosters", 401],
-      ["GET", "/v2/server/123456789012345678/roster-member-groups", 401],
-      ["POST", "/v2/server/123456789012345678/roster-member-groups", 401],
-      ["PATCH", "/v2/server/123456789012345678/roster-member-groups/70000000-0000-4000-8000-000000000001", 401],
-      ["DELETE", "/v2/server/123456789012345678/roster-member-groups/70000000-0000-4000-8000-000000000001", 401],
-      ["PUT", "/v2/server/123456789012345678/rosters/70000000-0000-4000-8000-000000000001/member-groups", 401],
       ["POST", "/v2/app/announcements", 401],
       ["PUT", "/v2/app/announcements/70000000-0000-4000-8000-000000000001", 401],
       ["DELETE", "/v2/app/announcements/70000000-0000-4000-8000-000000000001", 401],
@@ -93,7 +114,7 @@ it("runs the complete fetch entrypoint inside workerd without external services"
       const response = await runtime.dispatchFetch(`https://entrypoint.test${path}`, {
         method, headers: { "x-request-id": "workerd-entrypoint", origin: "https://app.example.test" },
       })
-      expect(response.status).toBe(status)
+      expect(response.status, `${method} ${path}`).toBe(status)
       expect(response.headers.get("x-request-id")).toBe("workerd-entrypoint")
       expect(response.headers.get("access-control-allow-origin")).toBe("https://app.example.test")
       if (status >= 400) expect(await response.json()).toMatchObject({ request_id: "workerd-entrypoint" })
@@ -101,33 +122,51 @@ it("runs the complete fetch entrypoint inside workerd without external services"
       if (path === "/v2/auth/web/refresh") expect(response.headers.has("set-cookie")).toBe(false)
       if (path === "/v2/auth/web/logout") expect(response.headers.get("set-cookie")).toContain("Max-Age=0")
     }
+    for (const { method, path } of deferredApiRoutes) {
+      const response = await runtime.dispatchFetch(`https://entrypoint.test${path}`, {
+        method, headers: { authorization: "Bearer fixture-bot-token", "content-type": "application/json" },
+        ...(method === "GET" ? {} : { body: "{}" }),
+      })
+      expect(response.status).toBe(404)
+      expect(await response.json()).toMatchObject({ code: "not_found" })
+    }
+    expect(outboundRequests).toBe(0)
     const forbidden = await runtime.dispatchFetch("https://entrypoint.test/v2/auth/web/refresh", { method: "POST" })
     expect(forbidden.status).toBe(403)
     expect(forbidden.headers.has("set-cookie")).toBe(false)
     const capability = "00000000-0000-4000-8000-000000000001"
-    const transcriptPrefix = await transcriptStoragePrefix(capability)
+    const transcriptPrefix = await jsonTranscriptStoragePrefix(capability)
     // Miniflare's ReplaceWorkersTypes conditional currently misidentifies this
     // R2 proxy under TS7. Validate the actual proxy API instead of type-casting it.
     const bucket: unknown = await runtime.getR2Bucket("TICKETING")
     if (typeof bucket !== "object" || bucket === null || !("put" in bucket) || typeof bucket.put !== "function") throw new Error("R2 fixture proxy missing put")
-    const transcriptUrl = `https://entrypoint.test/v2/ticket-transcripts/${capability}/channel.html`
-    const metadata = {transcriptVersion:"1",transcriptPrefix}
-    await bucket.put(`${transcriptPrefix}/channel.html`,"<!doctype html><p>Private fixture</p>",{
-      customMetadata:{...metadata,transcriptKind:"channel"},
-    })
+    const transcriptUrl = `https://entrypoint.test/v2/ticket-transcripts/${capability}`
     expect((await runtime.dispatchFetch(transcriptUrl)).status).toBe(404)
-    await bucket.put(`${transcriptPrefix}/manifest.json`,JSON.stringify({version:1,complete:true,channel:true,thread:false}),{
-      customMetadata:{...metadata,transcriptKind:"manifest"},
+    const transcriptBytes = new TextEncoder().encode(JSON.stringify(jsonTranscriptFixture))
+    await bucket.put(`${transcriptPrefix}/transcript.json`,transcriptBytes,{
+      httpMetadata:{contentType:"application/json"},customMetadata:{format:"clashking-json-v1",kind:"document"},
+      sha256:await crypto.subtle.digest("SHA-256",transcriptBytes),
+    })
+    // A stored document is still staging data until the small index is committed.
+    expect((await runtime.dispatchFetch(transcriptUrl)).status).toBe(404)
+    const documentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", transcriptBytes)),
+      byte => byte.toString(16).padStart(2, "0")).join("")
+    const indexBytes = new TextEncoder().encode(JSON.stringify({ size: transcriptBytes.byteLength, sha256: documentHash, attachments: [] }))
+    await bucket.put(`${transcriptPrefix}/index.json`, indexBytes, {
+      httpMetadata: { contentType: "application/json" }, customMetadata: { format: "clashking-json-v1", kind: "index" },
+      sha256: await crypto.subtle.digest("SHA-256", indexBytes),
     })
     const transcript = await runtime.dispatchFetch(transcriptUrl,{headers:{"x-request-id":capability,origin:"https://app.example.test"}})
     expect(transcript.status).toBe(200)
-    expect(await transcript.text()).toBe("<!doctype html><p>Private fixture</p>")
+    expect(await transcript.json()).toEqual(jsonTranscriptFixture)
+    expect(transcript.headers.get("content-type")).toContain("application/json")
+    expect((await runtime.dispatchFetch(`${transcriptUrl}/channel.html`)).status).toBe(404)
     expect(transcript.headers.get("referrer-policy")).toBe("no-referrer")
     expect(transcript.headers.get("content-security-policy")).toContain("default-src 'none'")
     expect(transcript.headers.has("x-request-id")).toBe(false)
     expect(transcript.headers.has("access-control-allow-origin")).toBe(false)
     expect((await runtime.dispatchFetch(`https://entrypoint.test/v2/ticket-transcripts/${capability}/unknown`,{headers:{"x-request-id":capability}})).status).toBe(404)
-    await bucket.put(`${transcriptPrefix}/manifest.json`,"corrupt",{customMetadata:{...metadata,transcriptKind:"manifest"}})
+    await bucket.put(`${transcriptPrefix}/transcript.json`,"corrupt",{customMetadata:{format:"clashking-json-v1",kind:"document"}})
     expect((await runtime.dispatchFetch(transcriptUrl,{headers:{"x-request-id":capability}})).status).toBe(503)
     // A normal request confirms that this capture actually observes console
     // events; all transcript success/error/malformed-path invocations stay quiet.

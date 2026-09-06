@@ -1,5 +1,5 @@
 import { PgClient } from "@effect/sql-pg"
-import { DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEndpoint, DashboardReplaceRosterMemberGroupsEndpoint } from "@clashking/api-contracts"
+import { DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEndpoint, DashboardReplaceRosterMemberGroupsEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Layer, Redacted, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { beforeAll, expect, it } from "vitest"

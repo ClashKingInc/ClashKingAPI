@@ -7,13 +7,13 @@ export * from "./endpoint.js";
 export * from "./errors.js";
 export * from "./expo.js";
 export * from "./home.js";
+export * from "./health.js";
 export * from "./public-metadata.js";
 export * from "./public-player-extra.js";
 export * from "./current-war-summary.js";
 export * from "./initialization.js";
 export * from "./app-announcements.js";
 export * from "./stats.js";
-export * from "./tenor.js";
 export * from "./billing-webhook.js";
 export * from "./media.js";
 export declare const endpoints: {
@@ -81,1000 +81,6 @@ export declare const endpoints: {
         readonly userId: import("effect/Schema").String;
         readonly downloadCount: import("effect/Schema").Number;
     }>, readonly []>;
-    readonly giveawayEnter: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly giveawayId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly giveawayId: import("effect/Schema").String;
-        readonly outcome: import("effect/Schema").Literals<readonly ["entered", "already_entered"]>;
-        readonly entryCount: import("effect/Schema").Number;
-    }>, readonly [{
-        readonly status: 403;
-        readonly body: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-            readonly reason: import("effect/Schema").Literals<readonly ["roles", "avatar", "linked_account", "not_member", "not_open", "invalid_configuration", "wrong_message"]>;
-        }>, import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>]>;
-    }, {
-        readonly status: 409;
-        readonly body: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-            readonly reason: import("effect/Schema").Literals<readonly ["roles", "avatar", "linked_account", "not_member", "not_open", "invalid_configuration", "wrong_message"]>;
-        }>, import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>]>;
-    }, ...{
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]]>;
-    readonly giveawayPublicationPrepare: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly giveawayId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly kind: import("effect/Schema").Literals<readonly ["start", "update", "end"]>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"pending">;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly effectId: import("effect/Schema").String;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly giveawayPublicationClaim: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly giveawayId: import("effect/Schema").String;
-        readonly effectId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["pending", "complete", "ambiguous", "failed"]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"claimed">;
-        readonly claimToken: import("effect/Schema").String;
-        readonly effect: import("effect/Schema").Struct<{
-            readonly effectId: import("effect/Schema").String;
-            readonly kind: import("effect/Schema").Literals<readonly ["start", "update", "end", "reroll"]>;
-            readonly sourceMessageId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly startTime: import("effect/Schema").String;
-            readonly payload: import("effect/Schema").Struct<{
-                readonly version: import("effect/Schema").Literal<1>;
-                readonly occurred_at: import("effect/Schema").String;
-                readonly giveaway: import("effect/Schema").Struct<{
-                    readonly id: import("effect/Schema").String;
-                    readonly server_id: import("effect/Schema").String;
-                    readonly channel_id: import("effect/Schema").String;
-                    readonly message_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly prize: import("effect/Schema").String;
-                    readonly status: import("effect/Schema").Literals<readonly ["scheduled", "ongoing", "ended"]>;
-                    readonly end_time: import("effect/Schema").String;
-                    readonly winners: import("effect/Schema").Number;
-                    readonly mentions: import("effect/Schema").$Array<import("effect/Schema").String>;
-                    readonly text_above_embed: import("effect/Schema").String;
-                    readonly text_in_embed: import("effect/Schema").String;
-                    readonly text_on_end: import("effect/Schema").String;
-                    readonly image_url: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly entry_count: import("effect/Schema").Number;
-                }>;
-                readonly winner_ids: import("effect/Schema").$Array<import("effect/Schema").String>;
-                readonly replaced_user_ids: import("effect/Schema").$Array<import("effect/Schema").String>;
-                readonly reason: import("effect/Schema").String;
-                readonly actor_label: import("effect/Schema").String;
-            }>;
-        }>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly giveawayPublicationComplete: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly giveawayId: import("effect/Schema").String;
-        readonly effectId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly claimToken: import("effect/Schema").String;
-        readonly outcome: import("effect/Schema").Literals<readonly ["succeeded", "ambiguous", "failed", "retry"]>;
-        readonly messageId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly failureReason: import("effect/Schema").optionalKey<import("effect/Schema").Literals<readonly ["payload_validation", "http_rejected", "transport_uncertain", "source_update_uncertain", "rate_limited"]>>;
-        readonly retryAfterSeconds: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["succeeded", "ambiguous", "failed", "pending"]>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly giveawayPublicationPending: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly limit: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-    }>, import("effect/Schema").Struct<{
-        readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly giveawayId: import("effect/Schema").String;
-            readonly effectId: import("effect/Schema").String;
-        }>>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketOpenPrepare: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["open", "approve", "assign"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"link_required">;
-        readonly preparationId: import("effect/Schema").String;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly content: import("effect/Schema").String;
-        readonly link: import("effect/Schema").Struct<{
-            readonly customId: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketApprovePrepare: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["open", "approve", "assign"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketOperationAdvance: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["open", "approve", "assign"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketAction: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["open", "approve", "assign"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketAccountInteraction: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"form">;
-        readonly preparationId: import("effect/Schema").String;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"linked">;
-        readonly preparationId: import("effect/Schema").String;
-        readonly accountTag: import("effect/Schema").String;
-        readonly content: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"accounts">;
-        readonly ticketId: import("effect/Schema").String;
-        readonly sessionId: import("effect/Schema").String;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly content: import("effect/Schema").String;
-        readonly accounts: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly tag: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly townHallLevel: import("effect/Schema").Number;
-        }>>;
-        readonly select: import("effect/Schema").Struct<{
-            readonly customId: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly label: import("effect/Schema").String;
-                readonly value: import("effect/Schema").String;
-            }>>;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"account">;
-        readonly ticketId: import("effect/Schema").String;
-        readonly sessionId: import("effect/Schema").String;
-        readonly content: import("effect/Schema").String;
-        readonly account: import("effect/Schema").Struct<{
-            readonly tag: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly townHallLevel: import("effect/Schema").Number;
-        }>;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketOperationStatus: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-        readonly ticketId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly action: import("effect/Schema").Literals<readonly ["open", "set_status", "assign", "approve", "add_member", "opt", "notify"]>;
-        readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly threadId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly failure: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketPanelPublicationPrepare: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly effectId: import("effect/Schema").String;
-        readonly panelId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["pending", "executing", "uncertain", "succeeded", "failed"]>;
-        readonly statusCustomId: import("effect/Schema").String;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketPanelPublicationStatus: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly effectId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly effectId: import("effect/Schema").String;
-        readonly panelId: import("effect/Schema").String;
-        readonly state: import("effect/Schema").Literals<readonly ["pending", "executing", "uncertain", "succeeded", "failed"]>;
-        readonly statusCustomId: import("effect/Schema").String;
-        readonly messageId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly dashboardRosterMemberGroups: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly position: import("effect/Schema").Number;
-        }>>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly dashboardCreateRosterMemberGroup: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly name: import("effect/Schema").String;
-        readonly position: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-    }>, import("effect/Schema").Struct<{
-        readonly group: import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly position: import("effect/Schema").Number;
-        }>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly dashboardUpdateRosterMemberGroup: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-        readonly memberGroupId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly position: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-    }>, import("effect/Schema").Struct<{
-        readonly group: import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly position: import("effect/Schema").Number;
-        }>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly dashboardDeleteRosterMemberGroup: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-        readonly memberGroupId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Void, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly dashboardReplaceRosterMemberGroups: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly member_group_id: import("effect/Schema").String;
-            readonly signup_enabled: import("effect/Schema").Boolean;
-            readonly position: import("effect/Schema").Number;
-            readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-        }>>;
-    }>, import("effect/Schema").Struct<{
-        readonly groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
-            readonly name: import("effect/Schema").String;
-            readonly position: import("effect/Schema").Number;
-            readonly signup_enabled: import("effect/Schema").Boolean;
-            readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-        }>>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly rosterAction: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly statusCustomId: import("effect/Schema").String;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly rosterOperationAdvance: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly statusCustomId: import("effect/Schema").String;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly rosterOperationStatus: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly messageId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly failure: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly rosterPublicationPrepare: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ready">;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly expiresAt: import("effect/Schema").String;
-        readonly form: import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"account_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Number;
-            readonly maxValues: import("effect/Schema").Number;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"string_select">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly placeholder: import("effect/Schema").String;
-            readonly minValues: import("effect/Schema").Literal<1>;
-            readonly maxValues: import("effect/Schema").Literal<1>;
-            readonly options: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly value: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"modal">;
-            readonly customId: import("effect/Schema").String;
-            readonly title: import("effect/Schema").String;
-            readonly fields: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly customId: import("effect/Schema").String;
-                readonly label: import("effect/Schema").String;
-                readonly required: import("effect/Schema").Boolean;
-                readonly style: import("effect/Schema").Literals<readonly ["short", "paragraph"]>;
-                readonly maxLength: import("effect/Schema").Number;
-            }>>;
-        }>, import("effect/Schema").Struct<{
-            readonly kind: import("effect/Schema").Literal<"continue">;
-            readonly customId: import("effect/Schema").String;
-            readonly content: import("effect/Schema").String;
-            readonly label: import("effect/Schema").String;
-        }>]>;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literals<readonly ["accepted", "complete"]>;
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly statusCustomId: import("effect/Schema").String;
-    }>]>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly rosterPublicationStatus: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly interaction: import("effect/Schema").Struct<{
-            readonly rawBody: import("effect/Schema").String;
-            readonly signature: import("effect/Schema").String;
-            readonly timestamp: import("effect/Schema").String;
-        }>;
-    }>, import("effect/Schema").Struct<{
-        readonly operationId: import("effect/Schema").String;
-        readonly rosterId: import("effect/Schema").String;
-        readonly action: import("effect/Schema").Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;
-        readonly state: import("effect/Schema").Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
-        readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly messageId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly failure: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
     readonly accounts: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly userId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
@@ -1086,18 +92,18 @@ export declare const endpoints: {
             readonly hidden: import("effect/Schema").Boolean;
             readonly added_at: import("effect/Schema").String;
             readonly verified_at: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly last_login: import("effect/Schema").NullOr<import("effect/Schema").String>;
+            readonly last_login: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         }>>;
     }>, readonly []>;
     readonly addStrike: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
         readonly tag: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly reason: import("effect/Schema").String;
-        readonly added_by: import("effect/Schema").String;
-        readonly rollover_days: import("effect/Schema").Number;
-        readonly strike_weight: import("effect/Schema").Number;
-        readonly image: import("effect/Schema").String;
+        readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+        readonly added_by: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+        readonly rollover_days: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+        readonly strike_weight: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+        readonly image: import("effect/Schema").optionalKey<import("effect/Schema").String>;
     }>, import("effect/Schema").Struct<{
         readonly status: import("effect/Schema").String;
         readonly strike_id: import("effect/Schema").String;
@@ -1152,7 +158,9 @@ export declare const endpoints: {
     }>, readonly []>;
     readonly bans: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+    }>, import("effect/Schema").Struct<{
+        readonly user_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly VillageTag: import("effect/Schema").String;
             readonly VillageName: import("effect/Schema").String;
@@ -1447,9 +455,9 @@ export declare const endpoints: {
             readonly name: import("effect/Schema").String;
             readonly clanLevel: import("effect/Schema").Number;
             readonly badgeUrls: import("effect/Schema").Struct<{
-                readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-                readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-                readonly large: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly small: import("effect/Schema").String;
+                readonly large: import("effect/Schema").String;
+                readonly medium: import("effect/Schema").String;
             }>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
@@ -1471,8 +479,8 @@ export declare const endpoints: {
                     readonly name: import("effect/Schema").String;
                     readonly badgeUrls: import("effect/Schema").Struct<{
                         readonly small: import("effect/Schema").String;
-                        readonly medium: import("effect/Schema").String;
                         readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
                     }>;
                     readonly clanLevel: import("effect/Schema").Number;
                     readonly attacks: import("effect/Schema").Number;
@@ -1507,8 +515,8 @@ export declare const endpoints: {
                     readonly name: import("effect/Schema").String;
                     readonly badgeUrls: import("effect/Schema").Struct<{
                         readonly small: import("effect/Schema").String;
-                        readonly medium: import("effect/Schema").String;
                         readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
                     }>;
                     readonly clanLevel: import("effect/Schema").Number;
                     readonly attacks: import("effect/Schema").Number;
@@ -1545,7 +553,18 @@ export declare const endpoints: {
                 readonly tag: import("effect/Schema").String;
             }>]>>;
         }>>;
-    }>, readonly []>;
+    }>, {
+        status: number;
+        body: import("effect/Schema").Struct<{
+            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
+            readonly message: import("effect/Schema").String;
+            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly field: import("effect/Schema").String;
+                readonly message: import("effect/Schema").String;
+            }>>>;
+        }>;
+    }[]>;
     readonly cwlLeaderboard: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly leagueId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{
@@ -1639,7 +658,9 @@ export declare const endpoints: {
     readonly deleteBan: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
         readonly tag: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+    }>, import("effect/Schema").Struct<{
+        readonly user_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly status: import("effect/Schema").String;
         readonly player_tag: import("effect/Schema").String;
         readonly player_name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -1662,7 +683,79 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly name: import("effect/Schema").String;
-            readonly data: import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
+            readonly data: import("effect/Schema").StructWithRest<import("effect/Schema").Struct<{
+                readonly content: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+                readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly avatar_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly embeds: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                    readonly title: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    readonly url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    readonly color: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                    readonly footer: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                        readonly text: import("effect/Schema").String;
+                        readonly icon_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    }>>;
+                    readonly image: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                        readonly url: import("effect/Schema").String;
+                    }>>;
+                    readonly thumbnail: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                        readonly url: import("effect/Schema").String;
+                    }>>;
+                    readonly author: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                        readonly name: import("effect/Schema").String;
+                        readonly url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                        readonly icon_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                    }>>;
+                    readonly fields: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                        readonly name: import("effect/Schema").String;
+                        readonly value: import("effect/Schema").String;
+                        readonly inline: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
+                    }>>>;
+                }>>>;
+                readonly components: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+                readonly messages: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").StructWithRest<import("effect/Schema").Struct<{
+                    readonly data: import("effect/Schema").StructWithRest<import("effect/Schema").Struct<{
+                        readonly content: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+                        readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                        readonly avatar_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                        readonly tts: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
+                        readonly embeds: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                            readonly title: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            readonly description: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            readonly url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            readonly color: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                            readonly footer: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                                readonly text: import("effect/Schema").String;
+                                readonly icon_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            }>>;
+                            readonly image: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                                readonly url: import("effect/Schema").String;
+                            }>>;
+                            readonly thumbnail: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                                readonly url: import("effect/Schema").String;
+                            }>>;
+                            readonly author: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                                readonly name: import("effect/Schema").String;
+                                readonly url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                                readonly icon_url: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                            }>>;
+                            readonly fields: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                                readonly name: import("effect/Schema").String;
+                                readonly value: import("effect/Schema").String;
+                                readonly inline: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
+                            }>>>;
+                        }>>>;
+                        readonly components: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+                        readonly attachments: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>>;
+                        readonly allowed_mentions: import("effect/Schema").optionalKey<import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>;
+                        readonly flags: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                    }>, readonly [import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>;
+                }>, readonly [import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>>>;
+                readonly application_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            }>, readonly [import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("./expo-common.js").JsonValue, import("./expo-common.js").JsonValue, never, never>>]>;
         }>>;
         readonly total: import("effect/Schema").Number;
     }>, readonly []>;
@@ -1674,7 +767,7 @@ export declare const endpoints: {
         readonly serverId: import("effect/Schema").String;
         readonly prize: import("effect/Schema").String;
         readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly status: import("effect/Schema").String;
+        readonly status: import("effect/Schema").Literals<readonly ["scheduled", "ongoing", "ended"]>;
         readonly start: import("effect/Schema").String;
         readonly end: import("effect/Schema").String;
         readonly winners: import("effect/Schema").Number;
@@ -1685,19 +778,21 @@ export declare const endpoints: {
         readonly imageUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly profilePictureRequired: import("effect/Schema").Boolean;
         readonly cocAccountRequired: import("effect/Schema").Boolean;
-        readonly rolesMode: import("effect/Schema").String;
+        readonly rolesMode: import("effect/Schema").Literals<readonly ["allow", "deny", "none"]>;
         readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
         readonly boosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly value: import("effect/Schema").Number;
             readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
         }>>;
-        readonly entries: import("effect/Schema").$Array<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
+        readonly entries: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").String, import("effect/Schema").Struct<{
+            readonly user_id: import("effect/Schema").String;
+        }>]>>;
         readonly winnersList: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly userId: import("effect/Schema").String;
             readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly avatarUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly inServer: import("effect/Schema").Boolean;
-            readonly status: import("effect/Schema").String;
+            readonly status: import("effect/Schema").Literals<readonly ["winner", "rerolled"]>;
             readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         }>>;
@@ -1716,7 +811,7 @@ export declare const endpoints: {
             readonly serverId: import("effect/Schema").String;
             readonly prize: import("effect/Schema").String;
             readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly status: import("effect/Schema").String;
+            readonly status: import("effect/Schema").Literals<readonly ["scheduled", "ongoing", "ended"]>;
             readonly start: import("effect/Schema").String;
             readonly end: import("effect/Schema").String;
             readonly winners: import("effect/Schema").Number;
@@ -1727,19 +822,21 @@ export declare const endpoints: {
             readonly imageUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly profilePictureRequired: import("effect/Schema").Boolean;
             readonly cocAccountRequired: import("effect/Schema").Boolean;
-            readonly rolesMode: import("effect/Schema").String;
+            readonly rolesMode: import("effect/Schema").Literals<readonly ["allow", "deny", "none"]>;
             readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             readonly boosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly value: import("effect/Schema").Number;
                 readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             }>>;
-            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
+            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").String, import("effect/Schema").Struct<{
+                readonly user_id: import("effect/Schema").String;
+            }>]>>;
             readonly winnersList: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly userId: import("effect/Schema").String;
                 readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly avatarUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly inServer: import("effect/Schema").Boolean;
-                readonly status: import("effect/Schema").String;
+                readonly status: import("effect/Schema").Literals<readonly ["winner", "rerolled"]>;
                 readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             }>>;
@@ -1755,7 +852,7 @@ export declare const endpoints: {
             readonly serverId: import("effect/Schema").String;
             readonly prize: import("effect/Schema").String;
             readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly status: import("effect/Schema").String;
+            readonly status: import("effect/Schema").Literals<readonly ["scheduled", "ongoing", "ended"]>;
             readonly start: import("effect/Schema").String;
             readonly end: import("effect/Schema").String;
             readonly winners: import("effect/Schema").Number;
@@ -1766,19 +863,21 @@ export declare const endpoints: {
             readonly imageUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly profilePictureRequired: import("effect/Schema").Boolean;
             readonly cocAccountRequired: import("effect/Schema").Boolean;
-            readonly rolesMode: import("effect/Schema").String;
+            readonly rolesMode: import("effect/Schema").Literals<readonly ["allow", "deny", "none"]>;
             readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             readonly boosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly value: import("effect/Schema").Number;
                 readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             }>>;
-            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
+            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").String, import("effect/Schema").Struct<{
+                readonly user_id: import("effect/Schema").String;
+            }>]>>;
             readonly winnersList: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly userId: import("effect/Schema").String;
                 readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly avatarUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly inServer: import("effect/Schema").Boolean;
-                readonly status: import("effect/Schema").String;
+                readonly status: import("effect/Schema").Literals<readonly ["winner", "rerolled"]>;
                 readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             }>>;
@@ -1794,7 +893,7 @@ export declare const endpoints: {
             readonly serverId: import("effect/Schema").String;
             readonly prize: import("effect/Schema").String;
             readonly channelId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly status: import("effect/Schema").String;
+            readonly status: import("effect/Schema").Literals<readonly ["scheduled", "ongoing", "ended"]>;
             readonly start: import("effect/Schema").String;
             readonly end: import("effect/Schema").String;
             readonly winners: import("effect/Schema").Number;
@@ -1805,19 +904,21 @@ export declare const endpoints: {
             readonly imageUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly profilePictureRequired: import("effect/Schema").Boolean;
             readonly cocAccountRequired: import("effect/Schema").Boolean;
-            readonly rolesMode: import("effect/Schema").String;
+            readonly rolesMode: import("effect/Schema").Literals<readonly ["allow", "deny", "none"]>;
             readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             readonly boosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly value: import("effect/Schema").Number;
                 readonly roles: import("effect/Schema").$Array<import("effect/Schema").String>;
             }>>;
-            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
+            readonly entries: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").String, import("effect/Schema").Struct<{
+                readonly user_id: import("effect/Schema").String;
+            }>]>>;
             readonly winnersList: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly userId: import("effect/Schema").String;
                 readonly username: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly avatarUrl: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly inServer: import("effect/Schema").Boolean;
-                readonly status: import("effect/Schema").String;
+                readonly status: import("effect/Schema").Literals<readonly ["winner", "rerolled"]>;
                 readonly timestamp: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             }>>;
@@ -1900,7 +1001,7 @@ export declare const endpoints: {
         readonly userId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly player_tag: import("effect/Schema").String;
-        readonly api_token: import("effect/Schema").String;
+        readonly api_token: import("effect/Schema").optionalKey<import("effect/Schema").String>;
     }>, import("effect/Schema").Struct<{
         readonly message: import("effect/Schema").String;
         readonly account: import("effect/Schema").Struct<{
@@ -2208,17 +1309,8 @@ export declare const endpoints: {
         readonly rosterId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly roster: import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
             readonly minTownhall: import("effect/Schema").NullOr<import("effect/Schema").Number>;
             readonly maxTownhall: import("effect/Schema").NullOr<import("effect/Schema").Number>;
-            readonly rosterRoleId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly memberGroups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signupEnabled: import("effect/Schema").Boolean;
-                readonly roleId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly databaseId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly id: import("effect/Schema").String;
             readonly serverId: import("effect/Schema").String;
@@ -2254,8 +1346,6 @@ export declare const endpoints: {
             readonly createdAt: import("effect/Schema").String;
             readonly updatedAt: import("effect/Schema").String;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly memberGroupId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly isSubstitute: import("effect/Schema").Boolean;
                 readonly playerTag: import("effect/Schema").String;
                 readonly playerName: import("effect/Schema").String;
                 readonly clanTag: import("effect/Schema").NullOr<import("effect/Schema").String>;
@@ -2280,17 +1370,8 @@ export declare const endpoints: {
         readonly serverId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
             readonly minTownhall: import("effect/Schema").NullOr<import("effect/Schema").Number>;
             readonly maxTownhall: import("effect/Schema").NullOr<import("effect/Schema").Number>;
-            readonly rosterRoleId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly memberGroups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signupEnabled: import("effect/Schema").Boolean;
-                readonly roleId: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly databaseId: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly id: import("effect/Schema").String;
             readonly serverId: import("effect/Schema").String;
@@ -2330,10 +1411,12 @@ export declare const endpoints: {
     readonly saveBan: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
         readonly tag: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly reason: import("effect/Schema").String;
+    }>, import("effect/Schema").Struct<{
+        readonly user_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+    }>, import("effect/Schema").Struct<{
+        readonly reason: import("effect/Schema").NullOr<import("effect/Schema").String>;
         readonly added_by: import("effect/Schema").String;
-        readonly image: import("effect/Schema").String;
+        readonly image: import("effect/Schema").NullOr<import("effect/Schema").String>;
     }>, import("effect/Schema").Struct<{
         readonly status: import("effect/Schema").String;
         readonly player_tag: import("effect/Schema").String;
@@ -2481,12 +1564,10 @@ export declare const endpoints: {
         readonly serverId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
             readonly name: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
-            readonly embed_name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly embed_name: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly components: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
                 readonly custom_id: import("effect/Schema").String;
                 readonly label: import("effect/Schema").String;
                 readonly style: import("effect/Schema").Number;
@@ -2510,15 +1591,15 @@ export declare const endpoints: {
                 readonly apply_clans: import("effect/Schema").$Array<import("effect/Schema").String>;
                 readonly roles_to_add: import("effect/Schema").$Array<import("effect/Schema").String>;
                 readonly roles_to_remove: import("effect/Schema").$Array<import("effect/Schema").String>;
-                readonly townhall_requirements: import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Number>;
-                readonly new_message: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly townhall_requirements: import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Number>>;
+                readonly new_message: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             }>>;
-            readonly open_category: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly sleep_category: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly closed_category: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly status_change_log: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly ticket_button_click_log: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly ticket_close_log: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly open_category: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+            readonly sleep_category: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+            readonly closed_category: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+            readonly status_change_log: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+            readonly ticket_button_click_log: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
+            readonly ticket_close_log: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly approve_messages: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly name: import("effect/Schema").String;
                 readonly message: import("effect/Schema").String;
@@ -3446,8 +2527,6 @@ export declare const endpoints: {
     readonly dashboardCreateRoster: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly server_id: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{
-        readonly capacity: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-        readonly roster_role_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         readonly max_accounts_per_user: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").Number>>;
         readonly server_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly alias: import("effect/Schema").String;
@@ -3457,8 +2536,6 @@ export declare const endpoints: {
         readonly clan_tag: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         readonly members: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly member_group_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
-            readonly is_substitute: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
             readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly tag: import("effect/Schema").String;
             readonly townhall: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -3481,15 +2558,6 @@ export declare const endpoints: {
         readonly message: import("effect/Schema").String;
         readonly roster_id: import("effect/Schema").String;
         readonly roster: import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3501,8 +2569,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -3560,8 +2626,6 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{
         readonly server_id: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{
-        readonly capacity: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-        readonly roster_role_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         readonly alias: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly description: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
         readonly roster_type: import("effect/Schema").optionalKey<import("effect/Schema").Literals<readonly ["clan", "family"]>>;
@@ -3594,15 +2658,6 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{
         readonly message: import("effect/Schema").String;
         readonly roster: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3614,8 +2669,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -3674,15 +2727,6 @@ export declare const endpoints: {
         readonly server_id: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly roster: import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3694,8 +2738,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -3763,15 +2805,6 @@ export declare const endpoints: {
         readonly clan_tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly rosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3783,8 +2816,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -3853,15 +2884,6 @@ export declare const endpoints: {
         readonly source_server_id: import("effect/Schema").String;
         readonly members_copied: import("effect/Schema").Number;
         readonly roster: import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3873,8 +2895,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -3934,15 +2954,6 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly message: import("effect/Schema").String;
         readonly refreshed_rosters: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly capacity: import("effect/Schema").Number;
-            readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
-                readonly position: import("effect/Schema").Number;
-                readonly signup_enabled: import("effect/Schema").Boolean;
-                readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            }>>;
             readonly id: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly alias: import("effect/Schema").String;
@@ -3954,8 +2965,6 @@ export declare const endpoints: {
             readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly is_substitute: import("effect/Schema").Boolean;
                 readonly name: import("effect/Schema").String;
                 readonly tag: import("effect/Schema").String;
                 readonly townhall: import("effect/Schema").Number;
@@ -4014,8 +3023,6 @@ export declare const endpoints: {
         readonly server_id: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{
         readonly members: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly member_group_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
-            readonly is_substitute: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
             readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly tag: import("effect/Schema").String;
             readonly townhall: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -4035,8 +3042,6 @@ export declare const endpoints: {
             readonly answers: import("effect/Schema").optionalKey<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
         }>>>;
         readonly add: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly member_group_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
-            readonly is_substitute: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
             readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             readonly tag: import("effect/Schema").String;
             readonly townhall: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -4066,8 +3071,6 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{
         readonly server_id: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{
-        readonly member_group_id: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
-        readonly is_substitute: import("effect/Schema").optionalKey<import("effect/Schema").Boolean>;
         readonly answers: import("effect/Schema").optionalKey<import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>;
     }>, import("effect/Schema").Struct<{
         readonly message: import("effect/Schema").String;
@@ -4088,8 +3091,6 @@ export declare const endpoints: {
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly message: import("effect/Schema").String;
         readonly member: import("effect/Schema").Struct<{
-            readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-            readonly is_substitute: import("effect/Schema").Boolean;
             readonly name: import("effect/Schema").String;
             readonly tag: import("effect/Schema").String;
             readonly townhall: import("effect/Schema").Number;
@@ -4183,15 +3184,6 @@ export declare const endpoints: {
             readonly max_accounts_per_user: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly min_signups: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly rosters: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly capacity: import("effect/Schema").Number;
-                readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly id: import("effect/Schema").String;
-                    readonly name: import("effect/Schema").String;
-                    readonly position: import("effect/Schema").Number;
-                    readonly signup_enabled: import("effect/Schema").Boolean;
-                    readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                }>>;
                 readonly id: import("effect/Schema").String;
                 readonly server_id: import("effect/Schema").String;
                 readonly alias: import("effect/Schema").String;
@@ -4203,8 +3195,6 @@ export declare const endpoints: {
                 readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
                 readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly is_substitute: import("effect/Schema").Boolean;
                     readonly name: import("effect/Schema").String;
                     readonly tag: import("effect/Schema").String;
                     readonly townhall: import("effect/Schema").Number;
@@ -4272,15 +3262,6 @@ export declare const endpoints: {
             readonly max_accounts_per_user: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly min_signups: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly rosters: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly capacity: import("effect/Schema").Number;
-                readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly id: import("effect/Schema").String;
-                    readonly name: import("effect/Schema").String;
-                    readonly position: import("effect/Schema").Number;
-                    readonly signup_enabled: import("effect/Schema").Boolean;
-                    readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                }>>;
                 readonly id: import("effect/Schema").String;
                 readonly server_id: import("effect/Schema").String;
                 readonly alias: import("effect/Schema").String;
@@ -4292,8 +3273,6 @@ export declare const endpoints: {
                 readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
                 readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly is_substitute: import("effect/Schema").Boolean;
                     readonly name: import("effect/Schema").String;
                     readonly tag: import("effect/Schema").String;
                     readonly townhall: import("effect/Schema").Number;
@@ -4364,15 +3343,6 @@ export declare const endpoints: {
             readonly max_accounts_per_user: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly min_signups: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly rosters: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly capacity: import("effect/Schema").Number;
-                readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly id: import("effect/Schema").String;
-                    readonly name: import("effect/Schema").String;
-                    readonly position: import("effect/Schema").Number;
-                    readonly signup_enabled: import("effect/Schema").Boolean;
-                    readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                }>>;
                 readonly id: import("effect/Schema").String;
                 readonly server_id: import("effect/Schema").String;
                 readonly alias: import("effect/Schema").String;
@@ -4384,8 +3354,6 @@ export declare const endpoints: {
                 readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
                 readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly is_substitute: import("effect/Schema").Boolean;
                     readonly name: import("effect/Schema").String;
                     readonly tag: import("effect/Schema").String;
                     readonly townhall: import("effect/Schema").Number;
@@ -4463,15 +3431,6 @@ export declare const endpoints: {
             readonly max_accounts_per_user: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly min_signups: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly rosters: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly capacity: import("effect/Schema").Number;
-                readonly roster_role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                readonly member_groups: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly id: import("effect/Schema").String;
-                    readonly name: import("effect/Schema").String;
-                    readonly position: import("effect/Schema").Number;
-                    readonly signup_enabled: import("effect/Schema").Boolean;
-                    readonly role_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                }>>;
                 readonly id: import("effect/Schema").String;
                 readonly server_id: import("effect/Schema").String;
                 readonly alias: import("effect/Schema").String;
@@ -4483,8 +3442,6 @@ export declare const endpoints: {
                 readonly clan_badge: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
                 readonly group_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                 readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly member_group_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
-                    readonly is_substitute: import("effect/Schema").Boolean;
                     readonly name: import("effect/Schema").String;
                     readonly tag: import("effect/Schema").String;
                     readonly townhall: import("effect/Schema").Number;
@@ -5209,15 +4166,13 @@ export declare const endpoints: {
         readonly id: import("effect/Schema").String;
         readonly name: import("effect/Schema").String;
         readonly icon: import("effect/Schema").NullOr<import("effect/Schema").String>;
-        readonly owner: import("effect/Schema").Boolean;
-        readonly permissions: import("effect/Schema").String;
-        readonly role: import("effect/Schema").String;
+        readonly owner_id: import("effect/Schema").NullOr<import("effect/Schema").String>;
         readonly features: import("effect/Schema").$Array<import("effect/Schema").String>;
-        readonly has_bot: import("effect/Schema").Boolean;
-        readonly member_count: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-        readonly delegated: import("effect/Schema").Boolean;
-        readonly last_command_at: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly inactive: import("effect/Schema").Boolean;
+        readonly member_count: import("effect/Schema").NullOr<import("effect/Schema").Number>;
+        readonly description: import("effect/Schema").NullOr<import("effect/Schema").String>;
+        readonly banner: import("effect/Schema").NullOr<import("effect/Schema").String>;
+        readonly premium_tier: import("effect/Schema").Number;
+        readonly boost_count: import("effect/Schema").Number;
     }>, readonly []>;
     readonly reactivateServer: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
@@ -5475,10 +4430,10 @@ export declare const endpoints: {
         readonly serverId: import("effect/Schema").String;
         readonly playerTag: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly reason: import("effect/Schema").String;
-        readonly added_by: import("effect/Schema").String;
+        readonly reason: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+        readonly added_by: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly rollover_days: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
-        readonly strike_weight: import("effect/Schema").Number;
+        readonly strike_weight: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly image: import("effect/Schema").optionalKey<import("effect/Schema").String>;
     }>, import("effect/Schema").Struct<{
         readonly status: import("effect/Schema").String;
@@ -5766,15 +4721,6 @@ export declare const endpoints: {
         readonly countdown_type: import("effect/Schema").Literals<readonly ["clan_games_timer", "cwl_timer", "raid_weekend_timer", "season_end_timer", "season_day_timer", "war_score", "war_timer"]>;
     }>, readonly []>;
     readonly serverChannels: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly serverId: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").$Array<import("effect/Schema").Struct<{
-        readonly id: import("effect/Schema").String;
-        readonly name: import("effect/Schema").String;
-        readonly type: import("effect/Schema").Literals<readonly ["category", "text", "news", "forum"]>;
-        readonly parent_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-        readonly parent_name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>>, readonly []>;
-    readonly serverDiscordChannels: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly serverId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").$Array<import("effect/Schema").Struct<{
         readonly id: import("effect/Schema").String;
@@ -6104,12 +5050,10 @@ export declare const endpoints: {
         readonly serverId: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly id: import("effect/Schema").String;
             readonly name: import("effect/Schema").String;
             readonly server_id: import("effect/Schema").String;
             readonly embed_name: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly components: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly id: import("effect/Schema").String;
                 readonly custom_id: import("effect/Schema").String;
                 readonly label: import("effect/Schema").String;
                 readonly style: import("effect/Schema").Number;
@@ -6853,6 +5797,132 @@ export declare const endpoints: {
         readonly total_linked_accounts: import("effect/Schema").Number;
         readonly verified_accounts: import("effect/Schema").Number;
     }>, readonly []>;
+    readonly storedCwlGroup: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
+        readonly tag: import("effect/Schema").String;
+    }>, import("effect/Schema").Struct<{
+        readonly season: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+        readonly state: import("effect/Schema").String;
+        readonly season: import("effect/Schema").String;
+        readonly warLeague: import("effect/Schema").NullOr<import("effect/Schema").Struct<{
+            readonly id: import("effect/Schema").Number;
+            readonly name: import("effect/Schema").String;
+        }>>;
+        readonly clans: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly tag: import("effect/Schema").String;
+            readonly name: import("effect/Schema").String;
+            readonly clanLevel: import("effect/Schema").Number;
+            readonly badgeUrls: import("effect/Schema").Struct<{
+                readonly small: import("effect/Schema").String;
+                readonly large: import("effect/Schema").String;
+                readonly medium: import("effect/Schema").String;
+            }>;
+            readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly tag: import("effect/Schema").String;
+                readonly name: import("effect/Schema").String;
+                readonly townHallLevel: import("effect/Schema").Number;
+            }>>;
+        }>>;
+        readonly rounds: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly warTags: import("effect/Schema").$Array<import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
+                readonly state: import("effect/Schema").String;
+                readonly teamSize: import("effect/Schema").Number;
+                readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                readonly battleModifier: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly preparationStartTime: import("effect/Schema").String;
+                readonly startTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly endTime: import("effect/Schema").String;
+                readonly clan: import("effect/Schema").Struct<{
+                    readonly tag: import("effect/Schema").String;
+                    readonly name: import("effect/Schema").String;
+                    readonly badgeUrls: import("effect/Schema").Struct<{
+                        readonly small: import("effect/Schema").String;
+                        readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
+                    }>;
+                    readonly clanLevel: import("effect/Schema").Number;
+                    readonly attacks: import("effect/Schema").Number;
+                    readonly stars: import("effect/Schema").Number;
+                    readonly destructionPercentage: import("effect/Schema").Number;
+                    readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                        readonly tag: import("effect/Schema").String;
+                        readonly name: import("effect/Schema").String;
+                        readonly townhallLevel: import("effect/Schema").Number;
+                        readonly mapPosition: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>>;
+                        readonly opponentAttacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                        readonly bestOpponentAttack: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>;
+                    }>>;
+                }>;
+                readonly opponent: import("effect/Schema").Struct<{
+                    readonly tag: import("effect/Schema").String;
+                    readonly name: import("effect/Schema").String;
+                    readonly badgeUrls: import("effect/Schema").Struct<{
+                        readonly small: import("effect/Schema").String;
+                        readonly large: import("effect/Schema").String;
+                        readonly medium: import("effect/Schema").String;
+                    }>;
+                    readonly clanLevel: import("effect/Schema").Number;
+                    readonly attacks: import("effect/Schema").Number;
+                    readonly stars: import("effect/Schema").Number;
+                    readonly destructionPercentage: import("effect/Schema").Number;
+                    readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                        readonly tag: import("effect/Schema").String;
+                        readonly name: import("effect/Schema").String;
+                        readonly townhallLevel: import("effect/Schema").Number;
+                        readonly mapPosition: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>>;
+                        readonly opponentAttacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                        readonly bestOpponentAttack: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
+                            readonly attackerTag: import("effect/Schema").String;
+                            readonly defenderTag: import("effect/Schema").String;
+                            readonly stars: import("effect/Schema").Number;
+                            readonly destructionPercentage: import("effect/Schema").Number;
+                            readonly order: import("effect/Schema").Number;
+                            readonly duration: import("effect/Schema").Number;
+                        }>>;
+                    }>>;
+                }>;
+                readonly warStartTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly season: import("effect/Schema").String;
+            }>, import("effect/Schema").Struct<{
+                readonly tag: import("effect/Schema").String;
+            }>]>>;
+        }>>;
+    }>, {
+        status: number;
+        body: import("effect/Schema").Struct<{
+            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
+            readonly message: import("effect/Schema").String;
+            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly field: import("effect/Schema").String;
+                readonly message: import("effect/Schema").String;
+            }>>>;
+        }>;
+    }[]>;
     readonly authMe: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly user_id: import("effect/Schema").String;
         readonly username: import("effect/Schema").String;
@@ -8898,6 +7968,14 @@ export declare const endpoints: {
         }>>;
         readonly count: import("effect/Schema").Number;
     }>, readonly []>;
+    readonly playerBuilderhallCounts: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Never, readonly [{
+        readonly status: 501;
+        readonly body: import("effect/Schema").Struct<{
+            readonly code: import("effect/Schema").Literal<"not_implemented">;
+            readonly message: import("effect/Schema").Literal<"Builder Hall counts are not implemented">;
+            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+        }>;
+    }]>;
     readonly playerLeagueTierCounts: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly cwl_league_id: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -9009,7 +8087,7 @@ export declare const endpoints: {
             readonly value: import("effect/Schema").Number;
             readonly target: import("effect/Schema").Number;
             readonly info: import("effect/Schema").String;
-            readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+            readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
             readonly village: import("effect/Schema").String;
         }>>;
         readonly heroes: import("effect/Schema").$Array<import("effect/Schema").Struct<{
@@ -9187,8 +8265,8 @@ export declare const endpoints: {
         readonly members: import("effect/Schema").$Array<import("effect/Schema").Struct<{
             readonly playerTag: import("effect/Schema").String;
             readonly playerName: import("effect/Schema").String;
-            readonly clanTag: import("effect/Schema").String;
-            readonly clanName: import("effect/Schema").String;
+            readonly clanTag: import("effect/Schema").NullOr<import("effect/Schema").String>;
+            readonly clanName: import("effect/Schema").NullOr<import("effect/Schema").String>;
             readonly leagueTrophies: import("effect/Schema").Number;
             readonly attackWinCount: import("effect/Schema").Number;
             readonly attackLoseCount: import("effect/Schema").Number;
@@ -9377,12 +8455,12 @@ export declare const endpoints: {
         readonly requiredBuilderBaseTrophies: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly requiredTownhallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly clanCapital: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
-            readonly capitalHallLevel: import("effect/Schema").Number;
-            readonly districts: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly capitalHallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+            readonly districts: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly id: import("effect/Schema").Number;
                 readonly name: import("effect/Schema").String;
                 readonly districtHallLevel: import("effect/Schema").Number;
-            }>>;
+            }>>>;
         }>>;
         readonly chatLanguage: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
             readonly id: import("effect/Schema").Number;
@@ -9646,10 +8724,10 @@ export declare const endpoints: {
         readonly limit: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-            readonly result: import("effect/Schema").String;
+            readonly result: import("effect/Schema").NullOr<import("effect/Schema").String>;
             readonly endTime: import("effect/Schema").String;
             readonly teamSize: import("effect/Schema").Number;
-            readonly attacksPerMember: import("effect/Schema").Number;
+            readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
             readonly clan: import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
@@ -9659,22 +8737,22 @@ export declare const endpoints: {
                     readonly large: import("effect/Schema").String;
                 }>;
                 readonly clanLevel: import("effect/Schema").Number;
-                readonly attacks: import("effect/Schema").Number;
+                readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly stars: import("effect/Schema").Number;
                 readonly destructionPercentage: import("effect/Schema").Number;
             }>;
             readonly opponent: import("effect/Schema").Struct<{
-                readonly tag: import("effect/Schema").String;
-                readonly name: import("effect/Schema").String;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly large: import("effect/Schema").String;
                 }>;
                 readonly clanLevel: import("effect/Schema").Number;
-                readonly attacks: import("effect/Schema").Number;
+                readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly stars: import("effect/Schema").Number;
                 readonly destructionPercentage: import("effect/Schema").Number;
+                readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
             }>;
         }>>;
         readonly paging: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
@@ -9710,7 +8788,9 @@ export declare const endpoints: {
     }]>;
     readonly proxyCurrentWar: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly clanTag: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
+        readonly state: import("effect/Schema").Literal<"notInWar">;
+    }>, import("effect/Schema").Struct<{
         readonly state: import("effect/Schema").String;
         readonly teamSize: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
@@ -9792,7 +8872,7 @@ export declare const endpoints: {
         }>>;
         readonly warStartTime: import("effect/Schema").optionalKey<import("effect/Schema").String>;
         readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-    }>, readonly [{
+    }>]>, readonly [{
         readonly status: 400;
         readonly body: import("effect/Schema").Struct<{
             readonly reason: import("effect/Schema").String;
@@ -10037,7 +9117,6 @@ export declare const endpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -10140,7 +9219,6 @@ export declare const endpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -10243,7 +9321,6 @@ export declare const endpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -10346,7 +9423,6 @@ export declare const endpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -10449,7 +9525,6 @@ export declare const endpoints: {
             readonly clan: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                 readonly tag: import("effect/Schema").String;
                 readonly name: import("effect/Schema").String;
-                readonly clanLevel: import("effect/Schema").Number;
                 readonly badgeUrls: import("effect/Schema").Struct<{
                     readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -10842,23 +9917,58 @@ export declare const endpoints: {
         }>>;
         readonly count: import("effect/Schema").Number;
     }>, readonly []>;
-    readonly ticketTranscriptChannel: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
+    readonly ticketTranscript: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly capability: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Unknown, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
+    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+        readonly schemaVersion: import("effect/Schema").Literal<1>;
+        readonly collectedAt: import("effect/Schema").String;
+        readonly captureStartedAt: import("effect/Schema").String;
+        readonly ticket: import("effect/Schema").Struct<{
+            readonly guildId: import("effect/Schema").String;
+            readonly channelId: import("effect/Schema").String;
+            readonly openerId: import("effect/Schema").String;
+            readonly number: import("effect/Schema").String;
+            readonly panelName: import("effect/Schema").String;
         }>;
-    }[]>;
-    readonly ticketTranscriptThread: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
-        readonly capability: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Unknown, {
+        readonly channels: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly id: import("effect/Schema").String;
+            readonly name: import("effect/Schema").String;
+            readonly type: import("effect/Schema").Number;
+            readonly topic: import("effect/Schema").NullOr<import("effect/Schema").String>;
+            readonly historyComplete: import("effect/Schema").Boolean;
+            readonly messages: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                readonly id: import("effect/Schema").String;
+                readonly createdAt: import("effect/Schema").String;
+                readonly editedAt: import("effect/Schema").NullOr<import("effect/Schema").String>;
+                readonly author: import("effect/Schema").Struct<{
+                    readonly id: import("effect/Schema").String;
+                    readonly name: import("effect/Schema").String;
+                    readonly displayName: import("effect/Schema").String;
+                    readonly avatarUrl: import("effect/Schema").NullOr<import("effect/Schema").String>;
+                    readonly bot: import("effect/Schema").Boolean;
+                }>;
+                readonly content: import("effect/Schema").String;
+                readonly type: import("effect/Schema").Number;
+                readonly pinned: import("effect/Schema").Boolean;
+                readonly referencedMessageId: import("effect/Schema").NullOr<import("effect/Schema").String>;
+                readonly embeds: import("effect/Schema").$Array<import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>>;
+                readonly components: import("effect/Schema").$Array<import("effect/Schema").$Record<import("effect/Schema").String, import("effect/Schema").Codec<import("effect/Schema").Json, import("effect/Schema").Json, never, never>>>;
+                readonly attachmentIds: import("effect/Schema").$Array<import("effect/Schema").String>;
+                readonly omittedAttachmentCount: import("effect/Schema").Number;
+                readonly reactions: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                    readonly emoji: import("effect/Schema").String;
+                    readonly count: import("effect/Schema").Number;
+                }>>;
+            }>>;
+        }>>;
+        readonly attachments: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+            readonly id: import("effect/Schema").String;
+            readonly filename: import("effect/Schema").String;
+            readonly contentType: import("effect/Schema").String;
+            readonly size: import("effect/Schema").Number;
+            readonly sha256: import("effect/Schema").String;
+        }>>;
+    }>, {
         status: number;
         body: import("effect/Schema").Struct<{
             readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
@@ -11346,7 +10456,7 @@ export declare const endpoints: {
                 readonly value: import("effect/Schema").Number;
                 readonly target: import("effect/Schema").Number;
                 readonly info: import("effect/Schema").String;
-                readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                readonly completionInfo: import("effect/Schema").optionalKey<import("effect/Schema").NullOr<import("effect/Schema").String>>;
                 readonly village: import("effect/Schema").String;
             }>>;
             readonly heroes: import("effect/Schema").$Array<import("effect/Schema").Struct<{
@@ -11510,12 +10620,12 @@ export declare const endpoints: {
                 readonly requiredBuilderBaseTrophies: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly requiredTownhallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                 readonly clanCapital: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
-                    readonly capitalHallLevel: import("effect/Schema").Number;
-                    readonly districts: import("effect/Schema").$Array<import("effect/Schema").Struct<{
+                    readonly capitalHallLevel: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
+                    readonly districts: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
                         readonly id: import("effect/Schema").Number;
                         readonly name: import("effect/Schema").String;
                         readonly districtHallLevel: import("effect/Schema").Number;
-                    }>>;
+                    }>>>;
                 }>>;
                 readonly chatLanguage: import("effect/Schema").optionalKey<import("effect/Schema").Struct<{
                     readonly id: import("effect/Schema").Number;
@@ -11870,10 +10980,10 @@ export declare const endpoints: {
             readonly war_log_data: import("effect/Schema").$Array<import("effect/Schema").Struct<{
                 readonly clan_tag: import("effect/Schema").String;
                 readonly items: import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                    readonly result: import("effect/Schema").String;
+                    readonly result: import("effect/Schema").NullOr<import("effect/Schema").String>;
                     readonly endTime: import("effect/Schema").String;
                     readonly teamSize: import("effect/Schema").Number;
-                    readonly attacksPerMember: import("effect/Schema").Number;
+                    readonly attacksPerMember: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                     readonly clan: import("effect/Schema").Struct<{
                         readonly tag: import("effect/Schema").String;
                         readonly name: import("effect/Schema").String;
@@ -11883,22 +10993,22 @@ export declare const endpoints: {
                             readonly large: import("effect/Schema").String;
                         }>;
                         readonly clanLevel: import("effect/Schema").Number;
-                        readonly attacks: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                         readonly stars: import("effect/Schema").Number;
                         readonly destructionPercentage: import("effect/Schema").Number;
                     }>;
                     readonly opponent: import("effect/Schema").Struct<{
-                        readonly tag: import("effect/Schema").String;
-                        readonly name: import("effect/Schema").String;
                         readonly badgeUrls: import("effect/Schema").Struct<{
                             readonly small: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                             readonly medium: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                             readonly large: import("effect/Schema").String;
                         }>;
                         readonly clanLevel: import("effect/Schema").Number;
-                        readonly attacks: import("effect/Schema").Number;
+                        readonly attacks: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
                         readonly stars: import("effect/Schema").Number;
                         readonly destructionPercentage: import("effect/Schema").Number;
+                        readonly tag: import("effect/Schema").optionalKey<import("effect/Schema").String>;
+                        readonly name: import("effect/Schema").optionalKey<import("effect/Schema").String>;
                     }>;
                 }>>;
             }>>;
@@ -12780,6 +11890,11 @@ export declare const endpoints: {
             readonly townhall_level: import("effect/Schema").optionalKey<import("effect/Schema").Number>;
         }>>;
     }>, readonly []>;
+    readonly health: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
+        readonly status: import("effect/Schema").Literal<"ok">;
+        readonly runtime: import("effect/Schema").Literal<"cloudflare-worker">;
+        readonly version: import("effect/Schema").Literal<"0.1.0-rc.0">;
+    }>, readonly []>;
     readonly statsArmies: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
         readonly dates: import("effect/Schema").Struct<{
             readonly start_date: import("effect/Schema").optionalKey<import("effect/Schema").String>;
@@ -13188,15 +12303,6 @@ export declare const endpoints: {
             }>>>;
         }>;
     }]>;
-    readonly tenorMedia: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly url: import("effect/Schema").String;
-    }>, import("effect/Schema").Struct<{
-        readonly provider: import("effect/Schema").Literal<"tenor">;
-        readonly id: import("effect/Schema").String;
-        readonly media_url: import("effect/Schema").String;
-        readonly width: import("effect/Schema").Number;
-        readonly height: import("effect/Schema").Number;
-    }>, readonly []>;
     readonly billingStripeWebhook: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").String, import("effect/Schema").Void, {
         status: number;
         body: import("effect/Schema").Struct<{
@@ -13212,29 +12318,6 @@ export declare const endpoints: {
     readonly mediaFile: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{
         readonly filename: import("effect/Schema").String;
     }>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Unknown, {
-        status: number;
-        body: import("effect/Schema").Struct<{
-            readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
-            readonly message: import("effect/Schema").String;
-            readonly request_id: import("effect/Schema").optionalKey<import("effect/Schema").String>;
-            readonly details: import("effect/Schema").optionalKey<import("effect/Schema").$Array<import("effect/Schema").Struct<{
-                readonly field: import("effect/Schema").String;
-                readonly message: import("effect/Schema").String;
-            }>>>;
-        }>;
-    }[]>;
-    readonly ticketMessageEvent: import("./endpoint.js").Endpoint<import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{}>, import("effect/Schema").Struct<{
-        readonly id: import("effect/Schema").String;
-        readonly guild_id: import("effect/Schema").String;
-        readonly channel_id: import("effect/Schema").String;
-        readonly author_id: import("effect/Schema").String;
-        readonly application_id: import("effect/Schema").String;
-    }>, import("effect/Schema").Union<readonly [import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"ignored">;
-    }>, import("effect/Schema").Struct<{
-        readonly outcome: import("effect/Schema").Literal<"accepted">;
-        readonly operationId: import("effect/Schema").String;
-    }>]>, {
         status: number;
         body: import("effect/Schema").Struct<{
             readonly code: import("effect/Schema").Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;

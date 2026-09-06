@@ -66,3 +66,25 @@ it("runs all moderation routes through canonical section authorization and real 
   for(const bits of ["8","32"]){permission=bits;expect((await dispatch("GET",`${server}/strikes`))?.status).toBe(200)}
   permission="0";expect((await dispatch("GET",`${other}/bans`,undefined,true))?.status).toBe(200)
 })
+
+it("preserves omitted strike defaults and counts only active strikes after creation", async () => {
+  await run(Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`INSERT INTO servers(id,name) VALUES(${server},'Moderation fixture') ON CONFLICT DO NOTHING`
+    yield* sql`INSERT INTO strikes(id,server_id,tag,date_created,reason,added_by,strike_weight,rollover_date)
+      VALUES('EXPIRED_FIXTURE',${server},'#QGR',now(),'Expired','',9,now()-interval '1 day')`
+  }))
+  const result = await (await dispatch("POST", `${server}/strikes/%23QGR`, {}, true))?.json() as { strike_id: string }
+  expect(result).toMatchObject({ status: "created", total_strikes: 1, total_weight: 1 })
+  const row = await run(Effect.gen(function* () {
+    return (yield* (yield* SqlClient.SqlClient)`SELECT reason,added_by,strike_weight,rollover_date,image FROM strikes WHERE id=${result.strike_id}`)[0]
+  }))
+  expect(row).toEqual({ reason: "", added_by: "", strike_weight: 1, rollover_date: null, image: null })
+  expect(await (await dispatch("GET", `${server}/strikes/player/%23QGR/summary`, undefined, true))?.json())
+    .toMatchObject({ total_strikes: 2, total_weight: 10 })
+  const negative = await (await dispatch("POST", `${server}/strikes/%23QGR`, { strike_weight: 0, rollover_days: -2 }, true))?.json() as { strike_id: string }
+  expect(negative).toMatchObject({ total_strikes: 2, total_weight: 2 })
+  expect(await run(Effect.gen(function* () {
+    return (yield* (yield* SqlClient.SqlClient)`SELECT rollover_date FROM strikes WHERE id=${negative.strike_id}`)[0]
+  }))).toEqual({ rollover_date: null })
+})

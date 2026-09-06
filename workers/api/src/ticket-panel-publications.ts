@@ -1,4 +1,4 @@
-import { RuntimeUUID,TicketPanelPublicationPrepareEndpoint,TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts"
+import { RuntimeUUID,TicketPanelPublicationPrepareEndpoint,TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect,Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { DiscordApi } from "./discord-api.js"

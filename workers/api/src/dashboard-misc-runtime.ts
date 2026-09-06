@@ -98,7 +98,7 @@ const linkJson = (row: LinkRow): LinkedAccount => ({
   user_id: row.user_id, player_tag: row.tag, order_index: row.order_index,
   is_verified: row.is_verified, hidden: row.hidden, added_at: iso(row.added_at),
   ...(row.verified_at === null ? {} : { verified_at: iso(row.verified_at) }),
-  ...(row.last_login === null ? {} : { last_login: iso(row.last_login) }),
+  last_login: row.last_login === null ? null : iso(row.last_login),
 })
 const database = <A>(effect: Effect.Effect<A, unknown>) => effect.pipe(
   Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Dashboard miscellaneous database operation failed" })),

@@ -4,6 +4,7 @@ import {
   GlobalCounts,
   HomeActivityRequest,
   HomeActivityResponse,
+  HealthResponse,
   StatsArmiesRequest,
   StatsArmiesResponse,
   StatsCwlRequest,
@@ -13,8 +14,6 @@ import {
   StatsOverviewResponse,
   StatsRankedRequest,
   StatsWarRequest,
-  TenorMediaRequest,
-  TenorMediaResponse,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 
@@ -24,10 +23,8 @@ import { dispatchAppContentNotifications } from "./app-content-notifications.js"
 import { dispatchBotAdjacentRuntime } from "./bot-adjacent-runtime.js"
 import { dispatchBotRuntime } from "./bot-runtime.js"
 import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
-import { dispatchDashboardRosterConfiguration } from "./dashboard-roster-configuration.js"
 import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
 import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
-import { dispatchPersistentRuntime } from "./persistent-runtime.js"
 import { dispatchPublicData } from "./public-data-runtime.js"
 import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
 import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
@@ -42,7 +39,6 @@ import { dispatchAccountMutations } from "./account-mutations.js"
 import { dispatchLinkMutations } from "./link-mutations.js"
 import { dispatchBillingMutations } from "./billing-runtime.js"
 import { dispatchDashboardRosterSnapshots } from "./dashboard-roster-snapshots.js"
-import { dispatchTicketNotifications } from "./ticket-notifications.js"
 import { dispatchInitialization } from "./initialization.js"
 import { dispatchPublicPlayerExtra } from "./public-player-extra.js"
 import { dispatchPublicClanExtra } from "./public-clan-extra.js"
@@ -50,9 +46,8 @@ import { AuthIdentity, type UserPrincipal } from "./auth.js"
 import { serveAppUpdateManifest } from "./app-updates.js"
 import { loadAppConfig } from "./app-config.js"
 import type { ApiFailure } from "./errors.js"
-import { InvalidRequest, NotFound } from "./errors.js"
+import { InvalidRequest, NotFound, NotImplemented } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
-import { TenorResolver } from "./tenor.js"
 import { proxyRequest } from "./proxy.js"
 import { queryHomeActivity } from "./home.js"
 import { readBoundedJson } from "./request-body.js"
@@ -82,6 +77,8 @@ export const failureResponse = (failure: ApiFailure, requestId: string): Respons
       return json({ code: "forbidden", message: failure.message, request_id: requestId, ...(failure.reason === undefined ? {} : { reason: failure.reason }) }, 403)
     case "NotFound":
       return json({ code: "not_found", message: failure.message, request_id: requestId }, 404)
+    case "NotImplemented":
+      return json({ code: "not_implemented", message: failure.message, request_id: requestId }, 501)
     case "RateLimited": {
       const response = json({ code: "rate_limited", message: failure.message, request_id: requestId }, 429)
       response.headers.set("retry-after", String(failure.retryAfterSeconds))
@@ -186,7 +183,7 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return json({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.0" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.0" })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -232,6 +229,9 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "GET" && url.pathname === "/v2/counts/players/town-halls") {
       return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("townhall_level"))
     }
+    if (request.method === "GET" && url.pathname === "/v2/counts/players/builder-halls") {
+      return yield* new NotImplemented({ message: "Builder Hall counts are not implemented" })
+    }
     if (request.method === "GET" && url.pathname === "/v2/counts/players/league-tiers") {
       return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("league_tier_id"))
     }
@@ -246,19 +246,12 @@ export const route = (request: Request, bindings: WorkerBindings,
     }
     if (url.pathname.startsWith("/proxy/v1/")) {
       const auth = yield* AuthIdentity
-      const principal = yield* auth.requireUserOrBot(request)
+      const principal = yield* auth.requireUser(request)
       const response = yield* proxyRequest(request, bindings)
-      if (principal.kind === "user" && onProxyResponse !== undefined) {
+      if (onProxyResponse !== undefined) {
         yield* Effect.sync(() => onProxyResponse(principal, request, response))
       }
       return response
-    }
-    if (request.method === "POST" && url.pathname === "/v2/media/tenor/resolve") {
-      const body = yield* decodeJson(request, TenorMediaRequest)
-      const auth = yield* AuthIdentity
-      yield* auth.requireUserOrBot(request)
-      const resolver = yield* TenorResolver
-      return yield* encodeJson(TenorMediaResponse, yield* resolver.resolve(body.url))
     }
     const authResponse = yield* dispatchAuthLifecycle(request, bindings)
     if (authResponse !== undefined) return authResponse
@@ -278,10 +271,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botAdjacentResponse !== undefined) return botAdjacentResponse
     const moderationResponse = yield* dispatchBotRuntime(request, bindings)
     if (moderationResponse !== undefined) return moderationResponse
-    const persistentResponse = yield* dispatchPersistentRuntime(request, bindings)
-    if (persistentResponse !== undefined) return persistentResponse
-    const notificationResponse = yield* dispatchTicketNotifications(request, bindings)
-    if (notificationResponse !== undefined) return notificationResponse
+    // Discord command orchestration is deferred to the Bot specification. Its
+    // reference modules remain in this checkout, but are not API dispatchers.
     const metadataResponse = yield* dispatchPublicMetadata(request, bindings)
     if (metadataResponse !== undefined) return metadataResponse
     const publicDataResponse = yield* dispatchPublicData(request, bindings)
@@ -296,8 +287,6 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (aiContextResponse !== undefined) return aiContextResponse
     const aiUsageResponse = yield* dispatchDashboardRosterAIUsage(request, bindings.AI_USAGE_SECRET)
     if (aiUsageResponse !== undefined) return aiUsageResponse
-    const rosterConfigurationResponse = yield* dispatchDashboardRosterConfiguration(request)
-    if (rosterConfigurationResponse !== undefined) return rosterConfigurationResponse
     const rosterResponse = yield* dispatchDashboardRoster(request, bindings)
     if (rosterResponse !== undefined) return rosterResponse
     const miscResponse = yield* dispatchDashboardMisc(request, bindings)

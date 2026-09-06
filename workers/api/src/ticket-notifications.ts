@@ -1,9 +1,10 @@
-import { DecimalSnowflake, RuntimeUUID, TicketMessageEventEndpoint } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { RuntimeUUID, TicketMessageEventEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { AuthIdentity } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
-import type { WorkerBindings } from "./environment.js"
+import type { DeferredRuntimeBindings, WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { wakeTicketOperation } from "./ticket-runtime.js"
@@ -88,7 +89,7 @@ export const prepareTicketNotification = (event: Event, bindings: Bindings) => E
   Effect.catchTag("SqlError", cause => Effect.fail(new DatabaseFailure({ cause, message: "Ticket notification journal is unavailable" }))))
 
 export const ticketNotificationRoutes = [{ method: "POST", path: "/v2/runtime/tickets/message-events" }] as const
-export const dispatchTicketNotifications = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
+export const dispatchTicketNotifications = (request: Request, bindings: DeferredRuntimeBindings) => Effect.gen(function* () {
   if (request.method !== "POST" || new URL(request.url).pathname !== TicketMessageEventEndpoint.path) return undefined
   yield* (yield* AuthIdentity).requireBot(request)
   if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {

@@ -11,6 +11,9 @@ export const RosterMemberGroupSetting = Schema.Struct({ id: RuntimeUUID, name: G
     signup_enabled: Schema.Boolean, role_id: Schema.NullOr(DecimalSnowflake) });
 export const RosterBuilderMemberGroupSetting = Schema.Struct({ id: RuntimeUUID, name: GroupName, position: Position,
     signupEnabled: Schema.Boolean, roleId: Schema.NullOr(DecimalSnowflake) });
+// The request and five endpoint descriptors below are deferred Bot/configuration
+// references, exported only from ./deferred-runtime. The value schemas above
+// remain dependencies of retained roster payloads, without enabling new routes.
 export const RosterMemberGroupSettingsRequest = Schema.Struct({ groups: Schema.Array(Schema.Struct({
         member_group_id: RuntimeUUID, signup_enabled: Schema.Boolean, position: Position, role_id: Schema.NullOr(DecimalSnowflake),
     })).check(Schema.isMaxLength(25), Schema.makeFilter(groups => {

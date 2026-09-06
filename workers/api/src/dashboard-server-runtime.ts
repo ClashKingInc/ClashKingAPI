@@ -1,5 +1,6 @@
 import {
   dashboardEndpoints,
+  requireEndpointSuccessStatus,
   BotServerWarLeaderboardEndpoint,
   BotServerDonationsLeaderboardEndpoint,
   BotServerLegendsLeaderboardEndpoint,
@@ -296,6 +297,7 @@ const authenticate = (
 })
 
 const sectionFor = (path: string): string => {
+  if (path === "/v2/guild/:guildId") return ""
   if (path.includes("/bases")) return "bases"
   if (path.includes("/dashboard-capabilities")) return ""
   if (path.includes("/links/server/")) return "links"
@@ -353,11 +355,11 @@ const responseFor = (endpoint: AnyEndpoint, value: unknown) => {
   const baseFailure = encodeDashboardBaseFailure(value)
   if (baseFailure !== undefined) return baseFailure
   if (endpoint.responseMode === "none") {
-    return Effect.succeed(new Response(null, { status: endpoint.successStatus }))
+    return Effect.succeed(new Response(null, { status: requireEndpointSuccessStatus(endpoint) }))
   }
   return Schema.encodeUnknownEffect(endpoint.response)(value).pipe(
     Effect.map((encoded) => Response.json(encoded, {
-      status: endpoint.successStatus,
+      status: requireEndpointSuccessStatus(endpoint),
       headers: { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" },
     })),
     Effect.orDie,

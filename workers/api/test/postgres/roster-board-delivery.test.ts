@@ -154,7 +154,7 @@ it('pages board audits and terminal repair discovery beyond 100 publications wit
     const queued = new Set<string>()
     let cursor: string | undefined = '', pages = 0
     while (cursor !== undefined) {
-      const page = yield* enqueueRosterBoardAudits(cursor)
+      const page: Effect.Success<ReturnType<typeof enqueueRosterBoardAudits>> = yield* enqueueRosterBoardAudits(cursor)
       expect(page.effectIds.length).toBeLessThanOrEqual(100)
       for (const id of page.effectIds) { expect(queued.has(id)).toBe(false); queued.add(id) }
       cursor = page.nextScopeKey
@@ -165,7 +165,7 @@ it('pages board audits and terminal repair discovery beyond 100 publications wit
     let after: string | undefined = '0'
     const recovered: string[] = []
     while (after !== undefined) {
-      const page = yield* pendingRosterBoardRepairs(after)
+      const page: Effect.Success<ReturnType<typeof pendingRosterBoardRepairs>> = yield* pendingRosterBoardRepairs(after)
       recovered.push(...page.jobs.filter(job => job.server_id === serverId).map(job => job.id))
       after = page.nextOrdinal
     }

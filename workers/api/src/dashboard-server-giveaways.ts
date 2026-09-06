@@ -5,7 +5,6 @@ import type { DashboardServerOperationInput } from "./dashboard-server-runtime.j
 import { uploadMediaFile, mediaFileUrl } from "./dashboard-upload.js"
 import { DiscordApi } from "./discord-api.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
-import { enqueueGiveawayPublication } from "./giveaway-publications.js"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, RateLimited, Forbidden, Unauthenticated, PayloadTooLarge, type ApiFailure } from "./errors.js"
 
 export const dashboardGiveawayOperationIds = ["serverGiveaways", "serverGiveaway", "createServerGiveaway", "updateServerGiveaway", "deleteServerGiveaway", "giveawayEntries", "rerollGiveaway"] as const
@@ -109,23 +108,19 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
       if (existing?.status !== "ended" || body.user_ids_to_replace.length === 0) return yield* new InvalidRequest({ message: "Select current winners from an ended giveaway" })
       for (const userId of body.user_ids_to_replace) yield* requestValue(DecimalSnowflake, userId)
       const winners = yield* stored(Schema.Array(StoredWinner), existing.winners_list), entries = yield* stored(Schema.Array(GiveawayEntry), existing.entries)
-      const initial = (yield* sql<{ governed: boolean; published: boolean }>`SELECT
-        (EXISTS(SELECT 1 FROM giveaway_outcome_runs WHERE giveaway_id=${id}) OR
-          EXISTS(SELECT 1 FROM giveaway_publication_effects WHERE giveaway_id=${id} AND kind='end')) AS governed,
-        EXISTS(SELECT 1 FROM giveaway_publication_effects WHERE giveaway_id=${id} AND kind='end' AND state='succeeded') AS published`)[0]
-      if (initial?.governed && !initial.published) return yield* new InvalidRequest({ message: "The initial giveaway outcome must be published before rerolling" })
       const current = new Set(winners.filter((winner) => winner.status === "winner").map((winner) => winner.user_id))
       if (body.user_ids_to_replace.some((userId) => !current.has(userId))) return yield* new InvalidRequest({ message: "Replacement target is not a current winner" })
-      const eligible = [...new Set(entries.map((entry) => typeof entry === "string" ? entry : entry.user_id).filter((userId) => !current.has(userId)))]
-      if (eligible.length < body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Not enough eligible participants" })
+      // Shuffle weighted slots first, then take distinct people. Extra slots
+      // still increase the chance of winning, but cannot win a second prize.
+      const eligible = entries.map((entry) => typeof entry === "string" ? entry : entry.user_id).filter((userId) => !current.has(userId))
+      if (new Set(body.user_ids_to_replace).size !== body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Replacement targets must be unique" })
+      if (new Set(eligible).size < body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Not enough eligible participants" })
       secureShuffle(eligible)
-      const newWinners = eligible.slice(0, body.user_ids_to_replace.length), now = new Date().toISOString(), replace = new Set(body.user_ids_to_replace)
+      const newWinners = [...new Set(eligible)].slice(0, body.user_ids_to_replace.length), now = new Date().toISOString().replace(/\.\d{3}Z$/u, "Z"), replace = new Set(body.user_ids_to_replace)
       const updated = [...winners.map((winner) => replace.has(winner.user_id) ? { ...winner, status: "rerolled", timestamp: now, reason: "dashboard_reroll" } : winner), ...newWinners.map((user_id) => ({ user_id, status: "winner", timestamp: now }))]
+      // The existing Dashboard endpoint updates winner data only. Bot message
+      // publication and its new journals are not prerequisites for rerolling.
       yield* sql`UPDATE giveaways SET winners_list=${JSON.stringify(updated)}::jsonb,updated_at=now() WHERE server_id=${serverId} AND id=${id}`
-      yield* enqueueGiveawayPublication(id,"reroll",{
-        operationId:crypto.randomUUID(),winnerIds:newWinners,replacedIds:body.user_ids_to_replace,
-        actorLabel:input.principal.kind === "user" ? input.principal.userId : "bot",occurredAt:now,
-      })
       return { message: "Winners rerolled successfully", giveawayId: id, serverId, newWinners }
     }
     if (!(input.body instanceof FormData)) return yield* new InvalidRequest({ message: "Multipart form data is required" })

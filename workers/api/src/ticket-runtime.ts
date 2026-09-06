@@ -1,8 +1,8 @@
-import { RuntimeUUID, TicketOperationAdvanceEndpoint, TicketOpenPrepareEndpoint, TicketOperationStatusEndpoint,
-  TicketButtonSettings, DiscordEmbed } from "@clashking/api-contracts"
+import { TicketButtonSettings, DiscordEmbed } from "@clashking/api-contracts"
+import { RuntimeUUID, TicketOperationAdvanceEndpoint, TicketOpenPrepareEndpoint, TicketOperationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
-import type { WorkerBindings } from "./environment.js"
+import type { DeferredRuntimeBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
 import { loadTicketPanelSource } from "./ticket-panel-source.js"
@@ -425,6 +425,6 @@ export const ticketOperationStatus = (operationId: string, interaction: Verified
     ...(typeof result.failure === "string" ? { failure:result.failure } : {}) },"Stored ticket operation status is invalid")
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(new DatabaseFailure({ cause,message:"Ticket operation status is unavailable" }))))
 
-export const wakeTicketOperation = (bindings: WorkerBindings, operationId: string, serverId: string, ticketId: string) =>
+export const wakeTicketOperation = (bindings: DeferredRuntimeBindings, operationId: string, serverId: string, ticketId: string) =>
   Effect.tryPromise({ try:() => bindings.TICKET_RUNTIME.getByName(`${serverId}:${ticketId}`).wake(operationId),
     catch:(cause) => new DatabaseFailure({ cause,message:"Ticket runtime coordinator is unavailable" }) })

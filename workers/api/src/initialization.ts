@@ -16,11 +16,16 @@ const proxyFailure = (cause: unknown) => new UpstreamUnavailable({ cause, messag
 /** Go initialization is best-effort for individual live Clash lookups. HTTP
  * failures omit that item; malformed success payloads remain contract failures. */
 export const initializationProxy = <S extends Schema.Codec<unknown, unknown, never, never>>(bindings: WorkerBindings, path: string, schema: S) => Effect.gen(function* () {
-  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${path}`, { signal, redirect: "error", headers: { accept: "application/json" } })), catch: proxyFailure })
-  if (response.status !== 200) { yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve()); return undefined }
+  // Workerd supports only manual/follow. Reject redirects via the status check
+  // below; redirect:"error" throws before the service binding receives a request.
+  const response = yield* Effect.tryPromise({ try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`https://clash-proxy.internal/v1/${path}`, { signal, redirect: "manual", headers: { accept: "application/json" } })), catch: proxyFailure }).pipe(
+    Effect.timeout("20 seconds"), Effect.catch(() => Effect.succeed(undefined)),
+  )
+  if (response === undefined) return undefined
+  if (response.status !== 200) { yield* Effect.promise(() => response.body?.cancel().catch(() => undefined) ?? Promise.resolve()); return undefined }
   const payload = yield* readBoundedJson(response, 4 * 1024 * 1024).pipe(Effect.mapError(proxyFailure))
   return yield* Schema.decodeUnknownEffect(schema)(payload).pipe(Effect.mapError(proxyFailure))
-}).pipe(Effect.timeout("20 seconds"), Effect.catchTag("TimeoutError", () => Effect.fail(proxyFailure("Clash request deadline exceeded"))))
+}).pipe(Effect.timeout("20 seconds"), Effect.catchTag("TimeoutError", () => Effect.succeed(undefined)))
 
 export const initializationWindow = (now: Date) => {
   const start = new Date(now)

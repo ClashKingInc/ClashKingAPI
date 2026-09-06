@@ -23,7 +23,6 @@ const rosterId = "019fbb92-95e2-7781-9f22-e057c54de9ac"
 const bindings = {} as WorkerBindings
 
 const roster = {
-  capacity: 50, roster_role_id: null, member_groups: [],
   id: rosterId, server_id: serverId, alias: "CWL", roster_type: "clan", signup_scope: "clan-only",
   members: [], columns: [], sort: [], revision: 1,
   created_at: "2026-09-03T00:00:00.000Z", updated_at: "2026-09-03T00:00:00.000Z",

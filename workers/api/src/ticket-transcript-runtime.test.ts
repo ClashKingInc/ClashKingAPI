@@ -25,9 +25,10 @@ const fixture = async (hasThread = true) => {
 }
 
 describe("private R2 transcript capability reader", () => {
-  it("declares exactly the three public streamed shared contracts", () => {
-    expect(ticketTranscriptRoutes).toEqual(Object.values(ticketTranscriptEndpoints).map(({method,path})=>({method,path})))
-    expect(Object.values(ticketTranscriptEndpoints).every(endpoint=>endpoint.auth === "public" && endpoint.responseMode === "response")).toBe(true)
+  it("keeps this preserved HTML implementation separate from the active JSON contracts", () => {
+    expect(ticketTranscriptRoutes.filter(route => route.path.endsWith(".html"))).toHaveLength(2)
+    expect(Object.values(ticketTranscriptEndpoints).some(endpoint => endpoint.path.endsWith(".html"))).toBe(false)
+    expect(Object.values(ticketTranscriptEndpoints).every(endpoint => endpoint.auth === "public")).toBe(true)
   })
   it("serves completed channel and private thread as inert HTML without authentication or external redirects", async () => {
     const bucket = await fixture()

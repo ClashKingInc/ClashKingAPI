@@ -148,7 +148,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
           WHERE user_id = $1 AND is_verified = true AND (cardinality($2::text[]) = 0 OR tag = ANY($2::text[])) ORDER BY tag`, [userId, [...tags]]))
         const verified = rows.map(({ tag }) => tag)
         if (tags.length > 0 && verified.length !== tags.length) return yield* new Forbidden({ message: "Every tracking tag must be a verified account" })
-        if (verified.length > 100) return yield* new InvalidRequest({ message: "A maximum of 100 tracking tags is allowed" })
         return yield* refreshTrackingTargets(bindings, verified)
       }),
       serverClans: (serverId) => db(sql<{ tag: string; name: string }>`SELECT sc.tag, clan.name
@@ -179,28 +178,41 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
 }
 
 export const refreshTrackingTargets = (bindings: WorkerBindings, tags: readonly string[]): Effect.Effect<TrackingResponse, ApiFailure> =>
-  input(() => {
-    if (tags.length > 100 || tags.some((tag) => !/^#[0289PYLQGRJCUV]{3,14}$/u.test(tag))) throw new Error("Tracking requires at most 100 canonical player tags")
-    if (bindings.API_BOT_TOKEN.trim().length === 0) throw new Error("Tracking API token is not configured")
-  }).pipe(Effect.andThen(Effect.tryPromise({
-    try: async () => {
-      const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/verified-players/refresh", {
-        method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
-        body: JSON.stringify({ player_tags: tags }),
-      }))
-      if (!response.ok) throw new Error(`Tracking returned ${response.status}`)
-      return await response.json() as unknown
-    },
-    catch: (cause) => new UpstreamUnavailable({ cause, message: "Verified player tracking cache is unavailable" }),
-  })),
-    Effect.flatMap(Schema.decodeUnknownEffect(botEndpoints.refreshVerifiedPlayerTracking.response)),
-    Effect.mapError((cause) => cause instanceof UpstreamUnavailable ? cause : new UpstreamUnavailable({ cause, message: "Tracking response violated its contract" })),
-    Effect.flatMap((response) => response.player_tags.length === tags.length
-      && response.player_tags.every((tag, index) => tag === tags[index])
-      && Number.isFinite(Date.parse(response.expires_at))
-      ? Effect.succeed(response)
-      : Effect.fail(new UpstreamUnavailable({ cause: response, message: "Tracking did not acknowledge the requested player targets" }))),
-  )
+  Effect.gen(function* () {
+    yield* input(() => {
+      if (tags.some((tag) => !/^#[0289PYLQGRJCUV]{3,14}$/u.test(tag))) throw new Error("Tracking requires canonical player tags")
+    })
+    // Match the original empty-list no-op: do not write or prune the cache.
+    if (tags.length === 0) return { player_tags: tags, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString() }
+    if (!bindings.API_BOT_TOKEN?.trim()) return yield* new UpstreamUnavailable({ cause: undefined, message: "Tracking API token is not configured" })
+    let earliestExpiry = Number.POSITIVE_INFINITY
+    // Only the private transport is bounded to 100, not the user's verified accounts.
+    // Earlier batches may be written if a later batch fails; replaying ZADD is safe.
+    for (let offset = 0; offset < tags.length; offset += 100) {
+      const batch = tags.slice(offset, offset + 100)
+      const response = yield* Effect.tryPromise({
+        try: async (signal) => {
+          const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/verified-players/refresh", {
+            method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
+            body: JSON.stringify({ player_tags: batch }), signal,
+          }))
+          if (response.status !== 200) throw new Error(`Tracking returned ${response.status}`)
+          return await response.json() as unknown
+        },
+        catch: (cause) => new UpstreamUnavailable({ cause, message: "Verified player tracking cache is unavailable" }),
+      }).pipe(
+        Effect.timeout("3 seconds"),
+        Effect.flatMap(Schema.decodeUnknownEffect(botEndpoints.refreshVerifiedPlayerTracking.response)),
+        Effect.mapError((cause) => cause instanceof UpstreamUnavailable ? cause : new UpstreamUnavailable({ cause, message: "Tracking response violated its contract" })),
+      )
+      const expiry = Date.parse(response.expires_at)
+      if (response.player_tags.length !== batch.length || !response.player_tags.every((tag, index) => tag === batch[index]) || !Number.isFinite(expiry)) {
+        return yield* new UpstreamUnavailable({ cause: response, message: "Tracking did not acknowledge the requested player targets" })
+      }
+      earliestExpiry = Math.min(earliestExpiry, expiry)
+    }
+    return { player_tags: tags, expires_at: new Date(earliestExpiry).toISOString() }
+  })
 
 export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBindings): Effect.Effect<
   Response | undefined, ApiFailure, AuthIdentity | BotAdjacentStore | ServerAuthorization | SqlClient.SqlClient
@@ -247,7 +259,7 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
       case "refreshVerifiedPlayerTracking": {
         const principal = yield* auth.requireUser(request)
         const body = yield* decodeBody(request, botEndpoints.refreshVerifiedPlayerTracking.body)
-        const tags = yield* input(() => normalizeTags(body.player_tags, 100))
+        const tags = yield* input(() => normalizeTags(body.player_tags))
         return yield* encode(botEndpoints.refreshVerifiedPlayerTracking.response, yield* store.refreshVerifiedPlayerTracking(principal.userId, tags))
       }
       case "serverClans": {
@@ -303,8 +315,8 @@ function normalizeTag(value: string): string {
   if (!/^#[0289PYLQGRJCUV]{3,14}$/u.test(tag)) throw new Error("Invalid Clash player tag")
   return tag
 }
-function normalizeTags(values: readonly string[], limit: number): string[] {
-  if (values.length > limit) throw new Error(`A maximum of ${limit} player tags is allowed`)
+function normalizeTags(values: readonly string[], limit?: number): string[] {
+  if (limit !== undefined && values.length > limit) throw new Error(`A maximum of ${limit} player tags is allowed`)
   return [...new Set(values.map(normalizeTag))]
 }
 function input<A>(evaluate: () => A): Effect.Effect<A, InvalidRequest> {

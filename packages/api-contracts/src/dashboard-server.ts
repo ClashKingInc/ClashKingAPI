@@ -459,10 +459,10 @@ export const SearchBannedPlayersResponse = Schema.Struct({
 })
 
 export const StrikeRequest = Schema.Struct({
-  reason: Schema.String,
-  added_by: Schema.String,
+  reason: OptionalString,
+  added_by: OptionalString,
   rollover_days: OptionalNumber,
-  strike_weight: Schema.Number,
+  strike_weight: OptionalNumber,
   image: OptionalString,
 })
 export const Strike = Schema.Struct({
@@ -589,7 +589,6 @@ export const DiscordEmoji = Schema.Struct({
   animated: OptionalBoolean,
 })
 export const TicketButton = Schema.Struct({
-  id: Schema.String,
   custom_id: Schema.String,
   label: Schema.String,
   style: Schema.Number,
@@ -619,7 +618,6 @@ export const ApproveMessage = Schema.Struct({
 export const ApproveMessages = Schema.Array(ApproveMessage).check(Schema.isMaxLength(25), Schema.makeFilter(messages =>
   new Set(messages.map(message => message.name.trim())).size === messages.length ? undefined : "Template names must be unique after trimming"))
 export const TicketPanel = Schema.Struct({
-  id: Schema.String,
   name: Schema.String,
   server_id: Schema.String,
   embed_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
@@ -631,7 +629,7 @@ export const TicketPanel = Schema.Struct({
   status_change_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
   ticket_button_click_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
   ticket_close_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  approve_messages: ApproveMessages,
+  approve_messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
 })
 export const TicketPanelsResponse = Schema.Struct({
   items: Schema.Array(TicketPanel),
@@ -672,7 +670,7 @@ export const UpdateTicketButtonSettingsRequest = Schema.Struct({
   new_message: Schema.NullOr(Schema.String),
 })
 export const UpdateApproveMessagesRequest = Schema.Struct({
-  messages: ApproveMessages,
+  messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
 })
 
 export const DiscordEmbedFooter = Schema.Struct({
@@ -938,7 +936,7 @@ export const GuildEndpoint = defineEndpoint({
   auth: "server-read", errors: [], body: NoBody,
   bodyMode: "none", method: "GET", operationId: "dashboardGuild",
   path: "/v2/guild/:guildId", pathParams: DashboardGuildPath, query: NoQuery,
-  response: GuildInfo, responseMode: "json", successStatus: 200,
+  response: GuildDetails, responseMode: "json", successStatus: 200,
   summary: "Get one Discord guild",
 })
 export const ReactivateServerEndpoint = defineEndpoint({
@@ -1184,12 +1182,6 @@ export const ServerChannelsEndpoint = defineEndpoint({
   operationId: "serverChannels", path: "/v2/server/:serverId/channels",
   pathParams: DashboardServerPath, query: NoQuery, response: Schema.Array(DiscordChannel),
   responseMode: "json", successStatus: 200, summary: "List Discord channels",
-})
-export const ServerDiscordChannelsEndpoint = defineEndpoint({
-  auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
-  operationId: "serverDiscordChannels", path: "/v2/server/:serverId/discord-channels",
-  pathParams: DashboardServerPath, query: NoQuery, response: Schema.Array(DiscordChannel),
-  responseMode: "json", successStatus: 200, summary: "List Discord channels through the compatibility route",
 })
 export const ServerThreadsEndpoint = defineEndpoint({
   auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",

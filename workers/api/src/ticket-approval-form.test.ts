@@ -1,4 +1,4 @@
-import { TicketApplicationForm } from "@clashking/api-contracts"
+import { TicketApplicationForm } from "@clashking/api-contracts/deferred-runtime"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 import type { VerifiedRuntimeInteraction } from "./runtime-interaction.js"

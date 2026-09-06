@@ -15,8 +15,8 @@ export const AdminUser = Schema.Struct({
     role: AdminRole,
     active: Schema.Boolean,
     last_login_at: Schema.optionalKey(Schema.String),
-    created_at: Schema.String,
-    updated_at: Schema.String,
+    created_at: Schema.optionalKey(Schema.String),
+    updated_at: Schema.optionalKey(Schema.String),
 });
 export const Platform = Schema.Literals(["ios", "android", "web"]);
 export const FeatureFlag = Schema.Struct({
@@ -69,12 +69,9 @@ export const DeveloperApplication = Schema.Struct({
     updated_at: Schema.String,
     revoked_at: Schema.NullOr(Schema.String),
 });
-export const CreateDeveloperApplicationInput = Schema.Struct({
-    developer_name: NonEmptyString.check(Schema.isMaxLength(120)),
-});
-export const UpdateDeveloperApplicationInput = Schema.Struct({
-    developer_name: NonEmptyString.check(Schema.isMaxLength(120)),
-});
+const DeveloperName = Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120));
+export const CreateDeveloperApplicationInput = Schema.Struct({ developer_name: DeveloperName });
+export const UpdateDeveloperApplicationInput = Schema.Struct({ developer_name: DeveloperName });
 export const CreatedDeveloperApplication = Schema.Struct({
     ...DeveloperApplication.fields,
     api_token: Schema.String.check(Schema.isPattern(/^ck_dev_/u)),
@@ -337,10 +334,10 @@ const TrackingHealth = Schema.Struct({ healthy: Schema.Boolean, reported_healthy
 const TrackingDatabaseMetrics = Schema.Struct({ batch_count: Count, rows_requested: Count, rows_affected: Count, average_store_duration_ms: Schema.Number });
 const TrackingTargetProgress = Schema.Struct({ target_count: Count, current_cycle: Count, processed_targets: Count, targets_per_second: Schema.Number, completion_percentage: Schema.Number, estimated_seconds_remaining: Schema.optionalKey(Schema.Number), estimated_loop_completion: Schema.optionalKey(Schema.String) });
 const TrackingProcessState = Schema.Struct({ script: Schema.String, run_id: Count, interval_start: Schema.String, interval_end: Schema.String, process_started_at: Schema.String, ram_bytes: Count, uptime_seconds: Count, goroutines: Count, heap_objects: Count, gc_cycles: Count, health: TrackingHealth });
-const TrackingDomainState = Schema.Struct({ script: Schema.String, domain: Schema.String, run_id: Count, interval_start: Schema.String, interval_end: Schema.String, interval_duration_seconds: Count, last_success: Schema.optionalKey(Schema.String), latest_error: Schema.optionalKey(Schema.String), request_count: Count, requests_per_second: Schema.Number, error_count: Count, error_rate: Schema.Number, average_request_latency_ms: Schema.Number, write_count: Count, writes_per_second: Schema.Number, processing_count: Count, average_processing_duration_ms: Schema.Number, queue_depth: Count, database: TrackingDatabaseMetrics, targets: TrackingTargetProgress, health: TrackingHealth });
-export const TrackingSummaryResponse = Schema.Struct({ generated_at: Schema.String, stale_after_seconds: Count, processes: Schema.Array(TrackingProcessState), domains: Schema.Array(TrackingDomainState), globalclans: Schema.optionalKey(Schema.Struct({ priority: Schema.optionalKey(TrackingTargetProgress), non_priority: Schema.optionalKey(TrackingTargetProgress) })) });
+const TrackingDomainState = Schema.Struct({ script: Schema.String, domain: Schema.String, run_id: Count, interval_start: Schema.String, interval_end: Schema.String, interval_duration_seconds: Count, last_success: Schema.optionalKey(Schema.String), latest_error: Schema.NullOr(Schema.Struct({ message: Schema.String, timestamp: Schema.String })), request_count: Count, requests_per_second: Schema.Number, error_count: Count, error_rate: Schema.Number, average_request_latency_ms: Schema.Number, write_count: Count, writes_per_second: Schema.Number, processing_count: Count, average_processing_duration_ms: Schema.Number, queue_depth: Count, database: TrackingDatabaseMetrics, targets: Schema.NullOr(TrackingTargetProgress), health: TrackingHealth });
+export const TrackingSummaryResponse = Schema.Struct({ generated_at: Schema.String, stale_after_seconds: Count, processes: Schema.Array(TrackingProcessState), domains: Schema.Array(TrackingDomainState) });
 const TrackingProcessPoint = Schema.Struct({ timestamp: Schema.String, observed_at: Schema.String, ram_bytes: Count, uptime_seconds: Count, goroutines: Count, heap_objects: Count, gc_cycles: Count });
-const TrackingDomainPoint = Schema.Struct({ timestamp: Schema.String, observed_at: Schema.String, interval_duration_seconds: Count, request_count: Count, requests_per_second: Schema.Number, error_count: Count, error_rate: Schema.Number, average_request_latency_ms: Schema.Number, write_count: Count, writes_per_second: Schema.Number, processing_count: Count, average_processing_duration_ms: Schema.Number, queue_depth: Count, database: TrackingDatabaseMetrics, targets: TrackingTargetProgress, reported_healthy: Schema.Boolean });
+const TrackingDomainPoint = Schema.Struct({ timestamp: Schema.String, observed_at: Schema.String, interval_duration_seconds: Count, request_count: Count, requests_per_second: Schema.Number, error_count: Count, error_rate: Schema.Number, average_request_latency_ms: Schema.Number, write_count: Count, writes_per_second: Schema.Number, processing_count: Count, average_processing_duration_ms: Schema.Number, queue_depth: Count, database: TrackingDatabaseMetrics, targets: Schema.NullOr(TrackingTargetProgress), reported_healthy: Schema.Boolean });
 export const TrackingTimeSeriesResponse = Schema.Struct({ generated_at: Schema.String, window: Schema.Literals(["15m", "1h", "6h", "24h"]), start: Schema.String, end: Schema.String, bucket_seconds: Count, max_points_per_series: Count, processes: Schema.Array(Schema.Struct({ script: Schema.String, points: Schema.Array(TrackingProcessPoint) })), domains: Schema.Array(Schema.Struct({ script: Schema.String, domain: Schema.String, points: Schema.Array(TrackingDomainPoint) })) });
 export const AppReleaseTrack = Schema.Literals(["beta", "production"]);
 export const AppReleasePlatform = Schema.Literals(["ios", "android"]);
@@ -355,9 +352,15 @@ const RollbackPlatforms = Schema.Struct({
     android: Schema.optionalKey(RollbackPlatformInfo),
 });
 export const AppReleaseMarker = Schema.Struct({ schemaVersion: Schema.Literal(1), version: Schema.String, appVersion: Schema.String, track: AppReleaseTrack, type: Schema.Literals(["native", "ota"]), gitSha: Schema.String, createdAt: Schema.String, releaseNotes: Schema.optionalKey(Schema.String), platforms: ReleasePlatforms, rollbackTargets: Schema.optionalKey(Schema.Record(Schema.String, Schema.Struct({ type: Schema.Literals(["native", "ota"]), gitSha: Schema.optionalKey(Schema.String), platforms: RollbackPlatforms }))) });
+// Match the saved Admin form's trimmed x.y.z / x.y.z-beta version input.
+const AppReleaseVersionInput = Schema.Trim.check(Schema.isPattern(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-beta)?$/u), Schema.isMaxLength(80));
+// Calendar-valid ISO dates, optional seconds/fraction, and an explicit Z or HH:MM offset.
+const ReleaseDate = "(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-8])))";
+const AppReleaseDateTimeInput = Schema.String.check(Schema.isPattern(new RegExp(`^${ReleaseDate}T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$`, "u")));
 const AppUpdateSchedule = Schema.Struct({ fromBasisPoints: IntBetween(0, 10_000), toBasisPoints: IntBetween(0, 10_000), startsAt: Schema.String, endsAt: Schema.String });
+const AppUpdateScheduleInput = Schema.Struct({ fromBasisPoints: IntBetween(0, 10_000), toBasisPoints: IntBetween(0, 10_000), startsAt: AppReleaseDateTimeInput, endsAt: AppReleaseDateTimeInput }).annotate({ parseOptions: { onExcessProperty: "ignore" } });
 export const AppUpdateChannel = Schema.Struct({ channel: AppReleaseTrack, platform: AppReleasePlatform, runtimeVersion: Schema.String, activeVersion: Schema.NullOr(Schema.String), rollbackTargetVersion: Schema.NullOr(Schema.String), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateSchedule), updatedAt: Schema.String });
-export const AppUpdateChannelInput = Schema.Struct({ activeVersion: Schema.NullOr(Schema.String), rollbackTargetVersion: Schema.NullOr(Schema.String), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateSchedule) });
+export const AppUpdateChannelInput = Schema.Struct({ expectedUpdatedAt: Schema.NullOr(AppReleaseDateTimeInput), activeVersion: Schema.NullOr(AppReleaseVersionInput), rollbackTargetVersion: Schema.NullOr(AppReleaseVersionInput), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateScheduleInput) }).annotate({ parseOptions: { onExcessProperty: "error" } });
 export const AppReleasesResponse = Schema.Struct({ releases: Schema.Array(AppReleaseMarker), channels: Schema.Array(AppUpdateChannel) });
 const adminRead = { auth: "admin", body: NoBody, bodyMode: "none", responseMode: "json", successStatus: 200 };
 const adminJson = { auth: "admin", bodyMode: "json", responseMode: "json", successStatus: 200 };
@@ -367,8 +370,8 @@ export const AdminMeEndpoint = defineEndpoint({ ...adminRead, operationId: "admi
 export const AdminDashboardEndpoint = defineEndpoint({ ...adminRead, operationId: "adminDashboard", method: "GET", path: "/v2/admin/dashboard", summary: "Get the admin dashboard snapshot", pathParams: NoPathParams, query: Schema.Struct({ days: Schema.optionalKey(IntBetween(1, 365)) }), response: AdminDashboardSnapshot });
 export const AdminAuditEndpoint = defineEndpoint({ ...adminRead, operationId: "adminAudit", method: "GET", path: "/v2/admin/audit", summary: "List admin audit events", pathParams: NoPathParams, query: Schema.Struct({ actor: Schema.optionalKey(Schema.String), action: Schema.optionalKey(Schema.String), resource_type: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(IntBetween(1, 500)) }), response: Schema.Array(AdminAuditEvent) });
 export const AdminProxyStatsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminProxyStats", method: "GET", path: "/v2/admin/proxy/stats", summary: "Get proxy statistics", pathParams: NoPathParams, query: Schema.Struct({ series: Schema.optionalKey(Schema.Literals(["1m", "5m", "15m", "30m", "1h"])), lookback: Schema.optionalKey(Schema.Literals(["1h", "6h", "12h", "24h", "48h"])), endpoints: Schema.optionalKey(Schema.Literals(["24h", "7d"])), limit: Schema.optionalKey(IntBetween(1, 100)) }), response: ProxyStatsResponse });
-export const AdminTrackingSummaryEndpoint = defineEndpoint({ ...adminRead, operationId: "adminTrackingSummary", method: "GET", path: "/v2/admin/tracking/summary", summary: "Get tracking health summary", pathParams: NoPathParams, query: NoQuery, response: TrackingSummaryResponse });
-export const AdminTrackingTimeseriesEndpoint = defineEndpoint({ ...adminRead, operationId: "adminTrackingTimeseries", method: "GET", path: "/v2/admin/tracking/timeseries", summary: "Get tracking timeseries", pathParams: NoPathParams, query: Schema.Struct({ window: Schema.Literals(["15m", "1h", "6h", "24h"]), script: Schema.optionalKey(Schema.String) }), response: TrackingTimeSeriesResponse });
+export const AdminTrackingSummaryEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingSummary", method: "GET", path: "/v2/admin/tracking/summary", summary: "Get tracking health summary", pathParams: NoPathParams, query: NoQuery, response: TrackingSummaryResponse });
+export const AdminTrackingTimeseriesEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingTimeseries", method: "GET", path: "/v2/admin/tracking/timeseries", summary: "Get tracking timeseries", pathParams: NoPathParams, query: Schema.Struct({ window: Schema.Literals(["15m", "1h", "6h", "24h"]), script: Schema.optionalKey(Schema.String), domain: Schema.optionalKey(Schema.String) }), response: TrackingTimeSeriesResponse });
 export const AdminListDeveloperApplicationsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminListDeveloperApplications", method: "GET", path: "/v2/admin/developer-applications", summary: "List developer applications", pathParams: NoPathParams, query: NoQuery, response: Schema.Array(DeveloperApplication) });
 export const AdminCreateDeveloperApplicationEndpoint = defineEndpoint({ ...adminJson, successStatus: 201, operationId: "adminCreateDeveloperApplication", method: "POST", path: "/v2/admin/developer-applications", summary: "Create a developer application", pathParams: NoPathParams, query: NoQuery, body: CreateDeveloperApplicationInput, response: CreatedDeveloperApplication });
 export const AdminGetDeveloperApplicationEndpoint = defineEndpoint({ ...adminRead, operationId: "adminGetDeveloperApplication", method: "GET", path: "/v2/admin/developer-applications/:applicationId", summary: "Get a developer application", pathParams: ApplicationIdPath, query: NoQuery, response: DeveloperApplication });

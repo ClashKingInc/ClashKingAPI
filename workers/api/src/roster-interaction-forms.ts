@@ -1,4 +1,5 @@
-import { DashboardRosterSignupQuestion, RosterRuntimeForm, RuntimeUUID } from "@clashking/api-contracts"
+import { DashboardRosterSignupQuestion } from "@clashking/api-contracts"
+import { RosterRuntimeForm, RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { Conflict, InvalidRequest } from "./errors.js"
 import type { VerifiedRuntimeInteraction } from "./runtime-interaction.js"

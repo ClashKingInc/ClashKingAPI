@@ -163,17 +163,12 @@ describe("Dashboard response contracts", () => {
 
   it("decodes a representative roster and rejects malformed core roster state", () => {
     const roster = {
-      capacity: 50,
-      roster_role_id: null,
-      member_groups: [],
       id: "roster-1",
       server_id: "123",
       alias: "CWL",
       roster_type: "clan",
       signup_scope: "clan-only",
       members: [{
-        member_group_id: null,
-        is_substitute: false,
         name: "Matt",
         tag: "#P0Y",
         townhall: 17,

@@ -15,6 +15,7 @@ import { appUpdateInternals } from "./app-updates.js"
 import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
 import { decryptPushToken } from "./push-secrets.js"
+import { executeTrackingRead } from "./tracking-operations.js"
 
 export type AdminWorkerBindings = WorkerBindings & {
   readonly ADMIN_NOTIFICATION_LAB_ENABLED?: string
@@ -878,21 +879,6 @@ const proxyStats = (input: AdminOperationInput) => {
   }), input.bindings.CLASH_PROXY)
 }
 
-const tracking = (input: AdminOperationInput, endpoint: "summary" | "timeseries") => {
-  if (input.bindings.API_BOT_TOKEN.trim().length === 0) {
-    return Effect.fail(new UpstreamUnavailable({ cause: undefined, message: "Tracking API token is not configured" }))
-  }
-  const upstream = new URL(`https://tracking.internal/v2/admin/tracking/${endpoint}`)
-  if (endpoint === "timeseries") {
-    for (const [key, value] of Object.entries(asRecord(input.query))) {
-      if (value !== undefined) upstream.searchParams.set(key, String(value))
-    }
-  }
-  return fetchJson("Tracking API request failed", new Request(upstream, {
-    headers: { accept: "application/json", authorization: `Bearer ${input.bindings.API_BOT_TOKEN}` },
-  }), input.bindings.TRACKING)
-}
-
 const releaseMarkerKey = (track: string, version: string): string => `releases/${track}/${version}/release.json`
 
 const validReleaseMarker = (marker: AppReleaseMarkerValue): boolean =>
@@ -916,9 +902,6 @@ const decodeReleaseMarker = (value: unknown) => Schema.decodeUnknownEffect(AppRe
 )
 
 const readReleaseMarker = (bindings: AdminWorkerBindings, track: string, version: string) => Effect.gen(function* () {
-  if (!appUpdateInternals.validVersion(version, track, "ota")) {
-    return yield* new InvalidRequest({ message: "Active version must be a valid OTA version for this track" })
-  }
   const object = yield* Effect.tryPromise({
     try: () => bindings.APP_UPDATES.get(releaseMarkerKey(track, version)),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Release marker lookup failed" }),
@@ -957,23 +940,24 @@ const listReleaseObjects = (bindings: AdminWorkerBindings) => Effect.gen(functio
 })
 
 const listAppReleases = (input: AdminOperationInput) => database("App update channel list failed", Effect.gen(function* () {
+  const releases = yield* listReleaseObjects(input.bindings)
   const sql = yield* SqlClient.SqlClient
   const channels = yield* sql.unsafe<AppUpdateChannelRow>(`SELECT channel, platform, runtime_version,
     active_version, rollback_target_version, rollout_basis_points, paused, rollout_from_basis_points,
     rollout_to_basis_points, rollout_starts_at, rollout_ends_at, updated_at
     FROM app_update_channels ORDER BY channel, platform, runtime_version`)
-  return { releases: yield* listReleaseObjects(input.bindings), channels: channels.map(mapChannel) }
+  return { releases, channels: channels.map(mapChannel) }
 }))
 
 const semverParts = (value: string): ReadonlyArray<number> | null => {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(value)
-  return match === null ? null : [Number(match[1]), Number(match[2]), Number(match[3])]
+  const parts = value.replace(/-beta$/u, "").split(".").map(Number)
+  return parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0) ? null : parts
 }
 
 const compareVersions = (left: string, right: string): number => {
   const a = semverParts(left)
   const b = semverParts(right)
-  if (a === null || b === null) return left.localeCompare(right, undefined, { numeric: true })
+  if (a === null || b === null) throw new Error("cannot compare invalid app release versions")
   for (let index = 0; index < 3; index += 1) {
     if (a[index] !== b[index]) return (a[index] ?? 0) - (b[index] ?? 0)
   }
@@ -986,60 +970,54 @@ const updateAppReleaseChannel = (input: AdminOperationInput) => database("App up
   const track = String(path.track)
   const platform = String(path.platform) as "android" | "ios"
   const runtimeVersion = String(path.runtimeVersion)
+  const schedule = body.schedule === null ? null : asRecord(body.schedule)
+  const releaseError = (status: 400 | 409, detail: string) => Response.json({ detail }, {
+    status, headers: { "cache-control": "no-store" },
+  })
+  if (schedule !== null && new Date(String(schedule.endsAt)) <= new Date(String(schedule.startsAt))) {
+    return releaseError(400, "schedule.endsAt must be after schedule.startsAt")
+  }
   const sql = yield* SqlClient.SqlClient
   // A SELECT lock cannot lock a missing row. Claim the unique channel key first;
   // a concurrent initializer waits here and then validates the committed state.
-  yield* sql.unsafe(`INSERT INTO app_update_channels (channel,platform,runtime_version)
-    VALUES ($1,$2,$3) ON CONFLICT (channel,platform,runtime_version) DO NOTHING`,
+  const claimed = yield* sql.unsafe(`INSERT INTO app_update_channels (channel,platform,runtime_version)
+    VALUES ($1,$2,$3) ON CONFLICT (channel,platform,runtime_version) DO NOTHING RETURNING channel`,
   [track, platform, runtimeVersion])
   const current = (yield* sql.unsafe<AppUpdateChannelRow>(`SELECT channel, platform, runtime_version,
     active_version, rollback_target_version, rollout_basis_points, paused, rollout_from_basis_points,
     rollout_to_basis_points, rollout_starts_at, rollout_ends_at, updated_at FROM app_update_channels
     WHERE channel=$1 AND platform=$2 AND runtime_version=$3 FOR UPDATE`, [track, platform, runtimeVersion]))[0]
+  if (current === undefined || (body.expectedUpdatedAt === null ? claimed.length !== 1
+    : claimed.length === 1 || new Date(String(body.expectedUpdatedAt)).getTime() !== new Date(current.updated_at).getTime())) {
+    return releaseError(409, "This release channel changed since you loaded it. Reload before saving.")
+  }
   const activeVersion = body.activeVersion === null ? null : String(body.activeVersion)
   const rollbackVersion = body.rollbackTargetVersion === null ? null : String(body.rollbackTargetVersion)
   if (current?.rollback_target_version && activeVersion === null) {
-    return new Response(JSON.stringify({ code: "conflict", message: "Pause this rollback or select a newer OTA release" }), {
-      status: 409, headers: { "content-type": "application/json", "cache-control": "no-store" },
-    })
+    return releaseError(409, "pause this rollback or select a newer OTA release")
   }
   if (current?.rollback_target_version !== null && current?.rollback_target_version !== undefined &&
       activeVersion === current.active_version && rollbackVersion !== current.rollback_target_version) {
-    return new Response(JSON.stringify({ code: "conflict", message: "An active rollback is final for this release" }), {
-      status: 409, headers: { "content-type": "application/json", "cache-control": "no-store" },
-    })
+    return releaseError(409, "an activated rollback is final for this release; select a newer OTA release")
   }
-  let marker: AppReleaseMarkerValue | null = null
+  if (current?.active_version && activeVersion !== null && activeVersion !== current.active_version &&
+      compareVersions(activeVersion, current.active_version) <= 0) {
+    return releaseError(409, "select a newer OTA release, or use the pre-signed rollback control")
+  }
   if (activeVersion !== null) {
-    marker = yield* readReleaseMarker(input.bindings, track, activeVersion)
+    const marker = yield* readReleaseMarker(input.bindings, track, activeVersion)
     if (marker.track !== track || marker.version !== activeVersion || marker.type !== "ota" ||
         marker.platforms[platform]?.runtimeVersion !== runtimeVersion || marker.platforms[platform]?.manifest === undefined) {
-      return yield* new InvalidRequest({ message: "Active release marker does not match the selected channel and runtime" })
+      return releaseError(409, "selected release is not an OTA update for this channel, platform, and runtime")
     }
-    if (current?.active_version !== null && current?.active_version !== undefined &&
-        activeVersion !== current.active_version && compareVersions(activeVersion, current.active_version) <= 0) {
-      return new Response(JSON.stringify({ code: "conflict", message: "Forward activation requires a newer release version" }), {
-        status: 409, headers: { "content-type": "application/json", "cache-control": "no-store" },
-      })
+    if (rollbackVersion !== null) {
+      const rollback = marker.rollbackTargets?.[rollbackVersion]?.platforms[platform]
+      if (rollbackVersion === activeVersion || rollback?.runtimeVersion !== runtimeVersion || !rollback.key) {
+        return releaseError(409, "selected rollback was not pre-signed for this release, platform, and runtime")
+      }
     }
-  }
-  if (rollbackVersion !== null) {
-    const rollback = marker?.rollbackTargets?.[rollbackVersion]
-    if (rollback === undefined || rollback.platforms[platform]?.runtimeVersion !== runtimeVersion) {
-      return yield* new InvalidRequest({ message: "Rollback target is not declared for this platform and runtime" })
-    }
-    const key = rollback.platforms[platform]?.key
-    const exists = key === undefined ? false : yield* Effect.tryPromise({
-      try: async () => await input.bindings.APP_UPDATES.head(key) !== null,
-      catch: (cause) => new UpstreamUnavailable({ cause, message: "Rollback target lookup failed" }),
-    })
-    if (!exists) {
-      return yield* new InvalidRequest({ message: "Rollback target object does not exist" })
-    }
-  }
-  const schedule = body.schedule === null ? null : asRecord(body.schedule)
-  if (schedule !== null && new Date(String(schedule.endsAt)) <= new Date(String(schedule.startsAt))) {
-    return yield* new InvalidRequest({ message: "Rollout schedule must end after it starts" })
+  } else if (rollbackVersion !== null) {
+    return releaseError(400, "rollbackTargetVersion requires activeVersion")
   }
   const rows = yield* sql.unsafe<AppUpdateChannelRow>(`INSERT INTO app_update_channels
     (channel,platform,runtime_version,active_version,rollback_target_version,rollout_basis_points,
@@ -1049,7 +1027,7 @@ const updateAppReleaseChannel = (input: AdminOperationInput) => database("App up
       rollback_target_version=excluded.rollback_target_version,rollout_basis_points=excluded.rollout_basis_points,
       paused=excluded.paused,rollout_from_basis_points=excluded.rollout_from_basis_points,
       rollout_to_basis_points=excluded.rollout_to_basis_points,rollout_starts_at=excluded.rollout_starts_at,
-      rollout_ends_at=excluded.rollout_ends_at,updated_at=now()
+      rollout_ends_at=excluded.rollout_ends_at,updated_at=GREATEST(clock_timestamp(),app_update_channels.updated_at + interval '1 millisecond')
     RETURNING channel, platform, runtime_version, active_version, rollback_target_version,
       rollout_basis_points, paused, rollout_from_basis_points, rollout_to_basis_points,
       rollout_starts_at, rollout_ends_at, updated_at`, [track, platform, runtimeVersion, activeVersion,
@@ -1377,8 +1355,8 @@ const operationFor = (
     case "adminDashboard": return dashboard(input)
     case "adminAudit": return listAudit(input)
     case "adminProxyStats": return proxyStats(input)
-    case "adminTrackingSummary": return tracking(input, "summary")
-    case "adminTrackingTimeseries": return tracking(input, "timeseries")
+    case "adminTrackingSummary": return executeTrackingRead("summary", input.query)
+    case "adminTrackingTimeseries": return executeTrackingRead("timeseries", input.query)
     case "adminListDeveloperApplications": return listDeveloperApplications()
     case "adminCreateDeveloperApplication": return createDeveloperApplication(input)
     case "adminGetDeveloperApplication": return getDeveloperApplication(input)
@@ -1465,7 +1443,15 @@ export const executeAdminOperation = (
   Effect.flatMap(() => databaseMutations.has(operationId)
     ? database("Admin transaction failed", Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
-        return yield* sql.withTransaction(operationFor(operationId, input))
+        const operation = operationFor(operationId, input)
+        if (operationId === "adminUpdateAppReleaseChannel") {
+          // Selection rejections retain the original status/detail response, but
+          // must fail the transaction so a first-time key claim is not committed.
+          return yield* sql.withTransaction(operation.pipe(Effect.flatMap((value) =>
+            value instanceof Response && value.status >= 400 ? Effect.fail(value) : Effect.succeed(value),
+          ))).pipe(Effect.catch((cause) => cause instanceof Response ? Effect.succeed(cause) : Effect.fail(cause)))
+        }
+        return yield* sql.withTransaction(operation)
       }))
     : operationFor(operationId, input)),
 )

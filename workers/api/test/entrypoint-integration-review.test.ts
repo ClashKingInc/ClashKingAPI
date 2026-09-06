@@ -3,25 +3,27 @@ import { SqlClient, SqlError } from "effect/unstable/sql"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { DatabaseFailure } from "../src/errors.js"
 import type { WorkerBindings } from "../src/environment.js"
+import { deferredApiRoutes } from "./deferred-runtime-paths.js"
 
 const databaseState = vi.hoisted(() => ({ mode: 'healthy' }))
-vi.mock("../src/database.js", () => ({
+vi.mock("../src/database.js", async (importOriginal) => {
+  const { lazyDatabaseLayer } = await importOriginal<typeof import("../src/database.js")>()
+  return {
   databaseLayer: () => {
     if(databaseState.mode==='throw') throw new Error('fixture construction failed')
     if(databaseState.mode==='defect') return Layer.effect(SqlClient.SqlClient,Effect.die(new Error('fixture acquisition defect')))
-    if(databaseState.mode==='sql') return Layer.effect(SqlClient.SqlClient,Effect.fail(new SqlError.SqlError({reason:new SqlError.ConnectionError({cause:new Error('fixture SQL connection failure')})})))
+    if(databaseState.mode==='sql') return lazyDatabaseLayer(Effect.fail(new SqlError.SqlError({reason:new SqlError.ConnectionError({cause:new Error('fixture SQL connection failure')})})))
     if(databaseState.mode==='fail') return Layer.effect(SqlClient.SqlClient,Effect.fail(new DatabaseFailure({cause:new Error('fixture database unavailable'),message:'Database unavailable'})))
     // These boundary cases must not query; accessing a SQL operation fails loudly.
     return Layer.succeed(SqlClient.SqlClient,new Proxy({} as SqlClient.SqlClient,{get:()=>{throw new Error('Unexpected SQL operation in entrypoint boundary test')}}))
   },
-}))
+  }
+})
 // Native Cloudflare base classes are not available in the Node test lane.
 // These exports are unrelated to fetch; the request layer and router remain real.
 vi.mock("../src/materialized-view-refresher.js", () => ({MaterializedViewRefresher:class {}}))
 vi.mock("../src/shared-links-rate-limiter.js", () => ({SharedLinksRateLimiter:class {}}))
-vi.mock("../src/ticket-runtime-coordinator.js", () => ({TicketRuntimeCoordinator:class {}}))
-vi.mock("../src/runtime-recovery-coordinator.js", () => ({RuntimeRecoveryCoordinator:class {}}))
-import worker from "../src/index.js"
+import worker, * as workerExports from "../src/index.js"
 
 const bindings = {
   ACCESS_TEAM_DOMAIN:'fixture.cloudflareaccess.com', ACCESS_AUDIENCE:'fixture-audience',
@@ -32,17 +34,17 @@ const bindings = {
   ADMIN_ALLOWED_ORIGINS:'https://admin.example.test', WEB_ALLOWED_ORIGINS:'https://app.example.test',
   HYPERDRIVE:{connectionString:'postgres://fixture:fixture@127.0.0.1/fixture'},
 } as WorkerBindings
-const request = async (path: string, method = 'GET', origin: string | null = 'https://app.example.test') => {
+const request = async (path: string, method = 'GET', origin: string | null = 'https://app.example.test', extraHeaders: Record<string, string> = {}, body?: unknown) => {
   const tasks: Promise<unknown>[] = []
   const context = {waitUntil:(promise:Promise<unknown>)=>{tasks.push(promise.catch(()=>undefined))},passThroughOnException:()=>undefined} as ExecutionContext
   try {
-    return await worker.fetch(new Request(`https://api.example.test${path}`,{method,headers:{'x-request-id':'entrypoint-fixture',...(origin === null ? {} : {origin})}}),bindings,context)
+    return await worker.fetch(new Request(`https://api.example.test${path}`,{method,headers:{'x-request-id':'entrypoint-fixture',...(origin === null ? {} : {origin}),...extraHeaders},...(body === undefined ? {} : {body:JSON.stringify(body)})}),bindings,context)
   } finally { await Promise.all(tasks) }
 }
 afterEach(()=>{databaseState.mode='healthy';vi.restoreAllMocks()})
 
 describe('actual fetch entrypoint service composition and dispatcher order',()=>{
-  it('schedules the persisted recovery singleton instead of querying an initial SQL batch',async()=>{
+  it('schedules only the retained materialized-view refresh, never bot recovery',async()=>{
     databaseState.mode='throw'
     const wake=vi.fn(async()=>undefined), refresh=vi.fn(async()=>({ refreshed:true }))
     const recovery=vi.fn(()=>({wake})), refresher=vi.fn(()=>({refresh}))
@@ -51,16 +53,52 @@ describe('actual fetch entrypoint service composition and dispatcher order',()=>
       MATERIALIZED_VIEW_REFRESHER:{getByName:refresher}} as unknown as WorkerBindings,
     {waitUntil:(promise:Promise<unknown>)=>tasks.push(promise)} as unknown as ExecutionContext)
     await Promise.all(tasks)
-    expect(recovery).toHaveBeenCalledExactlyOnceWith('persistent-runtime-recovery')
-    expect(wake).toHaveBeenCalledOnce()
+    expect(recovery).not.toHaveBeenCalled()
+    expect(wake).not.toHaveBeenCalled()
     expect(refresher).toHaveBeenCalledExactlyOnceWith('stats-materialized-views',{locationHint:'enam'})
     expect(refresh).toHaveBeenCalledOnce()
-    expect(tasks).toHaveLength(2)
+    expect(tasks).toHaveLength(1)
+  })
+  it('exports only the retained API coordinators', () => {
+    expect(Object.keys(workerExports).sort()).toEqual(['MaterializedViewRefresher', 'SharedLinksRateLimiter', 'default'])
+  })
+  it.each(deferredApiRoutes)('leaves $method $path unmounted without SQL or provider calls', async ({ method, path }) => {
+    const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))
+    for (const headers of [{}, { authorization: 'Bearer fixture-bot-token', 'content-type': 'application/json' }]) {
+      const response = await request(path, method, 'https://app.example.test', headers)
+      expect(response.status).toBe(404)
+      expect(await response.json()).toMatchObject({ code: 'not_found', request_id: 'entrypoint-fixture' })
+    }
+    expect(outbound).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['GET', '/v2/server/123456789012345678/channels'],
+    ['GET', '/v2/server/123456789012345678/bans'],
+    ['GET', '/v2/server/123456789012345678/strikes'],
+    ['GET', '/v2/server/123456789012345678/clans-basic'],
+    ['POST', '/v2/links/server/123456789012345678'],
+  ])('retains baseline %s %s behind its existing authentication', async (method, path) => {
+    const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))
+    expect((await request(path, method)).status).toBe(401)
+    expect(outbound).not.toHaveBeenCalled()
+  })
+  it.each([
+    { method: 'POST', path: '/v2/roster-group', body: { name: 'Group' } },
+    { method: 'GET', path: '/v2/roster-group/list' },
+    { method: 'GET', path: '/v2/roster-group/80000000-0000-4000-8000-000000000003' },
+    { method: 'PATCH', path: '/v2/roster-group/80000000-0000-4000-8000-000000000003', body: { name: 'Renamed group' } },
+    { method: 'DELETE', path: '/v2/roster-group/80000000-0000-4000-8000-000000000003' },
+    { method: 'POST', path: '/v2/roster/account-groups/query', body: { serverId: '123456789012345678', rosterIds: [] } },
+  ])('preserves the original $method $path with valid input behind authentication', async ({ method, path, body }) => {
+    const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))
+    const response = await request(`${path}?server_id=123456789012345678`, method, 'https://app.example.test', { 'content-type': 'application/json' }, body)
+    expect(response.status).toBe(401)
+    expect(outbound).not.toHaveBeenCalled()
   })
   it('isolates bearer transcript requests from database setup, request IDs, CORS and every application log',async()=>{
     databaseState.mode='throw'
     const log=vi.spyOn(console,'log'),error=vi.spyOn(console,'error')
-    const response=await request('/v2/ticket-transcripts/00000000-0000-4000-8000-000000000001/channel.html')
+    const response=await request('/v2/ticket-transcripts/00000000-0000-4000-8000-000000000001')
     // No TICKETING fixture is supplied here: storage failure stays private too.
     expect(response.status).toBe(503)
     expect(await response.json()).toEqual({code:'upstream_unavailable',message:'Transcript unavailable'})
@@ -76,6 +114,18 @@ describe('actual fetch entrypoint service composition and dispatcher order',()=>
     expect(await response.json()).toMatchObject({status:'ok',runtime:'cloudflare-worker'})
     expect(response.headers.get('x-request-id')).toBe('entrypoint-fixture')
     expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.test')
+  })
+  it.each([{}, { authorization: 'Bearer invalid-token' }, { authorization: 'Bearer fixture-bot-token' }])('preserves the public Builder Hall 501 without SQL or provider work %#', async (headers) => {
+    const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))
+    const response = await request('/v2/counts/players/builder-halls', 'GET', null, headers)
+    expect(response.status).toBe(501)
+    expect(await response.json()).toEqual({
+      code: 'not_implemented', message: 'Builder Hall counts are not implemented', request_id: 'entrypoint-fixture',
+    })
+    expect(outbound).not.toHaveBeenCalled()
+  })
+  it('does not add a POST alias for Builder Hall counts', async () => {
+    expect((await request('/v2/counts/players/builder-halls', 'POST', null)).status).toBe(404)
   })
   it('reaches the new player dispatcher and recovers its typed validation error',async()=>{
     const response=await request('/v2/player/%23P0Y/ranked/invalid/group')
@@ -118,12 +168,21 @@ describe('actual fetch entrypoint service composition and dispatcher order',()=>
     expect(response.status).toBe(404)
     expect(await response.json()).toMatchObject({request_id:response.headers.get('x-request-id')})
   })
-  it.each(['fail','sql'])('recovers a typed service-layer acquisition %s into the HTTP contract',async(mode)=>{
+  it.each(['fail'])('recovers a typed service-layer acquisition %s into the HTTP contract',async(mode)=>{
     databaseState.mode=mode
     const response=await request('/v2/health')
     expect(response.status).toBe(503)
     expect(await response.json()).toMatchObject({code:'upstream_unavailable',request_id:'entrypoint-fixture'})
     expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.test')
+  })
+  it('keeps health and preflight independent of unavailable SQL while recovering an actual query failure',async()=>{
+    databaseState.mode='sql'
+    expect((await request('/v2/health')).status).toBe(200)
+    expect((await request('/v2/auth/me')).status).toBe(401)
+    expect((await request('/v2/counts/players/town-halls','OPTIONS')).status).toBe(204)
+    const response=await request('/v2/counts/players/town-halls')
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({code:'upstream_unavailable',request_id:'entrypoint-fixture'})
   })
   it.each(['defect','throw'])('recovers service setup %s without leaking it',async(mode)=>{
     databaseState.mode=mode

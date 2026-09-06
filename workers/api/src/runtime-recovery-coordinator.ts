@@ -1,16 +1,16 @@
 import { DurableObject } from "cloudflare:workers"
 import { Effect } from "effect"
-import type { WorkerBindings } from "./environment.js"
+import type { DeferredRuntimeBindings } from "./environment.js"
 import { pendingRuntimePage, type RecoveryCursor, type RecoveryJob, type RecoveryKind, type RecoveryPage } from "./runtime-recovery.js"
 
 interface ScanRow { readonly [key: string]: SqlStorageValue; readonly kind: RecoveryKind; readonly cursor: string | null }
 interface WakeRow { readonly [key: string]: SqlStorageValue; readonly id: string; readonly queue: string }
 
 /** Enumerates missing wakes only; per-ticket coordinators own external delivery. */
-export class RuntimeRecoveryCoordinator extends DurableObject<WorkerBindings> {
+export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBindings> {
   private running = false
 
-  constructor(ctx: DurableObjectState, env: WorkerBindings) {
+  constructor(ctx: DurableObjectState, env: DeferredRuntimeBindings) {
     super(ctx,env)
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS recovery_scans (

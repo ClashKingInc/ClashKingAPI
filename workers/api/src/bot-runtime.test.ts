@@ -8,7 +8,7 @@ import {
   botRuntimeRoutes,
   dispatchBotRuntime,
 } from "./bot-runtime.js"
-import type { WorkerBindings } from "./environment.js"
+import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { ServerAuthorization, serverAccessAllows } from "./server-authorization.js"
 import { Forbidden } from "./errors.js"
 
@@ -102,7 +102,7 @@ describe("Bot runtime dispatcher", () => {
             image: "",
             reason: "test",
             rollover_days: 0,
-            strike_weight: 0,
+            strike_weight: -1,
           }),
           headers: { "content-type": "application/json" },
           method: "POST",
@@ -113,6 +113,50 @@ describe("Bot runtime dispatcher", () => {
 
     expect(result._tag).toBe("Failure")
     expect(addStrike).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{}, { reason: "", added_by: "", image: "", rollover_days: 0, strike_weight: 1 }],
+    [{ strike_weight: 0, rollover_days: -1 }, { reason: "", added_by: "", image: "", rollover_days: -1, strike_weight: 1 }],
+    [{ strike_weight: 2147483647 }, { reason: "", added_by: "", image: "", rollover_days: 0, strike_weight: 2147483647 }],
+  ])("preserves the original strike defaults for %j", async (body, expected) => {
+    const addStrike = vi.fn(() => Effect.succeed({ status: "created", strike_id: "STRIKE", player_tag: "#P0Y", server_id: largeServerId }))
+    const response = await run(new Request(`https://api.clashk.ing/v2/server/${largeServerId}/strikes/%23P0Y`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }), { addStrike })
+    expect(response?.status).toBe(200)
+    expect(addStrike).toHaveBeenCalledWith(largeServerId, "#P0Y", expected)
+  })
+
+  it.each([-1, 2147483648, 1.5])("rejects a strike weight outside the original integer range: %s", async strike_weight => {
+    const addStrike = vi.fn(() => Effect.die("Invalid strike reached persistence"))
+    await expect(run(new Request(`https://api.clashk.ing/v2/server/${largeServerId}/strikes/%23P0Y`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ strike_weight }),
+    }), { addStrike })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    expect(addStrike).not.toHaveBeenCalled()
+  })
+
+  it("keeps a persisted strike successful if its follow-up active summary fails", async () => {
+    const inserts: unknown[][] = []
+    const query = (strings: TemplateStringsArray, ...values: unknown[]) => {
+      expect(strings.join("?")).toContain("INSERT INTO strikes")
+      inserts.push(values)
+      return Effect.succeed([])
+    }
+    const sql = Object.assign(query, { unsafe: (statement: string) => {
+      expect(statement).toContain("s.rollover_date >= now()")
+      return Effect.fail(new Error("summary unavailable after commit"))
+    } }) as unknown as SqlClient.SqlClient
+    const fakeBindings = { CLASH_PROXY: { fetch: async () => Response.json({ name: "Fixture" }) } } as unknown as WorkerBindings
+    const storeLayer = BotModerationStore.layer.pipe(Layer.provide(Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, sql), WorkerEnvironment.layer(fakeBindings),
+    )))
+    const result = await Effect.runPromise(Effect.gen(function* () {
+      return yield* (yield* BotModerationStore).addStrike(largeServerId, "#P0Y", {})
+    }).pipe(Effect.provide(storeLayer)))
+    expect(result).toMatchObject({ status: "created", total_strikes: 0, total_weight: 0 })
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0]?.slice(3)).toEqual(["", "", 1, null, ""])
   })
 
   it("uses moderation view for reads and manage for every mutation before reading the body", async () => {

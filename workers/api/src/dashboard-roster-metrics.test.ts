@@ -28,6 +28,10 @@ describe("roster metric recipes", () => {
       const query = strings.join("?")
       if (query.includes("SELECT tag FROM roster_members")) return Effect.succeed([{ tag: "#P" }, { tag: "#NONE" }])
       if (query.includes("player_war_history")) return Effect.succeed([{ war_id: 1 }, { war_id: 2 }])
+      if (query.includes("AS pending FROM wars")) return Effect.succeed((parameters[0] as string[]).map((id) => ({
+        war_id: String(id), pending: true, payload: null, archive_pack_id: null, archive_offset: null, archive_compressed_bytes: null,
+        war_type: String(id) === "1" ? "cwl" : "random",
+      })))
       if (query.includes("LEFT JOIN war_archive_pending")) return Effect.succeed([parameters[0] === "1"
         ? { war_id: "1", war_type: "cwl", payload: war(3) }
         : { war_id: "2", war_type: "random", payload: war(1) }])

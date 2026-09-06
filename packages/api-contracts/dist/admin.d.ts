@@ -9,8 +9,8 @@ export declare const AdminUser: Schema.Struct<{
     readonly role: Schema.Literals<readonly ["owner", "admin"]>;
     readonly active: Schema.Boolean;
     readonly last_login_at: Schema.optionalKey<Schema.String>;
-    readonly created_at: Schema.String;
-    readonly updated_at: Schema.String;
+    readonly created_at: Schema.optionalKey<Schema.String>;
+    readonly updated_at: Schema.optionalKey<Schema.String>;
 }>;
 export declare const Platform: Schema.Literals<readonly ["ios", "android", "web"]>;
 export declare const FeatureFlag: Schema.Struct<{
@@ -64,10 +64,10 @@ export declare const DeveloperApplication: Schema.Struct<{
     readonly revoked_at: Schema.NullOr<Schema.String>;
 }>;
 export declare const CreateDeveloperApplicationInput: Schema.Struct<{
-    readonly developer_name: Schema.String;
+    readonly developer_name: Schema.Trim;
 }>;
 export declare const UpdateDeveloperApplicationInput: Schema.Struct<{
-    readonly developer_name: Schema.String;
+    readonly developer_name: Schema.Trim;
 }>;
 export declare const CreatedDeveloperApplication: Schema.Struct<{
     readonly application_id: Schema.String;
@@ -678,7 +678,10 @@ export declare const TrackingSummaryResponse: Schema.Struct<{
         readonly interval_end: Schema.String;
         readonly interval_duration_seconds: Schema.Number;
         readonly last_success: Schema.optionalKey<Schema.String>;
-        readonly latest_error: Schema.optionalKey<Schema.String>;
+        readonly latest_error: Schema.NullOr<Schema.Struct<{
+            readonly message: Schema.String;
+            readonly timestamp: Schema.String;
+        }>>;
         readonly request_count: Schema.Number;
         readonly requests_per_second: Schema.Number;
         readonly error_count: Schema.Number;
@@ -695,7 +698,7 @@ export declare const TrackingSummaryResponse: Schema.Struct<{
             readonly rows_affected: Schema.Number;
             readonly average_store_duration_ms: Schema.Number;
         }>;
-        readonly targets: Schema.Struct<{
+        readonly targets: Schema.NullOr<Schema.Struct<{
             readonly target_count: Schema.Number;
             readonly current_cycle: Schema.Number;
             readonly processed_targets: Schema.Number;
@@ -703,7 +706,7 @@ export declare const TrackingSummaryResponse: Schema.Struct<{
             readonly completion_percentage: Schema.Number;
             readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
             readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>;
+        }>>;
         readonly health: Schema.Struct<{
             readonly healthy: Schema.Boolean;
             readonly reported_healthy: Schema.Boolean;
@@ -712,26 +715,6 @@ export declare const TrackingSummaryResponse: Schema.Struct<{
             readonly age_seconds: Schema.Number;
             readonly stale_after_seconds: Schema.Number;
         }>;
-    }>>;
-    readonly globalclans: Schema.optionalKey<Schema.Struct<{
-        readonly priority: Schema.optionalKey<Schema.Struct<{
-            readonly target_count: Schema.Number;
-            readonly current_cycle: Schema.Number;
-            readonly processed_targets: Schema.Number;
-            readonly targets_per_second: Schema.Number;
-            readonly completion_percentage: Schema.Number;
-            readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-            readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>>;
-        readonly non_priority: Schema.optionalKey<Schema.Struct<{
-            readonly target_count: Schema.Number;
-            readonly current_cycle: Schema.Number;
-            readonly processed_targets: Schema.Number;
-            readonly targets_per_second: Schema.Number;
-            readonly completion_percentage: Schema.Number;
-            readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-            readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>>;
     }>>;
 }>;
 export declare const TrackingTimeSeriesResponse: Schema.Struct<{
@@ -776,7 +759,7 @@ export declare const TrackingTimeSeriesResponse: Schema.Struct<{
                 readonly rows_affected: Schema.Number;
                 readonly average_store_duration_ms: Schema.Number;
             }>;
-            readonly targets: Schema.Struct<{
+            readonly targets: Schema.NullOr<Schema.Struct<{
                 readonly target_count: Schema.Number;
                 readonly current_cycle: Schema.Number;
                 readonly processed_targets: Schema.Number;
@@ -784,7 +767,7 @@ export declare const TrackingTimeSeriesResponse: Schema.Struct<{
                 readonly completion_percentage: Schema.Number;
                 readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
                 readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-            }>;
+            }>>;
             readonly reported_healthy: Schema.Boolean;
         }>>;
     }>>;
@@ -848,8 +831,9 @@ export declare const AppUpdateChannel: Schema.Struct<{
     readonly updatedAt: Schema.String;
 }>;
 export declare const AppUpdateChannelInput: Schema.Struct<{
-    readonly activeVersion: Schema.NullOr<Schema.String>;
-    readonly rollbackTargetVersion: Schema.NullOr<Schema.String>;
+    readonly expectedUpdatedAt: Schema.NullOr<Schema.String>;
+    readonly activeVersion: Schema.NullOr<Schema.Trim>;
+    readonly rollbackTargetVersion: Schema.NullOr<Schema.Trim>;
     readonly rolloutBasisPoints: Schema.Int;
     readonly paused: Schema.Boolean;
     readonly schedule: Schema.NullOr<Schema.Struct<{
@@ -926,8 +910,8 @@ export declare const AdminMeEndpoint: import("./endpoint.js").Endpoint<Schema.St
     readonly role: Schema.Literals<readonly ["owner", "admin"]>;
     readonly active: Schema.Boolean;
     readonly last_login_at: Schema.optionalKey<Schema.String>;
-    readonly created_at: Schema.String;
-    readonly updated_at: Schema.String;
+    readonly created_at: Schema.optionalKey<Schema.String>;
+    readonly updated_at: Schema.optionalKey<Schema.String>;
 }>, readonly []>;
 export declare const AdminDashboardEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{
     readonly days: Schema.optionalKey<Schema.Int>;
@@ -1079,7 +1063,10 @@ export declare const AdminTrackingSummaryEndpoint: import("./endpoint.js").Endpo
         readonly interval_end: Schema.String;
         readonly interval_duration_seconds: Schema.Number;
         readonly last_success: Schema.optionalKey<Schema.String>;
-        readonly latest_error: Schema.optionalKey<Schema.String>;
+        readonly latest_error: Schema.NullOr<Schema.Struct<{
+            readonly message: Schema.String;
+            readonly timestamp: Schema.String;
+        }>>;
         readonly request_count: Schema.Number;
         readonly requests_per_second: Schema.Number;
         readonly error_count: Schema.Number;
@@ -1096,7 +1083,7 @@ export declare const AdminTrackingSummaryEndpoint: import("./endpoint.js").Endpo
             readonly rows_affected: Schema.Number;
             readonly average_store_duration_ms: Schema.Number;
         }>;
-        readonly targets: Schema.Struct<{
+        readonly targets: Schema.NullOr<Schema.Struct<{
             readonly target_count: Schema.Number;
             readonly current_cycle: Schema.Number;
             readonly processed_targets: Schema.Number;
@@ -1104,7 +1091,7 @@ export declare const AdminTrackingSummaryEndpoint: import("./endpoint.js").Endpo
             readonly completion_percentage: Schema.Number;
             readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
             readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>;
+        }>>;
         readonly health: Schema.Struct<{
             readonly healthy: Schema.Boolean;
             readonly reported_healthy: Schema.Boolean;
@@ -1114,30 +1101,11 @@ export declare const AdminTrackingSummaryEndpoint: import("./endpoint.js").Endpo
             readonly stale_after_seconds: Schema.Number;
         }>;
     }>>;
-    readonly globalclans: Schema.optionalKey<Schema.Struct<{
-        readonly priority: Schema.optionalKey<Schema.Struct<{
-            readonly target_count: Schema.Number;
-            readonly current_cycle: Schema.Number;
-            readonly processed_targets: Schema.Number;
-            readonly targets_per_second: Schema.Number;
-            readonly completion_percentage: Schema.Number;
-            readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-            readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>>;
-        readonly non_priority: Schema.optionalKey<Schema.Struct<{
-            readonly target_count: Schema.Number;
-            readonly current_cycle: Schema.Number;
-            readonly processed_targets: Schema.Number;
-            readonly targets_per_second: Schema.Number;
-            readonly completion_percentage: Schema.Number;
-            readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-            readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-        }>>;
-    }>>;
 }>, readonly []>;
 export declare const AdminTrackingTimeseriesEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{
     readonly window: Schema.Literals<readonly ["15m", "1h", "6h", "24h"]>;
     readonly script: Schema.optionalKey<Schema.String>;
+    readonly domain: Schema.optionalKey<Schema.String>;
 }>, Schema.Struct<{}>, Schema.Struct<{
     readonly generated_at: Schema.String;
     readonly window: Schema.Literals<readonly ["15m", "1h", "6h", "24h"]>;
@@ -1180,7 +1148,7 @@ export declare const AdminTrackingTimeseriesEndpoint: import("./endpoint.js").En
                 readonly rows_affected: Schema.Number;
                 readonly average_store_duration_ms: Schema.Number;
             }>;
-            readonly targets: Schema.Struct<{
+            readonly targets: Schema.NullOr<Schema.Struct<{
                 readonly target_count: Schema.Number;
                 readonly current_cycle: Schema.Number;
                 readonly processed_targets: Schema.Number;
@@ -1188,7 +1156,7 @@ export declare const AdminTrackingTimeseriesEndpoint: import("./endpoint.js").En
                 readonly completion_percentage: Schema.Number;
                 readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
                 readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-            }>;
+            }>>;
             readonly reported_healthy: Schema.Boolean;
         }>>;
     }>>;
@@ -1205,7 +1173,7 @@ export declare const AdminListDeveloperApplicationsEndpoint: import("./endpoint.
     readonly revoked_at: Schema.NullOr<Schema.String>;
 }>>, readonly []>;
 export declare const AdminCreateDeveloperApplicationEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
-    readonly developer_name: Schema.String;
+    readonly developer_name: Schema.Trim;
 }>, Schema.Struct<{
     readonly application_id: Schema.String;
     readonly developer_name: Schema.String;
@@ -1234,7 +1202,7 @@ export declare const AdminGetDeveloperApplicationEndpoint: import("./endpoint.js
 export declare const AdminUpdateDeveloperApplicationEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly applicationId: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
-    readonly developer_name: Schema.String;
+    readonly developer_name: Schema.Trim;
 }>, Schema.Struct<{
     readonly application_id: Schema.String;
     readonly developer_name: Schema.String;
@@ -1379,8 +1347,9 @@ export declare const AdminUpdateAppReleaseChannelEndpoint: import("./endpoint.js
     readonly platform: Schema.Literals<readonly ["ios", "android"]>;
     readonly runtimeVersion: Schema.String;
 }>, Schema.Struct<{}>, Schema.Struct<{
-    readonly activeVersion: Schema.NullOr<Schema.String>;
-    readonly rollbackTargetVersion: Schema.NullOr<Schema.String>;
+    readonly expectedUpdatedAt: Schema.NullOr<Schema.String>;
+    readonly activeVersion: Schema.NullOr<Schema.Trim>;
+    readonly rollbackTargetVersion: Schema.NullOr<Schema.Trim>;
     readonly rolloutBasisPoints: Schema.Int;
     readonly paused: Schema.Boolean;
     readonly schedule: Schema.NullOr<Schema.Struct<{
@@ -2257,8 +2226,8 @@ export declare const adminEndpoints: {
         readonly role: Schema.Literals<readonly ["owner", "admin"]>;
         readonly active: Schema.Boolean;
         readonly last_login_at: Schema.optionalKey<Schema.String>;
-        readonly created_at: Schema.String;
-        readonly updated_at: Schema.String;
+        readonly created_at: Schema.optionalKey<Schema.String>;
+        readonly updated_at: Schema.optionalKey<Schema.String>;
     }>, readonly []>;
     readonly dashboard: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{
         readonly days: Schema.optionalKey<Schema.Int>;
@@ -2410,7 +2379,10 @@ export declare const adminEndpoints: {
             readonly interval_end: Schema.String;
             readonly interval_duration_seconds: Schema.Number;
             readonly last_success: Schema.optionalKey<Schema.String>;
-            readonly latest_error: Schema.optionalKey<Schema.String>;
+            readonly latest_error: Schema.NullOr<Schema.Struct<{
+                readonly message: Schema.String;
+                readonly timestamp: Schema.String;
+            }>>;
             readonly request_count: Schema.Number;
             readonly requests_per_second: Schema.Number;
             readonly error_count: Schema.Number;
@@ -2427,7 +2399,7 @@ export declare const adminEndpoints: {
                 readonly rows_affected: Schema.Number;
                 readonly average_store_duration_ms: Schema.Number;
             }>;
-            readonly targets: Schema.Struct<{
+            readonly targets: Schema.NullOr<Schema.Struct<{
                 readonly target_count: Schema.Number;
                 readonly current_cycle: Schema.Number;
                 readonly processed_targets: Schema.Number;
@@ -2435,7 +2407,7 @@ export declare const adminEndpoints: {
                 readonly completion_percentage: Schema.Number;
                 readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
                 readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-            }>;
+            }>>;
             readonly health: Schema.Struct<{
                 readonly healthy: Schema.Boolean;
                 readonly reported_healthy: Schema.Boolean;
@@ -2445,30 +2417,11 @@ export declare const adminEndpoints: {
                 readonly stale_after_seconds: Schema.Number;
             }>;
         }>>;
-        readonly globalclans: Schema.optionalKey<Schema.Struct<{
-            readonly priority: Schema.optionalKey<Schema.Struct<{
-                readonly target_count: Schema.Number;
-                readonly current_cycle: Schema.Number;
-                readonly processed_targets: Schema.Number;
-                readonly targets_per_second: Schema.Number;
-                readonly completion_percentage: Schema.Number;
-                readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-                readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-            }>>;
-            readonly non_priority: Schema.optionalKey<Schema.Struct<{
-                readonly target_count: Schema.Number;
-                readonly current_cycle: Schema.Number;
-                readonly processed_targets: Schema.Number;
-                readonly targets_per_second: Schema.Number;
-                readonly completion_percentage: Schema.Number;
-                readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
-                readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-            }>>;
-        }>>;
     }>, readonly []>;
     readonly trackingTimeseries: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{
         readonly window: Schema.Literals<readonly ["15m", "1h", "6h", "24h"]>;
         readonly script: Schema.optionalKey<Schema.String>;
+        readonly domain: Schema.optionalKey<Schema.String>;
     }>, Schema.Struct<{}>, Schema.Struct<{
         readonly generated_at: Schema.String;
         readonly window: Schema.Literals<readonly ["15m", "1h", "6h", "24h"]>;
@@ -2511,7 +2464,7 @@ export declare const adminEndpoints: {
                     readonly rows_affected: Schema.Number;
                     readonly average_store_duration_ms: Schema.Number;
                 }>;
-                readonly targets: Schema.Struct<{
+                readonly targets: Schema.NullOr<Schema.Struct<{
                     readonly target_count: Schema.Number;
                     readonly current_cycle: Schema.Number;
                     readonly processed_targets: Schema.Number;
@@ -2519,7 +2472,7 @@ export declare const adminEndpoints: {
                     readonly completion_percentage: Schema.Number;
                     readonly estimated_seconds_remaining: Schema.optionalKey<Schema.Number>;
                     readonly estimated_loop_completion: Schema.optionalKey<Schema.String>;
-                }>;
+                }>>;
                 readonly reported_healthy: Schema.Boolean;
             }>>;
         }>>;
@@ -2536,7 +2489,7 @@ export declare const adminEndpoints: {
         readonly revoked_at: Schema.NullOr<Schema.String>;
     }>>, readonly []>;
     readonly createDeveloperApplication: import("./endpoint.js").Endpoint<Schema.Struct<{}>, Schema.Struct<{}>, Schema.Struct<{
-        readonly developer_name: Schema.String;
+        readonly developer_name: Schema.Trim;
     }>, Schema.Struct<{
         readonly application_id: Schema.String;
         readonly developer_name: Schema.String;
@@ -2565,7 +2518,7 @@ export declare const adminEndpoints: {
     readonly updateDeveloperApplication: import("./endpoint.js").Endpoint<Schema.Struct<{
         readonly applicationId: Schema.String;
     }>, Schema.Struct<{}>, Schema.Struct<{
-        readonly developer_name: Schema.String;
+        readonly developer_name: Schema.Trim;
     }>, Schema.Struct<{
         readonly application_id: Schema.String;
         readonly developer_name: Schema.String;
@@ -2710,8 +2663,9 @@ export declare const adminEndpoints: {
         readonly platform: Schema.Literals<readonly ["ios", "android"]>;
         readonly runtimeVersion: Schema.String;
     }>, Schema.Struct<{}>, Schema.Struct<{
-        readonly activeVersion: Schema.NullOr<Schema.String>;
-        readonly rollbackTargetVersion: Schema.NullOr<Schema.String>;
+        readonly expectedUpdatedAt: Schema.NullOr<Schema.String>;
+        readonly activeVersion: Schema.NullOr<Schema.Trim>;
+        readonly rollbackTargetVersion: Schema.NullOr<Schema.Trim>;
         readonly rolloutBasisPoints: Schema.Int;
         readonly paused: Schema.Boolean;
         readonly schedule: Schema.NullOr<Schema.Struct<{

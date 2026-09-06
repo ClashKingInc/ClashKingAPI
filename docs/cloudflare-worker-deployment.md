@@ -1,10 +1,22 @@
 # Cloudflare API Worker deployment gate
 
+September 4 implementation update: no deployment, provisioning or production
+change is authorized. Infrastructure observations dated September 3 below are
+historical, not freshly verified. The active API excludes deferred bot-runtime
+routes/coordinators; consult `deferred-bot-runtime-boundary.md` and the parent
+task's replacement plan before following older release instructions here.
+
 The TypeScript Worker is a staged replacement and must not receive the production
 `api.clashk.ing` route until the route-parity checklist, schema prerequisites,
 consumer builds, and coordinator approval are complete.
 
 ## Required infrastructure
+
+- Build public documentation using `npm run docs:build` before preparing the
+  API Worker. Its four generated assets belong to `API_DOCUMENTATION` on the
+  same Worker, not to the separate Admin/Dashboard frontend. The normal Worker
+  build/dry-run scripts do this automatically. The full internal OpenAPI file
+  must not be uploaded as the public reference; see `api-documentation.md`.
 
 - Before first traffic on a freshly migrated database, explicitly populate
   `api_global_counts`, `api_league_tier_counts`, `townhall_counts`, and
@@ -37,6 +49,12 @@ consumer builds, and coordinator approval are complete.
   origins and validate connectivity before provisioning the real VPC IDs;
   do not use transient container IPs as an undocumented deployment assumption.
   Tracking's new authenticated internal HTTP ingress is not yet deployed.
+  Its source is now in the independent `../clashking_tracking` copy as the
+  opt-in `--script internal-api` domain. It requires the shared `API_BOT_TOKEN`
+  and a private/loopback listener, exposes only the three retained cache/event
+  operations, and does not host Tracking health reads. Those remain SQL reads
+  in this API. See `docs/operational-route-dispositions.md` and the Tracking
+  copy's bridge documentation before choosing its private origin.
 - The existing tunnel also serves Admin, Coolify, Dozzle, and staging hostnames.
   Do not start its token on another host or alter shared ingress as part of this
   migration. A disabled installation on `152.53.39.145` was inspected first but
@@ -52,12 +70,20 @@ consumer builds, and coordinator approval are complete.
   names, public origins, and existing marker objects before changing this binding.
 See Cloudflare's [private Hyperdrive with Workers VPC guide](https://developers.cloudflare.com/hyperdrive/configuration/connect-to-private-database-vpc/)
 for the current tunnel, VPC service, and Hyperdrive creation sequence.
-- Create `admin_access_principals` through the authoritative `clashking_schemas` Goose
-  migration, then bootstrap the first owner explicitly. The Worker has no
-  claim-only or email-domain authorization fallback.
+- Preserve the existing restricted Cloudflare Access application as the Admin
+  admission authority. The speculative `admin_access_principals` bootstrap and
+  owner-only split were removed from active code; do not create or populate that
+  table for this port. Signed assertions still require exact issuer/audience
+  and valid times. Existing stored data is not deleted.
 - Configure one Access application for `admin.clashk.ing/*` and
   `api.clashk.ing/v2/admin/*`, enable eager redirect cookies, and bypass only
-  unauthenticated `OPTIONS`. Set `ACCESS_TEAM_DOMAIN`, `ACCESS_AUDIENCE`, and an
+  unauthenticated `OPTIONS` plus the two existing service-facing GETs
+  `/v2/admin/tracking/summary` and `/v2/admin/tracking/timeseries` at the edge.
+  These two still enforce either the exact API Bot bearer or a valid Access
+  assertion inside the Worker; the edge exception must not include other
+  methods or Admin paths. Otherwise Access intercepts existing Bot callers
+  before the Worker can authenticate them. Verify both paths before cutover.
+  Set `ACCESS_TEAM_DOMAIN`, `ACCESS_AUDIENCE`, and an
   exact comma-separated `ADMIN_ALLOWED_ORIGINS` list.
 - Set `WEB_ALLOWED_ORIGINS` to exact Dashboard/App origins. Credentialed CORS
   never permits `*`, suffix matches, or reflected unknown origins.
@@ -111,16 +137,18 @@ the staging login test; a configured value is not evidence of provider registrat
 The current local integration runner explicitly targets authoritative Goose
 version 027. This is a test baseline, not approval to apply production migrations
 or a final release schema floor: remaining runtime/schema gates must close first.
-Earlier migrations include the Admin access bootstrap, managed Discord-resource
-ledger, and durable subject-mutation mutex rows. New mobile writers serialize on those rows, including bot-owned subjects
+The retained migration profile excludes the speculative Admin access bootstrap
+and Bot orchestration migrations. It includes the retained managed Discord-resource
+ledger and durable subject-mutation mutex rows. New mobile writers serialize on those rows, including bot-owned subjects
 without authentication accounts. Do not fabricate auth users or use global table
 locks to coordinate those subjects.
 
 The switch is coordinated, not a mixed Go/Worker compatibility period. Drain old
 in-flight writes before directing traffic to the Worker. The old Go account
-deleter uses independent statements; eventual new account deletion must share
-the new writers' identity/subject locks and transaction boundaries. That deletion
-implementation remains approval-blocked, so this is still a release gate.
+deleter uses independent statements; the implemented Worker account deletion
+shares the new writers' identity/subject locks and transaction boundaries in
+`account-mutations.ts`. This implementation was authorized and has disposable
+database coverage; executing it against production is not authorized.
 
 CWL statistics read the additive schema-owned `stats.cwl` version 1 histogram.
 Apply and verify the schema-owned offline backfill before enabling those reads
@@ -170,7 +198,9 @@ documents `placement.host` as the targeted option for known,
 single-homed infrastructure outside those cloud providers; `mode: "smart"` is
 reserved for unknown or multiple backends.
 This is an experimental latency-based placement hint, not an absolute residency
-pin. It applies to fetch handlers, not RPC or named entrypoints, so Bot traffic
+pin. The user clarified that execution near the DB host is the requirement;
+an immutable regional guarantee is not a remaining product question. It applies
+to fetch handlers, not RPC or named entrypoints, so Bot traffic
 must use the default Service Binding fetch entrypoint. Verify actual database
 roundtrip latency and `cf-placement` where available in the staged environment.
 
@@ -183,36 +213,29 @@ not support PostgreSQL advisory-lock operations.
 That limitation is documented in Cloudflare's [supported database features](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/).
 The DO namespace and SQLite-backed class migration are declared in
 `workers/api/wrangler.jsonc`; the deterministic `stats-materialized-views`
-instance name is the coordination atom, and its `enam` location hint keeps the
-Cron coordinator in eastern North America because Worker placement does not
-apply to Durable Object RPC. A successful run clears its lease and
+instance name is the coordination key. Its `enam` location hint requests initial
+placement near eastern North America; it is best-effort, not a guarantee, and
+does not relocate an already-created object. Worker fetch placement does not
+apply to Durable Object RPC. See Cloudflare's
+[data-location documentation](https://developers.cloudflare.com/durable-objects/reference/data-location/).
+A successful run clears its lease and
 records completion, an overlapping invocation returns `already_running`, and a
 failure clears the active lease, logs the failure, and rejects the Cron promise
 so Cloudflare records the scheduled invocation as failed. The fifteen-minute
 persistent lease is retained only as crash recovery if an isolate terminates
 between acquisition and cleanup.
 
-The same Cron handler also wakes `RUNTIME_RECOVERY` at the deterministic name
-`persistent-runtime-recovery`. Its separate SQLite coordinator scans ticket
-operations and panel publications in bounded, alternating keyset pages. Exact
-PostgreSQL timestamp cursors and a fixed watermark survive eviction. Page
-inventory and a retryable outgoing wake backlog commit together before cursor
-advancement; rejected per-ticket coordinator RPCs rotate without blocking later
-pages. Existing `TICKET_RUNTIME` objects still perform external delivery. Failed
-inventory/RPC batches retry after 30 seconds; successful pages continue after one
-second. Repeated Cron wakes rearm alarms without resetting an active scan.
-Each external read/wake has a ten-second deadline capped by a shared
-thirty-second alarm budget. Exhaustion leaves unattempted wakes durable, and
-failure retry is scheduled thirty seconds after the attempt finishes. SQL
-receives cancellation signaling; a timed-out RPC is ambiguous and remains
-retryable, never treated as proof that the target did not accept its wake.
-The local `v4-runtime-recovery` migration and generated binding types prepare
-this class for a future authorized deployment; no live namespace exists as a
-result of this work. Roster operation and terminal-role-repair feeds must be
-integrated separately before claiming roster recovery parity.
+The Cron handler no longer wakes bot recovery. `RUNTIME_RECOVERY` and
+`TICKET_RUNTIME` are not active API bindings or entrypoint exports. Their source
+is preserved as reference for the later bot plan, not a deployment prerequisite.
+Historical migration declarations remain until their applied state is known;
+reconcile them under later release authorization without deleting live state
+or reactivating the old runtime merely to satisfy those declarations.
 
-Deploy to a non-production Worker name and route first. Verify Wrangler's
-placement output, `cf-placement` on test responses where supported, Hyperdrive
+Only after explicit release authorization, validate a non-production Worker
+before any production cutover. Verify Wrangler's placement output and the
+incoming `cf-placement` request header through an approved diagnostic; the
+current API does not echo it in responses. Verify Hyperdrive
 connectivity, Access 401/403 behavior, exact-origin preflights, all route parity
 tests, and consumer builds. Roll back by removing the staged route or restoring
 the prior route target; the Go deployment remains intact until the coordinator

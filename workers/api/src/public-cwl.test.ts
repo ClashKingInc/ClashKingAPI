@@ -1,13 +1,16 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 vi.mock("./war-archive-decoder.js", () => ({ decodeArchiveFrame: vi.fn() }))
-import { cwlStandings, cwlSummary, nextCwlLeague, type CwlGroup, type CwlWar } from "./public-cwl.js"
+import { StoredCwlRounds, cwlStandings, cwlSummary, nextCwlLeague, type CwlGroup, type CwlWar } from "./public-cwl.js"
 import { historyKind, trophySeason } from "./public-history.js"
 import { playerChangeTypes } from "./public-changes.js"
 
 const group: CwlGroup = { cwl_id: "testcwl12345", season: "2026-08", state: "ended", rounds: [["#WAR"], ["#WAR", "#0"]], cwl_league_id: 48000018, war_size: 15, clan_tags: ["#P0Y", "#P0L"] }
 const war: CwlWar = { war_id: "1", war_tag: "#WAR", state: "warEnded", size: 15, end_time: "2026-08-03T12:00:00Z", clan_tag: "#P0Y", opponent_tag: "#P0L", clan_stars: 30, opponent_stars: 30, clan_destruction_percentage: 95, opponent_destruction_percentage: 90 }
 describe("public CWL calculations", () => {
+  it("reads stored rounds as warTags objects", () => {
+    expect(Schema.decodeUnknownSync(StoredCwlRounds)([{ warTags: ["#WAR", "#0"] }])).toEqual([{ warTags: ["#WAR", "#0"] }])
+  })
   it("deduplicates rounds and applies the ten-star victory bonus and destruction tiebreak", () => {
     const wars = new Map([[war.war_tag, war]])
     expect(cwlStandings(group, wars)).toMatchObject({ complete: true, items: [{ tag: "#P0Y", rank: 1, stars: 40, wins: 1 }, { tag: "#P0L", rank: 2, stars: 30, losses: 1 }] })

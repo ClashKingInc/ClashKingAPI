@@ -1,3 +1,4 @@
+/** @internal Deferred bot orchestration reference; never include in active API endpoint maps. */
 import { Schema } from "effect";
 /** The original signed UTF-8 body, never reserialized, logged, or persisted. */
 export declare const RuntimeInteractionProof: Schema.Struct<{

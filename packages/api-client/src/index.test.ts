@@ -15,6 +15,7 @@ import {
   createAdminApiClient,
   createBrowserApiClient,
   createApiClient,
+  httpTransport,
   MAX_RESPONSE_BYTES,
   serviceBindingTransport,
   type ApiClientError,
@@ -29,6 +30,60 @@ afterEach(() => {
 
 describe("portable cancellation", () => {
   const input = { path: { id: "00000000-0000-4000-8000-000000000000" }, query: {}, body: {} }
+
+  it("aborts the HTTP fetch when its Effect fiber is interrupted", async () => {
+    let started!: () => void
+    const fetchStarted = new Promise<void>((resolve) => { started = resolve })
+    let fetchSignal: AbortSignal | undefined
+    const client = createApiClient({
+      transport: httpTransport((request) => {
+        fetchSignal = request.signal
+        started()
+        return new Promise((_resolve, reject) => {
+          request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true })
+        })
+      }),
+    })
+    const interruption = new AbortController()
+    const pending = Effect.runPromise(
+      client.execute(adminEndpoints.archivePost, input),
+      { signal: interruption.signal },
+    ).catch(() => undefined)
+
+    await fetchStarted
+    interruption.abort(new Error("Fiber interrupted"))
+    await pending
+
+    expect(fetchSignal?.aborted).toBe(true)
+    expect(fetchSignal?.reason).toMatchObject({ name: "AbortError" })
+  })
+
+  it("preserves explicit caller cancellation through the HTTP interruption bridge", async () => {
+    const caller = new AbortController()
+    let fetchStarted!: () => void
+    const started = new Promise<void>((resolve) => { fetchStarted = resolve })
+    let fetchSignal: AbortSignal | undefined
+    const client = createApiClient({
+      transport: httpTransport((request) => {
+        fetchSignal = request.signal
+        fetchStarted()
+        return new Promise((_resolve, reject) => {
+          request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true })
+        })
+      }),
+    })
+    const reason = new Error("Caller cancelled")
+    const pending = Effect.runPromise(
+      client.execute(adminEndpoints.archivePost, input, { signal: caller.signal }),
+    ).catch(() => undefined)
+
+    await started
+    caller.abort(reason)
+    await pending
+
+    expect(fetchSignal?.aborted).toBe(true)
+    expect(fetchSignal?.reason).toBe(reason)
+  })
 
   it("works without AbortSignal static methods and cleans up timers and listeners", async () => {
     vi.useFakeTimers()

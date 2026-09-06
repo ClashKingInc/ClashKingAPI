@@ -1,4 +1,4 @@
-import { RuntimeInteractionProof } from "@clashking/api-contracts"
+import { RuntimeInteractionProof } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { beforeAll, describe, expect, it } from "vitest"
 import { giveawayRolesPermit } from "./giveaway-runtime.js"

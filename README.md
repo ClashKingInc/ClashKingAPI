@@ -26,11 +26,58 @@ The interactive reference shows the available routes, what to send, what comes b
 
 ## Project layout
 
-- `internal/routes` contains the API routes and their tests.
-- `internal/models` contains the request and response formats.
-- `internal/utils` contains shared setup for the database, cache, authentication, email, and outside services.
-- `internal/docs` is Swaggo's generated input, while `internal/swaggerdocs/openapi.json` and `openapi.yaml` are the OpenAPI 3.2 files served by the API.
+- `workers/api` contains the Effect v4 / TypeScript Cloudflare Worker replacement.
+- `packages/api-contracts` owns shared request/response schemas and endpoint definitions.
+- `packages/api-client` provides the typed request client used by the separate consumers.
+- `internal/routes`, `internal/models` and `internal/utils` retain the Go source as
+  the behavior baseline; the Worker does not run or forward requests to Go.
+- `scripts/generate-openapi.mjs` generates the complete internal schema from
+  shared contracts. `npm run docs:build` produces the public documentation assets
+  actually served by the Worker; `internal/swaggerdocs` remains the original Go
+  reference, not the new generated output.
 - `locales` contains messages sent to users in supported languages.
+
+## Local Worker replacement
+
+This independent checkout contains an uncommitted replacement candidate, not
+the currently deployed API. The source comparison is recorded in
+[current-origin reconciliation](docs/current-origin-reconciliation.md). It stays
+on `/v2`, replaces the six QUERY methods with POST, retains Dashboard business
+handlers, and moves Admin business handlers into the API. Dashboard and Admin
+frontends are separate Workers; Bot runtime work remains a separate plan.
+
+Use Node 26 and npm 12, with the pinned Effect/TypeScript versions:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run test:scripts
+npm run test:durable
+npm run test:archive-runtime
+npm run lint
+npm run parity:check
+npm run openapi:check
+npm run build
+```
+
+Build and Worker dry-run scripts do not deploy. The retained database test lane
+requires the authoritative schema copy's disposable Goose/Timescale harness:
+`npm run test:postgres:all -- /path/to/clashking_schemas`. It never uses an
+inherited production connection. Deferred Bot tests are not active API acceptance.
+
+For interactive Dashboard/App development, use
+`node scripts/local-api-database.mjs run`. This is the recommended persistent
+local database startup; the disposable harness above is for tests only. See
+[local development and the one-time data handoff](docs/local-development.md)
+before switching an already running temporary database.
+
+Shared packages currently use locally packed archives and are not published.
+See the [deployment gate](docs/cloudflare-worker-deployment.md),
+[public documentation](docs/api-documentation.md) and
+[JSON transcript storage](docs/json-ticket-transcripts.md) before preparing any
+release. No production deployment, infrastructure change or migration is
+authorized by the local build instructions.
 
 ## Using ClashKing data
 
@@ -44,7 +91,9 @@ Game images and other Clash of Clans assets are available from [assets.clashk.in
 
 ## Contributing
 
-Bug fixes and useful improvements are welcome. Keep changes focused, follow the existing Go style, and include tests when behavior changes.
+Bug fixes and useful improvements are welcome. Keep changes focused, follow the
+owning module's patterns, and include tests when behavior changes. Shared schema
+changes must be checked against the Dashboard, Admin, App and Bot consumers.
 
 ## License
 

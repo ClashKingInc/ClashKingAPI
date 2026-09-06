@@ -1751,7 +1751,7 @@ export declare const InitializationResponse: Schema.Struct<{
             readonly value: Schema.Number;
             readonly target: Schema.Number;
             readonly info: Schema.String;
-            readonly completionInfo: Schema.optionalKey<Schema.String>;
+            readonly completionInfo: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly village: Schema.String;
         }>>;
         readonly heroes: Schema.$Array<Schema.Struct<{
@@ -1915,12 +1915,12 @@ export declare const InitializationResponse: Schema.Struct<{
             readonly requiredBuilderBaseTrophies: Schema.optionalKey<Schema.Number>;
             readonly requiredTownhallLevel: Schema.optionalKey<Schema.Number>;
             readonly clanCapital: Schema.optionalKey<Schema.Struct<{
-                readonly capitalHallLevel: Schema.Number;
-                readonly districts: Schema.$Array<Schema.Struct<{
+                readonly capitalHallLevel: Schema.optionalKey<Schema.Number>;
+                readonly districts: Schema.optionalKey<Schema.$Array<Schema.Struct<{
                     readonly id: Schema.Number;
                     readonly name: Schema.String;
                     readonly districtHallLevel: Schema.Number;
-                }>>;
+                }>>>;
             }>>;
             readonly chatLanguage: Schema.optionalKey<Schema.Struct<{
                 readonly id: Schema.Number;
@@ -2275,10 +2275,10 @@ export declare const InitializationResponse: Schema.Struct<{
         readonly war_log_data: Schema.$Array<Schema.Struct<{
             readonly clan_tag: Schema.String;
             readonly items: Schema.$Array<Schema.Struct<{
-                readonly result: Schema.String;
+                readonly result: Schema.NullOr<Schema.String>;
                 readonly endTime: Schema.String;
                 readonly teamSize: Schema.Number;
-                readonly attacksPerMember: Schema.Number;
+                readonly attacksPerMember: Schema.optionalKey<Schema.Number>;
                 readonly clan: Schema.Struct<{
                     readonly tag: Schema.String;
                     readonly name: Schema.String;
@@ -2288,22 +2288,22 @@ export declare const InitializationResponse: Schema.Struct<{
                         readonly large: Schema.String;
                     }>;
                     readonly clanLevel: Schema.Number;
-                    readonly attacks: Schema.Number;
+                    readonly attacks: Schema.optionalKey<Schema.Number>;
                     readonly stars: Schema.Number;
                     readonly destructionPercentage: Schema.Number;
                 }>;
                 readonly opponent: Schema.Struct<{
-                    readonly tag: Schema.String;
-                    readonly name: Schema.String;
                     readonly badgeUrls: Schema.Struct<{
                         readonly small: Schema.optionalKey<Schema.String>;
                         readonly medium: Schema.optionalKey<Schema.String>;
                         readonly large: Schema.String;
                     }>;
                     readonly clanLevel: Schema.Number;
-                    readonly attacks: Schema.Number;
+                    readonly attacks: Schema.optionalKey<Schema.Number>;
                     readonly stars: Schema.Number;
                     readonly destructionPercentage: Schema.Number;
+                    readonly tag: Schema.optionalKey<Schema.String>;
+                    readonly name: Schema.optionalKey<Schema.String>;
                 }>;
             }>>;
         }>>;
@@ -3429,7 +3429,7 @@ export declare const InitializationEndpoint: import("./endpoint.js").Endpoint<Sc
             readonly value: Schema.Number;
             readonly target: Schema.Number;
             readonly info: Schema.String;
-            readonly completionInfo: Schema.optionalKey<Schema.String>;
+            readonly completionInfo: Schema.optionalKey<Schema.NullOr<Schema.String>>;
             readonly village: Schema.String;
         }>>;
         readonly heroes: Schema.$Array<Schema.Struct<{
@@ -3593,12 +3593,12 @@ export declare const InitializationEndpoint: import("./endpoint.js").Endpoint<Sc
             readonly requiredBuilderBaseTrophies: Schema.optionalKey<Schema.Number>;
             readonly requiredTownhallLevel: Schema.optionalKey<Schema.Number>;
             readonly clanCapital: Schema.optionalKey<Schema.Struct<{
-                readonly capitalHallLevel: Schema.Number;
-                readonly districts: Schema.$Array<Schema.Struct<{
+                readonly capitalHallLevel: Schema.optionalKey<Schema.Number>;
+                readonly districts: Schema.optionalKey<Schema.$Array<Schema.Struct<{
                     readonly id: Schema.Number;
                     readonly name: Schema.String;
                     readonly districtHallLevel: Schema.Number;
-                }>>;
+                }>>>;
             }>>;
             readonly chatLanguage: Schema.optionalKey<Schema.Struct<{
                 readonly id: Schema.Number;
@@ -3953,10 +3953,10 @@ export declare const InitializationEndpoint: import("./endpoint.js").Endpoint<Sc
         readonly war_log_data: Schema.$Array<Schema.Struct<{
             readonly clan_tag: Schema.String;
             readonly items: Schema.$Array<Schema.Struct<{
-                readonly result: Schema.String;
+                readonly result: Schema.NullOr<Schema.String>;
                 readonly endTime: Schema.String;
                 readonly teamSize: Schema.Number;
-                readonly attacksPerMember: Schema.Number;
+                readonly attacksPerMember: Schema.optionalKey<Schema.Number>;
                 readonly clan: Schema.Struct<{
                     readonly tag: Schema.String;
                     readonly name: Schema.String;
@@ -3966,22 +3966,22 @@ export declare const InitializationEndpoint: import("./endpoint.js").Endpoint<Sc
                         readonly large: Schema.String;
                     }>;
                     readonly clanLevel: Schema.Number;
-                    readonly attacks: Schema.Number;
+                    readonly attacks: Schema.optionalKey<Schema.Number>;
                     readonly stars: Schema.Number;
                     readonly destructionPercentage: Schema.Number;
                 }>;
                 readonly opponent: Schema.Struct<{
-                    readonly tag: Schema.String;
-                    readonly name: Schema.String;
                     readonly badgeUrls: Schema.Struct<{
                         readonly small: Schema.optionalKey<Schema.String>;
                         readonly medium: Schema.optionalKey<Schema.String>;
                         readonly large: Schema.String;
                     }>;
                     readonly clanLevel: Schema.Number;
-                    readonly attacks: Schema.Number;
+                    readonly attacks: Schema.optionalKey<Schema.Number>;
                     readonly stars: Schema.Number;
                     readonly destructionPercentage: Schema.Number;
+                    readonly tag: Schema.optionalKey<Schema.String>;
+                    readonly name: Schema.optionalKey<Schema.String>;
                 }>;
             }>>;
         }>>;

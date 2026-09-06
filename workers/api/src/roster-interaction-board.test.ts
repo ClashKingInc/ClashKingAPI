@@ -1,4 +1,4 @@
-import { DashboardRoster } from "@clashking/api-contracts"
+import { DeferredRosterBoardData } from "@clashking/api-contracts/deferred-runtime"
 import { Effect } from "effect"
 import { expect, it } from "vitest"
 import { renderRosterBoard } from "./roster-interaction-board.js"
@@ -6,10 +6,10 @@ import { renderRosterBoard } from "./roster-interaction-board.js"
 const rosterId = '019eb56a-5615-7334-8013-526a7ee0ace1'
 const groupId = '019eb56a-5615-7334-8013-526a7ee0ace2'
 const now = Date.parse('2026-09-04T07:20:00Z')
-const member = (name: string, tag: string): typeof DashboardRoster.Type.members[number] => ({
+const member = (name: string, tag: string): typeof DeferredRosterBoardData.Type.members[number] => ({
   name, tag, townhall: 16, hero_level_sum: 300, member_group_id: null, is_substitute: false,
 })
-const fixture = (): typeof DashboardRoster.Type => ({
+const fixture = (): typeof DeferredRosterBoardData.Type => ({
   id: rosterId, server_id: '123456789012345678', alias: 'CWL Team', capacity: 50,
   roster_role_id: null, roster_type: 'clan', signup_scope: 'clan-only', clan_tag: '#CLAN',
   columns: ['townhall', 'name', 'tag'], sort: [{ columnId: 'name', direction: 'asc' }],

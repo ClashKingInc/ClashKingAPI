@@ -67,7 +67,6 @@ const endpointMaps = [
   contracts.dashboardEndpoints,
   contracts.botEndpoints,
   contracts.adminEndpoints,
-  contracts.persistentRuntimeEndpoints,
   contracts.endpoints,
 ].filter((value) => value !== undefined)
 
@@ -76,6 +75,12 @@ const normalizedPath = (path) => path.replaceAll(/:([A-Za-z0-9_]+)/gu, "{}")
 const endpoints = new Map()
 for (const endpointMap of endpointMaps) {
   for (const endpoint of Object.values(endpointMap)) {
+    if (endpoint.path.startsWith("/v2/runtime/")) {
+      throw new Error(`Deferred bot runtime cannot be advertised in OpenAPI: ${endpoint.operationId}`)
+    }
+    if (/^\/v2\/server\/:[^/]+\/(?:roster-member-groups(?:\/:[^/]+)?|rosters\/:[^/]+\/member-groups)$/u.test(endpoint.path)) {
+      throw new Error(`Deferred roster configuration cannot be advertised in OpenAPI: ${endpoint.operationId}`)
+    }
     const key = `${endpoint.method} ${normalizedPath(endpoint.path)}`
     const existing = endpoints.get(key)
     if (existing !== undefined) {
@@ -93,6 +98,7 @@ const security = (endpoint) => {
   switch (endpoint.auth) {
     case "public": return []
     case "admin": return [{ CloudflareAccess: [] }]
+    case "admin-or-bot": return [{ CloudflareAccess: [] }, { BotToken: [] }]
     case "ai-metering": return [{ AiMetering: [] }]
     case "bot": return [{ BotToken: [] }]
     case "developer": return [{ DeveloperToken: [] }]
@@ -116,6 +122,7 @@ for (const entry of [...endpoints.values()].sort((left, right) =>
       ...objectParameters(endpoint.query, "query"),
       ...(endpoint.path.startsWith("/v2/auth/web/") ? [{ name: "Origin", in: "header", required: true, schema: { type: "string", format: "uri" }, description: "Must exactly match a configured web origin." }] : []),
       ...(endpoint.auth === "admin" ? [{ name: "X-Requested-With", in: "header", required: true, schema: { type: "string", const: "XMLHttpRequest" } }] : []),
+      ...(endpoint.auth === "admin-or-bot" ? [{ name: "X-Requested-With", in: "header", required: false, schema: { type: "string", const: "XMLHttpRequest" }, description: "Required with Cloudflare Access; not required for a valid bot bearer token." }] : []),
     ],
     ...(endpoint.bodyMode === "none"
       ? {}
@@ -130,7 +137,9 @@ for (const entry of [...endpoints.values()].sort((left, right) =>
           },
         }),
     responses: {
-      [endpoint.successStatus]: response("Success", endpoint.response, endpoint.responseMode, endpoint.responseContentType),
+      ...(endpoint.successStatus === null ? {} : {
+        [endpoint.successStatus]: response("Success", endpoint.response, endpoint.responseMode, endpoint.responseContentType),
+      }),
       ...Object.fromEntries((endpoint.errors ?? []).map((error) => [
         error.status,
         response("Expected error", error.body, "json"),
@@ -160,7 +169,7 @@ const document = {
       UserToken: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
       BotToken: { type: "http", scheme: "bearer", description: "Configured API bot token." },
       DeveloperToken: { type: "http", scheme: "bearer", description: "Active developer application API key." },
-      CloudflareAccess: { type: "apiKey", in: "header", name: "Cf-Access-Jwt-Assertion", description: "Verified Cloudflare Access assertion; an active database principal is also required." },
+      CloudflareAccess: { type: "apiKey", in: "header", name: "Cf-Access-Jwt-Assertion", description: "Verified Cloudflare Access identity admitted by the configured Access application." },
       AiMetering: { type: "apiKey", in: "header", name: "X-ClashKing-AI-Metering" },
       WebRefreshCookie: { type: "apiKey", in: "cookie", name: "ck_web_refresh" },
     },

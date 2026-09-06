@@ -42,6 +42,17 @@ export class DiscordCredentials extends Context.Service<
           return yield* new Unauthenticated({ message: "Missing device identity" })
         }
         const sql = yield* SqlClient.SqlClient
+        // Reading a usable access token does not rotate any state and should
+        // not serialize every Dashboard request on this device's token row.
+        const currentRows = yield* sql<TokenRow>`SELECT access_token_ciphertext, refresh_token_ciphertext, expires_at
+          FROM auth_discord_tokens WHERE user_id = ${userId} AND device_id = ${deviceId}`
+          .pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Discord credential lookup failed" })))
+        const current = currentRows[0]
+        if (current === undefined || !current.access_token_ciphertext || !current.refresh_token_ciphertext) {
+          return yield* new Unauthenticated({ message: "Missing Discord token; please link your Discord account" })
+        }
+        const currentExpiry = current.expires_at === null ? 0 : new Date(current.expires_at).valueOf()
+        if (Number.isFinite(currentExpiry) && currentExpiry - 60_000 > Date.now()) return yield* cipher.decrypt(current.access_token_ciphertext)
         return yield* sql.withTransaction(Effect.gen(function* () {
         const rows = yield* sql<TokenRow>`
           SELECT access_token_ciphertext, refresh_token_ciphertext, expires_at

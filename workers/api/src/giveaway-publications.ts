@@ -1,4 +1,4 @@
-import { GiveawayPublicationPayload, type GiveawayPublicationClaimEndpoint, type GiveawayPublicationCompleteEndpoint } from "@clashking/api-contracts"
+import { GiveawayPublicationPayload, type GiveawayPublicationClaimEndpoint, type GiveawayPublicationCompleteEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound } from "./errors.js"

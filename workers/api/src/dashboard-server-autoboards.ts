@@ -79,9 +79,10 @@ const select = `SELECT a.id::text, a.board_type, a.target_scope, COALESCE(array_
  FROM autoboards a LEFT JOIN autoboard_targets t ON t.autoboard_id = a.id WHERE a.server_id = $1`
 const readBoards = (serverId: string, id?: string) => Effect.gen(function* () { const sql = yield* SqlClient.SqlClient; return yield* sql.unsafe<BoardRow>(`${select}${id === undefined ? "" : " AND a.id = $2::uuid"} GROUP BY a.id ORDER BY a.created_at, a.id`, id === undefined ? [serverId] : [serverId, id]) })
 const Hook = Schema.Struct({ id: DecimalSnowflake, type: Schema.Number, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)), user: Schema.optionalKey(Schema.Struct({ id: DecimalSnowflake })), application_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
-const boardValue = (row: BoardRow) => Effect.gen(function* () {
+const boardValue = (row: BoardRow, knownChannelId?: string) => Effect.gen(function* () {
   const discord = yield* DiscordApi
-  const hook = yield* discord.request(`/webhooks/${row.webhook_id}`).pipe(Effect.flatMap((raw) => decodeDiscord(Hook, raw)), Effect.catch((failure) => failure instanceof NotFound ? Effect.succeed(undefined) : Effect.fail(failure)))
+  const hook = knownChannelId === undefined ? yield* discord.request(`/webhooks/${row.webhook_id}`).pipe(Effect.flatMap((raw) => decodeDiscord(Hook, raw)), Effect.catch((failure) => failure instanceof NotFound ? Effect.succeed(undefined) : Effect.fail(failure)))
+    : { id: row.webhook_id, type: 1, channel_id: knownChannelId }
   const channelId = hook !== undefined && [1, 2].includes(hook.type) ? hook.channel_id ?? null : null
   return { id: row.id, boardType: row.board_type, targetKind: autoboardCapabilities.find((item) => item.boardType === row.board_type)?.targetKind ?? "", targetScope: row.target_scope, targets: row.targets, deliveryMode: row.delivery_mode, channelId, channelDeleted: channelId === null,
     threadId: row.thread_id, messageId: row.message_id, enabled: row.enabled, intervalMinutes: row.interval_minutes,
@@ -96,11 +97,21 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
   if (operation === "autoboardCapabilities") return { boardTypes: autoboardCapabilities }
   if (operation === "serverAutoboards") {
     const rows = yield* readBoards(serverId)
-    return { items: yield* Effect.forEach(rows, boardValue), total: rows.length, refreshCount: rows.filter((row) => row.delivery_mode === "refresh").length, sendCount: rows.filter((row) => row.delivery_mode === "send").length, limit: servers[0].autoboard_limit }
+    return { items: yield* Effect.forEach(rows, (row) => boardValue(row)), total: rows.length, refreshCount: rows.filter((row) => row.delivery_mode === "refresh").length, sendCount: rows.filter((row) => row.delivery_mode === "send").length, limit: servers[0].autoboard_limit }
   }
   const requestedId = text(input.path.autoboardId)
   if (operation !== "createAutoboard" && !uuid(requestedId)) return yield* invalid("autoboardId", "must be a valid UUID")
   let created: Effect.Success<ReturnType<typeof createLogWebhook>> | undefined
+  const prepared = operation === "deleteAutoboard" ? undefined : yield* Effect.gen(function* () {
+    const write = yield* validateAutoboardWrite(input.body)
+    yield* validateDiscordDestination(serverId, write.channelId, write.threadId)
+    const user = yield* decodeDiscord(Schema.Struct({ id: DecimalSnowflake }), yield* discord.request("/users/@me"))
+    const hooks = yield* decodeDiscord(Schema.Array(Hook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+    const webhookId = hooks.find((hook) => hook.type === 1 && hook.channel_id === write.channelId && (hook.user?.id === user.id || hook.application_id === user.id))?.id
+    const botProfile = webhookId === undefined ? yield* profile : { name: "ClashKing" }
+    const avatar = webhookId === undefined ? yield* discordWebhookAvatar("avatar_url" in botProfile && typeof botProfile.avatar_url === "string" ? botProfile.avatar_url : null) : undefined
+    return { write, user, webhookId, botProfile, avatar }
+  })
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)
     if (operation === "deleteAutoboard") {
@@ -109,18 +120,19 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
       return { id: requestedId, deleted: true }
     }
     if (operation === "replaceAutoboard" && (yield* readBoards(serverId, requestedId)).length === 0) return yield* new NotFound({ message: "Autoboard not found" })
-    const write = yield* validateAutoboardWrite(input.body)
+    if (prepared === undefined) return yield* Effect.die("Missing autoboard preparation")
+    const { write, user } = prepared
     if (operation === "createAutoboard") {
       const count = yield* sql<{ count: number; limit: number }>`SELECT (SELECT count(*)::int FROM autoboards WHERE server_id = ${serverId}) AS count, autoboard_limit AS limit FROM servers WHERE id = ${serverId}`
       if (count[0] === undefined || count[0].count >= count[0].limit) return yield* invalid("autoboards", "server autoboard limit reached")
     }
-    yield* validateDiscordDestination(serverId, write.channelId, write.threadId)
-    const user = yield* decodeDiscord(Schema.Struct({ id: DecimalSnowflake }), yield* discord.request("/users/@me"))
-    const hooks = yield* decodeDiscord(Schema.Array(Hook), yield* discord.request(`/guilds/${serverId}/webhooks`))
-    let webhookId = hooks.find((hook) => hook.type === 1 && hook.channel_id === write.channelId && (hook.user?.id === user.id || hook.application_id === user.id))?.id
+    let webhookId = prepared.webhookId
     if (webhookId === undefined) {
-      const botProfile = yield* profile
-      created = yield* createLogWebhook(serverId, write.channelId, botProfile.name, yield* discordWebhookAvatar("avatar_url" in botProfile && typeof botProfile.avatar_url === "string" ? botProfile.avatar_url : null))
+      const hooks = yield* decodeDiscord(Schema.Array(Hook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+      webhookId = hooks.find((hook) => hook.type === 1 && hook.channel_id === write.channelId && (hook.user?.id === user.id || hook.application_id === user.id))?.id
+    }
+    if (webhookId === undefined) {
+      created = yield* createLogWebhook(serverId, write.channelId, prepared.botProfile.name, prepared.avatar)
       yield* recordCreatedDiscordResource(created)
       webhookId = created.id
     }
@@ -139,6 +151,6 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
     for (const [position, target] of write.targets.entries()) yield* sql`INSERT INTO autoboard_targets (autoboard_id, position, target) VALUES (${id}::uuid, ${position}, ${target})`
     const row = (yield* readBoards(serverId, id))[0]
     if (row === undefined) return yield* new NotFound({ message: "Autoboard not found" })
-    return { item: yield* boardValue(row) }
+    return { item: yield* boardValue(row, write.channelId) }
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }).pipe(Effect.mapError((cause) => cause instanceof Conflict || cause instanceof DatabaseFailure || cause instanceof Forbidden || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof RateLimited || cause instanceof UpstreamUnavailable ? cause : new DatabaseFailure({ cause, message: "Autoboard operation failed" })))

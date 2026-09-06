@@ -1,4 +1,6 @@
 import { AppConfigEndpoint } from "./app-config.js";
+import { StoredCwlGroupEndpoint } from "./stored-cwl.js";
+export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js";
 import { AuthDeleteEndpoint, AuthDiscordEndpoint, AuthEmailEndpoint, AuthExportEndpoint, AuthForgotPasswordEndpoint, AuthMeEndpoint, AuthRefreshEndpoint, AuthRegisterEndpoint, AuthResendVerificationEndpoint, AuthResetPasswordEndpoint, AuthVerifyEmailEndpoint, AuthWebDiscordEndpoint, AuthWebEmailEndpoint, AuthWebLogoutEndpoint, AuthWebRefreshEndpoint, AuthWebResetPasswordEndpoint, AuthWebVerifyEmailEndpoint, } from "./expo-auth.js";
 import { ClanChangesEndpoint, ClanCwlSeasonsEndpoint, ClanJoinLeaveEndpoint, ClanLeaderboardHistoryEndpoint, ClanLeaderboardSummaryEndpoint, ClanLegendHistoryEndpoint, ClanLegendSummaryEndpoint, ClanRecordsEndpoint, ClanWarlogEndpoint, ClanWarsEndpoint, } from "./expo-clan.js";
 import { AchievementsCheckEndpoint, ActiveAnnouncementsEndpoint, AnnouncementEndpoint, AppUpdateManifestEndpoint, BillingSubscriptionEndpoint, PostsEndpoint, } from "./expo-content.js";
@@ -7,7 +9,7 @@ import { BookmarksAddEndpoint, BookmarksDeleteEndpoint, BookmarksListEndpoint, B
 import { NotificationAccountPutEndpoint, NotificationDeviceDeleteEndpoint, NotificationDeviceRegisterEndpoint, NotificationPreferencesGetEndpoint, NotificationPreferencesPutEndpoint, } from "./expo-notifications.js";
 import { PlayerBattlelogHistoryEndpoint, PlayerChangesEndpoint, PlayerCwlHistoryEndpoint, PlayerJoinLeaveEndpoint, PlayerJoinLeaveTotalsEndpoint, PlayerSearchEndpoint, PlayerTimersEndpoint, PlayerWarStatsEndpoint, } from "./expo-player.js";
 import { LeaderboardClanDonationsEndpoint, LeaderboardClanWarWinsEndpoint, LeaderboardClanWinStreakEndpoint, LeaderboardHistoryEndpoint, LeaderboardLeagueEndpoint, LeaderboardTownhallsEndpoint, } from "./expo-rankings.js";
-import { ClanCapitalLeagueCountsEndpoint, ClanLocationCountsEndpoint, CwlLeagueCountsEndpoint, GlobalCountsEndpoint, PlayerLeagueTierCountsEndpoint, PlayerTownhallCountsEndpoint, StatsOverviewEndpoint, } from "./expo-stats.js";
+import { ClanCapitalLeagueCountsEndpoint, ClanLocationCountsEndpoint, CwlLeagueCountsEndpoint, GlobalCountsEndpoint, PlayerBuilderhallCountsEndpoint, PlayerLeagueTierCountsEndpoint, PlayerTownhallCountsEndpoint, StatsOverviewEndpoint, } from "./expo-stats.js";
 import { WarBasicEndpoint, WarPreviousEndpoint } from "./expo-war.js";
 import { ProxyBuilderClanRankingsEndpoint, ProxyBuilderPlayerRankingsEndpoint, ProxyCapitalRaidSeasonsEndpoint, ProxyCapitalRankingsEndpoint, ProxyClanEndpoint, ProxyClanRankingsEndpoint, ProxyClanSearchEndpoint, ProxyClanWarlogEndpoint, ProxyCurrentLeagueGroupEndpoint, ProxyCurrentWarEndpoint, ProxyCwlWarEndpoint, ProxyLeagueGroupEndpoint, ProxyLeagueTiersEndpoint, ProxyLocationsEndpoint, ProxyPlayerBattlelogEndpoint, ProxyPlayerEndpoint, ProxyPlayerLeagueHistoryEndpoint, ProxyPlayerRankingsEndpoint, } from "./proxy.js";
 import { StatsArmiesEndpoint, StatsCwlEndpoint, StatsItemsEndpoint, StatsRankedEndpoint, StatsWarEndpoint, } from "./stats.js";
@@ -25,6 +27,7 @@ export * from "./proxy.js";
 export { AppConfigEndpoint, AppConfigResponse } from "./app-config.js";
 export { StatsArmiesEndpoint, StatsArmiesRequest, StatsCwlEndpoint, StatsCwlRequest, StatsItemsEndpoint, StatsItemsRequest, StatsRankedEndpoint, StatsRankedRequest, StatsWarEndpoint, StatsWarRequest } from "./stats.js";
 export const expoEndpoints = {
+    storedCwlGroup: StoredCwlGroupEndpoint,
     appConfig: AppConfigEndpoint,
     authMe: AuthMeEndpoint,
     authDiscord: AuthDiscordEndpoint,
@@ -99,6 +102,7 @@ export const expoEndpoints = {
     statsOverview: StatsOverviewEndpoint,
     globalCounts: GlobalCountsEndpoint,
     playerTownhallCounts: PlayerTownhallCountsEndpoint,
+    playerBuilderhallCounts: PlayerBuilderhallCountsEndpoint,
     playerLeagueTierCounts: PlayerLeagueTierCountsEndpoint,
     clanLocationCounts: ClanLocationCountsEndpoint,
     cwlLeagueCounts: CwlLeagueCountsEndpoint,

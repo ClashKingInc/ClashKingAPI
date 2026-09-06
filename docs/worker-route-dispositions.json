@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
   "source": "internal/routes/register.go",
-  "policy": "Port preserves each real capability including unfinished or permission-blocked work; it does not imply implementation. Duplicate-handler aliases retain only their canonical registration. QUERY becomes POST.",
-  "drop_reasons": {"duplicate-handler-alias":"Both source lines register the identical Go handler; keep the canonical route without a compatibility alias.","never-implemented":"Go unconditionally returns501 and documents no durable Builder Hall count source; no working capability exists to port."},
+  "status": "Historical proposed dispositions from the archived rewrite; not an approved baseline or deletion policy. See worker-route-baseline.json and worker-route-inventory-review.md.",
+  "policy": "The checker compares these historical proposals against immutable original source and individually source-verified preserved features. Explicit manifest decisions select six QUERY-to-POST changes and sixteen audited alias retirements. Builder Hall retains its original public 501 boundary; see docs/builder-hall-counts-boundary.md.",
+  "drop_reasons": {"duplicate-handler-alias":"Historical alias label; exact paired handlers, wrapper differences, canonical operations and consumer evidence are audited in docs/worker-route-alias-review.md."},
   "routes": [
     {"method":"POST","path":"/v2/achievements/check","source_line":35,"disposition":"port","canonical_method":"POST","canonical_path":"/v2/achievements/check"},
     {"method":"GET","path":"/v2/app/updates/manifest","source_line":36,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/app/updates/manifest"},
@@ -53,7 +54,7 @@
     {"method":"GET","path":"/v2/leaderboard/:league_tier_id/trophy-buckets","source_line":92,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/leaderboard/:league_tier_id/trophy-buckets"},
     {"method":"GET","path":"/v2/counts","source_line":93,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts"},
     {"method":"GET","path":"/v2/counts/players/town-halls","source_line":94,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts/players/town-halls"},
-    {"method":"GET","path":"/v2/counts/players/builder-halls","source_line":95,"disposition":"drop","reason":"never-implemented","evidence":"internal/routes/stats.go:77-92"},
+    {"method":"GET","path":"/v2/counts/players/builder-halls","source_line":95,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts/players/builder-halls","evidence":"docs/builder-hall-counts-boundary.md"},
     {"method":"GET","path":"/v2/counts/players/league-tiers","source_line":96,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts/players/league-tiers"},
     {"method":"GET","path":"/v2/counts/clans/locations","source_line":97,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts/clans/locations"},
     {"method":"GET","path":"/v2/counts/clans/cwl-leagues","source_line":98,"disposition":"port","canonical_method":"GET","canonical_path":"/v2/counts/clans/cwl-leagues"},

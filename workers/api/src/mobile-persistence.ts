@@ -2,6 +2,7 @@ import {
   AchievementsCheckEndpoint, BookmarksAddEndpoint, BookmarksDeleteEndpoint, BookmarksListEndpoint,
   BookmarksOrderEndpoint, RecentSearchesEndpoint, UpgradePreferencesGetEndpoint,
   UpgradePreferencesPatchEndpoint, UpgradesGetEndpoint, UpgradesPutEndpoint,
+  requireEndpointSuccessStatus,
   type AnyEndpoint, type Bookmark, type BookmarkType, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
@@ -204,7 +205,7 @@ const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequ
     // These schemas are tied to E by the factory; their generic Type is erased by AnyEndpoint.
     const value = yield* execute({ path, query, body } as EndpointRequest<E>, context)
     const encoded = yield* Schema.encodeUnknownEffect(endpoint.response)(value).pipe(Effect.orDie)
-    return Response.json(encoded, { status: endpoint.successStatus })
+    return Response.json(encoded, { status: requireEndpointSuccessStatus(endpoint) })
   }),
 })
 

@@ -237,25 +237,30 @@ export class BotModerationStore extends Context.Service<
       ) {
         const playerName = yield* proxyPlayerName(bindings, tag)
         const strikeId = crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()
-        const rolloverDate = body.rollover_days > 0
-          ? new Date(Date.now() + body.rollover_days * 86_400_000)
+        const rolloverDays = body.rollover_days ?? 0
+        const rolloverDate = rolloverDays > 0
+          ? new Date(Date.now() + rolloverDays * 86_400_000)
           : null
         yield* database("Unable to add strike", sql`
           INSERT INTO strikes
             (id, server_id, tag, date_created, reason, added_by, strike_weight, rollover_date, image)
           VALUES
-            (${strikeId}, ${serverId}, ${tag}, now(), ${body.reason}, ${body.added_by},
-             ${body.strike_weight}, ${rolloverDate}, NULLIF(${body.image}, ''))
+            (${strikeId}, ${serverId}, ${tag}, now(), ${body.reason ?? ""}, ${body.added_by ?? ""},
+             ${body.strike_weight || 1}, ${rolloverDate}, NULLIF(${body.image ?? ""}, ''))
         `)
-        const summary = yield* strikeSummary(serverId, tag)
+        // The original creation response counts active strikes and does not
+        // turn a failed post-insert summary read into a failed mutation.
+        const summary: { readonly items: readonly StrikeItem[]; readonly count: number } = yield* listStrikes(serverId, { playerTag: tag, viewExpired: false }).pipe(
+          Effect.catch(() => Effect.succeed({ items: [] as readonly StrikeItem[], count: 0 })),
+        )
         return {
           status: "created",
           strike_id: strikeId,
           player_tag: tag,
           player_name: playerName,
           server_id: serverId,
-          total_strikes: summary.total_strikes,
-          total_weight: summary.total_weight,
+          total_strikes: summary.count,
+          total_weight: summary.items.reduce((total, item) => total + item.strike_weight, 0),
         }
       })
 
@@ -344,12 +349,14 @@ export const dispatchBotRuntime = (
       }
       case "addStrike": {
         const tag = yield* routeInput(() => normalizeTag(match.params.tag))
-        const body = yield* decodeBody(request, botEndpoints.addStrike.body)
-        if (body.strike_weight < 1 || !Number.isSafeInteger(body.strike_weight)) {
-          return yield* new InvalidRequest({ message: "strike_weight must be a positive integer" })
+        const decoded = yield* decodeBody(request, botEndpoints.addStrike.body)
+        const body = { reason: decoded.reason ?? "", added_by: decoded.added_by ?? "", image: decoded.image ?? "",
+          rollover_days: decoded.rollover_days ?? 0, strike_weight: decoded.strike_weight === undefined || decoded.strike_weight === 0 ? 1 : decoded.strike_weight }
+        if (body.strike_weight < 1 || body.strike_weight > 2147483647 || !Number.isSafeInteger(body.strike_weight)) {
+          return yield* new InvalidRequest({ message: "strike_weight must be between 1 and 2147483647" })
         }
-        if (body.rollover_days < 0 || !Number.isSafeInteger(body.rollover_days)) {
-          return yield* new InvalidRequest({ message: "rollover_days must be a non-negative integer" })
+        if (!Number.isSafeInteger(body.rollover_days)) {
+          return yield* new InvalidRequest({ message: "rollover_days must be an integer" })
         }
         return yield* encode(
           botEndpoints.addStrike.response,

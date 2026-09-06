@@ -80,6 +80,8 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       const rosterId = created.roster_id
       const rosterPath = `/roster/${rosterId}${query}`
       expect(created.roster.server_id).toBe(serverId)
+      for (const field of ["capacity", "roster_role_id", "member_groups"]) expect(created.roster).not.toHaveProperty(field)
+      for (const field of ["member_group_id", "is_substitute"]) expect(created.roster.members[0]).not.toHaveProperty(field)
       yield* run(rosterPath)
       yield* run(`/roster/${serverId}/list`)
       yield* run(rosterPath, "PATCH", { alias: "Updated roster", webhook_id: channelId, message_id: userId })
@@ -162,5 +164,33 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       yield* run(rosterPath, "DELETE")
     }).pipe(Effect.provide(layer), Effect.scoped))
     expect([...covered].sort()).toEqual(dashboardRosterRuntimeRoutes.map(({ method, path }) => `${method} ${path}`).sort())
+  })
+
+  it("retains rosters larger than 50 members and enforces the configured per-owner limit without bot-only columns", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const fixtureServerId = "1534567890123456790"
+      yield* sql`INSERT INTO servers (id, name) VALUES (${fixtureServerId}, 'Baseline roster size')`
+      const operations = yield* DashboardRosterOperations
+      const members = Array.from({ length: 51 }, (_, index) => ({ tag: `#P0Y${index}`, name: `Player ${index}`, townhall: 17, hero_level_sum: 0 }))
+      const request = new Request(`https://api.clashk.ing/v2/roster?server_id=${fixtureServerId}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alias: "No new capacity limit", members, max_accounts_per_user: null }),
+      })
+      const response = yield* operations.execute("createRoster", { request, url: new URL(request.url), bindings, params: {} })
+      const created = Schema.decodeUnknownSync(DashboardCreateRosterResponse)(yield* Effect.promise(() => response.json()))
+      expect(created.roster.members).toHaveLength(51)
+      expect(created.roster).not.toHaveProperty("capacity")
+      const owner = "2534567890123456790"
+      yield* sql`INSERT INTO player_links (tag, user_id, source) VALUES ('#P0Y0', ${owner}, 'discord'), ('#P0Y1', ${owner}, 'discord')`
+      const update = new Request(`https://api.clashk.ing/v2/roster/${created.roster_id}?server_id=${fixtureServerId}`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ max_accounts_per_user: 1 }),
+      })
+      const result = yield* operations.execute("updateRoster", { request: update, url: new URL(update.url), bindings, params: { rosterId: created.roster_id } })
+        .pipe(Effect.map(() => "accepted"), Effect.catchTag("Conflict", error => Effect.succeed(error.message)))
+      expect(result).toBe("Roster account limit per Discord user would be exceeded")
+      expect(yield* sql`SELECT max_accounts_per_user FROM rosters WHERE id = ${created.roster_id}::uuid`)
+        .toEqual([{ max_accounts_per_user: null }])
+    }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

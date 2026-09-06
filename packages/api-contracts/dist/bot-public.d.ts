@@ -692,9 +692,9 @@ export declare const BotCwlGroupEndpoint: import("./endpoint.js").Endpoint<Schem
         readonly name: Schema.String;
         readonly clanLevel: Schema.Number;
         readonly badgeUrls: Schema.Struct<{
-            readonly small: Schema.optionalKey<Schema.String>;
-            readonly medium: Schema.optionalKey<Schema.String>;
-            readonly large: Schema.optionalKey<Schema.String>;
+            readonly small: Schema.String;
+            readonly large: Schema.String;
+            readonly medium: Schema.String;
         }>;
         readonly members: Schema.$Array<Schema.Struct<{
             readonly tag: Schema.String;
@@ -716,8 +716,8 @@ export declare const BotCwlGroupEndpoint: import("./endpoint.js").Endpoint<Schem
                 readonly name: Schema.String;
                 readonly badgeUrls: Schema.Struct<{
                     readonly small: Schema.String;
-                    readonly medium: Schema.String;
                     readonly large: Schema.String;
+                    readonly medium: Schema.String;
                 }>;
                 readonly clanLevel: Schema.Number;
                 readonly attacks: Schema.Number;
@@ -752,8 +752,8 @@ export declare const BotCwlGroupEndpoint: import("./endpoint.js").Endpoint<Schem
                 readonly name: Schema.String;
                 readonly badgeUrls: Schema.Struct<{
                     readonly small: Schema.String;
-                    readonly medium: Schema.String;
                     readonly large: Schema.String;
+                    readonly medium: Schema.String;
                 }>;
                 readonly clanLevel: Schema.Number;
                 readonly attacks: Schema.Number;
@@ -790,7 +790,18 @@ export declare const BotCwlGroupEndpoint: import("./endpoint.js").Endpoint<Schem
             readonly tag: Schema.String;
         }>]>>;
     }>>;
-}>, readonly []>;
+}>, {
+    status: number;
+    body: Schema.Struct<{
+        readonly code: Schema.Literals<readonly ["invalid_request", "validation_failed", "unauthenticated", "forbidden", "not_found", "conflict", "rate_limited", "payload_too_large", "unprocessable_entity", "not_implemented", "upstream_unavailable", "internal_error"]>;
+        readonly message: Schema.String;
+        readonly request_id: Schema.optionalKey<Schema.String>;
+        readonly details: Schema.optionalKey<Schema.$Array<Schema.Struct<{
+            readonly field: Schema.String;
+            readonly message: Schema.String;
+        }>>>;
+    }>;
+}[]>;
 export declare const BotCwlSeasonsEndpoint: import("./endpoint.js").Endpoint<Schema.Struct<{
     readonly tag: Schema.String;
 }>, Schema.Struct<{

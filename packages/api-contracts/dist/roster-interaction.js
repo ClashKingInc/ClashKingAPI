@@ -1,3 +1,4 @@
+/** @internal Deferred bot orchestration reference; never include in active API endpoint maps. */
 import { Schema } from "effect";
 import { defineEndpoint, NoQuery } from "./endpoint.js";
 import { ErrorResponse } from "./errors.js";

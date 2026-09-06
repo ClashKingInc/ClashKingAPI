@@ -1,6 +1,9 @@
+// Reference-only: this new configuration dispatcher is not mounted by the API.
+// Preserved for the later Bot/configuration design and its isolated tests.
 import { DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEndpoint,
   DashboardUpdateRosterMemberGroupEndpoint, DashboardDeleteRosterMemberGroupEndpoint,
-  DashboardReplaceRosterMemberGroupsEndpoint, DecimalSnowflake } from "@clashking/api-contracts"
+  DashboardReplaceRosterMemberGroupsEndpoint } from "@clashking/api-contracts/deferred-runtime"
+import { DecimalSnowflake, requireEndpointSuccessStatus } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
@@ -131,7 +134,7 @@ export const dispatchDashboardRosterConfiguration = (request: Request): Effect.E
       return { group: rows[0]! }
     }))
   }
-  if (endpoint.responseMode === "none") return new Response(null, { status: endpoint.successStatus, headers: { "cache-control": "no-store" } })
+  if (endpoint.responseMode === "none") return new Response(null, { status: requireEndpointSuccessStatus(endpoint), headers: { "cache-control": "no-store" } })
   const encoded = yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(Effect.mapError(databaseFailure))
-  return Response.json(encoded, { status: endpoint.successStatus, headers: { "cache-control": "no-store" } })
+  return Response.json(encoded, { status: requireEndpointSuccessStatus(endpoint), headers: { "cache-control": "no-store" } })
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))

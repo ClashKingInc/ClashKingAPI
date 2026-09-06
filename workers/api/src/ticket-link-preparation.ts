@@ -1,4 +1,4 @@
-import { TicketLinkRequiredResponse } from "@clashking/api-contracts"
+import { TicketLinkRequiredResponse } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { Conflict, DatabaseFailure } from "./errors.js"

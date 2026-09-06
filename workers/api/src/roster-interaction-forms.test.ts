@@ -1,4 +1,4 @@
-import { RosterRuntimeForm } from "@clashking/api-contracts"
+import { RosterRuntimeForm } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { expect, it } from "vitest"
 import { advanceRosterForm, createRosterForm, renderRosterForm } from "./roster-interaction-forms.js"

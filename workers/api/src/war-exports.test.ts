@@ -33,6 +33,10 @@ const harness = (wars: FixtureWar[] = [makeWar("2026-08-03T12:00:00Z", "Player")
       if (query.includes("max(end_time)")) return Effect.succeed([{ latest: wars.at(-1)?.endTime ?? null, clan_name: clanName }])
       if (query.includes("SELECT DISTINCT")) return Effect.succeed(wars.map((_, index) => ({ war_id: index + 1 })))
       if (query.includes("SELECT war_id::text")) return Effect.succeed(wars.map((_, index) => ({ war_id: String(index + 1) })))
+      if (query.includes("AS pending FROM wars")) return Effect.succeed((parameters[0] as string[]).map((id) => ({
+        war_id: String(id), war_type: "cwl", pending: true, payload: null,
+        archive_pack_id: null, archive_offset: null, archive_compressed_bytes: null,
+      })))
       if (query.includes("war_archive_pending")) {
         const id = String(parameters[0])
         return Effect.succeed([{ war_id: id, war_type: "cwl", payload: wars[Number(id) - 1],

@@ -1,4 +1,6 @@
-import { DashboardRoster, DecimalSnowflake, RuntimeUUID } from "@clashking/api-contracts"
+import { DecimalSnowflake } from "@clashking/api-contracts"
+import { DeferredRosterBoardData } from "@clashking/api-contracts/deferred-runtime"
+import { RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { loadRosterJson } from "./dashboard-roster-runtime.js"
@@ -18,7 +20,7 @@ export const prepareRosterBoardSnapshot = (serverId: string, rosterId: string, m
       WHERE id = ${rosterId}::uuid AND server_id = ${serverId} FOR SHARE`)[0]
     if (parent === undefined) return yield* new NotFound({ message: 'Roster not found' })
     const raw = yield* loadRosterJson(sql, rosterId, serverId)
-    const roster = yield* Schema.decodeUnknownEffect(DashboardRoster)(raw).pipe(Effect.mapError(cause =>
+    const roster = yield* Schema.decodeUnknownEffect(DeferredRosterBoardData)(raw).pipe(Effect.mapError(cause =>
       new DatabaseFailure({ cause, message: 'Stored roster board failed validation' })))
     const message = yield* renderRosterBoard(roster, mode, now)
     return { rosterId, serverId, revision: parent.revision, message }

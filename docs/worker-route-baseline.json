@@ -1,0 +1,754 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "commit": "90436aa042aa85ab1112ea12f3490787e2104b51",
+    "source": "internal/routes/register.go",
+    "sha256": "1bc89bb07330537aee963852555922f64b0df1449fba752878607eb629a8b698",
+    "status": "Accepted local source baseline: freshly fetched GitHub main cf7371e plus the original checkout's committed Capital Gold feature. Exact full-tree delta is documented in current-origin-reconciliation.md. Not a deployed-release claim.",
+    "scope": "/v2/* and /proxy/v1/* literal registrations. Legacy compatibility modules, startup, health, schedules and handler behavior require separate inventory."
+  },
+  "admin_baseline": {
+    "commit": "a4c1481c12e63eb39ec05f4be9db422263ad6ffe",
+    "source": "src/server/adminApi.ts",
+    "sha256": "e5832c9368d7222c6e6c01beb4679efbe72e9a3e7c56ae2bc23907410e6b7e9c",
+    "route_adapter": "src/routes/api.$.ts strips /api before dispatch",
+    "status": "Original Admin source route mappings checked locally; payload, authorization and behavior parity remain unverified."
+  },
+  "preserved_uncommitted_api_features": [
+    {
+      "method": "GET",
+      "path": "/v2/app/updates/manifest",
+      "origin": "preserved-uncommitted-api-feature",
+      "registration": "app.Get(\"/v2/app/updates/manifest\", appUpdateManifest(a))",
+      "registration_source": {
+        "commit": "3909883e555670f787c11db8d58e0a7c11425c07",
+        "source": "internal/routes/register.go",
+        "sha256": "7aa0b6b1807c526e0d11599406b6e3b98b5000d8e7436e235f3165b895ecafb1"
+      },
+      "implementation_source": {
+        "commit": "3909883e555670f787c11db8d58e0a7c11425c07",
+        "source": "internal/routes/app_updates.go",
+        "sha256": "77074b758a79f404227917eae8ddd1dc1b6e5656085855f13bf2d3f695f77621"
+      },
+      "test_source": {
+        "commit": "3909883e555670f787c11db8d58e0a7c11425c07",
+        "source": "internal/routes/app_updates_test.go",
+        "sha256": "071b212215268b58753667e12373314a98cc1556591152a5bdbb741607af84f4"
+      },
+      "decision": "Preserve the pre-existing uncommitted Go OTA feature that the user required retaining before the local 90436aa Capital Gold merge. The archived implementation/test bytes match the current original API checkout. This supplements one exact route, not all dirty source or the proxy authorization change.",
+      "evidence": "docs/worker-route-additions-review.md",
+      "status": "Source provenance is recognized; Worker behavior, Expo/Admin integration and deployment remain separate review."
+    }
+  ],
+  "method_changes": [
+    {
+      "method": "QUERY",
+      "path": "/v2/home/activity",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    },
+    {
+      "method": "QUERY",
+      "path": "/v2/stats/armies",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    },
+    {
+      "method": "QUERY",
+      "path": "/v2/stats/items",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    },
+    {
+      "method": "QUERY",
+      "path": "/v2/stats/ranked",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    },
+    {
+      "method": "QUERY",
+      "path": "/v2/stats/war",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    },
+    {
+      "method": "QUERY",
+      "path": "/v2/stats/cwl",
+      "canonical_method": "POST",
+      "approval": "Explicit user decision: replace these QUERY methods with POST without backward compatibility."
+    }
+  ],
+  "alias_retirement_decision": {
+    "basis": "Implementation-selected retirement under the user's no-backward-compatibility direction, after comparing original paired handlers and saved Dashboard, Expo and Admin callers. This is not a claim of sixteen separate user approvals.",
+    "evidence": "docs/worker-route-alias-review.md",
+    "constraints": "Retain every canonical operation. The original Dashboard clan-removal build must be replaced by its already-migrated saved caller at coordinated cutover. Channel permission and unauthenticated CORS differences are recorded in the audit; no compatibility behavior is restored. External and deferred Bot callers remain a later cutover audit."
+  },
+  "approved_removals": [
+    { "method": "GET", "path": "/v2/guild-summary", "canonical_method": "GET", "canonical_path": "/v2/activity/guild-summary", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/verify-email-code", "canonical_method": "POST", "canonical_path": "/v2/auth/verify-email-code", "decision": "alias_retirement_decision" },
+    { "method": "GET", "path": "/v2/me", "canonical_method": "GET", "canonical_path": "/v2/auth/me", "decision": "alias_retirement_decision" },
+    { "method": "GET", "path": "/v2/privacy/export", "canonical_method": "GET", "canonical_path": "/v2/auth/export", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/privacy/delete-request", "canonical_method": "DELETE", "canonical_path": "/v2/auth/me", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/discord", "canonical_method": "POST", "canonical_path": "/v2/auth/discord", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/refresh", "canonical_method": "POST", "canonical_path": "/v2/auth/refresh", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/register", "canonical_method": "POST", "canonical_path": "/v2/auth/register", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/resend-verification", "canonical_method": "POST", "canonical_path": "/v2/auth/resend-verification", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/email", "canonical_method": "POST", "canonical_path": "/v2/auth/email", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/forgot-password", "canonical_method": "POST", "canonical_path": "/v2/auth/forgot-password", "decision": "alias_retirement_decision" },
+    { "method": "POST", "path": "/v2/reset-password", "canonical_method": "POST", "canonical_path": "/v2/auth/reset-password", "decision": "alias_retirement_decision" },
+    { "method": "GET", "path": "/v2/public", "canonical_method": "GET", "canonical_path": "/v2/config/public", "decision": "alias_retirement_decision" },
+    { "method": "GET", "path": "/v2/link/server/:server_id/clan/list", "canonical_method": "GET", "canonical_path": "/v2/server/:server_id/clans-basic", "decision": "alias_retirement_decision" },
+    { "method": "GET", "path": "/v2/server/:server_id/discord-channels", "canonical_method": "GET", "canonical_path": "/v2/server/:server_id/channels", "decision": "alias_retirement_decision" },
+    { "method": "DELETE", "path": "/v2/server/:server_id/clan/:clan_tag", "canonical_method": "DELETE", "canonical_path": "/v2/server/:server_id/clans/:clan_tag", "decision": "alias_retirement_decision" }
+  ],
+  "retired_connect_flow": {
+    "status": "Intentionally removed by the user; never restore as a parity fix.",
+    "api_baseline_routes": [],
+    "scope": "No connected-app approval routes were found in the pinned API register.go. Dedicated Dashboard consent/grant and Admin setup require consumer inventory. Unrelated login and developer API management remain in scope."
+  },
+  "approved_moves_and_additions": [
+    {
+      "operation_id": "ticketTranscript",
+      "method": "GET",
+      "path": "/v2/ticket-transcripts/:capability",
+      "origin": "approved-new-json-transcript-storage",
+      "approval": "User explicitly requested future non-HTML R2 transcript code and public unpredictable UUID links; structured JSON is the documented implementation decision. No existing R2 objects, HTML fallback or Discord collection are assumed.",
+      "evidence": "docs/json-ticket-transcripts.md"
+    },
+    {
+      "operation_id": "ticketTranscriptAttachment",
+      "method": "GET",
+      "path": "/v2/ticket-transcripts/:capability/attachments/:attachmentId",
+      "origin": "approved-new-json-transcript-storage",
+      "approval": "Serve only attachments named by a successfully stored JSON transcript through the same UUID link; no listing or public bucket. Producer orchestration stays Bot-plan-only.",
+      "evidence": "docs/json-ticket-transcripts.md"
+    },
+    {
+      "operation_id": "adminListAppReleases",
+      "method": "GET",
+      "path": "/v2/admin/app-releases",
+      "origin": "preserved-uncommitted-admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/app-releases",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 377,
+      "original_source_sha256": "11f7a3c3b62482eba5b055e705502d896ebdd3dfad57d15eb72e6f3b60cce890",
+      "original_caller": "src/routes/app-releases.tsx",
+      "original_caller_sha256": "4b2692ae6f7c8f10330a3f3f79ac61eae5262f8c8f5f949e22d8f890ffe9731a",
+      "approval": "Implementation-selected preservation of concrete original uncommitted Admin work under the user's existing-handler move and preservation instructions; not a newly designed release feature or authority to release.",
+      "evidence": "docs/worker-route-additions-review.md"
+    },
+    {
+      "operation_id": "adminUpdateAppReleaseChannel",
+      "method": "PUT",
+      "path": "/v2/admin/app-releases/channels/:track/:platform/:runtimeVersion",
+      "origin": "preserved-uncommitted-admin-handler-move",
+      "original_method": "PUT",
+      "original_path": "/api/app-releases/channels/:track/:platform/:runtimeVersion",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 379,
+      "original_source_sha256": "11f7a3c3b62482eba5b055e705502d896ebdd3dfad57d15eb72e6f3b60cce890",
+      "original_caller": "src/routes/app-releases.tsx",
+      "original_caller_sha256": "4b2692ae6f7c8f10330a3f3f79ac61eae5262f8c8f5f949e22d8f890ffe9731a",
+      "approval": "Implementation-selected preservation of the original uncommitted channel-selection handler. Source validation/status/selection behavior is being reconciled; no actual release selection is executed.",
+      "evidence": "docs/worker-route-additions-review.md"
+    },
+    {
+      "operation_id": "workerHealth",
+      "method": "GET",
+      "path": "/v2/health",
+      "origin": "worker-liveness-adaptation",
+      "source": "workers/api/src/router.ts",
+      "approval": "Root-selected minimal Worker liveness adaptation under the approved Workers port, retaining the existing fixed 200 JSON. Not an original business feature, database readiness check, production probe change, or deployment claim.",
+      "evidence": "docs/worker-route-additions-review.md"
+    },
+    {
+      "operation_id": "adminMe",
+      "method": "GET",
+      "path": "/v2/admin/me",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/auth/me",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 337,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminDashboard",
+      "method": "GET",
+      "path": "/v2/admin/dashboard",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/dashboard",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 338,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminAudit",
+      "method": "GET",
+      "path": "/v2/admin/audit",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/audit",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 339,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminProxyStats",
+      "method": "GET",
+      "path": "/v2/admin/proxy/stats",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/proxy/stats",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 340,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminTrackingSummary",
+      "method": "GET",
+      "path": "/v2/admin/tracking/summary",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/tracking/summary",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 341,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminTrackingTimeseries",
+      "method": "GET",
+      "path": "/v2/admin/tracking/timeseries",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/tracking/timeseries",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 342,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminListDeveloperApplications",
+      "method": "GET",
+      "path": "/v2/admin/developer-applications",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/developer-applications",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 344,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminCreateDeveloperApplication",
+      "method": "POST",
+      "path": "/v2/admin/developer-applications",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/admin/developer-applications",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 345,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminGetDeveloperApplication",
+      "method": "GET",
+      "path": "/v2/admin/developer-applications/:applicationId",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/admin/developer-applications/:applicationId",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 351,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminUpdateDeveloperApplication",
+      "method": "PATCH",
+      "path": "/v2/admin/developer-applications/:applicationId",
+      "origin": "admin-handler-move",
+      "original_method": "PATCH",
+      "original_path": "/api/admin/developer-applications/:applicationId",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 352,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminDeleteDeveloperApplication",
+      "method": "DELETE",
+      "path": "/v2/admin/developer-applications/:applicationId",
+      "origin": "admin-handler-move",
+      "original_method": "DELETE",
+      "original_path": "/api/admin/developer-applications/:applicationId",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 353,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminListFeatureFlags",
+      "method": "GET",
+      "path": "/v2/admin/feature-flags",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/feature-flags",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 356,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminCreateFeatureFlag",
+      "method": "POST",
+      "path": "/v2/admin/feature-flags",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/feature-flags",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 357,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminUpdateFeatureFlag",
+      "method": "PATCH",
+      "path": "/v2/admin/feature-flags/:key",
+      "origin": "admin-handler-move",
+      "original_method": "PATCH",
+      "original_path": "/api/feature-flags/:key",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 358,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminListPosts",
+      "method": "GET",
+      "path": "/v2/admin/posts",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/posts",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 359,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminCreatePost",
+      "method": "POST",
+      "path": "/v2/admin/posts",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/posts",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 360,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminGetPost",
+      "method": "GET",
+      "path": "/v2/admin/posts/:id",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/posts/:id",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 481,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminUpdatePost",
+      "method": "PATCH",
+      "path": "/v2/admin/posts/:id",
+      "origin": "admin-handler-move",
+      "original_method": "PATCH",
+      "original_path": "/api/posts/:id",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 482,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminArchivePost",
+      "method": "DELETE",
+      "path": "/v2/admin/posts/:id",
+      "origin": "admin-handler-move",
+      "original_method": "DELETE",
+      "original_path": "/api/posts/:id",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 483,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPostAudience",
+      "method": "GET",
+      "path": "/v2/admin/posts/:id/audience",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/posts/:id/audience",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 489,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPostDeliveries",
+      "method": "GET",
+      "path": "/v2/admin/posts/:id/deliveries",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/posts/:id/deliveries",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 494,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPostRevisions",
+      "method": "GET",
+      "path": "/v2/admin/posts/:id/revisions",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/posts/:id/revisions",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 495,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminRestorePostRevision",
+      "method": "POST",
+      "path": "/v2/admin/posts/:id/revisions/:revision/restore",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/posts/:id/revisions/:revision",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 496,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPublishPost",
+      "method": "POST",
+      "path": "/v2/admin/posts/:id/publish",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/posts/:id/publish",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 497,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPushPost",
+      "method": "POST",
+      "path": "/v2/admin/posts/:id/push",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/posts/:id/push",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 498,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminDuplicatePost",
+      "method": "POST",
+      "path": "/v2/admin/posts/:id/duplicate",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/posts/:id/duplicate",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 499,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminListCampaigns",
+      "method": "GET",
+      "path": "/v2/admin/campaigns",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/campaigns",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 369,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminCreateCampaign",
+      "method": "POST",
+      "path": "/v2/admin/campaigns",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/campaigns",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 370,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminUpdateCampaign",
+      "method": "PATCH",
+      "path": "/v2/admin/campaigns/:id",
+      "origin": "admin-handler-move",
+      "original_method": "PATCH",
+      "original_path": "/api/campaigns/:id",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 371,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminPushAudience",
+      "method": "GET",
+      "path": "/v2/admin/push/audience",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/push/audience",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 362,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminTestPush",
+      "method": "POST",
+      "path": "/v2/admin/push/test",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/push/test",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 361,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminLabTypes",
+      "method": "GET",
+      "path": "/v2/admin/push/lab/types",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/push/lab/types",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 363,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminLabStatus",
+      "method": "GET",
+      "path": "/v2/admin/push/lab/status",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/push/lab/status",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 364,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminLabDevices",
+      "method": "GET",
+      "path": "/v2/admin/push/lab/devices",
+      "origin": "admin-handler-move",
+      "original_method": "GET",
+      "original_path": "/api/push/lab/devices",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 365,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminLabSend",
+      "method": "POST",
+      "path": "/v2/admin/push/lab/send",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/push/lab/send",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 366,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminMediaUpload",
+      "method": "POST",
+      "path": "/v2/admin/media/upload",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/media/upload",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 367,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "operation_id": "adminStoryUpload",
+      "method": "POST",
+      "path": "/v2/admin/stories/upload",
+      "origin": "admin-handler-move",
+      "original_method": "POST",
+      "original_path": "/api/stories/upload",
+      "original_source": "src/server/adminApi.ts",
+      "original_source_line": 368,
+      "approval": "User approved moving existing Admin business endpoints into the central API; this is a route mapping, not behavior or authorization acceptance."
+    },
+    {
+      "method": "GET",
+      "path": "/v2/media/:filename",
+      "operation_id": "mediaFile",
+      "origin": "r2-media-serving",
+      "approval": "R2-only new media requires serving the returned upload URL. This freezes the current reader path without approving transcript collection or historical migration.",
+      "behavior_review": "Verify existing /v2/cdn/upload and moved Admin upload responses point to valid private-R2-backed media; no production content was checked."
+    }
+  ],
+  "deferred_bot_routes": [
+    {
+      "method": "POST",
+      "path": "/v2/runtime/giveaways/:giveawayId/entries",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/giveaways/:giveawayId/publications/prepare",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/giveaways/:giveawayId/publications/:effectId/claim",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/giveaways/:giveawayId/publications/:effectId/complete",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/giveaway-publications/pending",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/tickets/open/prepare",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/tickets/approve/prepare",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/ticket-operations/:operationId/advance",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/tickets/actions",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/ticket-operations/:operationId/status",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/ticket-panel-publications/prepare",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/ticket-panel-publications/:effectId/status",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/tickets/accounts",
+      "source": "packages/api-contracts/src/persistent-runtime.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/rosters/actions",
+      "source": "packages/api-contracts/src/roster-interaction.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/roster-operations/:operationId/advance",
+      "source": "packages/api-contracts/src/roster-interaction.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/roster-operations/:operationId/status",
+      "source": "packages/api-contracts/src/roster-interaction.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/roster-publications/prepare",
+      "source": "packages/api-contracts/src/roster-interaction.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/roster-publications/:operationId/status",
+      "source": "packages/api-contracts/src/roster-interaction.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/runtime/tickets/message-events",
+      "source": "packages/api-contracts/src/media.ts",
+      "reason": "New bot interaction, publication or event orchestration belongs in the later bot plan, not API parity."
+    },
+    {
+      "method": "GET",
+      "path": "/v2/server/:serverId/roster-member-groups",
+      "category": "roster-configuration",
+      "source": "packages/api-contracts/src/roster-configuration.ts",
+      "evidence": "docs/worker-route-additions-review.md",
+      "reason": "Accepted deferral of new configuration absent from the original API and audited saved Dashboard/Expo/Admin callers. Preserve as later design reference; do not remove baseline roster-group/account-groups operations or stored data."
+    },
+    {
+      "method": "POST",
+      "path": "/v2/server/:serverId/roster-member-groups",
+      "category": "roster-configuration",
+      "source": "packages/api-contracts/src/roster-configuration.ts",
+      "evidence": "docs/worker-route-additions-review.md",
+      "reason": "Accepted deferral of new configuration absent from the original API and audited saved Dashboard/Expo/Admin callers. Preserve as later design reference; do not remove baseline roster-group/account-groups operations or stored data."
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2/server/:serverId/roster-member-groups/:memberGroupId",
+      "category": "roster-configuration",
+      "source": "packages/api-contracts/src/roster-configuration.ts",
+      "evidence": "docs/worker-route-additions-review.md",
+      "reason": "Accepted deferral of new configuration absent from the original API and audited saved Dashboard/Expo/Admin callers. Preserve as later design reference; do not remove baseline roster-group/account-groups operations or stored data."
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/server/:serverId/roster-member-groups/:memberGroupId",
+      "category": "roster-configuration",
+      "source": "packages/api-contracts/src/roster-configuration.ts",
+      "evidence": "docs/worker-route-additions-review.md",
+      "reason": "Accepted deferral of new configuration absent from the original API and audited saved Dashboard/Expo/Admin callers. Preserve as later design reference; do not remove baseline roster-group/account-groups operations or stored data."
+    },
+    {
+      "method": "PUT",
+      "path": "/v2/server/:serverId/rosters/:rosterId/member-groups",
+      "category": "roster-configuration",
+      "source": "packages/api-contracts/src/roster-configuration.ts",
+      "evidence": "docs/worker-route-additions-review.md",
+      "reason": "Accepted deferral of new configuration absent from the original API and audited saved Dashboard/Expo/Admin callers. Preserve as later design reference; do not remove baseline roster-group/account-groups operations or stored data."
+    }
+  ],
+  "manual_audit_gaps": [
+    "Fresh GitHub main and the accepted newer local features are reconciled in docs/current-origin-reconciliation.md. These source refs are not verified deployed versions.",
+    "Static mounted-route evidence does not prove that an endpoint can succeed, preserves permissions/errors, or reaches a real handler under its declared method.",
+    "Existing Dashboard Discord reads and mutations remain required; do not defer them because their helpers call Discord.",
+    "The sixteen alias retirements are implementation-selected under the user's no-backward-compatibility direction; retain canonical operations and the source/caller distinctions in docs/worker-route-alias-review.md.",
+    "Builder Hall counts retain the original public 501 boundary; see docs/builder-hall-counts-boundary.md. This is not implemented Builder Hall statistics or a frontend behavior decision.",
+    "Admin logout, liveness and readiness have explicit source-backed transport dispositions in docs/operational-route-dispositions.md. Live Access and external monitor configuration remain release checks.",
+    "Admin tracking summary/timeseries use the original SQL reads, preserve bot-token admission, and additionally admit the moved Admin frontend through Access. Unit, admission and disposable SQL tests cover both paths; see docs/operational-route-dispositions.md.",
+    "Two existing Admin app-release handlers have individually reverified dirty-source/page hashes and source-backed validation, transaction and rejection tests. Real referenced release objects and actual delivery remain release-only verification.",
+    "The preserved Go app-update manifest and App startup gate have source-pinned implementation/tests and local consumer checks. No actual update, device delivery or release selection was performed.",
+    "Five new roster member-group configuration routes are deferred separately from the nineteen runtime routes. Preserve the existing roster-group/account-groups API and all data/schema.",
+    "Tenor rendering remains the original GET on the Dashboard frontend Worker. New JSON transcript storage/readers follow the user's later explicit non-HTML R2 instruction; archived HTML readers/journals are not active or used as design authority.",
+    "The nine legacy non-v2 data aliases are retired; original public documentation routes and retained materialized-view scheduling have explicit dispositions in docs/operational-route-dispositions.md and docs/api-documentation.md. These operational paths remain outside the focused business-route counter.",
+    "Connected-app approval remains intentionally retired; unrelated developer application/token management must not be removed under that label.",
+    "Deferred bot routes and exported contracts are reported even if absent or incomplete. Their absence is not an API implementation gap; surviving API mounting/export is ownership work.",
+    "Blocked schema/review payloads remain blocked. This inventory does not read, reconstruct, modify or approve them."
+  ]
+}

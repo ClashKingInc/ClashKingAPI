@@ -1,5 +1,5 @@
 import { dashboardEndpoints, type AnyEndpoint } from "@clashking/api-contracts"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it, vi } from "vitest"
 
@@ -42,6 +42,54 @@ function dependencies(options: {
 const run = (value: DashboardServerOperationInput, options: Parameters<typeof dependencies>[0] = {}) => Effect.runPromise(executeDashboardServerCore(value).pipe(Effect.provide(dependencies(options))))
 
 describe("Dashboard server real operations", () => {
+  it("returns a normal empty clan list for an existing server without clans", async () => {
+    const query = vi.fn((statement: string) => Effect.succeed(statement.includes("SELECT id FROM servers") ? [{ id: serverId }] : []))
+    expect(await run(input(dashboardEndpoints.serverClans), { query })).toEqual([])
+    expect(query).toHaveBeenCalledTimes(2)
+  })
+  it("fetches the OAuth guild list once and creates missing settings rows for installed managed guilds", async () => {
+    const guilds = Array.from({ length: 100 }, (_, index) => ({ id: String(1000 + index), name: `Guild ${index}`, owner: true, permissions: "8", features: [] }))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>((path) => Effect.succeed(path.startsWith("/users/@me/guilds") ? guilds : {}))
+    const query = vi.fn((_query: string, _params: ReadonlyArray<unknown>) => Effect.succeed([]))
+    const result = Schema.decodeUnknownSync(dashboardEndpoints.dashboardGuilds.response)(
+      await run(input(dashboardEndpoints.dashboardGuilds, { path: {} }), { discord, query }),
+    )
+    expect(result).toHaveLength(100)
+    expect(result.every((guild) => guild.inactive === false && guild.last_command_at === undefined)).toBe(true)
+    expect(discord.mock.calls.filter(([path]) => path.startsWith("/users/@me/guilds"))).toHaveLength(1)
+    expect(query).toHaveBeenCalledTimes(2)
+    expect(query.mock.calls[0]?.[0]).toContain("INSERT INTO discord_cache.dashboard_access")
+    expect(query.mock.calls[1]?.[0]).toContain("INSERT INTO servers")
+    expect(query.mock.calls[1]?.[1]).toEqual([guilds.map((guild) => guild.id), guilds.map((guild) => guild.name)])
+  })
+
+  it("only marks an installed guild inactive when it has command history older than 90 days", async () => {
+    const guilds = [
+      { id: "1000", name: "Old", owner: true, permissions: "8", features: [] },
+      { id: "1001", name: "New", owner: true, permissions: "8", features: [] },
+    ]
+    const discord = vi.fn<DiscordApi["Service"]["request"]>((path) => Effect.succeed(path.startsWith("/users/@me/guilds") ? guilds : {}))
+    const query = vi.fn((_query: string, _params: ReadonlyArray<unknown>) => Effect.succeed([
+      { id: "1000", last_command_at: new Date(Date.now() - 91 * 86_400_000) },
+      { id: "1001", last_command_at: null },
+    ]))
+    const result = Schema.decodeUnknownSync(dashboardEndpoints.dashboardGuilds.response)(
+      await run(input(dashboardEndpoints.dashboardGuilds, { path: {} }), { discord, query }),
+    )
+    expect(result.map(({ id, inactive, last_command_at }) => ({ id, inactive, last_command_at }))).toEqual([
+      { id: "1000", inactive: true, last_command_at: expect.any(String) },
+      { id: "1001", inactive: false, last_command_at: undefined },
+    ])
+  })
+
+  it("returns the retained detailed guild fields without fetching an OAuth list again", async () => {
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.succeed({ id: serverId, name: "Family", owner_id: "111", icon: "a_icon", banner: "banner", description: "Details", features: [], premium_tier: 2, premium_subscription_count: 8, approximate_member_count: 25 }))
+    expect(await run(input(dashboardEndpoints.dashboardGuild, { path: { guildId: serverId } }), { discord })).toEqual({
+      id: serverId, name: "Family", owner_id: "111", icon: `https://cdn.discordapp.com/icons/${serverId}/a_icon.gif`,
+      banner: `https://cdn.discordapp.com/banners/${serverId}/banner.png`, description: "Details", features: [], premium_tier: 2, boost_count: 8, member_count: 25,
+    })
+    expect(discord).toHaveBeenCalledExactlyOnceWith(`/guilds/${serverId}?with_counts=true`)
+  })
   it("implements the same 85 operations advertised by the dispatcher", () => {
     expect(dashboardServerCoreOperationIds).toHaveLength(85)
     expect(new Set(dashboardServerCoreOperationIds).size).toBe(85)
@@ -64,6 +112,78 @@ describe("Dashboard server real operations", () => {
 
   it("rejects numeric Discord IDs returned by Discord instead of silently rounding", async () => {
     await expect(run(input(dashboardEndpoints.serverChannels), { discord: () => Effect.succeed([{ id: 123, name: "general", type: 0 }]) })).rejects.toMatchObject({ _tag: "UpstreamUnavailable" })
+  })
+
+  it("keeps whole channel lists live because cache rows cannot prove completeness", async () => {
+    const query = vi.fn(() => Effect.die("No full-list cache proof exists"))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.succeed([
+      { id: channelId, name: "live-general", type: 0 },
+    ]))
+    expect(await run(input(dashboardEndpoints.serverChannels), { query, discord })).toEqual([
+      { id: channelId, name: "live-general", type: "text" },
+    ])
+    expect(discord).toHaveBeenCalledExactlyOnceWith(`/guilds/${serverId}/channels`)
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("keeps whole role lists live and still filters managed/everyone roles", async () => {
+    const role = { id: channelId, name: "Member", color: 0, position: 2, managed: false, mentionable: true }
+    const roles = [role, { ...role, id: serverId }, { ...role, id: "3333333333333333333", managed: true }]
+    const query = vi.fn(() => Effect.die("No full-list cache proof exists"))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.succeed(roles))
+    expect(await run(input(dashboardEndpoints.discordRoles), { query, discord })).toEqual({ server_id: serverId, roles: [role], count: 1 })
+    expect(discord).toHaveBeenCalledExactlyOnceWith(`/guilds/${serverId}/roles`)
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("uses recent parent names only after live Discord supplies the active threads", async () => {
+    const query = vi.fn(() => Effect.succeed([{
+      id: channelId, guild_id: serverId, updated_at: new Date(), data: { id: channelId, name: "cached-parent" },
+    }]))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.succeed({ threads: [
+      { id: "3333333333333333333", name: "Thread", type: 11, parent_id: channelId, thread_metadata: { archived: false } },
+    ] }))
+    expect(await run(input(dashboardEndpoints.serverThreads), { query, discord })).toEqual([
+      { id: "3333333333333333333", name: "Thread", parent_channel_id: channelId, parent_channel_name: "cached-parent", archived: false },
+    ])
+    expect(discord).toHaveBeenCalledExactlyOnceWith(`/guilds/${serverId}/threads/active`)
+  })
+
+  it.each(["missing", "stale", "outage"])("falls back to live channel names on a %s cache", async (state) => {
+    const query = () => state === "outage" ? Effect.fail(new Error("cache unavailable")) : Effect.succeed(state === "missing" ? [] : [{
+      id: channelId, guild_id: serverId, updated_at: new Date(0), data: { id: channelId, name: "stale-parent" },
+    }])
+    const discord = vi.fn<DiscordApi["Service"]["request"]>((path) => Effect.succeed(path.endsWith("/threads/active")
+      ? { threads: [{ id: "3333333333333333333", name: "Thread", type: 11, parent_id: channelId }] }
+      : [{ id: channelId, name: "live-parent", type: 0 }]))
+    expect(await run(input(dashboardEndpoints.serverThreads), { query, discord })).toMatchObject([
+      { parent_channel_name: "live-parent" },
+    ])
+    expect(discord).toHaveBeenCalledTimes(2)
+    expect(discord).toHaveBeenLastCalledWith(`/guilds/${serverId}/channels`)
+  })
+
+  it("does not let a cache hit hide a failed live thread request", async () => {
+    const query = vi.fn(() => Effect.die("Do not query cache before active-thread verification"))
+    const discord = () => Effect.fail(new RateLimited({ message: "limited", retryAfterSeconds: 2 }))
+    await expect(run(input(dashboardEndpoints.serverThreads), { query, discord })).rejects.toMatchObject({ _tag: "RateLimited" })
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("never uses display cache for role-grant mutation validation", async () => {
+    const query = vi.fn(() => Effect.die("Cache must not be read before live validation"))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.fail(new RateLimited({ message: "live verification required", retryAfterSeconds: 2 })))
+    await expect(run(input(dashboardEndpoints.updateDashboardAccess, { body: { grants: [] } }), { query, discord })).rejects.toMatchObject({ _tag: "RateLimited" })
+    expect(discord).toHaveBeenCalledWith(`/guilds/${serverId}/roles`)
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("keeps the Discord connection test live even when cached data exists", async () => {
+    const query = vi.fn(() => Effect.die("A connection test cannot use the cache"))
+    const discord = vi.fn<DiscordApi["Service"]["request"]>(() => Effect.succeed({ id: serverId, name: "Live server" }))
+    expect(await run(input(dashboardEndpoints.serverDiscordTest), { query, discord })).toMatchObject({ status: "success", guild_name: "Live server" })
+    expect(discord).toHaveBeenCalledWith(`/guilds/${serverId}`)
+    expect(query).not.toHaveBeenCalled()
   })
 
   it("preserves upstream rate limiting rather than reporting a database failure", async () => {

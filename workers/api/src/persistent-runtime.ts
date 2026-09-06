@@ -1,10 +1,10 @@
 import { GiveawayEnterEndpoint, GiveawayPublicationClaimEndpoint, GiveawayPublicationCompleteEndpoint,
   GiveawayPublicationPendingEndpoint, GiveawayPublicationPrepareEndpoint, RuntimeGiveawayId, RuntimeInteractionProof,
   TicketOperationAdvanceEndpoint, TicketOperationStatusEndpoint,TicketPanelPublicationPrepareEndpoint,
-  TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts"
+  TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { AuthIdentity } from "./auth.js"
-import type { WorkerBindings } from "./environment.js"
+import type { DeferredRuntimeBindings } from "./environment.js"
 import { Forbidden, InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import { advanceTicketStaff, prepareTicketStaff } from "./ticket-staff-runtime.js"
 import { enterGiveaway } from "./giveaway-runtime.js"
@@ -31,7 +31,7 @@ export const persistentRuntimeRoutes = [
   { method: "POST", path: "/v2/runtime/ticket-panel-publications/:effectId/status", operation: "ticketPanelPublicationStatus" },
 ] as const
 
-export const dispatchPersistentRuntime = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
+export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRuntimeBindings) => Effect.gen(function* () {
   const path = new URL(request.url).pathname
   const match = /^\/v2\/runtime\/giveaways\/([^/]+)\/entries$/u.exec(path)
   const publication = /^\/v2\/runtime\/giveaways\/([^/]+)\/publications\/(prepare|([0-9a-f]{64})\/(claim|complete))$/u.exec(path)

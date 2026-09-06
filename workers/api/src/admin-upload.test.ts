@@ -6,14 +6,12 @@ import { dispatchAdmin, type AdminWorkerBindings } from "./admin.js"
 import { Forbidden } from "./errors.js"
 
 const MAX_FILE = 25 * 1024 * 1024
-const principal = { id: "access-subject", email: "owner@example.com", username: "owner", display_name: "Owner", role: "owner" as const,
-  active: true, created_at: "2026-09-03T00:00:00Z", updated_at: "2026-09-03T00:00:00Z" }
+const principal = { id: "access-subject", email: "owner@example.com", username: "owner@example.com", display_name: "Owner", role: "owner" as const,
+  active: true }
 const harness = (authorized = true, publicOrigin = "https://posts.example.com") => {
   const put = vi.fn(async (_key: string, _body: unknown, _options: unknown) => ({}))
-  const access = AccessIdentity.of({ requireAdmin: (_request, role) => {
-    expect(role).toBe("owner")
-    return authorized ? Effect.succeed(principal) : Effect.fail(new Forbidden({ message: "Owner required" }))
-  } })
+  const access = AccessIdentity.of({ requireAdmin: () => authorized
+    ? Effect.succeed(principal) : Effect.fail(new Forbidden({ message: "Cloudflare Access assertion is invalid" })) })
   const bindings = { POSTS_PUBLIC_ORIGIN: publicOrigin, POSTS: { put } } as unknown as AdminWorkerBindings
   const run = (request: Request) => Effect.runPromise(dispatchAdmin(request, bindings).pipe(
     Effect.provideService(AccessIdentity, access), Effect.provideService(SqlClient.SqlClient, {} as SqlClient.SqlClient),

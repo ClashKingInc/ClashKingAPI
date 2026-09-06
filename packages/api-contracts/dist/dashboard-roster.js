@@ -1,8 +1,6 @@
 import { Schema } from "effect";
 import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endpoint.js";
-import { DecimalSnowflake } from "./discord.js";
-import { RuntimeUUID } from "./persistent-runtime.js";
-import { RosterCapacity, RosterMemberGroupSetting } from "./roster-configuration.js";
+import { RosterCapacity } from "./roster-configuration.js";
 const ServerID = Schema.String;
 const JsonRecord = Schema.Record(Schema.String, Schema.Json);
 const RevisionRecord = Schema.Record(Schema.String, Schema.Number);
@@ -22,8 +20,6 @@ export const DashboardRosterSignupQuestion = Schema.Struct({
     order: Schema.Number,
 });
 export const DashboardRosterMember = Schema.Struct({
-    member_group_id: Schema.NullOr(RuntimeUUID),
-    is_substitute: Schema.Boolean,
     name: Schema.String,
     tag: Schema.String,
     townhall: Schema.Number,
@@ -49,8 +45,6 @@ export const DashboardRosterMember = Schema.Struct({
     answers: Schema.optionalKey(Schema.Json),
 });
 export const DashboardRosterMemberInput = Schema.Struct({
-    member_group_id: Schema.optionalKey(Schema.NullOr(RuntimeUUID)),
-    is_substitute: Schema.optionalKey(Schema.Boolean),
     name: Schema.optionalKey(Schema.String),
     tag: Schema.String,
     townhall: Schema.optionalKey(Schema.Number),
@@ -70,9 +64,6 @@ export const DashboardRosterMemberInput = Schema.Struct({
     answers: Schema.optionalKey(Schema.Json),
 });
 export const DashboardRoster = Schema.Struct({
-    capacity: RosterCapacity,
-    roster_role_id: Schema.NullOr(DecimalSnowflake),
-    member_groups: Schema.Array(RosterMemberGroupSetting),
     id: Schema.String,
     server_id: Schema.String,
     alias: Schema.String,
@@ -102,8 +93,6 @@ export const DashboardRoster = Schema.Struct({
     revision: Schema.Number,
 });
 export const DashboardCreateRosterRequest = Schema.Struct({
-    capacity: Schema.optionalKey(RosterCapacity),
-    roster_role_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)),
     max_accounts_per_user: Schema.optionalKey(Schema.NullOr(RosterCapacity)),
     server_id: Schema.optionalKey(ServerID),
     alias: Schema.String,
@@ -115,8 +104,6 @@ export const DashboardCreateRosterRequest = Schema.Struct({
     members: Schema.optionalKey(Schema.Array(DashboardRosterMemberInput)),
 });
 export const DashboardUpdateRosterRequest = Schema.Struct({
-    capacity: Schema.optionalKey(RosterCapacity),
-    roster_role_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)),
     alias: Schema.optionalKey(Schema.String),
     description: Schema.optionalKey(Schema.NullOr(Schema.String)),
     roster_type: Schema.optionalKey(DashboardRosterType),
@@ -176,8 +163,6 @@ export const DashboardManageRosterMembersRequest = Schema.Struct({
     player_tags: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export const DashboardUpdateRosterMemberRequest = Schema.Struct({
-    member_group_id: Schema.optionalKey(Schema.NullOr(RuntimeUUID)),
-    is_substitute: Schema.optionalKey(Schema.Boolean),
     answers: Schema.optionalKey(Schema.Json),
 });
 export const DashboardRefreshRosterMemberResponse = Schema.Struct({

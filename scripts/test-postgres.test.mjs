@@ -12,6 +12,8 @@ const fixture = (fn) => {
     const api=join(root,"api"),schema=join(root,"schema checkout"),log=join(root,"calls.log")
     for(const directory of [join(api,"scripts"),join(api,"workers/api/test/postgres/nested"),join(schema,"scripts"),join(schema,"database/timescale")]) mkdirSync(directory,{recursive:true})
     copyFileSync(runner,join(api,"scripts/test-postgres.sh"))
+    writeFileSync(join(api,"scripts/list-retained-postgres-suites.mjs"), `import { readdirSync } from 'node:fs';
+for (const file of readdirSync('workers/api/test/postgres', {recursive:true}).filter(file => file.endsWith('.test.ts'))) process.stdout.write('workers/api/test/postgres/' + file + '\\0');`)
     writeFileSync(join(schema,"database/go.mod"),"module fixture\n\ngo 1.25.0\n")
     // Fake only the schema-owned database boundary. It records argv and never
     // starts Docker, invokes Goose/npm, or connects to any database.
@@ -78,7 +80,7 @@ test("runs every nested suite separately with intact paths and the explicit sche
   assert.equal(result.status,0,result.stderr)
   const calls=readFileSync(log,"utf8").trimEnd().split("\n").map(line=>line.split("\0").slice(0,-1))
   assert.equal(calls.length,2)
-  for(const call of calls) assert.deepEqual(call.slice(0,-1),["--through","27","--","npm","run","test:postgres","--"])
+  for(const call of calls) assert.deepEqual(call.slice(0,-1),["--profile","retained-api","--","npm","run","test:postgres","--"])
   assert.deepEqual(calls.map(call=>call.at(-1)).sort(),["workers/api/test/postgres/nested/two with spaces.test.ts","workers/api/test/postgres/one.test.ts"])
   assert.match(result.stdout,/Completed 2 isolated PostgreSQL suites/u)
 }))
@@ -88,5 +90,14 @@ test("preserves a failing harness exit and stops before the next database",()=>f
   const result=run(undefined,{RUNNER_TEST_EXIT:"17"})
   assert.equal(result.status,17)
   assert.equal(readFileSync(log,"utf8").trimEnd().split("\n").length,1)
+  assert.doesNotMatch(result.stdout,/Completed/u)
+}))
+
+test("keep-going records failures, runs each isolated suite, and remains red",()=>fixture(({api,schema,log,run})=>{
+  for(const name of ["one.test.ts","two.test.ts"]) writeFileSync(join(api,"workers/api/test/postgres",name),"")
+  const result=run(["--keep-going",schema],{RUNNER_TEST_EXIT:"17"})
+  assert.equal(result.status,1)
+  assert.equal(readFileSync(log,"utf8").trimEnd().split("\n").length,2)
+  assert.match(result.stderr,/2 of 2 isolated PostgreSQL suites failed/u)
   assert.doesNotMatch(result.stdout,/Completed/u)
 }))

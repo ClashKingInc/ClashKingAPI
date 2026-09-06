@@ -7,6 +7,15 @@
   "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
   "workers_dev": false,
   "preview_urls": false,
+  // Only generated public API reference files, never repository/source output.
+  // Worker-first keeps every /v2 route and unknown path in the API router.
+  "assets": {
+    "directory": "./documentation-assets",
+    "binding": "API_DOCUMENTATION",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
   // Timescale is private on the single-homed netcup API host. Port 22 is the
   // existing public TCP probe; PostgreSQL remains bound to loopback only.
   "placement": { "host": "152.53.82.182:22" },
@@ -30,17 +39,13 @@
       {
         "name": "SHARED_LINKS_LIMITER",
         "class_name": "SharedLinksRateLimiter"
-      },
-      {
-        "name": "TICKET_RUNTIME",
-        "class_name": "TicketRuntimeCoordinator"
-      },
-      {
-        "name": "RUNTIME_RECOVERY",
-        "class_name": "RuntimeRecoveryCoordinator"
       }
     ]
   },
+  // Historical declarations are preserved until their applied state is known.
+  // Bot coordinators are neither bound nor exported by this API candidate.
+  // Do not deploy this candidate before reconciling the v3/v4 history; removing
+  // a binding is not permission to delete Durable Object namespaces or data.
   "migrations": [
     {
       "tag": "v1",

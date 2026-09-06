@@ -9,7 +9,7 @@ const Paging = Schema.Struct({ cursors: Schema.optionalKey(Schema.Struct({ after
 const League = Schema.Struct({ id: Schema.Number, name: Schema.String, iconUrls: Schema.optionalKey(IconUrls) });
 const PlayerClan = Schema.Struct({ tag: Schema.String, name: Schema.String, clanLevel: Schema.Number, badgeUrls: BadgeUrls });
 const PlayerItem = Schema.Struct({ name: Schema.String, level: Schema.Number, maxLevel: Schema.Number, village: Schema.String, superTroopIsActive: Schema.optionalKey(Schema.Boolean), equipment: Schema.optionalKey(Schema.Array(Schema.Struct({ name: Schema.String, level: Schema.Number, maxLevel: Schema.Number, village: Schema.String }))) });
-const Achievement = Schema.Struct({ name: Schema.String, stars: Schema.Number, value: Schema.Number, target: Schema.Number, info: Schema.String, completionInfo: Schema.optionalKey(Schema.String), village: Schema.String });
+const Achievement = Schema.Struct({ name: Schema.String, stars: Schema.Number, value: Schema.Number, target: Schema.Number, info: Schema.String, completionInfo: Schema.optionalKey(Schema.NullOr(Schema.String)), village: Schema.String });
 export const ProxyPlayerResponse = Schema.Struct({
     tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number,
     townHallWeaponLevel: Schema.optionalKey(Schema.Number), expLevel: Schema.Number, trophies: Schema.Number,
@@ -31,7 +31,7 @@ export const ProxyBattlelogResponse = Schema.Struct({ items: Schema.Array(Schema
         armyShareCode: Schema.String, battleTimestamp: Schema.String, battleTime: Schema.Number,
     })) });
 export const ProxyLeagueHistoryResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ leagueSeasonId: Schema.Number, leagueTrophies: Schema.Number, leagueTierId: Schema.Number, placement: Schema.Number, attackWins: Schema.Number, attackLosses: Schema.Number, attackStars: Schema.Number, defenseWins: Schema.Number, defenseLosses: Schema.Number, defenseStars: Schema.Number, maxBattles: Schema.Number })) });
-const LeagueMember = Schema.Struct({ playerTag: Schema.String, playerName: Schema.String, clanTag: Schema.String, clanName: Schema.String, leagueTrophies: Schema.Number, attackWinCount: Schema.Number, attackLoseCount: Schema.Number, defenseWinCount: Schema.Number, defenseLoseCount: Schema.Number });
+const LeagueMember = Schema.Struct({ playerTag: Schema.String, playerName: Schema.String, clanTag: Schema.NullOr(Schema.String), clanName: Schema.NullOr(Schema.String), leagueTrophies: Schema.Number, attackWinCount: Schema.Number, attackLoseCount: Schema.Number, defenseWinCount: Schema.Number, defenseLoseCount: Schema.Number });
 const LeagueBattle = Schema.Struct({ opponentPlayerTag: Schema.String, opponentName: Schema.String, stars: Schema.Number, destructionPercentage: Schema.Number, trophies: Schema.Number, creationTime: Schema.String });
 export const ProxyLeagueGroupResponse = Schema.Struct({ members: Schema.Array(LeagueMember), attackLogs: Schema.Array(LeagueBattle), defenseLogs: Schema.Array(LeagueBattle) });
 export const ProxyLeagueTiersResponse = Schema.Struct({ items: Schema.Array(League) });
@@ -47,7 +47,7 @@ export const ProxyClanResponse = Schema.Struct({
     warLeague: Schema.optionalKey(League), members: Schema.Number, memberList: Schema.Array(ClanMember),
     labels: Schema.Array(League), requiredBuilderBaseTrophies: Schema.optionalKey(Schema.Number),
     requiredTownhallLevel: Schema.optionalKey(Schema.Number),
-    clanCapital: Schema.optionalKey(Schema.Struct({ capitalHallLevel: Schema.Number, districts: Schema.Array(Schema.Struct({ id: Schema.Number, name: Schema.String, districtHallLevel: Schema.Number })) })),
+    clanCapital: Schema.optionalKey(Schema.Struct({ capitalHallLevel: Schema.optionalKey(Schema.Number), districts: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Schema.Number, name: Schema.String, districtHallLevel: Schema.Number }))) })),
     chatLanguage: Schema.optionalKey(Schema.Struct({ id: Schema.Number, name: Schema.String, languageCode: Schema.String })),
 });
 // Official clan search omits description and the member list (memberList=false).
@@ -61,14 +61,17 @@ const WarAttack = Schema.Struct({ attackerTag: Schema.String, defenderTag: Schem
 const WarMember = Schema.Struct({ tag: Schema.String, name: Schema.String, townhallLevel: Schema.Number, mapPosition: Schema.Number, attacks: Schema.optionalKey(Schema.Array(WarAttack)), opponentAttacks: Schema.optionalKey(Schema.Number), bestOpponentAttack: Schema.optionalKey(WarAttack) });
 const WarClan = Schema.Struct({ tag: Schema.String, name: Schema.String, badgeUrls: BadgeUrls, clanLevel: Schema.Number, attacks: Schema.Number, stars: Schema.Number, destructionPercentage: Schema.Number, members: Schema.Array(WarMember) });
 export const ProxyWarResponse = Schema.Struct({ state: Schema.String, teamSize: Schema.optionalKey(Schema.Number), attacksPerMember: Schema.optionalKey(Schema.Number), battleModifier: Schema.optionalKey(Schema.String), preparationStartTime: Schema.optionalKey(Schema.String), startTime: Schema.optionalKey(Schema.String), endTime: Schema.optionalKey(Schema.String), clan: Schema.optionalKey(WarClan), opponent: Schema.optionalKey(WarClan), warStartTime: Schema.optionalKey(Schema.String), tag: Schema.optionalKey(Schema.String) });
-const WarLogSide = Schema.Struct({ tag: Schema.String, name: Schema.String, badgeUrls: BadgeUrls, clanLevel: Schema.Number, attacks: Schema.Number, stars: Schema.Number, destructionPercentage: Schema.Number });
-export const ProxyWarlogResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ result: Schema.String, endTime: Schema.String, teamSize: Schema.Number, attacksPerMember: Schema.Number, clan: WarLogSide, opponent: WarLogSide })), paging: Schema.optionalKey(Paging) });
+const WarLogSide = Schema.Struct({ tag: Schema.String, name: Schema.String, badgeUrls: BadgeUrls, clanLevel: Schema.Number, attacks: Schema.optionalKey(Schema.Number), stars: Schema.Number, destructionPercentage: Schema.Number });
+// Deleted opponents omit their identity; CWL summaries omit attacksPerMember.
+const WarLogOpponent = Schema.Struct({ ...WarLogSide.fields, tag: Schema.optionalKey(Schema.String), name: Schema.optionalKey(Schema.String) });
+export const ProxyWarlogResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ result: Schema.NullOr(Schema.String), endTime: Schema.String, teamSize: Schema.Number, attacksPerMember: Schema.optionalKey(Schema.Number), clan: WarLogSide, opponent: WarLogOpponent })), paging: Schema.optionalKey(Paging) });
 const CwlClan = Schema.Struct({ tag: Schema.String, name: Schema.String, clanLevel: Schema.Number, badgeUrls: BadgeUrls, members: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number })) });
 export const ProxyCwlGroupResponse = Schema.Struct({ state: Schema.String, season: Schema.String, clans: Schema.Array(CwlClan), rounds: Schema.Array(Schema.Struct({ warTags: Schema.Array(Schema.String) })) });
 export const ProxyLocationsResponse = Schema.Struct({ items: Schema.Array(Location), paging: Schema.optionalKey(Paging) });
-const RankingItem = Schema.Struct({ tag: Schema.String, name: Schema.String, rank: Schema.Number, previousRank: Schema.optionalKey(Schema.Number), trophies: Schema.optionalKey(Schema.Number), builderBaseTrophies: Schema.optionalKey(Schema.Number), clanPoints: Schema.optionalKey(Schema.Number), clanBuilderBasePoints: Schema.optionalKey(Schema.Number), clanCapitalPoints: Schema.optionalKey(Schema.Number), members: Schema.optionalKey(Schema.Number), clanLevel: Schema.optionalKey(Schema.Number), badgeUrls: Schema.optionalKey(BadgeUrls), clan: Schema.optionalKey(PlayerClan), league: Schema.optionalKey(League), leagueTier: Schema.optionalKey(League), builderBaseLeague: Schema.optionalKey(League), location: Schema.optionalKey(Location), expLevel: Schema.optionalKey(Schema.Number), attackWins: Schema.optionalKey(Schema.Number), defenseWins: Schema.optionalKey(Schema.Number) });
+const RankingClan = Schema.Struct({ tag: Schema.String, name: Schema.String, badgeUrls: BadgeUrls });
+const RankingItem = Schema.Struct({ tag: Schema.String, name: Schema.String, rank: Schema.Number, previousRank: Schema.optionalKey(Schema.Number), trophies: Schema.optionalKey(Schema.Number), builderBaseTrophies: Schema.optionalKey(Schema.Number), clanPoints: Schema.optionalKey(Schema.Number), clanBuilderBasePoints: Schema.optionalKey(Schema.Number), clanCapitalPoints: Schema.optionalKey(Schema.Number), members: Schema.optionalKey(Schema.Number), clanLevel: Schema.optionalKey(Schema.Number), badgeUrls: Schema.optionalKey(BadgeUrls), clan: Schema.optionalKey(RankingClan), league: Schema.optionalKey(League), leagueTier: Schema.optionalKey(League), builderBaseLeague: Schema.optionalKey(League), location: Schema.optionalKey(Location), expLevel: Schema.optionalKey(Schema.Number), attackWins: Schema.optionalKey(Schema.Number), defenseWins: Schema.optionalKey(Schema.Number) });
 export const ProxyRankingsResponse = Schema.Struct({ items: Schema.Array(RankingItem), paging: Schema.optionalKey(Paging) });
-const proxyGet = (operationId, path, pathParams, response, query = NoQuery) => defineEndpoint({ operationId, method: "GET", path, auth: "user-or-bot", summary: operationId, body: NoBody, bodyMode: "none", pathParams, query, response, responseMode: "json", successStatus: 200, errors: ProxyErrors });
+const proxyGet = (operationId, path, pathParams, response, query = NoQuery) => defineEndpoint({ operationId, method: "GET", path, auth: "user", summary: operationId, body: NoBody, bodyMode: "none", pathParams, query, response, responseMode: "json", successStatus: 200, errors: ProxyErrors });
 const PlayerPath = Schema.Struct({ playerTag: Schema.String });
 const ClanPath = Schema.Struct({ clanTag: Schema.String });
 const LocationPath = Schema.Struct({ locationId: Schema.String });
@@ -82,7 +85,10 @@ export const ProxyClanEndpoint = proxyGet("getExpoProxyClan", "/proxy/v1/clans/:
 export const ProxyClanSearchEndpoint = proxyGet("searchExpoProxyClans", "/proxy/v1/clans", NoPathParams, ProxyClanSearchResponse, Schema.Struct({ name: Schema.String, warFrequency: Schema.optionalKey(Schema.String), locationId: Schema.optionalKey(Schema.Number), minMembers: Schema.optionalKey(Schema.Number), maxMembers: Schema.optionalKey(Schema.Number), minClanLevel: Schema.optionalKey(Schema.Number), limit: Schema.Number, memberList: Schema.Boolean }));
 export const ProxyCapitalRaidSeasonsEndpoint = proxyGet("getExpoProxyCapitalRaidSeasons", "/proxy/v1/clans/:clanTag/capitalraidseasons", ClanPath, ProxyCapitalRaidSeasonsResponse, LimitQuery);
 export const ProxyClanWarlogEndpoint = proxyGet("getExpoProxyClanWarlog", "/proxy/v1/clans/:clanTag/warlog", ClanPath, ProxyWarlogResponse, LimitQuery);
-export const ProxyCurrentWarEndpoint = proxyGet("getExpoProxyCurrentWar", "/proxy/v1/clans/:clanTag/currentwar", ClanPath, ProxyWarResponse);
+// Official notInWar responses can contain empty clan/opponent placeholders.
+// Keep active-war decoding strict, and discard placeholders only in this state.
+export const ProxyCurrentWarResponse = Schema.Union([Schema.Struct({ state: Schema.Literal("notInWar") }), ProxyWarResponse]);
+export const ProxyCurrentWarEndpoint = proxyGet("getExpoProxyCurrentWar", "/proxy/v1/clans/:clanTag/currentwar", ClanPath, ProxyCurrentWarResponse);
 export const ProxyCurrentLeagueGroupEndpoint = proxyGet("getExpoProxyCurrentLeagueGroup", "/proxy/v1/clans/:clanTag/currentwar/leaguegroup", ClanPath, ProxyCwlGroupResponse);
 export const ProxyCwlWarEndpoint = proxyGet("getExpoProxyCwlWar", "/proxy/v1/clanwarleagues/wars/:warTag", Schema.Struct({ warTag: Schema.String }), ProxyWarResponse);
 export const ProxyLocationsEndpoint = proxyGet("getExpoProxyLocations", "/proxy/v1/locations", NoPathParams, ProxyLocationsResponse);

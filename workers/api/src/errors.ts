@@ -19,6 +19,10 @@ export class NotFound extends Data.TaggedError("NotFound")<{
   readonly message: string
 }> {}
 
+export class NotImplemented extends Data.TaggedError("NotImplemented")<{
+  readonly message: string
+}> {}
+
 export class RateLimited extends Data.TaggedError("RateLimited")<{
   readonly message: string
   readonly retryAfterSeconds: number
@@ -53,6 +57,7 @@ export type ApiFailure =
   | Forbidden
   | InvalidRequest
   | NotFound
+  | NotImplemented
   | RateLimited
   | PayloadTooLarge
   | UnprocessableEntity

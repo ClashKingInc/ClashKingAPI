@@ -227,12 +227,29 @@ describe("notification SQL and authorization", () => {
     expect(test.events).toEqual([])
   })
 
-  it.each([503, 200])("reports a failed or unacknowledged Tracking publication after saving (%s)", async (status) => {
+  it.each([503, 200])("preserves the saved preferences after failed or unacknowledged publication (%s)", async (status) => {
     const test = harness(({ query }) => query.startsWith("UPDATE") ? [{ device_id: "device-one" }] : [],
       principal, async () => Response.json({ published: false }, { status }))
-    await expect(test.run(request("/v2/notifications/preferences", "PUT", preferenceBody)))
-      .rejects.toMatchObject({ _tag: "UpstreamUnavailable", message: expect.stringContaining("Preferences were saved") })
+    const response = await test.run(request("/v2/notifications/preferences", "PUT", preferenceBody))
+    expect(response?.status).toBe(200)
+    expect(await response?.json()).toMatchObject({ raidRemindersEnabled: true, reminderTimings: [60, 180] })
     expect(test.events).toEqual(["committed", "publish"])
+  })
+
+  it.each(["network", "invalid JSON", "timeout"])("returns saved preferences when the follow-up publication has %s failure", async (failure) => {
+    let signal: AbortSignal | undefined
+    const test = harness(({ query }) => query.startsWith("UPDATE") ? [{ device_id: "device-one" }] : [],
+      principal, async (request) => {
+        signal = request.signal
+        if (failure === "network") throw new Error("Unavailable")
+        if (failure === "invalid JSON") return new Response("not JSON")
+        return new Promise<Response>(() => {})
+      })
+    const response = await test.run(request("/v2/notifications/preferences", "PUT", preferenceBody))
+    expect(response?.status).toBe(200)
+    expect(test.events).toEqual(["committed", "publish"])
+    expect(test.statements.filter(({ query }) => query.startsWith("UPDATE mobile_push_devices"))).toHaveLength(1)
+    if (failure === "timeout") expect(signal?.aborted).toBe(true)
   })
 
   it("rejects out-of-granularity raid timings before writing", async () => {

@@ -3,17 +3,17 @@ import * as Roster from "./dashboard-roster.js"
 import * as Server from "./dashboard-server.js"
 import * as Extra from "./dashboard-server-extra.js"
 import { dashboardRosterExtraEndpoints } from "./dashboard-roster-extra.js"
-import { rosterConfigurationEndpoints } from "./roster-configuration.js"
 
 export * from "./dashboard-misc.js"
 export * from "./dashboard-roster.js"
 export * from "./dashboard-server.js"
 export * from "./dashboard-server-extra.js"
 export * from "./dashboard-roster-extra.js"
-export * from "./roster-configuration.js"
+// These value schemas are still embedded in retained roster responses. The
+// new configuration endpoints are reference-only in ./deferred-runtime.
+export { RosterCapacity, RosterMemberGroupSetting, RosterBuilderMemberGroupSetting } from "./roster-configuration.js"
 
 export const dashboardEndpoints = {
-  ...rosterConfigurationEndpoints,
   ...dashboardRosterExtraEndpoints,
   serverGiveaway: Extra.ServerGiveawayEndpoint,
   serverDiscordTest: Extra.ServerDiscordTestEndpoint,
@@ -120,7 +120,6 @@ export const dashboardEndpoints = {
   enableCountdown: Server.EnableCountdownEndpoint,
   disableCountdown: Server.DisableCountdownEndpoint,
   serverChannels: Server.ServerChannelsEndpoint,
-  serverDiscordChannels: Server.ServerDiscordChannelsEndpoint,
   serverThreads: Server.ServerThreadsEndpoint,
   serverReminders: Server.ServerRemindersEndpoint,
   createServerReminder: Server.CreateServerReminderEndpoint,

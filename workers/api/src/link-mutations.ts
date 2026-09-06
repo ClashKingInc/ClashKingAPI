@@ -1,5 +1,6 @@
 import {
   AccountConflictErrorResponse, LinksAddEndpoint, LinksOrderEndpoint, LinksRemoveEndpoint, LinksVisibilityEndpoint,
+  requireEndpointSuccessStatus,
   type AnyEndpoint, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
 import { Data, Effect, Schema } from "effect"
@@ -223,7 +224,7 @@ const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequ
     const body = yield* decode(endpoint.body, endpoint.bodyMode === "none" ? {} : yield* readBoundedJson(request))
     // The factory binds these independently decoded fields to this endpoint.
     const result = yield* execute({ path, query, body } as EndpointRequest<E>, principal, bindings)
-    return Response.json(yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(Effect.orDie), { status: endpoint.successStatus, headers: { "cache-control": "no-store" } })
+    return Response.json(yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(Effect.orDie), { status: requireEndpointSuccessStatus(endpoint), headers: { "cache-control": "no-store" } })
   }),
 })
 const routes = [

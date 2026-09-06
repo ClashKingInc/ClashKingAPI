@@ -1,4 +1,5 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
+import { DashboardLinksListEndpoint, LinksListEndpoint } from "@clashking/api-contracts"
 import { SqlClient } from "effect/unstable/sql"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -239,7 +240,11 @@ describe("read-only SQL services", () => {
     const result = await Effect.runPromise(Effect.gen(function* () { return yield* (yield* DashboardPersonalLinks).list(snowflake) }).pipe(
       Effect.provide(DashboardPersonalLinks.layer), Effect.provideService(SqlClient.SqlClient, fixture.sql),
     ))
-    expect(result).toEqual([{ user_id: snowflake, player_tag: "#2PP", order_index: 0, is_verified: true, hidden: false, added_at: "2026-09-01T00:00:00.000Z" }])
+    expect(result).toEqual([{ user_id: snowflake, player_tag: "#2PP", order_index: 0, is_verified: true, hidden: false, added_at: "2026-09-01T00:00:00.000Z", last_login: null }])
+    // The same HTTP route serves Dashboard and Expo. A missing last_login used
+    // to pass Dashboard decoding but break Expo's refresh after verification.
+    expect(Schema.decodeUnknownSync(LinksListEndpoint.response)({ items: result }).items).toEqual(result)
+    expect(Schema.decodeUnknownSync(DashboardLinksListEndpoint.response)({ items: result }).items).toEqual(result)
     expect(fixture.calls[0]?.text).toContain("ORDER BY order_index, added_at")
   })
 

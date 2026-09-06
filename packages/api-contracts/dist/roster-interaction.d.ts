@@ -1,3 +1,4 @@
+/** @internal Deferred bot orchestration reference; never include in active API endpoint maps. */
 import { Schema } from "effect";
 export declare const RosterRuntimeState: Schema.Literals<readonly ["preparing", "submitted", "provisioning", "reconciling", "completed", "failed"]>;
 export declare const RosterRuntimeAction: Schema.Literals<readonly ["signup", "remove", "sub", "refresh", "publish"]>;

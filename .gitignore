@@ -1,5 +1,6 @@
 # created by virtualenv automatically
 .env
+.local/
 *.xml
 *.idea
 .idea/
@@ -18,3 +19,4 @@ STRUCTURE_REVIEW.md
 
 # Go build artifacts
 *.exe
+workers/api/documentation-assets/

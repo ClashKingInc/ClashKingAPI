@@ -4,7 +4,7 @@ import { beforeAll,describe,expect,it } from "vitest"
 import { AuthIdentity } from "../../src/auth.js"
 import { databaseLayer } from "../../src/database.js"
 import { DiscordApi } from "../../src/discord-api.js"
-import type { WorkerBindings } from "../../src/environment.js"
+import type { DeferredRuntimeBindings, WorkerBindings } from "../../src/environment.js"
 import { UpstreamUnavailable } from "../../src/errors.js"
 import { dispatchPersistentRuntime } from "../../src/persistent-runtime.js"
 import type { VerifiedRuntimeInteraction } from "../../src/runtime-interaction.js"
@@ -164,7 +164,7 @@ describe("ticket panel publication journal",()=>{
     const calls:Array<{ name:string;effectId:string }>=[]
     const bindings={ DISCORD_PUBLIC_KEY:publicKey,DISCORD_APPLICATION_ID:"9934567890123456789",TICKET_RUNTIME:{
       getByName:(name:string)=>({ wake:async(effectId:string)=>{ calls.push({ name,effectId }) } }),
-    } } as unknown as WorkerBindings
+    } } as unknown as DeferredRuntimeBindings
     const reject=()=>Effect.die("Unexpected user authentication")
     const auth=Layer.succeed(AuthIdentity,{ requireBot:()=>Effect.succeed({ kind:"bot" as const }),requireUser:reject,requireUserOrBot:reject })
     const unusedDiscord=Layer.succeed(DiscordApi,{ request:()=>Effect.die("Unexpected Discord request"),token:()=>Effect.die("Unexpected OAuth") })

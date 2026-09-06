@@ -5,7 +5,7 @@ import type { DashboardServerOperationInput } from "./dashboard-server-runtime.j
 import { DiscordApi } from "./discord-api.js"
 import { validateDiscordDestination } from "./discord-destination.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
-import { DatabaseFailure, InvalidRequest, NotFound, RateLimited, Unauthenticated, Forbidden, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { Conflict, DatabaseFailure, InvalidRequest, NotFound, RateLimited, Unauthenticated, Forbidden, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
 export const dashboardReminderOperationIds = ["serverReminders", "createServerReminder", "updateServerReminder", "deleteServerReminder"] as const
 const groups = { War: "war_reminders", "Clan Capital": "capital_reminders", "Clan Games": "clan_games_reminders", Inactivity: "inactivity_reminders", roster: "roster_reminders" } as const
@@ -36,18 +36,22 @@ const validateFields = (body: Schema.Schema.Type<typeof UpdateReminderRequest>) 
 
 export interface ReminderChange { readonly clan_tag: string; readonly type: string; readonly action: "created" | "updated" | "deleted"; readonly reminder_id: string }
 export const publishReminderChange = (bindings: DashboardServerOperationInput["bindings"], change: ReminderChange) => Effect.tryPromise({
-  try: async () => {
+  try: async (signal) => {
     if (!bindings.API_BOT_TOKEN?.trim()) throw new Error("Tracking token is not configured")
     const response = await bindings.TRACKING.fetch(new Request("https://tracking.internal/internal/reminder-config/publish", {
       method: "POST", headers: { authorization: `Bearer ${bindings.API_BOT_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ clan_tag: change.clan_tag, type: change.type === "roster" ? "Roster" : change.type, action: change.action, reminder_id: change.reminder_id }), signal: AbortSignal.timeout(3_000),
+      body: JSON.stringify({ clan_tag: change.clan_tag, type: change.type === "roster" ? "Roster" : change.type, action: change.action, reminder_id: change.reminder_id }), signal,
     }))
     if (response.status !== 200) throw new Error(`Tracking returned ${response.status}`)
     const value: unknown = await response.json()
     Schema.decodeUnknownSync(Schema.Struct({ published: Schema.Literal(true) }))(value)
   },
   catch: (cause) => new UpstreamUnavailable({ cause, message: "Reminder was saved, but Tracking notification failed" }),
-})
+}).pipe(
+  Effect.timeout("3 seconds"),
+  // SQL has committed; a failed notification must not invite a duplicate creation.
+  Effect.catch(() => Effect.logWarning("Reminder publication unavailable after reminder was saved")),
+)
 
 export const executeDashboardReminders = (input: DashboardServerOperationInput): Effect.Effect<unknown, ApiFailure, SqlClient.SqlClient | DiscordApi> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
@@ -61,6 +65,23 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     return result
   }
   let change: ReminderChange | undefined
+  let validatedChannel: string | undefined
+  if (input.endpoint.operationId === "createServerReminder") {
+    const body = yield* decode(CreateReminderRequest, input.body)
+    yield* validateFields(body)
+    if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
+    yield* validateDiscordDestination(serverId, body.channel_id, body.thread_id || null)
+  } else if (input.endpoint.operationId === "updateServerReminder") {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id)) return yield* new NotFound({ message: "Reminder not found" })
+    const body = yield* decode(UpdateReminderRequest, input.body)
+    yield* validateFields(body)
+    if (body.channel_id !== undefined || body.thread_id !== undefined) {
+      const rows = yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE server_id=$1 AND id=$2::uuid`, [serverId, id])
+      if (rows[0] === undefined) return yield* new NotFound({ message: "Reminder not found" })
+      validatedChannel = body.channel_id ?? rows[0].channel_id ?? ""
+      yield* validateDiscordDestination(serverId, validatedChannel, body.thread_id || null)
+    }
+  }
   const result = yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)
     const operation = input.endpoint.operationId
@@ -68,7 +89,6 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
       const body = yield* decode(CreateReminderRequest, input.body)
       yield* validateFields(body)
       if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
-      yield* validateDiscordDestination(serverId, body.channel_id, body.thread_id || null)
       const data = { type: body.type, server: serverId, channel: body.channel_id, time: body.time, clan: tag(body.clan_tag ?? ""), custom_text: body.custom_text ?? "", [body.type === "Clan Capital" || body.type === "Clan Games" ? "townhalls" : "townhall_filter"]: body.townhall_filter ?? [], roles: body.roles ?? [], types: body.war_types ?? [], point_threshold: body.point_threshold, attack_threshold: body.attack_threshold, roster: body.roster_id, ping_type: body.ping_type }
       const rows = yield* sql.unsafe<{ id: string }>(`INSERT INTO reminders (server_id,type,type_name,clan_tag,webhook_token,channel_id,thread_id,minutes_remaining,trigger_time,custom_text,townhalls,roles,war_type_names,trigger_threshold,point_threshold,attack_threshold,roster_id,ping_type,data) VALUES ($1,$2,$3,$4,'',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,NULLIF($16,''),NULLIF($17,''),$18::jsonb) RETURNING id::text`, [serverId, Object.keys(groups).indexOf(body.type) + 1, body.type, tag(body.clan_tag ?? ""), body.channel_id, body.thread_id || null, reminderMinutes(body.time), body.time, body.custom_text ?? "", body.townhall_filter ?? null, body.roles ?? [], body.war_types ?? [], body.point_threshold ?? body.attack_threshold ?? null, body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold), body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold), body.roster_id ?? "", body.ping_type ?? "", JSON.stringify(data)])
       if (rows[0] === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Reminder insertion returned no identifier" })
@@ -87,7 +107,9 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     yield* validateFields(body)
     const destinationChanged = body.channel_id !== undefined || body.thread_id !== undefined
     const channel = body.channel_id ?? existing.channel_id
-    if (destinationChanged) yield* validateDiscordDestination(serverId, channel ?? "", body.thread_id || null)
+    if (destinationChanged && (channel ?? "") !== validatedChannel) {
+      return yield* new Conflict({ message: "Reminder destination changed during validation; reload and retry" })
+    }
     const data = { channel: body.channel_id, time: body.time, custom_text: body.custom_text, [existing.type_name === "Clan Capital" || existing.type_name === "Clan Games" ? "townhalls" : "townhall_filter"]: body.townhall_filter, roles: body.roles, types: body.war_types, point_threshold: body.point_threshold, attack_threshold: body.attack_threshold, ping_type: body.ping_type }
     yield* sql.unsafe(`UPDATE reminders SET channel_id=COALESCE($3,channel_id),trigger_time=COALESCE($4,trigger_time),minutes_remaining=COALESCE($5,minutes_remaining),custom_text=COALESCE($6,custom_text),townhalls=COALESCE($7,townhalls),roles=COALESCE($8,roles),war_type_names=COALESCE($9,war_type_names),point_threshold=COALESCE($10::jsonb,point_threshold),attack_threshold=COALESCE($11::jsonb,attack_threshold),ping_type=COALESCE($12,ping_type),trigger_threshold=COALESCE($13,trigger_threshold),data=data||$14::jsonb,thread_id=CASE WHEN $15 THEN $16 ELSE thread_id END,updated_at=now() WHERE server_id=$1 AND id=$2::uuid`, [serverId,id,body.channel_id ?? null,body.time ?? null,body.time === undefined ? null : reminderMinutes(body.time),body.custom_text ?? null,body.townhall_filter ?? null,body.roles ?? null,body.war_types ?? null,body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold),body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold),body.ping_type ?? null,body.point_threshold ?? body.attack_threshold ?? null,JSON.stringify(data),destinationChanged,body.thread_id || null])
     change = { clan_tag: existing.clan_tag, type: existing.type_name, action: "updated", reminder_id: id }
@@ -95,4 +117,4 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
   }))
   if (change !== undefined) yield* publishReminderChange(input.bindings, change)
   return result
-}).pipe(Effect.mapError((cause) => cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof RateLimited || cause instanceof Unauthenticated || cause instanceof Forbidden || cause instanceof UpstreamUnavailable || cause instanceof DatabaseFailure ? cause : new DatabaseFailure({ cause, message: "Reminder database operation failed" })))
+}).pipe(Effect.mapError((cause) => cause instanceof Conflict || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof RateLimited || cause instanceof Unauthenticated || cause instanceof Forbidden || cause instanceof UpstreamUnavailable || cause instanceof DatabaseFailure ? cause : new DatabaseFailure({ cause, message: "Reminder database operation failed" })))

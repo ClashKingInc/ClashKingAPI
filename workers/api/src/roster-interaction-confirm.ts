@@ -1,4 +1,5 @@
-import { RosterOperationAdvanceEndpoint, type RuntimeInteractionProof, type EndpointResponse } from "@clashking/api-contracts"
+import type { EndpointResponse } from "@clashking/api-contracts"
+import { RosterOperationAdvanceEndpoint, type RuntimeInteractionProof } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { Conflict, DatabaseFailure, Forbidden, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"

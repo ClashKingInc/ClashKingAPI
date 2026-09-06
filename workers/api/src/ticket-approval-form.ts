@@ -1,4 +1,5 @@
-import { ApproveMessages, TicketApplicationForm } from "@clashking/api-contracts"
+import { ApproveMessages } from "@clashking/api-contracts"
+import { TicketApplicationForm } from "@clashking/api-contracts/deferred-runtime"
 import { Schema } from "effect"
 import { Conflict, InvalidRequest } from "./errors.js"
 import type { VerifiedRuntimeInteraction } from "./runtime-interaction.js"

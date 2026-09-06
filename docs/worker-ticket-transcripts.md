@@ -53,3 +53,7 @@ history, durable per-page/attachment checkpoints and fencing, safe Discord CDN
 attachment copies, bounded rendering/upload recovery, protected durable capability
 storage, final completion evidence, log-link publication and only then channel
 deletion. All provider mutation tests must use fake Discord and disposable R2.
+> Superseded September 4, 2026: the user requires new non-HTML transcripts.
+> Active code uses structured JSON/R2; see [JSON ticket transcripts](json-ticket-transcripts.md).
+> This preserved older document is not the active contract, implementation plan,
+> permission to resume old orchestration, or evidence of existing R2 content.

@@ -62,16 +62,12 @@ inherited production connection. Deferred Bot tests are not active API acceptanc
 
 For interactive Dashboard/App development, use `npm run dev`. It generates the
 contracts and API documentation before starting the persistent local database;
-the disposable harness above is for tests only. See
-[local development and the one-time data handoff](docs/local-development.md)
-before switching an already running temporary database.
+the disposable harness above is for tests only.
 
-Shared packages currently use locally packed archives and are not published.
-See the [deployment gate](docs/cloudflare-worker-deployment.md),
-[public documentation](docs/api-documentation.md) and
-[JSON transcript storage](docs/json-ticket-transcripts.md) before preparing any
-release. No production deployment, infrastructure change or migration is
-authorized by the local build instructions.
+Publishing a GitHub release attaches version-matched API contracts and client
+archives plus their integrity manifest. Cloudflare builds `main` with
+`npm run worker:deploy`, which regenerates the OpenAPI and documentation assets
+before deploying the Worker.
 
 ## Using ClashKing data
 

@@ -30,7 +30,7 @@ it("preserves streamed non-GET proxy bodies and upstream responses in workerd", 
     expect(response.status).toBe(429)
     expect(await response.text()).toBe("unchanged upstream error")
     expect(response.headers.get("retry-after")).toBe("3")
-    expect(captured).toEqual([{ url: "https://clash-proxy.internal/v1/players/%23P0Y/verifytoken?fixture=1",
+    expect(captured).toEqual([{ url: "http://clash-proxy.internal/v1/players/%23P0Y/verifytoken?fixture=1",
       method: "POST", body: "fixture streamed body", authorization: null, cookie: null }])
   } finally { await runtime.dispose() }
 }, 30_000)

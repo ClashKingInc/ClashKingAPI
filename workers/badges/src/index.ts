@@ -2,16 +2,26 @@ const RESPONSE_CACHE_SECONDS = 86400;
 const TAG_TOKEN_TTL_SECONDS = 86400;
 const NULL_TOKEN_TTL_SECONDS = 300;
 const ASSET_CACHE_VERSION = "v1";
+const HINT_SIGNATURE_VERSION = "v1";
+const MIN_HINT_SECRET_LENGTH = 32;
+const MAX_BADGE_TOKEN_LENGTH = 512;
+const BADGE_TOKEN_HEADER = "X-ClashKing-Badge-Token";
+const BADGE_SIGNATURE_HEADER = "X-ClashKing-Badge-Signature";
 export const AVIF_QUALITY = 45;
 
 const BADGE_SIZES = {
-	small: 70,
-	medium: 200,
-	large: 512,
+	small: { outputPixels: 70, sourcePixels: 70 },
+	medium: { outputPixels: 200, sourcePixels: 200 },
+	large: { outputPixels: 512, sourcePixels: 512 },
+	"64": { outputPixels: 64, sourcePixels: 70 },
+	"128": { outputPixels: 128, sourcePixels: 200 },
+	"256": { outputPixels: 256, sourcePixels: 512 },
+	"512": { outputPixels: 512, sourcePixels: 512 },
 } as const;
 
 type BadgeSize = keyof typeof BADGE_SIZES;
 type BadgeFormat = "png" | "avif";
+type BadgeRecipe = (typeof BADGE_SIZES)[BadgeSize];
 
 type ParsedBadgePath = {
 	clanTag: string;
@@ -29,9 +39,9 @@ type BadgeAsset = {
 };
 
 export type BadgeDependencies = {
-	cache: Cache;
 	fetchBadge: (token: string, pixels: number) => Promise<Response>;
 	queryBadgeToken: (clanTag: string, env: Env) => Promise<string>;
+	getBadgeHintSecret: (env: Env) => string | undefined;
 };
 
 export function parseBadgePath(pathname: string): ParsedBadgePath | null {
@@ -43,12 +53,15 @@ export function parseBadgePath(pathname: string): ParsedBadgePath | null {
 		return null;
 	}
 
-	let format: BadgeFormat = "png";
+	let format: BadgeFormat;
 	if (/\.avif$/i.test(value)) {
 		format = "avif";
 		value = value.slice(0, -5);
 	} else if (/\.png$/i.test(value)) {
+		format = "png";
 		value = value.slice(0, -4);
+	} else {
+		return null;
 	}
 
 	value = value.replace(/^#/, "").toUpperCase();
@@ -65,11 +78,7 @@ export function parseSize(value: string | null): BadgeSize | null {
 		return "small";
 	}
 
-	if (value === "small" || value === "medium" || value === "large") {
-		return value;
-	}
-
-	return null;
+	return Object.hasOwn(BADGE_SIZES, value) ? (value as BadgeSize) : null;
 }
 
 export function assetCacheKey(
@@ -84,20 +93,6 @@ export function assetCacheKey(
 
 export function tokenCacheKey(clanTag: string): string {
 	return `clan-token:${ASSET_CACHE_VERSION}:${clanTag}`;
-}
-
-function responseCacheKey(
-	url: URL,
-	clanTag: string,
-	size: BadgeSize,
-	format: BadgeFormat,
-): Request {
-	const cacheVersion =
-		format === "avif" ? `q${AVIF_QUALITY}` : ASSET_CACHE_VERSION;
-	return new Request(
-		`${url.origin}/${clanTag}.${format}?size=${size}&v=${cacheVersion}`,
-		{ method: "GET" },
-	);
 }
 
 function badgeUrl(token: string, pixels: number): string {
@@ -126,6 +121,11 @@ async function queryBadgeToken(clanTag: string, env: Env): Promise<string> {
 	}
 }
 
+function getBadgeHintSecret(env: Env): string | undefined {
+	const secret = Reflect.get(env, "BADGE_HINT_SECRET");
+	return typeof secret === "string" ? secret : undefined;
+}
+
 function logCacheError(event: string, key: string, error: unknown): void {
 	console.error(
 		JSON.stringify({
@@ -151,37 +151,127 @@ function storeToken(
 	);
 }
 
+function isValidBadgeToken(token: string): boolean {
+	return (
+		token !== "null" &&
+		token.length <= MAX_BADGE_TOKEN_LENGTH &&
+		/^[A-Za-z0-9_-]+$/.test(token)
+	);
+}
+
+function decodeBase64Url(value: string): Uint8Array | null {
+	if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+		return null;
+	}
+
+	const padding = "=".repeat((4 - (value.length % 4)) % 4);
+	try {
+		const decoded = atob(value.replace(/-/g, "+").replace(/_/g, "/") + padding);
+		return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+	} catch {
+		return null;
+	}
+}
+
+async function readSignedBadgeHint(
+	request: Request,
+	clanTag: string,
+	env: Env,
+	dependencies: BadgeDependencies,
+): Promise<string | null> {
+	const token = request.headers.get(BADGE_TOKEN_HEADER);
+	const encodedSignature = request.headers.get(BADGE_SIGNATURE_HEADER);
+	if (!token || !encodedSignature || !isValidBadgeToken(token)) {
+		return null;
+	}
+
+	const secret = dependencies.getBadgeHintSecret(env);
+	if (!secret || secret.length < MIN_HINT_SECRET_LENGTH) {
+		return null;
+	}
+
+	const signature = decodeBase64Url(encodedSignature);
+	if (!signature) {
+		return null;
+	}
+
+	const encoder = new TextEncoder();
+	const key = await crypto.subtle.importKey(
+		"raw",
+		encoder.encode(secret),
+		{ name: "HMAC", hash: "SHA-256" },
+		false,
+		["verify"],
+	);
+	const valid = await crypto.subtle.verify(
+		"HMAC",
+		key,
+		signature,
+		encoder.encode(`${HINT_SIGNATURE_VERSION}\n${clanTag}\n${token}`),
+	);
+	return valid ? token : null;
+}
+
 async function resolveBadgeToken(
+	request: Request,
 	clanTag: string,
 	env: Env,
 	ctx: ExecutionContext,
 	dependencies: BadgeDependencies,
 ): Promise<BadgeTokenResolution> {
 	const key = tokenCacheKey(clanTag);
+	let cached: string | null = null;
 
 	try {
-		const cached = await env.BADGE_CACHE.get(key);
-		if (cached) {
-			return {
-				token: cached,
-				responseCacheSeconds:
-					cached === "null"
-						? NULL_TOKEN_TTL_SECONDS
-						: RESPONSE_CACHE_SECONDS,
-			};
+		cached = await env.BADGE_CACHE.get(key);
+		if (cached && cached !== "null") {
+			return { token: cached, responseCacheSeconds: RESPONSE_CACHE_SECONDS };
 		}
 	} catch (error) {
 		logCacheError("badge_token_cache_read_error", key, error);
 	}
 
+	if (cached === "null") {
+		const hintedToken = await readSignedBadgeHint(
+			request,
+			clanTag,
+			env,
+			dependencies,
+		);
+		if (hintedToken) {
+			storeToken(env, ctx, key, hintedToken);
+			return {
+				token: hintedToken,
+				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
+			};
+		}
+
+		return { token: "null", responseCacheSeconds: NULL_TOKEN_TTL_SECONDS };
+	}
+
 	try {
 		const token = await dependencies.queryBadgeToken(clanTag, env);
-		storeToken(env, ctx, key, token);
-		return {
-			token,
-			responseCacheSeconds:
-				token === "null" ? NULL_TOKEN_TTL_SECONDS : RESPONSE_CACHE_SECONDS,
-		};
+		if (token !== "null") {
+			storeToken(env, ctx, key, token);
+			return { token, responseCacheSeconds: RESPONSE_CACHE_SECONDS };
+		}
+
+		const hintedToken = await readSignedBadgeHint(
+			request,
+			clanTag,
+			env,
+			dependencies,
+		);
+		if (hintedToken) {
+			storeToken(env, ctx, key, hintedToken);
+			return {
+				token: hintedToken,
+				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
+			};
+		}
+
+		storeToken(env, ctx, key, "null");
+		return { token: "null", responseCacheSeconds: NULL_TOKEN_TTL_SECONDS };
 	} catch (error) {
 		console.error(
 			JSON.stringify({
@@ -190,6 +280,21 @@ async function resolveBadgeToken(
 				error: error instanceof Error ? error.message : String(error),
 			}),
 		);
+
+		const hintedToken = await readSignedBadgeHint(
+			request,
+			clanTag,
+			env,
+			dependencies,
+		);
+		if (hintedToken) {
+			storeToken(env, ctx, key, hintedToken);
+			return {
+				token: hintedToken,
+				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
+			};
+		}
+
 		return { token: "null", responseCacheSeconds: 0 };
 	}
 }
@@ -225,7 +330,7 @@ function storeAsset(
 	);
 }
 
-async function loadPngForToken(
+async function loadSourcePngForToken(
 	token: string,
 	pixels: number,
 	env: Env,
@@ -247,14 +352,14 @@ async function loadPngForToken(
 	return { token, stream: responseStream };
 }
 
-async function loadPng(
+async function loadSourcePng(
 	token: string,
 	pixels: number,
 	env: Env,
 	ctx: ExecutionContext,
 	dependencies: BadgeDependencies,
 ): Promise<BadgeAsset | null> {
-	const asset = await loadPngForToken(
+	const asset = await loadSourcePngForToken(
 		token,
 		pixels,
 		env,
@@ -265,43 +370,112 @@ async function loadPng(
 		return asset;
 	}
 
-	return loadPngForToken("null", pixels, env, ctx, dependencies);
+	return loadSourcePngForToken("null", pixels, env, ctx, dependencies);
 }
 
-async function loadAvif(
+async function transformBadge(
+	stream: ReadableStream,
+	format: BadgeFormat,
+	recipe: BadgeRecipe,
+	env: Env,
+): Promise<Response> {
+	let transformer = env.IMAGES.input(stream);
+	if (recipe.outputPixels !== recipe.sourcePixels) {
+		transformer = transformer.transform({
+			width: recipe.outputPixels,
+			height: recipe.outputPixels,
+			fit: "scale-down",
+		});
+	}
+
+	return transformer
+		.output(
+			format === "avif"
+				? { format: "image/avif", quality: AVIF_QUALITY }
+				: { format: "image/png" },
+		)
+		.then((result) => result.response());
+}
+
+async function loadBadgeAsset(
+	format: BadgeFormat,
 	token: string,
-	pixels: number,
+	recipe: BadgeRecipe,
 	env: Env,
 	ctx: ExecutionContext,
 	dependencies: BadgeDependencies,
 ): Promise<BadgeAsset | null> {
-	const cached = await readAsset(env, "avif", pixels, token);
+	const cached = await readAsset(env, format, recipe.outputPixels, token);
 	if (cached) {
 		return { token, stream: cached };
 	}
 
-	const png = await loadPng(token, pixels, env, ctx, dependencies);
-	if (!png) {
+	const source = await loadSourcePng(
+		token,
+		recipe.sourcePixels,
+		env,
+		ctx,
+		dependencies,
+	);
+	if (!source) {
 		return null;
 	}
 
-	if (png.token !== token) {
-		const fallbackCached = await readAsset(env, "avif", pixels, png.token);
+	if (source.token !== token) {
+		const fallbackCached = await readAsset(
+			env,
+			format,
+			recipe.outputPixels,
+			source.token,
+		);
 		if (fallbackCached) {
-			return { token: png.token, stream: fallbackCached };
+			return { token: source.token, stream: fallbackCached };
 		}
 	}
 
-	const transformed = await env.IMAGES.input(png.stream)
-		.output({ format: "image/avif", quality: AVIF_QUALITY })
-		.then((result) => result.response());
+	if (
+		format === "png" &&
+		recipe.outputPixels === recipe.sourcePixels
+	) {
+		return source;
+	}
+
+	const transformed = await transformBadge(source.stream, format, recipe, env);
 	if (!transformed.ok || !transformed.body) {
 		return null;
 	}
 
 	const [responseStream, cacheStream] = transformed.body.tee();
-	storeAsset(env, ctx, "avif", pixels, png.token, cacheStream);
-	return { token: png.token, stream: responseStream };
+	storeAsset(
+		env,
+		ctx,
+		format,
+		recipe.outputPixels,
+		source.token,
+		cacheStream,
+	);
+	return { token: source.token, stream: responseStream };
+}
+
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, OPTIONS",
+	"Access-Control-Allow-Headers": `${BADGE_TOKEN_HEADER}, ${BADGE_SIGNATURE_HEADER}`,
+} as const;
+
+function textResponse(
+	body: string | null,
+	status: number,
+	extraHeaders = {},
+): Response {
+	return new Response(body, {
+		status,
+		headers: {
+			...CORS_HEADERS,
+			"Cache-Control": "no-store",
+			...extraHeaders,
+		},
+	});
 }
 
 function imageResponse(
@@ -310,6 +484,7 @@ function imageResponse(
 	cacheSeconds: number,
 ): Response {
 	const headers = new Headers({
+		...CORS_HEADERS,
 		"Content-Type": format === "avif" ? "image/avif" : "image/png",
 		"X-Content-Type-Options": "nosniff",
 	});
@@ -327,11 +502,9 @@ function imageResponse(
 }
 
 const DEFAULT_DEPENDENCIES = {
-	get cache(): Cache {
-		return caches.default;
-	},
 	fetchBadge,
 	queryBadgeToken,
+	getBadgeHintSecret,
 } satisfies BadgeDependencies;
 
 export async function handleBadgeRequest(
@@ -340,65 +513,52 @@ export async function handleBadgeRequest(
 	ctx: ExecutionContext,
 	dependencies: BadgeDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<Response> {
+	if (request.method === "OPTIONS") {
+		return textResponse(null, 204, { "Access-Control-Max-Age": "86400" });
+	}
+
 	if (request.method !== "GET") {
-		return new Response("Method not allowed", {
-			status: 405,
-			headers: { Allow: "GET" },
-		});
+		return textResponse("Method not allowed", 405, { Allow: "GET, OPTIONS" });
 	}
 
 	const url = new URL(request.url);
 	const parsed = parseBadgePath(url.pathname);
-	const size = parseSize(url.searchParams.get("size"));
-
 	if (!parsed) {
-		return new Response("Invalid clan tag", { status: 400 });
+		return textResponse("Invalid badge path. Use /TAG.png or /TAG.avif.", 400);
 	}
 
+	const queryKeys = [...url.searchParams.keys()];
+	const sizeValues = url.searchParams.getAll("size");
+	if (queryKeys.some((key) => key !== "size") || sizeValues.length > 1) {
+		return textResponse("Only one size query parameter is supported.", 400);
+	}
+
+	const size = parseSize(sizeValues[0] ?? null);
 	if (!size) {
-		return new Response(
-			'Invalid size. Use "small", "medium", or "large".',
-			{ status: 400 },
+		return textResponse(
+			'Invalid size. Use "small", "medium", "large", 64, 128, 256, or 512.',
+			400,
 		);
 	}
 
-	const cacheKey = responseCacheKey(
-		url,
-		parsed.clanTag,
-		size,
-		parsed.format,
-	);
-	const cached = await dependencies.cache.match(cacheKey);
-	if (cached) {
-		return cached;
-	}
-
 	const resolution = await resolveBadgeToken(
+		request,
 		parsed.clanTag,
 		env,
 		ctx,
 		dependencies,
 	);
-	const pixels = BADGE_SIZES[size];
 
 	let asset: BadgeAsset | null;
 	try {
-		asset =
-			parsed.format === "avif"
-				? await loadAvif(
-						resolution.token,
-						pixels,
-						env,
-						ctx,
-						dependencies,
-					)
-				: await loadPng(
-						resolution.token,
-						pixels,
-						env,
-						ctx,
-						dependencies,
-					);
+		asset = await loadBadgeAsset(
+			parsed.format,
+			resolution.token,
+			BADGE_SIZES[size],
+			env,
+			ctx,
+			dependencies,
+		);
 	} catch (error) {
 		console.error(
 			JSON.stringify({
@@ -408,27 +568,18 @@ export async function handleBadgeRequest(
 				error: error instanceof Error ? error.message : String(error),
 			}),
 		);
-		return new Response("Badge unavailable", { status: 502 });
+		return textResponse("Badge unavailable", 502);
 	}
 
 	if (!asset) {
-		return new Response("Badge unavailable", { status: 502 });
+		return textResponse("Badge unavailable", 502);
 	}
 
-	const response = imageResponse(
+	return imageResponse(
 		asset.stream,
 		parsed.format,
 		resolution.responseCacheSeconds,
 	);
-	if (resolution.responseCacheSeconds > 0) {
-		ctx.waitUntil(
-			dependencies.cache.put(cacheKey, response.clone()).catch((error) => {
-				logCacheError("badge_response_cache_write_error", cacheKey.url, error);
-			}),
-		);
-	}
-
-	return response;
 }
 
 export default {

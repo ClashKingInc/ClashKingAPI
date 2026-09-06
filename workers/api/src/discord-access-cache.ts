@@ -63,8 +63,9 @@ export const cachedDiscordAccess = <R>(bindings: WorkerBindings, principal: ApiP
       yield* sql`UPDATE discord_cache.dashboard_access SET claims = NULL, expires_at = NULL WHERE cache_key = ${key}`
         .pipe(Effect.catch(() => Effect.void))
     }
-    const acquired = yield* sql<{ cache_key: string }>`INSERT INTO discord_cache.dashboard_access (cache_key, lease_token, lease_until)
-      VALUES (${key}, ${lease}::uuid, clock_timestamp() + interval '45 seconds')
+    const acquired = yield* sql<{ cache_key: string }>`INSERT INTO discord_cache.dashboard_access
+      (cache_key, observed_at, expires_at, lease_token, lease_until)
+      VALUES (${key}, ${startedAt}::timestamptz, NULL, ${lease}::uuid, clock_timestamp() + interval '45 seconds')
       ON CONFLICT (cache_key) DO UPDATE SET lease_token = EXCLUDED.lease_token, lease_until = EXCLUDED.lease_until
       WHERE (dashboard_access.lease_until IS NULL OR dashboard_access.lease_until <= clock_timestamp())
         AND (dashboard_access.expires_at IS NULL OR dashboard_access.expires_at <= clock_timestamp())

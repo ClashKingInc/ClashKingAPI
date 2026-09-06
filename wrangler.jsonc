@@ -11,7 +11,18 @@
   },
   "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
   "workers_dev": false,
-  "preview_urls": false,
+  "preview_urls": true,
+  "secrets": {
+    "required": [
+      "DATA_ENCRYPTION_KEY",
+      "DISCORD_CLIENT_ID",
+      "DISCORD_CLIENT_SECRET",
+      "JWT_ACCESS_SECRET",
+      "JWT_REFRESH_SECRET",
+      "SMTP_USERNAME",
+      "SMTP_PASSWORD"
+    ]
+  },
   // Only generated public API reference files, never repository/source output.
   // Worker-first keeps every /v2 route and unknown path in the API router.
   "assets": {

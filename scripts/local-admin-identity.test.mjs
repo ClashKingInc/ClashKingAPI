@@ -5,16 +5,22 @@ import { createLocalJWKSet, jwtVerify } from 'jose';
 import { createLocalAdminIdentity } from './local-admin-identity.mjs';
 
 test('rejects non-loopback API destinations', async () => {
-  for (const apiOrigin of ['https://api.clashk.ing', 'http://192.168.5.62:8787', 'http://127.0.0.1:8787/other', 'http://user@127.0.0.1:8787']) {
+  for (const apiOrigin of [
+    'https://api.clashk.ing', 'http://192.168.5.62:8787', 'http://127.0.0.1:8787/other',
+    'http://user@127.0.0.1:8787', 'http://user:pass@127.0.0.1:8787', 'http://localhost:8787',
+    'http://[::1]:8787', 'http://2130706433:8787', 'http://0177.0.0.1:8787',
+    'https://127.0.0.1:8787', 'http://127.0.0.1', 'http://127.0.0.1:80',
+    'http://127.0.0.1:8786', 'http://127.0.0.1:8787?target=evil', 'http://127.0.0.1:8787#evil',
+  ]) {
     await assert.rejects(createLocalAdminIdentity({apiOrigin}), /loopback/);
   }
 });
 
 test('signs only local Admin AJAX requests and preserves actual token verification', async () => {
   let forwarded = 0;
-  const adapter = await createLocalAdminIdentity({apiOrigin:'http://127.0.0.1:8787',port:0,fetcher:async (url, init) => {
+  const adapter = await createLocalAdminIdentity({apiOrigin:'http://127.0.0.1:8787',port:0,fetcher:async (path, init) => {
     forwarded++;
-    assert.equal(url.origin, 'http://127.0.0.1:8787');
+    assert.equal(path, '/v2/admin/me');
     assert.equal(init.headers.has('cookie'), false);
     assert.equal(init.headers.has('authorization'), false);
     if (init.method === 'OPTIONS') {
@@ -42,6 +48,9 @@ test('signs only local Admin AJAX requests and preserves actual token verificati
       {path:'/v2/admin/me',headers:{origin:'http://localhost:3000'}},
       {path:'/v2/guilds',headers},
       {path:'/v2/admin/../../guilds',headers},
+      {path:'/v2/admin/%2e%2e/guilds',headers},
+      {path:'/v2/admin/%2F%2Fevil.invalid',headers},
+      {path:'/v2/admin/%5cevil.invalid',headers},
     ]) assert.equal((await fetch(`${origin}${input.path}`,{headers:input.headers})).status,403,JSON.stringify(input));
     const wrongHostStatus = await new Promise((resolve, reject) => {
       get(`${origin}/v2/admin/me`, {headers:{...headers,host:'evil.invalid'}}, response => {

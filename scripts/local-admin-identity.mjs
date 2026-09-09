@@ -1,13 +1,32 @@
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 // Development adapter only: never imported by the deployable Worker. The
 // Worker still verifies RS256, issuer, audience, expiration and identity.
-export async function createLocalAdminIdentity({ apiOrigin, port = 8786, fetcher = fetch }) {
-  const api = new URL(apiOrigin);
-  if (api.protocol !== 'http:' || api.hostname !== '127.0.0.1' || !api.port || api.pathname !== '/' || api.username || api.password || api.search || api.hash) {
+const apiOrigin = 'http://127.0.0.1:8787';
+const fetchLocalApi = (path, init) => new Promise((resolve, reject) => {
+  const upstream = request({
+    protocol: 'http:', hostname: '127.0.0.1', port: 8787, path,
+    method: init.method, headers: Object.fromEntries(init.headers), signal: init.signal,
+  }, response => {
+    const status = response.statusCode ?? 502;
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(response.headers)) {
+      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+    }
+    const bodyless = init.method === 'HEAD' || [204, 205, 304].includes(status);
+    if (bodyless) response.resume();
+    resolve(new Response(bodyless ? null : Readable.toWeb(response), { status, headers }));
+  });
+  upstream.once('error', reject);
+  if (init.body) void pipeline(Readable.fromWeb(init.body), upstream).catch(reject);
+  else upstream.end();
+});
+
+export async function createLocalAdminIdentity({ apiOrigin: requestedOrigin, port = 8786, fetcher = fetchLocalApi }) {
+  if (requestedOrigin !== apiOrigin) {
     throw new Error('Local Admin identity requires an explicit loopback API origin');
   }
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid local Admin port');
@@ -27,8 +46,9 @@ export async function createLocalAdminIdentity({ apiOrigin, port = 8786, fetcher
         outgoing.writeHead(403).end('Local Admin requests only');
         return;
       }
-      const upstream = new URL(path, api);
-      if (upstream.origin !== api.origin || !upstream.pathname.startsWith('/v2/admin/')) {
+      const upstream = new URL(path, apiOrigin);
+      const upstreamPath = `${upstream.pathname}${upstream.search}`;
+      if (upstream.origin !== apiOrigin || upstreamPath !== path || !upstream.pathname.startsWith('/v2/admin/') || /%(?:2e|2f|5c)/iu.test(upstream.pathname)) {
         outgoing.writeHead(403).end('Local Admin requests only');
         return;
       }
@@ -49,7 +69,7 @@ export async function createLocalAdminIdentity({ apiOrigin, port = 8786, fetcher
           .setIssuer(issuer).setAudience(audience).setSubject('local-developer')
           .setIssuedAt().setExpirationTime('1m').sign(keys.privateKey));
       }
-      const response = await fetcher(upstream, {
+      const response = await fetcher(upstreamPath, {
         method: incoming.method, headers, redirect: 'manual',
         ...(['GET', 'HEAD'].includes(incoming.method) ? {} : { body: Readable.toWeb(incoming), duplex: 'half' }),
         signal: AbortSignal.timeout(30_000),

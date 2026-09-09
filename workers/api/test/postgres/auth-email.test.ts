@@ -171,14 +171,19 @@ describe("email lifecycle against authoritative Goose migrations", () => {
       yield* email.forgot(user.email, {})
       const payload = { email: user.email, reset_code: messageFor(user.email, "password_reset").code,
         new_password: "NewPassword2", device_id: "reset-browser", device_name: "Browser" }
-      let checked!: () => void, release!: () => void
+      let checked!: () => void, release!: () => void, resetPrepared!: () => void
       const passwordChecked = new Promise<void>((resolve) => { checked = resolve })
       const allowLogin = new Promise<void>((resolve) => { release = resolve })
+      const resetReady = new Promise<void>((resolve) => { resetPrepared = resolve })
       const gatedCrypto = AuthCrypto.of({ ...realCrypto, passwordMatches: (password, encoded) => Effect.gen(function* () {
         const matches = yield* realCrypto.passwordMatches(password, encoded)
         checked()
         yield* Effect.promise(() => allowLogin)
         return matches
+      }), passwordHash: password => Effect.gen(function* () {
+        const hash = yield* realCrypto.passwordHash(password)
+        resetPrepared()
+        return hash
       }) })
       const race = Effect.gen(function* () {
         const sessions = yield* AuthSessions
@@ -187,11 +192,12 @@ describe("email lifecycle against authoritative Goose migrations", () => {
           sessions.emailLogin(user.email, user.password, "old-password-login", "native"),
           Effect.promise(() => passwordChecked).pipe(Effect.flatMap(() => recovery.reset(payload, "web"))),
           Effect.gen(function* () {
-            yield* Effect.promise(() => passwordChecked)
-            try { yield* waitForBlockedLock(sql, "auth-reset-lock") } finally { release() }
+            yield* Effect.promise(() => resetReady)
+            release()
           }),
         ], { concurrency: 3 })
-      }).pipe(Effect.provide(Layer.fresh(AuthEmail.layer)), Effect.provide(Layer.fresh(AuthSessions.layer)), Effect.provideService(AuthCrypto, gatedCrypto))
+      }).pipe(Effect.provide(Layer.fresh(AuthEmail.layer)), Effect.provide(Layer.fresh(AuthSessions.layer)),
+        Effect.provideService(AuthCrypto, gatedCrypto))
       const [login, reset] = yield* race
       expect(login.user.user_id).toBe(reset.user.user_id)
       const rows = yield* sql<{ token_hash: string; device_id: string }>`SELECT token_hash,device_id FROM auth_refresh_tokens WHERE user_id = ${user.userId}`
@@ -206,38 +212,35 @@ describe("email lifecycle against authoritative Goose migrations", () => {
     await run(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       const email = yield* AuthEmail
-      const sessions = yield* AuthSessions
+      const realCrypto = yield* AuthCrypto
       const user = yield* create()
       yield* email.forgot(user.email, {})
       const payload = { email: user.email, reset_code: messageFor(user.email, "password_reset").code,
         new_password: "NewPassword2", device_id: "reset-browser", device_name: "Browser" }
-      let locked!: () => void
+      let locked!: () => void, loginPrepared!: () => void
       const userLocked = new Promise<void>((resolve) => { locked = resolve })
-      const outcomes = yield* Effect.all([
-        sql.withTransaction(Effect.gen(function* () {
-          yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${user.userId} FOR UPDATE`
-          locked()
-          yield* waitForBlockedLock(sql, "auth-login-lock")
-          return yield* email.reset(payload, "web")
-        })),
-        Effect.promise(() => userLocked).pipe(Effect.flatMap(() => sessions.emailLogin(user.email, user.password, "old-login", "native")), Effect.result),
-      ], { concurrency: 2 })
+      const loginReady = new Promise<void>((resolve) => { loginPrepared = resolve })
+      const observedCrypto = AuthCrypto.of({ ...realCrypto, emailHash: value => Effect.gen(function* () {
+        const hash = yield* realCrypto.emailHash(value)
+        loginPrepared()
+        return hash
+      }) })
+      const outcomes = yield* Effect.gen(function* () {
+        const concurrentSessions = yield* AuthSessions
+        return yield* Effect.all([
+          sql.withTransaction(Effect.gen(function* () {
+            yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${user.userId} FOR UPDATE`
+            locked()
+            yield* Effect.promise(() => loginReady)
+            return yield* email.reset(payload, "web")
+          })),
+          Effect.promise(() => userLocked).pipe(Effect.flatMap(() => concurrentSessions.emailLogin(
+            user.email, user.password, "old-login", "native",
+          )), Effect.result),
+        ], { concurrency: 2 })
+      }).pipe(Effect.provide(Layer.fresh(AuthSessions.layer)), Effect.provideService(AuthCrypto, observedCrypto))
       expect(outcomes[1]._tag === "Failure" && outcomes[1].failure).toBeInstanceOf(Unauthenticated)
       expect((yield* sql`SELECT token_hash FROM auth_refresh_tokens WHERE user_id = ${user.userId}`).length).toBe(1)
     }))
   })
 })
-
-function waitForBlockedLock(sql: SqlClient.SqlClient, marker: string) {
-  return Effect.gen(function* () {
-    for (let attempt = 0; attempt < 100; attempt++) {
-      // pg_stat_activity snapshots are cached within the reset transaction.
-      yield* sql`SELECT pg_stat_clear_snapshot()`
-      const rows = yield* sql<{ waiting: boolean }>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
-        WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock' AND query LIKE ${`%${marker}%`}) AS waiting`
-      if (rows[0]?.waiting) return
-      yield* Effect.sleep("10 millis")
-    }
-    throw new Error(`Expected a real blocked user-row lock: ${marker}`)
-  })
-}

@@ -3,7 +3,7 @@ import { Data } from "effect"
 export class InvalidRequest extends Data.TaggedError("InvalidRequest")<{
   readonly details?: ReadonlyArray<{ readonly field: string; readonly message: string }>
   readonly message: string
-  readonly status?: 400 | 415
+  readonly status?: 400 | 415 | 422
 }> {}
 
 export class Unauthenticated extends Data.TaggedError("Unauthenticated")<{

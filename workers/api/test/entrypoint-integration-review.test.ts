@@ -96,7 +96,8 @@ describe('actual fetch entrypoint service composition and dispatcher order',()=>
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({status:'ok',runtime:'cloudflare-worker'})
     expect(response.headers.get('x-request-id')).toBe('entrypoint-fixture')
-    expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.test')
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    expect(response.headers.has('access-control-allow-credentials')).toBe(false)
   })
   it.each([{}, { authorization: 'Bearer invalid-token' }, { authorization: 'Bearer fixture-bot-token' }])('preserves the public Builder Hall 501 without SQL or provider work %#', async (headers) => {
     const outbound = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider request'))
@@ -156,7 +157,8 @@ describe('actual fetch entrypoint service composition and dispatcher order',()=>
     const response=await request('/v2/health')
     expect(response.status).toBe(503)
     expect(await response.json()).toMatchObject({code:'upstream_unavailable',request_id:'entrypoint-fixture'})
-    expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.test')
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    expect(response.headers.has('access-control-allow-credentials')).toBe(false)
   })
   it('keeps health and preflight independent of unavailable SQL while recovering an actual query failure',async()=>{
     databaseState.mode='sql'

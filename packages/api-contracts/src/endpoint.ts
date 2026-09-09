@@ -39,7 +39,7 @@ export interface Endpoint<
   readonly errors?: Errors
   readonly method: HttpMethod
   readonly operationId: string
-  readonly path: `/proxy/v1/${string}` | `/v2/${string}`
+  readonly path: `/${string}`
   readonly pathParams: PathParams
   readonly query: Query
   readonly response: Response

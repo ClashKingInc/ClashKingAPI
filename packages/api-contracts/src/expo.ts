@@ -90,7 +90,6 @@ import {
   PlayerBuilderhallCountsEndpoint,
   PlayerLeagueTierCountsEndpoint,
   PlayerTownhallCountsEndpoint,
-  StatsOverviewEndpoint,
 } from "./expo-stats.js"
 import { WarBasicEndpoint, WarPreviousEndpoint } from "./expo-war.js"
 import {
@@ -215,7 +214,6 @@ export const expoEndpoints = {
   billingSubscription: BillingSubscriptionEndpoint,
   cwlSummaryExport: CwlSummaryExportEndpoint,
   playerWarStatsExport: PlayerWarStatsExportEndpoint,
-  statsOverview: StatsOverviewEndpoint,
   globalCounts: GlobalCountsEndpoint,
   playerTownhallCounts: PlayerTownhallCountsEndpoint,
   playerBuilderhallCounts: PlayerBuilderhallCountsEndpoint,

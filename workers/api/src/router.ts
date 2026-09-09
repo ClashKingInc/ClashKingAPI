@@ -6,7 +6,7 @@ import {
   HomeActivityResponse,
   HealthResponse,
   StatsPerformanceResponse,
-  StatsOverviewResponse,
+  endpoints as apiEndpoints,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 
@@ -50,7 +50,6 @@ import {
   queryGroupedCounts,
   queryGlobalCounts,
   queryRankedStats,
-  queryStatsOverview,
   queryWarStats,
   parseStatsCwlQuery,
   parseStatsRankedQuery,
@@ -58,6 +57,7 @@ import {
 } from "./stats.js"
 import { dispatchLeagueAnalytics } from "./league-analytics.js"
 import { dispatchStatsHistory } from "./stats-history.js"
+import { dispatchLegacyPublic } from "./legacy-public.js"
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" }
 
@@ -148,10 +148,30 @@ export const browserCors = (request: Request, response: Response, bindings: Work
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-export const applyCors = (request: Request, response: Response, bindings: WorkerBindings): Response =>
-  new URL(request.url).pathname.startsWith("/v2/admin/")
-    ? adminCors(request, response, bindings)
-    : browserCors(request, response, bindings)
+const endpointMatchers = Object.values(apiEndpoints).map((endpoint) => ({
+  auth: endpoint.auth, method: endpoint.method,
+  pattern: new RegExp(`^${endpoint.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replaceAll(/:[A-Za-z0-9_]+/gu, "[^/]+")}$`, "u"),
+  path: endpoint.path,
+}))
+const isOpenPublicRequest = (request: Request) => {
+  const url = new URL(request.url)
+  const method = request.method === "OPTIONS" ? request.headers.get("access-control-request-method") ?? "GET" : request.method
+  return endpointMatchers.some((endpoint) => endpoint.method === method && endpoint.auth === "public" &&
+    !endpoint.path.startsWith("/v2/auth/") && !endpoint.path.startsWith("/v2/billing/") && endpoint.pattern.test(url.pathname))
+}
+const publicCors = (request: Request, response: Response): Response => {
+  if (request.headers.get("origin") === null) return response
+  const headers = new Headers(response.headers)
+  headers.set("access-control-allow-origin", "*")
+  headers.set("access-control-expose-headers", "X-Request-ID, Retry-After, Content-Disposition")
+  headers.delete("access-control-allow-credentials")
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+export const applyCors = (request: Request, response: Response, bindings: WorkerBindings): Response => {
+  if (isOpenPublicRequest(request)) return publicCors(request, response)
+  return new URL(request.url).pathname.startsWith("/v2/admin/") ? adminCors(request, response, bindings) : browserCors(request, response, bindings)
+}
 
 export const adminPreflight = (request: Request, bindings: WorkerBindings): Response => {
   const response = new Response(null, { status: 204 })
@@ -164,7 +184,7 @@ export const adminPreflight = (request: Request, bindings: WorkerBindings): Resp
 }
 
 export const browserPreflight = (request: Request, bindings: WorkerBindings): Response => {
-  const withOrigin = browserCors(request, new Response(null, { status: 204 }), bindings)
+  const withOrigin = isOpenPublicRequest(request) ? publicCors(request, new Response(null, { status: 204 })) : browserCors(request, new Response(null, { status: 204 }), bindings)
   const headers = new Headers(withOrigin.headers)
   headers.set("access-control-allow-methods", "DELETE, GET, PATCH, POST, PUT")
   headers.set("access-control-allow-headers", "Accept, Authorization, Content-Type, X-Device-ID, X-Request-ID, Traceparent, Tracestate")
@@ -180,13 +200,13 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "OPTIONS" && url.pathname.startsWith("/v2/admin/")) {
       return adminPreflight(request, bindings)
     }
-    if (request.method === "OPTIONS" && (url.pathname.startsWith("/v2/") || url.pathname.startsWith("/proxy/v1/"))) {
+    if (request.method === "OPTIONS") {
       return browserPreflight(request, bindings)
     }
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.12" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.13" })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -211,12 +231,6 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "GET" && url.pathname === "/v2/stats/cwl") {
       const query = yield* parseStatsQuery(() => parseStatsCwlQuery(url.searchParams))
       return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(query))
-    }
-    if (request.method === "GET" && url.pathname === "/v2/stats/overview") {
-      return yield* encodeJson(StatsOverviewResponse, yield* queryStatsOverview({
-        ...(url.searchParams.get("start_date") === null ? {} : { start_date: url.searchParams.get("start_date") as string }),
-        ...(url.searchParams.get("end_date") === null ? {} : { end_date: url.searchParams.get("end_date") as string }),
-      }))
     }
     const analyticsResponse = yield* dispatchLeagueAnalytics(request)
     if (analyticsResponse !== undefined) return analyticsResponse
@@ -252,6 +266,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       }
       return response
     }
+    const legacyResponse = yield* dispatchLegacyPublic(request)
+    if (legacyResponse !== undefined) return legacyResponse
     const authResponse = yield* dispatchAuthLifecycle(request, bindings)
     if (authResponse !== undefined) return authResponse
     const accountResponse = yield* dispatchAccountMutations(request)

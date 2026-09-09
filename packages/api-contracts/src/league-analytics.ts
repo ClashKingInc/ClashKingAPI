@@ -25,7 +25,6 @@ export const LeagueBattle = Schema.Struct({
   duration: Schema.NullOr(Schema.Int),
   lootedResources: LootedResources,
   shareCode: Schema.NullOr(Schema.String),
-  armyHash: ArmyHash,
   trophies: Schema.Int,
 })
 export const AutomaticLeagueDefense = Schema.Struct({ trophies: Schema.Int, automatic: Schema.Literal(true) })
@@ -200,7 +199,7 @@ const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q ext
   response, responseMode: "json", successStatus: 200, errors: PublicErrors })
 
 const PlayerSeasonPath = Schema.Struct({ playerTag: Schema.String, seasonId: Schema.String })
-const ArmyPath = Schema.Struct({ armyHash: ArmyHash })
+export const ArmyLinkQuery = Schema.Struct({ ...TimeRangeQuery.fields, armyLink: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8192)).annotate({ description: "Clash CopyArmy link or raw army share code. URL-encode links when supplying this query parameter." }) })
 export const PlayerBattlelogHistoryEndpoint = publicGet("getPlayerBattlelogHistory", "/v2/player/:playerTag/battlelog/history",
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerBattlelogHistoryResponse, "Get stored player battle history")
 export const RankedBattlelogEndpoint = publicGet("getRankedBattlelog", "/v2/player/:playerTag/ranked/:seasonId/battlelog",
@@ -213,10 +212,10 @@ export const PlayerLeagueHistoryEndpoint = publicGet("getPlayerLeagueHistory", "
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerLeagueHistoryResponse, "Get a player's Ranked and completed Legend history")
 export const ArmySearchEndpoint = publicGet("searchLeagueArmies", "/v2/stats/armies",
   NoPathParams, ArmySearchQuery, ArmySearchResponse, "Discover similar Legend army families")
-export const ArmyDetailEndpoint = publicGet("getArmyFamily", "/v2/stats/armies/:armyHash",
-  ArmyPath, TimeRangeQuery, ArmyDetailResponse, "Get a Legend army family")
-export const ArmyTimelineEndpoint = publicGet("getArmyFamilyTimeline", "/v2/stats/armies/:armyHash/timeline",
-  ArmyPath, TimeRangeQuery, ArmyTimelineResponse, "Get a Legend army family's daily timeline")
+export const ArmyDetailEndpoint = publicGet("getArmyFamily", "/v2/stats/armies/detail",
+  NoPathParams, ArmyLinkQuery, ArmyDetailResponse, "Get a Legend army family")
+export const ArmyTimelineEndpoint = publicGet("getArmyFamilyTimeline", "/v2/stats/armies/timeline",
+  NoPathParams, ArmyLinkQuery, ArmyTimelineResponse, "Get a Legend army family's daily timeline")
 export const LeagueHitRateHistoryEndpoint = publicGet("getLeagueHitRateHistory", "/v2/stats/league/hit-rates",
   NoPathParams, LeagueHitRateQuery, LeagueHitRateHistoryResponse, "Get Ranked-season and Legend-day hit rates")
 export const LeagueTierStatisticsEndpoint = publicGet("getLeagueTierStatistics", "/v2/stats/league/tournaments/:seasonId/tiers/:leagueTierId",

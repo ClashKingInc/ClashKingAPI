@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   ArmyHash,
+  ArmyDetailEndpoint,
+  ArmyTimelineEndpoint,
   ArmySearchEndpoint,
   LeagueTierStatisticsEndpoint,
   LegendBattlelogResponse,
@@ -15,9 +17,19 @@ import {
 const realBattle = { time: "2026-09-07T06:00:00Z", townHallLevel: 18,
   opponent: { tag: "#P0Y", name: "Unknown", townHallLevel: 18 }, stars: 3, destructionPercentage: 100,
   duration: 120, lootedResources: { gold: 1, elixir: 2, darkElixir: 3 }, shareCode: "u1x1",
-  armyHash: "ab".repeat(32), trophies: 40 }
+  trophies: 40 }
 
 describe("league analytics contracts", () => {
+  it("requires a link query instead of a hash path for family statistics", () => {
+    expect(ArmyDetailEndpoint.path).toBe("/v2/stats/armies/detail")
+    expect(ArmyTimelineEndpoint.path).toBe("/v2/stats/armies/timeline")
+    for (const endpoint of [ArmyDetailEndpoint, ArmyTimelineEndpoint]) {
+      expect(Schema.decodeUnknownSync(endpoint.query)({ armyLink: "u1x1" })).toEqual({ armyLink: "u1x1" })
+      expect(() => Schema.decodeUnknownSync(endpoint.query)({})).toThrow()
+      expect(() => Schema.decodeUnknownSync(endpoint.query)({ armyLink: "" })).toThrow()
+    }
+  })
+
   it("accepts only lowercase exact army hashes", () => {
     expect(Schema.decodeUnknownSync(ArmyHash)("ab".repeat(32))).toBe("ab".repeat(32))
     expect(() => Schema.decodeUnknownSync(ArmyHash)("AB".repeat(32))).toThrow()
@@ -44,6 +56,8 @@ describe("league analytics contracts", () => {
       attackTrophies: 40, defenseTrophies: -20, trophies: 20, attacks: [realBattle], defenses: [] })
     expect(legend).not.toHaveProperty("startsAt")
     expect(legend).not.toHaveProperty("closed")
+    expect(legend.attacks[0]).not.toHaveProperty("armyHash")
+    expect(ranked.attacks[0]).not.toHaveProperty("armyHash")
   })
 
   it("does not expose Town Hall, mode, cursor, or raw item query aliases for families", () => {

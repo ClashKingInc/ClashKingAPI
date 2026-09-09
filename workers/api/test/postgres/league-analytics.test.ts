@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
 import {
+  dispatchLeagueAnalytics,
   queryArmyDetail,
   queryArmySearch,
   queryArmyTimeline,
@@ -41,7 +42,7 @@ describe("league analytics against authoritative Goose migrations 008 and 009", 
         VALUES
         (decode(${anchor},'hex'),'u1x10','[{"id":1,"quantity":10}]'::jsonb,ARRAY[28000000],
           '[{"equipmentId":90000000,"heroId":28000000}]'::jsonb),
-        (decode(${memberHash},'hex'),'u1x9-2x1','[{"id":1,"quantity":9},{"id":2,"quantity":1}]'::jsonb,
+        (decode(${memberHash},'hex'),'u2x1-1x9','[{"id":1,"quantity":9},{"id":2,"quantity":1}]'::jsonb,
           ARRAY[28000000],'[{"equipmentId":90000000,"heroId":28000000}]'::jsonb)`
       yield* sql`INSERT INTO army_families
         (anchor_army_hash,representative_share_code,family_name,source)
@@ -64,7 +65,7 @@ describe("league analytics against authoritative Goose migrations 008 and 009", 
         ('#2','#P','2026-09-07T07:00:00Z','ranked','defense',18,18,2,97,110,
           '{}'::jsonb,'u1x10',decode(${anchor},'hex')),
         ('#2','#P','2026-09-07T08:00:00Z','legend','attack',18,18,1,80,100,
-          '{}'::jsonb,'u1x9-2x1',decode(${memberHash},'hex')),
+          '{}'::jsonb,'u2x1-1x9',decode(${memberHash},'hex')),
         ('#2','#P','2026-09-08T08:00:00Z','legend','attack',18,18,2,90,110,
           '{}'::jsonb,'u1x10',decode(${anchor},'hex'))`
       yield* sql`INSERT INTO battles_farming
@@ -99,10 +100,12 @@ describe("league analytics against authoritative Goose migrations 008 and 009", 
     expect(detail).toMatchObject({ tag: "#2", registeredAttacks: 1, registeredDefenses: 2,
       attackTrophies: 40, attacks: [expect.objectContaining({ opponent: { tag: "#P", name: "Unknown", townHallLevel: 18 } })] })
     expect(detail.attacks).toHaveLength(1)
+    expect(detail.attacks[0]).not.toHaveProperty("armyHash")
     expect(detail.defenses).toHaveLength(1)
     const legend = await run(queryLegendBattlelog("#2", "2026-09-07", new Date("2026-09-07T12:00:00Z")))
     expect(legend.attacks).toEqual([expect.objectContaining({ time: "2026-09-07T08:00:00.000Z" })])
     expect(legend.defenses).toEqual([])
+    expect(legend.attacks[0]).not.toHaveProperty("armyHash")
     expect((await run(queryPlayerBattlelogHistory("#2", new URLSearchParams(
       "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
     )))).items).toEqual([expect.objectContaining({ battleTime: "2026-09-07T09:00:00.000Z", stars: 3 })])
@@ -118,12 +121,20 @@ describe("league analytics against authoritative Goose migrations 008 and 009", 
       "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-08&minimumPlayers=1",
     )))
     expect(multiDay.items).toEqual([expect.objectContaining({ armyHash: anchor, attacks: 15, players: 1 })])
-    expect(await run(queryArmyDetail(memberHash, new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
+    expect(await run(queryArmyDetail(new URLSearchParams(
+      "armyLink=https%3A%2F%2Flink.clashofclans.com%2Fen%3Faction%3DCopyArmy%26army%3Du1x9-2x1&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
     )))).toMatchObject({ armyHash: anchor, name: "Fallback ab-ab" })
-    expect((await run(queryArmyTimeline(memberHash, new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
+    expect((await run(queryArmyTimeline(new URLSearchParams(
+      "armyLink=u1x9-2x1&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
     )))).items).toHaveLength(1)
+
+    const lookupQuery = new URLSearchParams({ armyLink: "https://link.clashofclans.com/en?action=CopyArmy&army=u1x10",
+      "time[after]": "2026-09-07", "time[before]": "2026-09-07" })
+    const response = await run(dispatchLeagueAnalytics(new Request(`https://api.test/v2/stats/armies/detail?${lookupQuery}`)))
+    expect(await response?.json()).toMatchObject({ armyHash: anchor, attacks: 10 })
+    await expect(run(queryArmyDetail(new URLSearchParams({ armyLink: "u1x99" })))).rejects.toMatchObject({ _tag: "NotFound" })
+    await expect(run(queryArmyDetail(new URLSearchParams()))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    expect(await run(dispatchLeagueAnalytics(new Request(`https://api.test/v2/stats/armies/${anchor}`)))).toBeUndefined()
 
     const hitRates = await run(queryHitRateHistory(new URLSearchParams(
       "mode=ranked&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",

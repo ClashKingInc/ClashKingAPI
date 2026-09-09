@@ -44,6 +44,8 @@ describe("league analytics calculations", () => {
       { ...battle, direction: "defense", battle_time: "2026-09-07T07:00:00Z", stars: 1, destruction_percentage: 91 },
     ]], []))
     expect(complete).not.toHaveProperty("automaticDefensesDerived")
+    expect(complete.attacks[0]).not.toHaveProperty("armyHash")
+    expect(complete.defenses[0]).not.toHaveProperty("armyHash")
     expect(complete.defenses).toEqual([expect.objectContaining({ trophies: 9 }), expect.objectContaining({ trophies: 25 }),
       { trophies: 17, automatic: true }, { trophies: 17, automatic: true }])
     const incomplete = await run(queryRankedBattlelog("#2", "1788739200"), sql([[roster], [

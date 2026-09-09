@@ -16,6 +16,7 @@ import {
   queryRankedGroup,
   queryTierStatistics,
 } from "../../src/league-analytics.js"
+import { prepareStaticMetadata } from "../../src/static-metadata.js"
 
 const url = process.env.TEST_DATABASE_URL
 if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
@@ -29,6 +30,10 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
 
 describe("league analytics against authoritative Goose migrations 008 and 009", () => {
   it("keeps exact battle modes separate and reads only the permanent family and league relations", async () => {
+    await Effect.runPromise(prepareStaticMetadata({ ASSETS: { get: async (key: string) => ({ json: async () => ({ items: [{
+      _id: key.includes("heroes") ? 28_000_000 : key.includes("pets") ? 73_000_000 : key.includes("equipment") ? 90_000_000 : 105_000_034,
+      name: "Fixture metadata",
+    }] }) }) } } as unknown as Pick<WorkerBindings, "ASSETS">, ["league_tiers", "heroes", "pets", "equipment"]))
     await run(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       yield* sql`INSERT INTO army_compositions

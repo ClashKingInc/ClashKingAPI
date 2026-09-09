@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -27,6 +29,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --strict-peer-deps
+
+      - name: Require a new unused API package version
+        if: github.event_name == 'pull_request'
+        run: node scripts/api-release-version.mjs check-pr "origin/${{ github.base_ref }}"
 
       - name: Validate contracts, client, and Worker
         run: |

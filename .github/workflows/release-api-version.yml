@@ -1,0 +1,56 @@
+name: Create API release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: api-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Read and validate the package version
+        id: version
+        run: node scripts/api-release-version.mjs current
+
+      - name: Create the immutable tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+        run: |
+          existing_commit="$(git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}^{commit}" || true)"
+          if [ -n "$existing_commit" ]; then
+            test "$existing_commit" = "$GITHUB_SHA"
+          else
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "Release $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --verify-tag --target "$GITHUB_SHA" --title "$RELEASE_TAG" --generate-notes
+
+  packages:
+    needs: release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-api-packages.yml
+    with:
+      release_tag: ${{ needs.release.outputs.release_tag }}

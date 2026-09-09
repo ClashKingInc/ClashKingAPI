@@ -30,6 +30,7 @@ test("main release calls the immutable package workflow without recursive releas
   assert.match(release, /push:\s*\n\s*branches: \[main\]/u)
   assert.match(release, /uses: \.\/\.github\/workflows\/release-api-packages\.yml/u)
   assert.match(release, /gh release create/u)
+  assert.match(release, /GH_TOKEN: \$\{\{ github\.token \}\}/u)
   assert.doesNotMatch(release, /workflow_dispatch|repository_dispatch|--force/u)
   assert.match(packages, /workflow_call:/u)
   assert.doesNotMatch(packages, /--clobber/u)

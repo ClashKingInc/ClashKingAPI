@@ -31,6 +31,8 @@ jobs:
 
       - name: Create the immutable tag and GitHub Release
         env:
+          # Releases created by github.token do not recursively emit another
+          # release workflow; the package job below invokes it directly.
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}

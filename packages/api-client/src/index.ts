@@ -210,7 +210,7 @@ const encodedObject = (value: unknown, part: string): Readonly<Record<string, un
 
 export const buildEndpointUrl = (
   baseUrl: string,
-  pathTemplate: `/proxy/v1/${string}` | `/v2/${string}`,
+  pathTemplate: `/${string}`,
   encodedPath: unknown,
   encodedQuery: unknown,
 ): URL => {

@@ -18,6 +18,7 @@ export * from "./stats-history.js"
 export * from "./league-analytics.js"
 export * from "./billing-webhook.js"
 export * from "./media.js"
+export * from "./legacy-public.js"
 
 import { AppConfigEndpoint } from "./app-config.js"
 import { botEndpoints } from "./bot.js"
@@ -38,8 +39,10 @@ import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics
 import { statsHistoryEndpoints } from "./stats-history.js"
 import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
+import { legacyPublicEndpoints } from "./legacy-public.js"
 
 export const endpoints = {
+  ...legacyPublicEndpoints,
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,
   ...publicPlayerExtraEndpoints,

@@ -140,29 +140,6 @@ const metric = (row: MetricRow, daily: ReadonlyArray<DailyMetricRow> = []) => ({
   })),
 })
 
-const legacyMetric = (value: ReturnType<typeof metric>) => ({
-  available: value.available,
-  sample_size: value.sampleSize,
-  average_stars: value.averageStars,
-  average_destruction: value.averageDestruction,
-  zero_star_rate: value.zeroStarRate,
-  one_star_rate: value.oneStarRate,
-  two_star_rate: value.twoStarRate,
-  three_star_rate: value.threeStarRate,
-  daily: value.daily.map((point) => ({
-    date: point.date,
-    sample_size: point.sampleSize,
-    ...(point.useCount === undefined ? {} : { use_count: point.useCount }),
-    ...(point.usageRate === undefined ? {} : { usage_rate: point.usageRate }),
-    average_stars: point.averageStars,
-    average_destruction: point.averageDestruction,
-    zero_star_rate: point.zeroStarRate,
-    one_star_rate: point.oneStarRate,
-    two_star_rate: point.twoStarRate,
-    three_star_rate: point.threeStarRate,
-  })),
-})
-
 const metricFromDaily = (points: ReadonlyArray<DailyMetricRow>) => {
   const total = points.reduce((sum, point) => sum + n(point.sample_size), 0)
   const weighted = (field: keyof Pick<MetricRow,
@@ -311,42 +288,3 @@ export const queryGroupedCounts = (dimension: GroupedCountDimension) => database
     return { items, count: items.length }
   }),
 )
-
-const queryRankedOverview = (window: DateWindow) => database("Stats.rankedOverview", Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  const params = [window.start, window.endExclusive]
-  const source = `FROM (
-    SELECT b."timestamp" AS event_time, b.stars::int AS stars,
-      b.destruction_percentage::float8 AS destruction_percentage
-    FROM battlelogs b WHERE b.attack = true AND lower(b.battle_type) IN ('ranked', 'legend')
-      AND b."timestamp" >= $1 AND b."timestamp" < $2
-  ) source`
-  const rows = yield* sql.unsafe<MetricRow>(`SELECT ${metricColumns} ${source}`, params)
-  const daily = yield* sql.unsafe<DailyMetricRow>(
-    `SELECT to_char(event_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, ${metricColumns} ${source}
-     GROUP BY to_char(event_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') ORDER BY date`,
-    params,
-  )
-  const row = rows[0]
-  if (row === undefined) throw new Error("Ranked overview aggregate returned no row")
-  return legacyMetric(metric(row, daily))
-}))
-
-export const queryStatsOverview = (
-  dates: { readonly end_date?: string; readonly start_date?: string },
-) => Effect.gen(function* () {
-  const window = yield* statsDateWindow(dates)
-  const [countsResult, ranked, war, cwl] = yield* Effect.all([
-    queryGlobalCounts,
-    queryRankedOverview(window),
-    queryWarStats({ dates }),
-    queryCwlStats({ dates }),
-  ], { concurrency: "unbounded" })
-  return {
-    date_range: dateRange(window),
-    counts: countsResult,
-    ranked,
-    war: legacyMetric(war.metrics),
-    cwl: legacyMetric(cwl.metrics),
-  }
-})

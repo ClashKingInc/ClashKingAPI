@@ -1,0 +1,28 @@
+{
+  "name": "@clashking/api-worker",
+  "version": "0.1.0-rc.12",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --cwd ../.. --dry-run --outdir workers/api/dist",
+    "deploy": "wrangler deploy --cwd ../..",
+    "deploy:dry-run": "wrangler deploy --cwd ../.. --dry-run",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "types": "wrangler types --cwd ../.. workers/api/worker-configuration.d.ts"
+  },
+  "dependencies": {
+    "@clashking/api-contracts": "0.1.0-rc.12",
+    "@effect/sql-pg": "4.0.0-rc.112",
+    "bcryptjs": "3.0.3",
+    "effect": "4.0.0-rc.112",
+    "email-addresses": "5.0.0",
+    "fflate": "0.8.3",
+    "jose": "6.2.10",
+    "nodemailer": "9.1.1",
+    "stripe": "22.6.1"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.1"
+  }
+}

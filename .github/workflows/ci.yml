@@ -2,92 +2,86 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main]
   push:
-    branches: [main, master]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  # --- Build ------------------------------------------------------------------
-  build:
-    name: Build
+  typescript:
+    name: TypeScript Worker and packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --strict-peer-deps
+
+      - name: Require a new unused API package version
+        if: github.event_name == 'pull_request'
+        run: node scripts/api-release-version.mjs check-pr "origin/${{ github.base_ref }}"
+
+      - name: Validate contracts, client, and Worker
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:scripts
+          npm run test:archive-runtime
+          npm run lint
+          npm run openapi:check
+          npm run build
+
+  postgres:
+    name: Authoritative PostgreSQL integration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout clashy.go
+      # This immutable revision is the schema contract from DevKit PR #20.
+      # API_SCHEMA_TEST_REF remains an explicit transition override once that
+      # contract is present on DevKit main.
+      - name: Checkout authoritative schema and fixture harness
         uses: actions/checkout@v6
         with:
-          repository: ClashKingInc/clashy.go
-          path: clashy.go
+          repository: ClashKingInc/DevKit
+          ref: ${{ vars.API_SCHEMA_TEST_REF || '0858f8c830fae71fec944d1884a059f5fcc4743c' }}
+          path: .schema-test
+          token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
 
-      - name: Fix replace directive
-        run: go mod edit -replace github.com/clashkinginc/clashy.go=./clashy.go
+      - name: Validate schema fixture checkout
+        run: bash scripts/test-postgres.sh --check .schema-test
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-node@v6
         with:
-          go-version-file: go.mod
-          cache: true
+          node-version: 26
+          cache: npm
 
-      - name: Build
-        run: go build ./...
-
-  # --- Vet --------------------------------------------------------------------
-  vet:
-    name: Vet
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Checkout clashy.go
-        uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
         with:
-          repository: ClashKingInc/clashy.go
-          path: clashy.go
+          go-version-file: .schema-test/database/go.mod
+          cache: false
 
-      - name: Fix replace directive
-        run: go mod edit -replace github.com/clashkinginc/clashy.go=./clashy.go
+      - name: Install pinned Goose and API dependencies
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@v3.26.0
+          npm ci --strict-peer-deps
+          npm run build --workspace @clashking/api-contracts
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
+      - name: Validate database runner wiring
+        run: npm run test:scripts
 
-      - name: Vet
-        run: go vet ./...
-
-  # --- Tests ------------------------------------------------------------------
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Checkout clashy.go
-        uses: actions/checkout@v6
-        with:
-          repository: ClashKingInc/clashy.go
-          path: clashy.go
-
-      - name: Fix replace directive
-        run: go mod edit -replace github.com/clashkinginc/clashy.go=./clashy.go
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run tests
-        run: go test -coverprofile=coverage.out ./...
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
+      - name: Run each suite against a fresh migrated Timescale database
+        run: npm run test:postgres:all -- .schema-test

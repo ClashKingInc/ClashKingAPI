@@ -1,11 +1,16 @@
 # created by virtualenv automatically
 .env
+.local/
 *.xml
 *.idea
 .idea/
 *pycache*
 .venv/
 node_modules/
+**/dist/
+*.tsbuildinfo
+.wrangler/
+workers/*/.wrangler/
 
 # AI files
 .claude/
@@ -16,5 +21,4 @@ CLAUDE.md
 CUTOVER_REVIEW.md
 STRUCTURE_REVIEW.md
 
-# Go build artifacts
-*.exe
+workers/api/documentation-assets/

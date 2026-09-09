@@ -26,11 +26,48 @@ The interactive reference shows the available routes, what to send, what comes b
 
 ## Project layout
 
-- `internal/routes` contains the API routes and their tests.
-- `internal/models` contains the request and response formats.
-- `internal/utils` contains shared setup for the database, cache, authentication, email, and outside services.
-- `internal/docs` is Swaggo's generated input, while `internal/swaggerdocs/openapi.json` and `openapi.yaml` are the OpenAPI 3.2 files served by the API.
+- `workers/api` contains the Effect v4 / TypeScript Cloudflare Worker API.
+- `packages/api-contracts` owns shared request/response schemas and endpoint definitions.
+- `packages/api-client` provides the typed request client used by the separate consumers.
+- `scripts/generate-openapi.mjs` generates the complete internal schema from
+  shared contracts. `npm run docs:build` produces the public documentation assets
+  served by the Worker.
 - `locales` contains messages sent to users in supported languages.
+
+## Local development
+
+The API runs on Cloudflare Workers with Effect and TypeScript. It stays on
+`/v2`, uses POST for the six former QUERY operations, retains Dashboard business
+handlers, and owns Admin business handlers. Dashboard and Admin frontends are
+separate Workers; Bot runtime work remains a separate plan.
+
+Use Node 26 and npm 12, with the pinned Effect/TypeScript versions:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run test:scripts
+npm run test:archive-runtime
+npm run lint
+npm run openapi:check
+npm run build
+```
+
+Build and Worker dry-run scripts do not deploy. The retained database test lane
+requires the authoritative schema copy's disposable Goose/Timescale harness:
+`npm run test:postgres:all -- /path/to/clashking_schemas`. It never uses an
+inherited production connection. Deferred Bot tests are not active API acceptance.
+
+For interactive Dashboard/App development, use `npm run dev`. It generates the
+contracts and API documentation before starting the persistent local database;
+the disposable harness above is for tests only.
+
+Publishing a GitHub release attaches version-matched API contracts and client
+archives plus their integrity manifest. Cloudflare builds production from
+`main` with `npx wrangler deploy`; preview branches use
+`npx wrangler versions upload`. The root Wrangler configuration regenerates the
+OpenAPI and documentation assets before either upload.
 
 ## Using ClashKing data
 
@@ -44,7 +81,9 @@ Game images and other Clash of Clans assets are available from [assets.clashk.in
 
 ## Contributing
 
-Bug fixes and useful improvements are welcome. Keep changes focused, follow the existing Go style, and include tests when behavior changes.
+Bug fixes and useful improvements are welcome. Keep changes focused, follow the
+owning module's patterns, and include tests when behavior changes. Shared schema
+changes must be checked against the Dashboard, Admin, App and Bot consumers.
 
 ## License
 

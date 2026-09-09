@@ -1,0 +1,68 @@
+name: Release API packages
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to package
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag to rebuild and upload
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: api-package-release-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci --strict-peer-deps
+      - run: node --test scripts/api-package-release.test.mjs
+      - run: npm run typecheck && npm test && npm run test:scripts && npm run lint
+      - run: npm run openapi:check
+      - name: Record the checked-out release commit
+        run: echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Build and pack the matching release packages
+        id: packages
+        env:
+          SOURCE_TAG: ${{ env.RELEASE_TAG }}
+        run: node scripts/api-package-release.mjs prepare
+
+      - name: Preserve the exact release artifacts and manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-packages-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ steps.packages.outputs.directory }}
+          if-no-files-found: error
+
+      - name: Verify and attach immutable archives to the GitHub Release
+        env:
+          PACKAGE_DIRECTORY: ${{ steps.packages.outputs.directory }}
+          SOURCE_TAG: ${{ env.RELEASE_TAG }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node scripts/api-package-release.mjs verify "$PACKAGE_DIRECTORY"
+          gh release upload "$RELEASE_TAG" "$PACKAGE_DIRECTORY"/*.tgz "$PACKAGE_DIRECTORY/manifest.json"

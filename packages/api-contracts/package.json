@@ -1,0 +1,52 @@
+{
+  "name": "@clashking/api-contracts",
+  "version": "0.1.0-rc.12",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Browser-safe Effect schemas and endpoint metadata for the ClashKing v2 API",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClashKingInc/ClashKingAPI.git",
+    "directory": "packages/api-contracts"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./expo": {
+      "types": "./dist/expo.d.ts",
+      "import": "./dist/expo.js"
+    },
+    "./deferred-runtime": {
+      "types": "./dist/deferred-runtime.d.ts",
+      "import": "./dist/deferred-runtime.js"
+    }
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/prepare-package-license.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  },
+  "peerDependencies": {
+    "@clashking/clash-contract": ">=0.1.2 <2",
+    "effect": "4.0.0-rc.112"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "group": {
+    "state": "inWar", "season": "2026-09", "war_league": "Champion League I",
+    "rounds": [{"warTags": ["#W1", "#W2", "#0", "#W1"]}],
+    "clans": [
+      {"tag": "#A", "name": "Alpha", "clanLevel": 20, "badgeUrls": {"small": "a", "medium": "a", "large": "a"}, "members": [
+        {"tag": "#A1", "name": "Alpha One", "townHallLevel": 15},
+        {"tag": "#A2", "name": "Bench", "townHallLevel": 16}
+      ]},
+      {"tag": "#B", "name": "Beta", "clanLevel": 20, "badgeUrls": {"small": "b", "medium": "b", "large": "b"}, "members": [
+        {"tag": "#B1", "name": "Beta One", "townHallLevel": 14}
+      ]}
+    ]
+  },
+  "wars": [
+    {"state": "warEnded", "teamSize": 1, "clan": {
+      "tag": "#A", "name": "Alpha", "clanLevel": 20, "badgeUrls": {"small": "a", "medium": "a", "large": "a"}, "attacks": 1, "stars": 3, "destructionPercentage": 100,
+      "members": [{"tag": "#A1", "name": "Alpha One", "townhallLevel": 15, "mapPosition": 1,
+        "attacks": [{"attackerTag": "#A1", "defenderTag": "#B1", "stars": 3, "destructionPercentage": 100, "order": 1, "duration": 120}],
+        "bestOpponentAttack": {"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50, "order": 2, "duration": 120}}]
+    }, "opponent": {
+      "tag": "#B", "name": "Beta", "clanLevel": 20, "badgeUrls": {"small": "b", "medium": "b", "large": "b"}, "attacks": 1, "stars": 1, "destructionPercentage": 50.15,
+      "members": [{"tag": "#B1", "name": "Beta One", "townhallLevel": 14, "mapPosition": 2,
+        "attacks": [{"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50, "order": 2, "duration": 120}],
+        "bestOpponentAttack": {"attackerTag": "#A1", "defenderTag": "#B1", "stars": 3, "destructionPercentage": 100, "order": 1, "duration": 120}}]
+    }},
+    {"state": "inWar", "teamSize": 1, "clan": {
+      "tag": "#B", "name": "Beta", "clanLevel": 20, "badgeUrls": {"small": "b", "medium": "b", "large": "b"}, "attacks": 0, "stars": 0, "destructionPercentage": 0,
+      "members": [{"tag": "#B1", "name": "Beta One", "townhallLevel": 16, "mapPosition": 3}]
+    }, "opponent": {
+      "tag": "#A", "name": "Alpha", "clanLevel": 20, "badgeUrls": {"small": "a", "medium": "a", "large": "a"}, "attacks": 0, "stars": 0, "destructionPercentage": 0,
+      "members": [{"tag": "#A1", "name": "Alpha One", "townhallLevel": 15, "mapPosition": 1}]
+    }}
+  ]
+}

@@ -22,8 +22,8 @@ export const dashboardMiscExternalLayer = Layer.effect(DashboardMiscExternal, Ef
         )),
       )
     },
-    staticNames,
-    staticMaxLevel,
+    staticNames: (category, query) => staticNames(category, query).pipe(Effect.provideService(WorkerEnvironment, bindings)),
+    staticMaxLevel: (category, item) => staticMaxLevel(category, item).pipe(Effect.provideService(WorkerEnvironment, bindings)),
     discohook: (url) => resolveDiscohook(url).pipe(
       Effect.flatMap((value) => Schema.decodeUnknownEffect(dashboardEndpoints.dashboardDiscohookResolve.response)(value).pipe(
         Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Invalid Discohook response" })),

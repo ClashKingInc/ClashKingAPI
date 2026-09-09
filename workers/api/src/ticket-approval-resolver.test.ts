@@ -30,7 +30,9 @@ const setup = (options: { player?: unknown; clan?:unknown; clanResponse?:Respons
     return Effect.die(`Unexpected Discord ${path}`)
   })
   const exact = vi.fn(() => options.countUnavailable ? Effect.fail(new UpstreamUnavailable({ cause: undefined, message: "Exact count unavailable" })) : Effect.succeed(options.count ?? 42))
-  const bindings = { DISCORD_APPLICATION_ID: applicationId, CLASH_PROXY: { fetch } }
+  const bindings = { DISCORD_APPLICATION_ID: applicationId, CLASH_PROXY: { fetch }, ASSETS: { get: async () => ({ json: async () => ({ items: [{
+    _id: 28_000_000, name: "Barbarian King", village: "home", levels: [{ level: 20, required_townhall: 8 }],
+  }] }) }) } as unknown as R2Bucket }
   const layer = Layer.mergeAll(Layer.succeed(DiscordApi, { request, token: () => Effect.die("Unexpected OAuth") }),
     Layer.succeed(TicketApprovalGuildCounts, { exact }), noSql)
   // These unit cases never request the SQL-backed leader mention; any accidental

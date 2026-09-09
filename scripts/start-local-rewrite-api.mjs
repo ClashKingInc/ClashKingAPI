@@ -125,7 +125,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   compatibilityDate: config.compatibility_date, compatibilityFlags: ["nodejs_compat"],
   hyperdrives: { HYPERDRIVE: database.href },
   kvNamespaces: ["API_CACHE"],
-  r2Buckets: ["WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
+  r2Buckets: ["ASSETS", "WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {
   },
   serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: unavailable },

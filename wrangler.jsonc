@@ -61,6 +61,10 @@
   ],
   "r2_buckets": [
     {
+      "binding": "ASSETS",
+      "bucket_name": "clashking-assets"
+    },
+    {
       "binding": "WAR_ARCHIVE",
       "bucket_name": "clashking-wars"
     },

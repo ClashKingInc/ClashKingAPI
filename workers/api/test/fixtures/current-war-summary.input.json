@@ -17,11 +17,11 @@
       "tag": "#A", "name": "Alpha", "clanLevel": 20, "badgeUrls": {"small": "a", "medium": "a", "large": "a"}, "attacks": 1, "stars": 3, "destructionPercentage": 100,
       "members": [{"tag": "#A1", "name": "Alpha One", "townhallLevel": 15, "mapPosition": 1,
         "attacks": [{"attackerTag": "#A1", "defenderTag": "#B1", "stars": 3, "destructionPercentage": 100, "order": 1, "duration": 120}],
-        "bestOpponentAttack": {"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50.15, "order": 2, "duration": 120}}]
+        "bestOpponentAttack": {"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50, "order": 2, "duration": 120}}]
     }, "opponent": {
       "tag": "#B", "name": "Beta", "clanLevel": 20, "badgeUrls": {"small": "b", "medium": "b", "large": "b"}, "attacks": 1, "stars": 1, "destructionPercentage": 50.15,
       "members": [{"tag": "#B1", "name": "Beta One", "townhallLevel": 14, "mapPosition": 2,
-        "attacks": [{"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50.15, "order": 2, "duration": 120}],
+        "attacks": [{"attackerTag": "#B1", "defenderTag": "#A1", "stars": 1, "destructionPercentage": 50, "order": 2, "duration": 120}],
         "bestOpponentAttack": {"attackerTag": "#A1", "defenderTag": "#B1", "stars": 3, "destructionPercentage": 100, "order": 1, "duration": 120}}]
     }},
     {"state": "inWar", "teamSize": 1, "clan": {

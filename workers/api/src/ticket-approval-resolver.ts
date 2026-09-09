@@ -7,6 +7,7 @@ import { DatabaseFailure, UpstreamUnavailable, type ApiFailure } from "./errors.
 import { readBoundedJson } from "./request-body.js"
 import { TicketApprovalResolver } from "./ticket-approval-runtime.js"
 import { approvalBuiltinValues } from "./ticket-approval-values.js"
+import { prepareStaticMetadata } from "./static-metadata.js"
 import { ticketApprovalTokens, type TicketApprovalToken } from "./ticket-approval-template.js"
 import type { StaffTicketSnapshot } from "./ticket-staff-runtime.js"
 
@@ -37,6 +38,7 @@ const decode = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknow
 interface ApprovalBindings {
   readonly DISCORD_APPLICATION_ID: string
   readonly CLASH_PROXY: { readonly fetch: (request: Request) => Promise<Response> }
+  readonly ASSETS: R2Bucket
 }
 export const resolveTicketApproval = (ticket: StaffTicketSnapshot, template: string, bindings: ApprovalBindings) => Effect.gen(function* () {
   const required = ticketApprovalTokens.filter(token => template.includes(`{${token}}`))
@@ -92,6 +94,7 @@ export const resolveTicketApproval = (ticket: StaffTicketSnapshot, template: str
       emojis.set(emoji.name, `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`)
     }
   }
+  if (player && needs("account_heroes")) yield* prepareStaticMetadata(bindings, ["heroes"])
   const values = approvalBuiltinValues({ ticket: { number: ticket.number, status: ticket.status, channelId: ticket.channel_id, applicantUserId: ticket.applicant_user_id },
     applicantName: user?.username ?? "", guild: { name: guild?.name ?? "", memberCount: count },
     player: player ? { ...player, heroEquipment: player.heroEquipment ?? [] } : undefined,

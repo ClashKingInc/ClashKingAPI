@@ -20,7 +20,7 @@ const bindings=(leaderTag:string|undefined)=>({DISCORD_APPLICATION_ID:"485456789
   expect(request.method).toBe("GET");expect(new URL(request.url).pathname).toBe("/v1/clans/%23PYL")
   return Response.json({tag:"#PYL",name:"Family clan",clanLevel:20,members:leaderTag ? 1 : 0,
     memberList:leaderTag ? [{tag:leaderTag,name:"Current leader",role:"leader"}] : []})
-}}})
+}},ASSETS:{} as R2Bucket})
 
 describe("approval clan leader resolution against canonical player links",()=>{
   it("uses the current leader account's current owner without mutating verification or links",()=>run(Effect.gen(function* () {

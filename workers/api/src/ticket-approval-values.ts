@@ -1,6 +1,5 @@
 import metadata from "./ticket-approval-static-data.json"
-import staticMetadata from "./static-metadata-data.json"
-import { maxLevelAtTownHall } from "./static-metadata.js"
+import { maxLevelAtTownHall, rosterHeroNames } from "./static-metadata.js"
 import type { TicketApprovalToken } from "./ticket-approval-template.js"
 
 export interface ApprovalPlayer {
@@ -30,7 +29,7 @@ export const approvalHeroText = (player: ApprovalPlayer, emojis: ReadonlyMap<str
   })
   const heroes = new Map(player.heroes.filter(hero => hero.village === "home").map(hero => [hero.name, hero]))
   const lines: string[] = []
-  for (const name of staticMetadata.roster.heroes) {
+  for (const name of rosterHeroNames()) {
     const hero = heroes.get(name)
     if (!hero) continue
     const color = hero.level === maxLevelAtTownHall("heroes", hero.name, player.townHallLevel) ? "gold" : "blue"

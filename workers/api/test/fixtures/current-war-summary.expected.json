@@ -42,7 +42,7 @@
             "defense_count": 1,
             "missed_defenses": 1,
             "stars": 1,
-            "total_destruction": 50.15
+            "total_destruction": 50
           },
           "defenseLowerTHLevel": 1,
           "defenseUpperTHLevel": 0,
@@ -92,7 +92,7 @@
       "name": "Alpha",
       "rank": 1,
       "tag": "#A",
-      "total_destruction": 50.15,
+      "total_destruction": 50,
       "total_destruction_inflicted": 100,
       "total_stars": 3,
       "town_hall_levels": {
@@ -123,7 +123,7 @@
             "attack_count": 1,
             "missed_attacks": 0,
             "stars": 1,
-            "total_destruction": 50.15
+            "total_destruction": 50
           },
           "avgAttackOrder": 2,
           "avgAttackerPosition": 1,
@@ -157,7 +157,7 @@
       "rank": 2,
       "tag": "#B",
       "total_destruction": 100,
-      "total_destruction_inflicted": 50.15,
+      "total_destruction_inflicted": 50,
       "total_stars": 1,
       "town_hall_levels": {
         "14": 1
@@ -177,7 +177,7 @@
   ],
   "season": "2026-09",
   "state": "inWar",
-  "total_destruction": 150.15,
+  "total_destruction": 150,
   "total_stars": 4,
   "war_league": "Champion League I"
 }

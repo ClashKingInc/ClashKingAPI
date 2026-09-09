@@ -38,6 +38,7 @@ import { dispatchPublicClanExtra } from "./public-clan-extra.js"
 import { AuthIdentity, type UserPrincipal } from "./auth.js"
 import { serveAppUpdateManifest } from "./app-updates.js"
 import { loadAppConfig } from "./app-config.js"
+import { prepareStaticMetadata, staticMetadataSectionsForPath } from "./static-metadata.js"
 import type { ApiFailure } from "./errors.js"
 import { InvalidRequest, NotFound, NotImplemented } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
@@ -182,6 +183,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "OPTIONS" && (url.pathname.startsWith("/v2/") || url.pathname.startsWith("/proxy/v1/"))) {
       return browserPreflight(request, bindings)
     }
+    const staticSections = staticMetadataSectionsForPath(url.pathname)
+    if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
       return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.12" })
     }

@@ -117,9 +117,7 @@ const safeNumber = (raw: string | number) => Effect.try({ try: () => {
 }, catch: failure })
 interface RankedRow {
   player_tag: string; player_name: string; placement: number; league_trophies: number; group_tag: string; league_tier_id: number;
-  town_hall: number; maximum_battle_count: number; registered_attack_count: number; registered_defense_count: number;
-  observed_attack_count: number; observed_defense_count: number; missing_real_attacks: number; missing_real_defenses: number;
-  attacks_complete: boolean; defenses_complete: boolean; promoted: boolean; demoted: boolean;
+  town_hall: number; maximum_battle_count: number;
 }
 const rankedMember = ({ player_tag, player_name, group_tag, league_tier_id, ...row }: RankedRow, includeGroup: boolean) => ({
   name: player_name, tag: player_tag, ...row,
@@ -128,17 +126,13 @@ const rankedMember = ({ player_tag, player_name, group_tag, league_tier_id, ...r
 export const queryPlayerRankedGroup = (rawTag: string, rawSeason: string) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), season = yield* integerPath(rawSeason, "season"), sql = yield* SqlClient.SqlClient
   const rows = yield* sql<RankedRow>`SELECT player_tag, player_name, placement, league_trophies,
-    group_tag, league_tier_id, town_hall, maximum_battle_count, registered_attack_count, registered_defense_count,
-    observed_attack_count, observed_defense_count, missing_real_attacks, missing_real_defenses,
-    attacks_complete, defenses_complete, promoted, demoted
+    group_tag, league_tier_id, town_hall, maximum_battle_count
     FROM ranked_league_group_members WHERE season_id = ${String(season)}::bigint AND player_tag = ${tag}`.pipe(Effect.mapError(failure))
   const row = rows[0]
   if (!row) return { tag, season, group: null, members: [] }
   const member = rankedMember(row, true)
   const members = yield* sql<RankedRow>`SELECT player_tag, player_name, placement, league_trophies,
-    group_tag, league_tier_id, town_hall, maximum_battle_count, registered_attack_count, registered_defense_count,
-    observed_attack_count, observed_defense_count, missing_real_attacks, missing_real_defenses,
-    attacks_complete, defenses_complete, promoted, demoted
+    group_tag, league_tier_id, town_hall, maximum_battle_count
     FROM ranked_league_group_members WHERE season_id = ${String(season)}::bigint AND group_tag = ${row.group_tag}
     ORDER BY placement, player_tag`.pipe(Effect.mapError(failure))
   return { season, group_tag: row.group_tag, league_tier_id: row.league_tier_id, player: member, members: members.map((item) => rankedMember(item, false)), count: members.length }

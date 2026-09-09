@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { Effect } from "effect"
+import { beforeAll, describe, expect, it } from "vitest"
+import type { WorkerBindings } from "./environment.js"
+import { prepareStaticMetadata } from "./static-metadata.js"
 import { approvalBuiltinValues, approvalEmojiName, approvalHeroText, type ApprovalPlayer } from "./ticket-approval-values.js"
 import { ticketApprovalTokens } from "./ticket-approval-template.js"
 
@@ -9,6 +12,8 @@ const player: ApprovalPlayer = { name: "Applicant", townHallLevel: 8,
 }
 const emojis = new Map(["blank", "barbarian_king", "gold_20", "barbarian_puppet", "gold_18", "rage_vial", "blue_4"].map(name => [name, `<:${name}:123>`]))
 describe("retained ticket approval builtin values", () => {
+  beforeAll(() => Effect.runPromise(prepareStaticMetadata({ ASSETS: { get: async () => ({ json: async () => ({ items: [{ _id: 28_000_000,
+    name: "Barbarian King", village: "home", levels: [{ level: 20, required_townhall: 8 }] }] }) }) } } as unknown as Pick<WorkerBindings, "ASSETS">, ["heroes"])))
   it("renders all 22 tokens, literal account names, linked leader and retained blank badge", () => {
     const result = approvalBuiltinValues({ ticket: { number: 12, status: "sleep", channelId: "123", applicantUserId: "234" },
       applicantName: "User {custom}", guild: { name: "Guild", memberCount: 42 }, player,

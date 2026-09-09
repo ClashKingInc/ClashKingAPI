@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest"
 
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { dispatchPublicClanExtra } from "./public-clan-extra.js"
+import { prepareStaticMetadata } from "./static-metadata.js"
 import producerWar from "../test/fixtures/war-producer.json"
 
-const bindings = {} as WorkerBindings
+const bindings = { ASSETS: { get: async (key: string) => ({ json: async () => ({ items: key.includes("capital_leagues")
+  ? [{ _id: 85_000_001, name: "Bronze League III" }] : [{ _id: 48_000_000, name: "Unranked" }] }) }) } } as unknown as WorkerBindings
 const fixture = (select: (query: string, values: readonly unknown[]) => readonly object[]) => {
   const statements: string[] = []
   const query = (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -30,7 +32,10 @@ const fixture = (select: (query: string, values: readonly unknown[]) => readonly
     })
   }
   const layer = Layer.merge(Layer.succeed(SqlClient.SqlClient, query as unknown as SqlClient.SqlClient), Layer.succeed(WorkerEnvironment, bindings))
-  return { statements, run: (path: string, method = "GET") => Effect.runPromise(dispatchPublicClanExtra(new Request(`https://api.clashk.ing${path}`, { method }), bindings).pipe(Effect.provide(layer))) }
+  return { statements, run: (path: string, method = "GET") => Effect.runPromise(Effect.gen(function* () {
+    yield* prepareStaticMetadata(bindings, ["war_leagues", "capital_leagues"])
+    return yield* dispatchPublicClanExtra(new Request(`https://api.clashk.ing${path}`, { method }), bindings)
+  }).pipe(Effect.provide(layer))) }
 }
 const cached = { name: "Clan", tag: "#P0Y", description: "Fixture", clan_level: 20, clan_points: 50000, capital_gold_total: "9007199254740991",
   location_id: 32000006, cwl_league_id: 48000000, capital_league_id: 85000001, public_war_log: true,

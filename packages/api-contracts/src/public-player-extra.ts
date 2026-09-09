@@ -9,11 +9,6 @@ const OptionalString = Schema.optionalKey(Schema.String)
 export const RankedPlayerMember = Schema.Struct({
   name: Schema.String, tag: Schema.String, placement: Schema.Number, league_trophies: Schema.Number,
   town_hall: Schema.Number, maximum_battle_count: Schema.Number,
-  registered_attack_count: Schema.Number, registered_defense_count: Schema.Number,
-  observed_attack_count: Schema.Number, observed_defense_count: Schema.Number,
-  missing_real_attacks: Schema.Number, missing_real_defenses: Schema.Number,
-  attacks_complete: Schema.Boolean, defenses_complete: Schema.Boolean,
-  promoted: Schema.Boolean, demoted: Schema.Boolean,
   group_tag: OptionalString, league_tier_id: OptionalNumber,
 })
 export const PlayerRankedGroupResponse = Schema.Union([

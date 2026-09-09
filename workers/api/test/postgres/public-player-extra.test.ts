@@ -50,12 +50,12 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
   it("uses ranked season membership from the migration 008 roster shape", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient, season = Date.parse('2026-08-01T00:00:00Z')/1000
-      yield* sql`INSERT INTO ranked_league_group_members(season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,town_hall,maximum_battle_count,registered_attack_count,registered_defense_count,observed_attack_count,observed_defense_count,promoted,demoted) VALUES
-        (${String(season)}::bigint,'#GROUP',105000034,'#P0Y','Player',2,6000,18,12,10,8,9,8,false,true),
-        (${String(season)}::bigint,'#GROUP',105000034,'#P0L','Other',1,6100,17,12,12,8,12,8,true,false),
-        (${String(season+604800)}::bigint,'#GROUP',105000034,'#QQQ','Next season',1,6200,18,12,12,8,12,8,false,false)`
+      yield* sql`INSERT INTO ranked_league_group_members(season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,town_hall,maximum_battle_count,attack_win_count,attack_loss_count,defense_win_count,defense_loss_count) VALUES
+        (${String(season)}::bigint,'#2PY',105000034,'#P0Y','Player',2,6000,18,12,0,0,0,0),
+        (${String(season)}::bigint,'#2PY',105000034,'#P0L','Other',1,6100,17,12,0,0,0,0),
+        (${String(season+604800)}::bigint,'#2PY',105000034,'#QQQ','Next season',1,6200,18,12,0,0,0,0)`
       const group = yield* get(`player/%23P0Y/ranked/${season}/group`)
-      expect(group).toMatchObject({ season,count:2,player:{tag:'#P0Y',town_hall:18,missing_real_attacks:1,defenses_complete:true,demoted:true},members:[{tag:'#P0L'},{tag:'#P0Y'}] })
+      expect(group).toMatchObject({ season,count:2,player:{tag:'#P0Y',town_hall:18,maximum_battle_count:12},members:[{tag:'#P0L'},{tag:'#P0Y'}] })
       expect(yield* get(`player/%23QQQ/ranked/${season}/group`)).toEqual({ tag:'#QQQ',season,group:null,members:[] })
     }).pipe(Effect.provide(layer),Effect.scoped))
   })

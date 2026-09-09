@@ -1,5 +1,6 @@
 import { Schema } from "effect"
-import { defineEndpoint, NoBody, type ContractSchema } from "./endpoint.js"
+import { defineEndpoint, NoBody, type ContractSchema, type ErrorResponseSpec } from "./endpoint.js"
+import { ErrorResponse } from "./errors.js"
 
 export const LegacyBadgeUrls = Schema.Struct({ small: Schema.String, large: Schema.String, medium: Schema.String })
 export const LegacyWarAttack = Schema.Struct({ attackerTag: Schema.String, defenderTag: Schema.String, stars: Schema.Number, destructionPercentage: Schema.Number, order: Schema.Number, duration: Schema.Number })
@@ -41,18 +42,21 @@ const LegacyCwlRoundTags = Schema.Struct({ warTags: Schema.Array(Schema.String) 
 const LegacyCwlRoundWars = Schema.Struct({ warTags: Schema.Array(Schema.Union([LegacyWar, Schema.Struct({ tag: Schema.String })])) })
 export const LegacyCwlGroup = Schema.Struct({ state: Schema.String, season: Schema.String, clans: Schema.Array(LegacyCwlClan), rounds: Schema.Array(LegacyCwlRoundWars) })
 export const LegacyCurrentCwlResponse = Schema.Union([Schema.Null, Schema.Struct({ data: Schema.Struct({ state: Schema.String, season: Schema.String, clans: Schema.Array(LegacyCwlClan), rounds: Schema.Array(LegacyCwlRoundTags) }) })])
+export const LegacyDetailError = Schema.Struct({ detail: Schema.String })
 const legacyQuery = Schema.Struct({ timestamp_start: Schema.optionalKey(Schema.String), timestamp_end: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(Schema.String) })
 const joinLeaveQuery = Schema.Struct({ timestamp_start: Schema.optionalKey(Schema.String), time_stamp_end: Schema.optionalKey(Schema.String), limit: Schema.optionalKey(Schema.String) })
-const endpoint = <PathParams extends ContractSchema, Query extends ContractSchema, Response extends ContractSchema>(operationId: string, path: `/${string}`, pathParams: PathParams, query: Query, response: Response, summary: string) => defineEndpoint({
-  operationId, method: "GET", path, auth: "public", summary, body: NoBody, bodyMode: "none", pathParams, query, response, responseMode: "json", successStatus: 200,
+const invalid = { status: 422, body: ErrorResponse } as const
+const missing = { status: 404, body: LegacyDetailError } as const
+const endpoint = <PathParams extends ContractSchema, Query extends ContractSchema, Response extends ContractSchema, const Errors extends ReadonlyArray<ErrorResponseSpec>>(operationId: string, path: `/${string}`, pathParams: PathParams, query: Query, response: Response, summary: string, errors: Errors) => defineEndpoint({
+  operationId, method: "GET", path, auth: "public", summary, body: NoBody, bodyMode: "none", pathParams, query, response, responseMode: "json", successStatus: 200, errors,
 })
 
 export const legacyPublicEndpoints = {
-  legacyPlayerWarHits: endpoint("getLegacyPlayerWarHits", "/player/:player_tag/warhits", Schema.Struct({ player_tag: Schema.String }), legacyQuery, LegacyPlayerWarHitsResponse, "Get legacy player war attacks and defenses"),
-  legacyPlayerJoinLeave: endpoint("getLegacyPlayerJoinLeave", "/player/:player_tag/join-leave", Schema.Struct({ player_tag: Schema.String }), joinLeaveQuery, LegacyJoinLeaveResponse, "Get legacy player join and leave history"),
-  legacyClanJoinLeave: endpoint("getLegacyClanJoinLeave", "/clan/:clan_tag/join-leave", Schema.Struct({ clan_tag: Schema.String }), joinLeaveQuery, LegacyJoinLeaveResponse, "Get legacy clan join and leave history"),
-  legacyPreviousWars: endpoint("getLegacyPreviousWars", "/war/:clan_tag/previous", Schema.Struct({ clan_tag: Schema.String }), legacyQuery, LegacyWarListResponse, "Get legacy stored clan wars"),
-  legacyPreviousWarAtTime: endpoint("getLegacyPreviousWarAtTime", "/war/:clan_tag/previous/:end_time", Schema.Struct({ clan_tag: Schema.String, end_time: Schema.String }), Schema.Struct({}), LegacyWar, "Get a legacy stored clan war at an end time"),
-  legacyCurrentCwlGroup: endpoint("getLegacyCurrentCwlGroup", "/cwl/:clan_tag/group", Schema.Struct({ clan_tag: Schema.String }), Schema.Struct({}), LegacyCurrentCwlResponse, "Get the current legacy CWL group"),
-  legacyCwlSeason: endpoint("getLegacyCwlSeason", "/cwl/:clan_tag/:season", Schema.Struct({ clan_tag: Schema.String, season: Schema.String }), Schema.Struct({}), LegacyCwlGroup, "Get a legacy CWL season with stored wars"),
+  legacyPlayerWarHits: endpoint("getLegacyPlayerWarHits", "/player/:player_tag/warhits", Schema.Struct({ player_tag: Schema.String }), legacyQuery, LegacyPlayerWarHitsResponse, "Get legacy player war attacks and defenses", [invalid]),
+  legacyPlayerJoinLeave: endpoint("getLegacyPlayerJoinLeave", "/player/:player_tag/join-leave", Schema.Struct({ player_tag: Schema.String }), joinLeaveQuery, LegacyJoinLeaveResponse, "Get legacy player join and leave history", [invalid]),
+  legacyClanJoinLeave: endpoint("getLegacyClanJoinLeave", "/clan/:clan_tag/join-leave", Schema.Struct({ clan_tag: Schema.String }), joinLeaveQuery, LegacyJoinLeaveResponse, "Get legacy clan join and leave history", [invalid]),
+  legacyPreviousWars: endpoint("getLegacyPreviousWars", "/war/:clan_tag/previous", Schema.Struct({ clan_tag: Schema.String }), legacyQuery, LegacyWarListResponse, "Get legacy stored clan wars", [invalid]),
+  legacyPreviousWarAtTime: endpoint("getLegacyPreviousWarAtTime", "/war/:clan_tag/previous/:end_time", Schema.Struct({ clan_tag: Schema.String, end_time: Schema.String }), Schema.Struct({}), LegacyWar, "Get a legacy stored clan war at an end time", [invalid, missing]),
+  legacyCurrentCwlGroup: endpoint("getLegacyCurrentCwlGroup", "/cwl/:clan_tag/group", Schema.Struct({ clan_tag: Schema.String }), Schema.Struct({}), LegacyCurrentCwlResponse, "Get the current legacy CWL group", []),
+  legacyCwlSeason: endpoint("getLegacyCwlSeason", "/cwl/:clan_tag/:season", Schema.Struct({ clan_tag: Schema.String, season: Schema.String }), Schema.Struct({}), LegacyCwlGroup, "Get a legacy CWL season with stored wars", [missing]),
 } as const

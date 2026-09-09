@@ -156,8 +156,9 @@ const endpointMatchers = Object.values(apiEndpoints).map((endpoint) => ({
 const isOpenPublicRequest = (request: Request) => {
   const url = new URL(request.url)
   const method = request.method === "OPTIONS" ? request.headers.get("access-control-request-method") ?? "GET" : request.method
-  return endpointMatchers.some((endpoint) => endpoint.method === method && endpoint.auth === "public" &&
-    !endpoint.path.startsWith("/v2/auth/") && !endpoint.path.startsWith("/v2/billing/") && endpoint.pattern.test(url.pathname))
+  const matches = endpointMatchers.filter((endpoint) => endpoint.method === method && endpoint.pattern.test(url.pathname))
+  return matches.length > 0 && matches.every((endpoint) => endpoint.auth === "public" &&
+    !endpoint.path.startsWith("/v2/auth/") && !endpoint.path.startsWith("/v2/billing/"))
 }
 const publicCors = (request: Request, response: Response): Response => {
   if (request.headers.get("origin") === null) return response

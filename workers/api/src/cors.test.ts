@@ -46,4 +46,11 @@ describe("contract-aware CORS", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("https://dash.clashk.ing")
     expect(response.headers.get("access-control-allow-credentials")).toBe("true")
   })
+
+  it("uses the most restrictive auth mode when contracts share a route", () => {
+    const request = new Request("https://api.clashk.ing/v2/clan/%23P0Y/warlog", { headers: { origin } })
+    expect(applyCors(request, Response.json({}), bindings).headers.has("access-control-allow-origin")).toBe(false)
+    const allowed = new Request("https://api.clashk.ing/v2/clan/%23P0Y/warlog", { headers: { origin: "https://dash.clashk.ing" } })
+    expect(applyCors(allowed, Response.json({}), bindings).headers.get("access-control-allow-credentials")).toBe("true")
+  })
 })

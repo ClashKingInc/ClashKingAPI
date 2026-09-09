@@ -2,7 +2,7 @@ import { legacyPublicEndpoints, LegacyWar } from "@clashking/api-contracts"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { fixLegacyTag, legacyWar, normalizeLegacySeason } from "./legacy-public.js"
+import { fixLegacyTag, legacyDate, legacyWar, normalizeLegacySeason, parseLegacyEndTime } from "./legacy-public.js"
 import type { ArchivedWar } from "./war-archive-model.js"
 
 const war: ArchivedWar = {
@@ -25,6 +25,8 @@ describe("legacy public compatibility", () => {
       "GET /war/:clan_tag/previous",
       "GET /war/:clan_tag/previous/:end_time",
     ])
+    expect(legacyPublicEndpoints.legacyPreviousWarAtTime.errors?.map(({ status }) => status)).toEqual([422, 404])
+    expect(legacyPublicEndpoints.legacyCwlSeason.errors?.map(({ status }) => status)).toEqual([404])
   })
 
   it("preserves legacy war names, timestamps, orientation, and optional fields", () => {
@@ -42,5 +44,8 @@ describe("legacy public compatibility", () => {
     expect(normalizeLegacySeason("2026-05-17")).toBe("2026-05")
     expect(normalizeLegacySeason("2026-06")).toBe("2026-06")
     expect(normalizeLegacySeason("2026-06-14")).toBe("2026-06-14")
+    expect(legacyDate("2024-04-05T00:00:00.123456")).toBe("2024-04-05T00:00:00.123456")
+    expect(parseLegacyEndTime("20260228T000000.000Z")?.toISOString()).toBe("2026-02-28T00:00:00.000Z")
+    expect(parseLegacyEndTime("20260229T000000.000Z")).toBeUndefined()
   })
 })

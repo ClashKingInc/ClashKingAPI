@@ -69,7 +69,8 @@ const integer = (query: URLSearchParams, name: string, fallback: number) => {
   return value
 }
 const match = (path: string, pattern: RegExp) => pattern.exec(path)?.slice(1).map((value) => decodeURIComponent(value))
-const legacyDate = (value: Date | string) => `${new Date(value).toISOString().slice(0, -1)}000`
+export const legacyDate = (value: Date | string) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}$/u.test(value)
+  ? value : `${new Date(value).toISOString().slice(0, -1)}000`
 
 interface JoinLeaveRow { readonly time: Date | string; readonly type: string; readonly clan_tag: string; readonly player_tag: string; readonly player_name: string | null; readonly townhall_level: number; readonly clan_name: string | null }
 const correctedPlayerEvents = (source: readonly JoinLeaveRow[]) => {
@@ -94,7 +95,8 @@ const joinLeave = (tag: string, query: URLSearchParams, scope: "clan" | "player"
   if (limit <= 0) return { items: [] }
   const sql = yield* SqlClient.SqlClient
   const column = scope === "player" ? sql`jl.player_tag` : sql`jl.clan_tag`
-  const rows = yield* sql<JoinLeaveRow>`SELECT jl."time", jl."type", jl.clan_tag, jl.player_tag, jl.player_name,
+  const rows = yield* sql<JoinLeaveRow>`SELECT to_char(jl."time" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS "time",
+    jl."type", jl.clan_tag, jl.player_tag, jl.player_name,
     jl.townhall_level, clan.name AS clan_name FROM join_leave_history jl
     LEFT JOIN basic_clan clan ON clan.tag = jl.clan_tag WHERE ${column} = ${tag}
     AND jl."time" >= ${start} AND jl."time" <= ${end}
@@ -179,6 +181,11 @@ export const normalizeLegacySeason = (season: string) => {
   const parsed = /^\d{4}-\d{2}-\d{2}$/u.test(normalized) ? new Date(`${normalized}T00:00:00Z`) : undefined
   return parsed && !Number.isNaN(parsed.getTime()) && parsed < new Date("2026-06-14T00:00:00Z") ? normalized.slice(0, 7) : season
 }
+export const parseLegacyEndTime = (raw: string) => {
+  if (!/^\d{8}T\d{6}\.000Z$/u.test(raw)) return undefined
+  const target = new Date(raw.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.000Z$/u, "$1-$2-$3T$4:$5:$6.000Z"))
+  return !Number.isNaN(target.getTime()) && clashTime(target) === raw ? target : undefined
+}
 export const dispatchLegacyPublic = (request: Request) => Effect.gen(function* () {
   if (request.method !== "GET") return undefined
   const url = new URL(request.url), path = url.pathname
@@ -198,8 +205,8 @@ export const dispatchLegacyPublic = (request: Request) => Effect.gen(function* (
   }
   values = match(path, /^\/war\/([^/]+)\/previous\/([^/]+)$/u)
   if (values) {
-    const raw = values[1]!, target = /^\d{8}T\d{6}\.000Z$/u.test(raw) ? new Date(raw.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.000Z$/u, "$1-$2-$3T$4:$5:$6.000Z")) : new Date(NaN)
-    if (Number.isNaN(target.getTime())) return yield* new InvalidRequest({ message: "invalid end_time", status: 422 })
+    const target = parseLegacyEndTime(values[1]!)
+    if (!target) return yield* new InvalidRequest({ message: "invalid end_time", status: 422 })
     const sql = yield* SqlClient.SqlClient, tag = fixLegacyTag(values[0]!)
     const rows = yield* sql<{ war_id: string }>`SELECT war_id::text FROM wars WHERE (clan_tag = ${tag} OR opponent_tag = ${tag})
       AND end_time >= ${new Date(target.getTime() - 300_000)} AND end_time <= ${new Date(target.getTime() + 300_000)}

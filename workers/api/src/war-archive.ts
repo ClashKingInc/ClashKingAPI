@@ -67,6 +67,7 @@ const archiveRefs = (ids: readonly string[]) => Effect.gen(function* () {
 const readRef = (ref: ArchiveRef, bindings: WorkerBindings) => ref.pending === true
   ? readArchiveWar(ref.war_id) : decodeArchiveRef(ref, bindings)
 export const archiveReadConcurrency = 2
+export const historyArchiveReadConcurrency = 4
 
 // Public endpoints already support time/limit pagination. Reject oversized
 // pages explicitly; never return a silently truncated history.
@@ -87,6 +88,92 @@ export const loadArchiveWars = (warIds: readonly string[]) => Effect.gen(functio
     }), { concurrency: archiveReadConcurrency, discard: true })
   }
   return wars
+})
+
+/** Read an ordered list of archives with batched locator SQL and bounded I/O.
+ * The callback runs in input order, while each group of archive reads runs in
+ * parallel. Only one small locator page and one I/O batch are retained. */
+export const forEachArchiveWar = <E, R>(
+  warIds: readonly string[],
+  consume: (warId: string, war: ArchivedWar) => Effect.Effect<void, E, R>,
+) => Effect.gen(function* () {
+  const bindings = yield* WorkerEnvironment
+  const ids = [...new Set(warIds)]
+  for (let pageOffset = 0; pageOffset < ids.length; pageOffset += 64) {
+    const page = ids.slice(pageOffset, pageOffset + 64)
+    const refs = new Map((yield* archiveRefs(page)).map((ref) => [ref.war_id, ref]))
+    for (let offset = 0; offset < page.length; offset += historyArchiveReadConcurrency) {
+      const batch = page.slice(offset, offset + historyArchiveReadConcurrency)
+      const entries = yield* Effect.forEach(batch, (id) => {
+        const ref = refs.get(id)
+        return ref === undefined ? Effect.succeed(undefined) : readRef(ref, bindings)
+      }, { concurrency: historyArchiveReadConcurrency })
+      for (const [index, id] of batch.entries()) {
+        const entry = entries[index]
+        if (entry) yield* consume(id, entry.war)
+      }
+    }
+  }
+})
+
+/** Newest-first keyset traversal for bounded feeds. The consumer indicates
+ * when it has enough results. Every war sharing that end time is still read so
+ * attack-order and war-id tie breaking remain exact. */
+export const forEachNewestPlayerWar = <E, R>(
+  playerTags: readonly string[],
+  start: Date,
+  end: Date,
+  warTypes: readonly string[],
+  pageSize: number,
+  consume: (warId: string, war: ArchivedWar) => Effect.Effect<boolean, E, R>,
+) => Effect.gen(function* () {
+  if (!playerTags.length) return
+  const sql = yield* SqlClient.SqlClient
+  const bindings = yield* WorkerEnvironment
+  const size = Math.max(1, Math.min(64, Math.trunc(pageSize)))
+  let cursorEnd: Date | string | undefined
+  let cursorId: number | undefined
+  let satisfiedAt: number | undefined
+  for (;;) {
+    const parameters: unknown[] = [[...playerTags], start, end]
+    let statement = `
+      SELECT DISTINCT w.war_id, w.end_time
+      FROM player_war_history history
+      CROSS JOIN LATERAL unnest(history.war_ids) history_war_id
+      JOIN wars w ON w.war_id = history_war_id
+      WHERE history.player_tag = ANY($1::text[])
+        AND w.end_time >= $2 AND w.end_time <= $3`
+    if (warTypes.length) { parameters.push([...warTypes]); statement += ` AND w.war_type = ANY($${parameters.length}::text[])` }
+    if (cursorEnd !== undefined && cursorId !== undefined) {
+      parameters.push(cursorEnd, cursorId)
+      statement += ` AND (w.end_time < $${parameters.length - 1} OR (w.end_time = $${parameters.length - 1} AND w.war_id < $${parameters.length}))`
+    }
+    parameters.push(size)
+    statement += ` ORDER BY w.end_time DESC, w.war_id DESC LIMIT $${parameters.length}`
+    const rows = yield* sql.unsafe<{ readonly war_id: number; readonly end_time: Date | string }>(statement, parameters)
+      .pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Player war history query failed" })))
+    if (!rows.length) return
+    const refs = new Map((yield* archiveRefs(rows.map((row) => String(row.war_id)))).map((ref) => [ref.war_id, ref]))
+    for (let offset = 0; offset < rows.length; offset += historyArchiveReadConcurrency) {
+      const firstTimestamp = new Date(rows[offset]!.end_time).getTime()
+      if (satisfiedAt !== undefined && firstTimestamp < satisfiedAt) return
+      const batch = rows.slice(offset, offset + historyArchiveReadConcurrency)
+      const entries = yield* Effect.forEach(batch, (row) => {
+        const ref = refs.get(String(row.war_id))
+        return ref === undefined ? Effect.succeed(undefined) : readRef(ref, bindings)
+      }, { concurrency: historyArchiveReadConcurrency })
+      for (const [index, row] of batch.entries()) {
+        const timestamp = new Date(row.end_time).getTime()
+        if (satisfiedAt !== undefined && timestamp < satisfiedAt) return
+        const entry = entries[index]
+        if (entry && (yield* consume(String(row.war_id), entry.war))) satisfiedAt = timestamp
+      }
+    }
+    const last = rows.at(-1)!
+    cursorEnd = last.end_time
+    cursorId = last.war_id
+    if (rows.length < size) return
+  }
 })
 
 /** Complete keyset scan with at most 128 IDs and one decoded war retained.

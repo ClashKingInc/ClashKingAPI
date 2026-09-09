@@ -3,7 +3,7 @@ import { zstdCompressSync } from "node:zlib"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { expect, it, vi } from "vitest"
-import { loadArchiveWars } from "./war-archive.js"
+import { forEachArchiveWar, loadArchiveWars } from "./war-archive.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 
 const clan = { tag: "#ABC", name: "Clan", badgeToken: "", clanLevel: 1, attacks: 0, stars: 0, destructionPercentage: 0, members: [] }
@@ -23,9 +23,17 @@ const fixture = (count: number, padding = "") => {
     archive_compressed_bytes: frame.length, payload: null, pending: false,
   }))))
   const sql = query as unknown as SqlClient.SqlClient
-  return { get, query, peak: () => peak, run: () => Effect.runPromise(loadArchiveWars(Array.from({ length: count }, (_, index) => String(index + 1))).pipe(
+  const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(
     Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(WorkerEnvironment, { WAR_ARCHIVE: { get } } as unknown as WorkerBindings),
-  )) }
+  ) as Effect.Effect<A, E, Exclude<R, SqlClient.SqlClient | WorkerEnvironment>>
+  return { get, query, peak: () => peak,
+    run: () => Effect.runPromise(provide(loadArchiveWars(Array.from({ length: count }, (_, index) => String(index + 1))))),
+    stream: () => {
+      const seen: string[] = []
+      return Effect.runPromise(provide(forEachArchiveWar(Array.from({ length: count }, (_, index) => String(index + 1)),
+        (id) => Effect.sync(() => { seen.push(id) }))).pipe(Effect.as(seen)))
+    },
+  }
 }
 it("loads 50 archive locators in one SQL query and uses bounded parallel R2 reads", async () => {
   const test = fixture(50)
@@ -37,4 +45,11 @@ it("loads 50 archive locators in one SQL query and uses bounded parallel R2 read
 it("still rejects a page whose decoded total exceeds the memory limit", async () => {
   const test = fixture(2, "x".repeat(5 * 1024 * 1024))
   await expect(test.run()).rejects.toMatchObject({ _tag: "InvalidRequest" })
+})
+it("streams 50 archives with one locator query and four concurrent reads", async () => {
+  const test = fixture(50)
+  expect(await test.stream()).toEqual(Array.from({ length: 50 }, (_, index) => String(index + 1)))
+  expect(test.query).toHaveBeenCalledOnce()
+  expect(test.get).toHaveBeenCalledTimes(50)
+  expect(test.peak()).toBe(4)
 })

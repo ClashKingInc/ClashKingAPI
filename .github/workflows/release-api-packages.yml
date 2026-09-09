@@ -59,4 +59,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           node scripts/api-package-release.mjs verify "$PACKAGE_DIRECTORY"
-          gh release upload "$RELEASE_TAG" "$PACKAGE_DIRECTORY"/*.tgz "$PACKAGE_DIRECTORY/manifest.json" --clobber
+          gh release upload "$RELEASE_TAG" "$PACKAGE_DIRECTORY"/*.tgz "$PACKAGE_DIRECTORY/manifest.json"

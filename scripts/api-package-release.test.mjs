@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
@@ -61,4 +61,13 @@ test("verifies both archives against the source-bound manifest", t => {
   assert.throws(() => verify(directory, { tag, commit: "b".repeat(40) }), /source/u)
   writeFileSync(join(directory, artifacts[0].filename), "changed")
   assert.throws(() => verify(directory, { tag, commit }), /bytes changed/u)
+})
+
+test("release workflow attaches source-bound archives without replacing an existing version", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/release-api-packages.yml", import.meta.url), "utf8")
+  assert.match(workflow, /release:\s*\n\s*types: \[published\]/u)
+  assert.match(workflow, /ref: refs\/tags\/\$\{\{ env\.RELEASE_TAG \}\}/u)
+  assert.match(workflow, /api-package-release\.mjs verify/u)
+  assert.match(workflow, /gh release upload/u)
+  assert.doesNotMatch(workflow, /--clobber|npm publish/u)
 })

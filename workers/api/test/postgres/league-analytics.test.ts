@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it } from "vitest"
@@ -22,8 +23,9 @@ import { prepareStaticMetadata } from "../../src/static-metadata.js"
 const url = process.env.TEST_DATABASE_URL
 if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
 const layer = databaseLayer({ HYPERDRIVE: { connectionString: url } } as WorkerBindings)
-const anchor = "ab".repeat(32)
-const memberHash = "cd".repeat(32)
+const fixtureHash = (code: string) => createHash("sha256").update(new Uint8Array([2])).update(code).digest("hex")
+const anchor = fixtureHash("u1x10")
+const memberHash = fixtureHash("u2x1-1x9")
 const season = Math.floor(Date.parse("2026-09-07T05:00:00.000Z") / 1000)
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>

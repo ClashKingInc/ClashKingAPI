@@ -22,7 +22,7 @@ import {
   parsePlayerHistoryWindow,
   type AnalyticsWindow,
 } from "./league-analytics-query.js"
-import { parseArmyLinkQuery } from "./army-link.js"
+import { hashNormalizedArmy, parseArmyLinkQuery } from "./army-link.js"
 import { hasStaticItemId, lookupStaticItem } from "./static-metadata.js"
 
 const database = <A>(message: string, effect: Effect.Effect<A, unknown, SqlClient.SqlClient>) => effect.pipe(
@@ -278,14 +278,15 @@ export const queryArmySearch = (query: URLSearchParams, now = new Date()) => dat
     .filter((row) => row.players >= options.minimumPlayers) }
 }))
 
-const resolveFamily = (shareCode: string) => database("Army family lookup failed", Effect.gen(function* () {
+const resolveFamily = (hash: string) => database("Army family lookup failed", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<{ army_hash: string; family_name: string; representative_share_code: string }>(`
     SELECT encode(f.anchor_army_hash,'hex') army_hash,f.family_name,f.representative_share_code
-    FROM army_compositions c
-    LEFT JOIN army_family_members m ON m.army_hash=c.army_hash
-    JOIN army_families f ON f.anchor_army_hash=COALESCE(m.anchor_army_hash,c.army_hash)
-    WHERE c.normalized_share_code=$1 LIMIT 1`, [shareCode])
+    FROM army_families f WHERE f.anchor_army_hash=decode($1,'hex')
+    UNION ALL
+    SELECT encode(f.anchor_army_hash,'hex'),f.family_name,f.representative_share_code
+    FROM army_family_members m JOIN army_families f ON f.anchor_army_hash=m.anchor_army_hash
+    WHERE m.army_hash=decode($1,'hex') AND m.army_hash<>m.anchor_army_hash LIMIT 1`, [hash])
   const family = rows[0]
   if (family === undefined) return yield* new NotFound({ message: "Army family not found" })
   return family
@@ -311,11 +312,11 @@ const aggregateFamily = (family: { army_hash: string; family_name: string; repre
 export const queryArmyDetail = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
   const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
   const window = yield* parsePlayerHistoryWindow(timeQuery, now, 90)
-  return yield* aggregateFamily(yield* resolveFamily(shareCode), window)
+  return yield* aggregateFamily(yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), window)
 })
 export const queryArmyTimeline = (query: URLSearchParams, now = new Date()) => database("Army family timeline query failed", Effect.gen(function* () {
   const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
-  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 365), family = yield* resolveFamily(shareCode), sql = yield* SqlClient.SqlClient
+  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 365), family = yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<{ day: Date | string; attacks: number | string; players: number | string; zero: number | string; one: number | string; two: number | string; three: number | string; destruction: number | string; duration: number | string }>(`
     SELECT day,attack_count attacks,distinct_player_count players,zero_star_count zero,one_star_count one,two_star_count two,
       three_star_count three,destruction_percentage_sum destruction,duration_seconds_sum duration

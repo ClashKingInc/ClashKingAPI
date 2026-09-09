@@ -1,13 +1,12 @@
-import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import { normalizeArmyLink, parseArmyLinkQuery } from "./army-link.js"
+import { hashNormalizedArmy, normalizeArmyLink, parseArmyLinkQuery } from "./army-link.js"
 
 describe("army link normalization", () => {
-  it("matches the authoritative DevKit version-2 hash vector after reordering a link", () => {
+  it("matches the authoritative DevKit version-2 hash vector after reordering a link", async () => {
     const normalized = normalizeArmyLink("https://link.clashofclans.com/en?action=CopyArmy&army=u2x1-10x0s4x35d1x70i3x53h1p9e39-0p4e14_8")
     expect(normalized).toBe("h0p4e8_14-1p9e39i3x53d1x70u10x0-2x1s4x35")
-    expect(createHash("sha256").update(new Uint8Array([2])).update(normalized).digest("hex"))
+    expect(await Effect.runPromise(hashNormalizedArmy(normalized)))
       .toBe("381e0786e690608139a21c2a17b131cc4b265ce18353509ded94346e2bc0ff10")
   })
   it("combines quantities and retains zero-based IDs and hero assignments", () => {

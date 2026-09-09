@@ -5,7 +5,7 @@ import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { publicTag } from "./public-war.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls } from "./war-archive-model.js"
-import { readArchiveWar } from "./war-archive.js"
+import { forEachArchiveWar } from "./war-archive.js"
 
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "CWL history query failed" })
 const unranked = 48_000_000
@@ -33,15 +33,30 @@ const historyLimit = (query: URLSearchParams, fallback: number) => {
   const limit = query.has("limit") ? Number(query.get("limit")) : fallback
   return Number.isSafeInteger(limit) && limit > 0 ? Effect.succeed(limit) : Effect.fail(new InvalidRequest({ message: "Limit must be a positive integer" }))
 }
+type StoredCwlGroup = Omit<CwlGroup, "rounds"> & { rounds: unknown }
+const decodeCwlGroups = (rows: readonly StoredCwlGroup[]) => Effect.forEach(rows, (row) =>
+  decodeStoredCwlRounds(row.rounds).pipe(Effect.map((rounds): CwlGroup => ({ ...row, rounds })), Effect.mapError(failure)))
 export const loadCwlGroups = (clanTag: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<Omit<CwlGroup, "rounds"> & { rounds: unknown }>`SELECT g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size,
+  const rows = yield* sql<StoredCwlGroup>`SELECT g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size,
     array_agg(all_clans.clan_tag ORDER BY all_clans.clan_tag) AS clan_tags
     FROM cwl_groups g JOIN cwl_group_clans requested ON requested.cwl_id = g.cwl_id
     JOIN cwl_group_clans all_clans ON all_clans.cwl_id = g.cwl_id WHERE requested.clan_tag = ${clanTag}
     GROUP BY g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size
     ORDER BY CASE WHEN length(g.season) = 7 THEN g.season || '-01' ELSE g.season END, g.cwl_id`.pipe(Effect.mapError(failure))
-  return yield* Effect.forEach(rows, (row) => decodeStoredCwlRounds(row.rounds).pipe(Effect.map((rounds): CwlGroup => ({ ...row, rounds })), Effect.mapError(failure)))
+  return yield* decodeCwlGroups(rows)
+})
+export const loadCwlGroupsByIds = (cwlIds: readonly string[]) => Effect.gen(function* () {
+  const ids = [...new Set(cwlIds)]
+  if (!ids.length) return [] as readonly CwlGroup[]
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql<StoredCwlGroup>`SELECT g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size,
+    array_agg(all_clans.clan_tag ORDER BY all_clans.clan_tag) AS clan_tags
+    FROM cwl_groups g JOIN cwl_group_clans all_clans ON all_clans.cwl_id = g.cwl_id
+    WHERE g.cwl_id = ANY(${ids}::text[])
+    GROUP BY g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id, g.war_size
+    ORDER BY CASE WHEN length(g.season) = 7 THEN g.season || '-01' ELSE g.season END DESC, g.cwl_id DESC`.pipe(Effect.mapError(failure))
+  return yield* decodeCwlGroups(rows)
 })
 export const loadCwlWars = (groups: readonly CwlGroup[]) => Effect.gen(function* () {
   const tags = [...new Set(groups.flatMap((group) => group.rounds.flat().filter(validTag)))]
@@ -212,25 +227,40 @@ export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) =>
   const missing = new Set(seeds.filter((seed) => !seed.cwl_league_id).map((seed) => seed.clan_tag))
   for (const clan of missing) yield* ensureCwlLeagueIds(clan)
   if (missing.size) seeds = yield* playerSeeds(tag, limit)
-  const items: PlayerItem[] = []
-  const clanGroups = new Map<string, CwlGroup[]>()
+  const groups = yield* loadCwlGroupsByIds(seeds.map((seed) => seed.cwl_id))
+  const groupById = new Map(groups.map((group) => [group.cwl_id, group]))
+  const wars = yield* loadCwlWars(groups)
+  type HistoryContext = {
+    readonly seed: PlayerSeed; readonly group: CwlGroup; readonly completed: readonly CwlWar[];
+    readonly rounds: ReadonlyMap<string, number>; readonly attacks: PlayerItem["attacks"][number][];
+    readonly scores: Map<string, { clan: string; player: string; stars: number }>; readonly sizes: Set<number>;
+    missedAttacks: number
+  }
+  const contexts: HistoryContext[] = []
+  const contextsByWar = new Map<string, HistoryContext[]>()
   for (const seed of seeds) {
-    let groups = clanGroups.get(seed.clan_tag)
-    if (!groups) { groups = yield* loadCwlGroups(seed.clan_tag); clanGroups.set(seed.clan_tag, groups) }
-    const group = groups.find((entry) => entry.cwl_id === seed.cwl_id)
+    const group = groupById.get(seed.cwl_id)
     if (!group) return yield* failure(new Error("CWL group disappeared during history read"))
-    const wars = yield* loadCwlWars([group])
-    const completed = [...wars.values()].filter((war) => finished(war.state))
+    const expected = new Set(group.rounds.flat().filter(validTag))
+    const completed = [...expected].flatMap((warTag) => {
+      const war = wars.get(warTag)
+      return war && finished(war.state) ? [war] : []
+    })
     const rounds = new Map(group.rounds.flatMap((tags, index) => tags.filter(validTag).map((tag) => [tag, index + 1] as const)))
-    const attacks: PlayerItem["attacks"][number][] = []
-    const scores = new Map<string, { clan: string; player: string; stars: number }>()
-    const sizes = new Set<number>()
-    let missedAttacks = 0
-    // Retain one archive at a time; group placement requires only scalar scores.
+    const context: HistoryContext = { seed, group, completed, rounds, attacks: [], scores: new Map(), sizes: new Set(), missedAttacks: 0 }
+    contexts.push(context)
     for (const row of completed) {
-      const entry = yield* readArchiveWar(row.war_id, row.end_time)
-      if (!entry) continue
-      const war = entry.war
+      const owners = contextsByWar.get(row.war_id) ?? []
+      owners.push(context)
+      contextsByWar.set(row.war_id, owners)
+    }
+  }
+  // Locator rows are fetched in pages and archive I/O is bounded-concurrent.
+  // Each decoded war is released after its scalar/player contribution is kept.
+  yield* forEachArchiveWar([...contextsByWar.keys()], (warId, war) => Effect.sync(() => {
+    for (const context of contextsByWar.get(warId) ?? []) {
+      const { seed, rounds, attacks, scores, sizes } = context
+      const row = context.completed.find((candidate) => candidate.war_id === warId)!
       for (const clan of [war.clan, war.opponent]) for (const member of clan.members) {
         const key = `${clan.tag}\0${member.tag}`
         const score = scores.get(key) ?? { clan: clan.tag, player: member.tag, stars: 0 }
@@ -242,7 +272,7 @@ export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) =>
       const member = own?.members.find((member) => member.tag === tag)
       if (!member) continue
       sizes.add(war.teamSize)
-      missedAttacks += Math.max(0, war.attacksPerMember - (member.attacks?.length ?? 0))
+      context.missedAttacks += Math.max(0, war.attacksPerMember - (member.attacks?.length ?? 0))
       for (const attack of member.attacks ?? []) {
         const defender = opponent.members.find((member) => member.tag === attack.defenderTag)
         attacks.push({ warTag: war.warTag ?? "", round: rounds.get(row.war_tag) ?? 0,
@@ -251,6 +281,10 @@ export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) =>
           stars: attack.stars, destructionPercentage: attack.destructionPercentage, order: attack.order, duration: attack.duration })
       }
     }
+  }))
+  const items: PlayerItem[] = []
+  for (const context of contexts) {
+    const { seed, group, completed, attacks, scores, sizes, missedAttacks } = context
     attacks.sort((a, b) => a.round - b.round || a.order - b.order)
     const summary = cwlSummary(group, wars, seed.clan_tag)
     const hasStanding = seed.stars !== null && seed.wins !== null && seed.losses !== null && seed.ties !== null

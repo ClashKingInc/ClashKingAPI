@@ -207,7 +207,7 @@ export const route = (request: Request, bindings: WorkerBindings,
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.14" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.15" })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)

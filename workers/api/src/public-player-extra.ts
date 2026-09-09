@@ -12,7 +12,7 @@ import { publicHistoryOptions, isoTimestamp } from "./public-player.js"
 import { leaderboardHistoryItem, historicalHomeLeagues } from "./public-history.js"
 import { leaderboardLimit } from "./public-leaderboards.js"
 import { correctedJoinLeaveEvents, type JoinLeaveRow } from "./public-join-leave.js"
-import { forEachPlayerWar } from "./war-archive.js"
+import { forEachNewestPlayerWar } from "./war-archive.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls, archiveAttackFacts, clashTime, type ArchiveAttackFact } from "./war-archive-model.js"
 import locations from "./data/search-locations.json"
@@ -229,11 +229,11 @@ export const queryPlayerWarAttacks = (rawTag: string, query: URLSearchParams) =>
   if (type && !["random", "friendly", "cwl"].includes(type)) return yield* new InvalidRequest({ message: "Invalid war type" })
   const attacks: ArchiveAttackFact[] = []
   const order = (a: ArchiveAttackFact, b: ArchiveAttackFact) => b.warEndTime.getTime() - a.warEndTime.getTime() || b.attackOrder - a.attackOrder || Number(b.warId) - Number(a.warId)
-  yield* forEachPlayerWar([tag], options.start, options.end, (id, war) => Effect.sync(() => {
-    if (type && war.type !== type) return
+  yield* forEachNewestPlayerWar([tag], options.start, options.end, type ? [type] : [], Math.max(8, options.limit * 2), (id, war) => Effect.sync(() => {
     for (const attack of archiveAttackFacts(id, war)) if (attack.attackerTag === tag || attack.defenderTag === tag) {
       attacks.push(attack); attacks.sort(order); if (attacks.length > options.limit) attacks.pop()
     }
+    return attacks.length >= options.limit
   }))
   return { items: attacks.map(({ warId, warEndTime, ...attack }) => ({ ...attack, war_id: warId, warEndTime: clashTime(warEndTime), side: attack.attackerTag === tag ? "attack" : "defense" })) }
 })

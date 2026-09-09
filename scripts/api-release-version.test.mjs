@@ -3,23 +3,23 @@ import { readFileSync } from "node:fs"
 import { test } from "node:test"
 import { validatePullRequestVersion, validateReleaseVersion } from "./api-release-version.mjs"
 
-const pair = (version = "0.1.0-rc.13") => [
+const pair = (version = "0.1.0-rc.14") => [
   { name: "@clashking/api-contracts", version },
   { name: "@clashking/api-client", version, dependencies: { "@clashking/api-contracts": version } },
 ]
 
 test("requires one exact semantic version across the release package pair", () => {
-  assert.equal(validateReleaseVersion(...pair()), "0.1.0-rc.13")
+  assert.equal(validateReleaseVersion(...pair()), "0.1.0-rc.14")
   const mismatch = pair(); mismatch[1].version = "0.1.0-rc.12"
   assert.throws(() => validateReleaseVersion(...mismatch), /same valid semantic version/u)
-  const dependency = pair(); dependency[1].dependencies["@clashking/api-contracts"] = "^0.1.0-rc.13"
+  const dependency = pair(); dependency[1].dependencies["@clashking/api-contracts"] = "^0.1.0-rc.14"
   assert.throws(() => validateReleaseVersion(...dependency), /exact contracts version/u)
   assert.throws(() => validateReleaseVersion(...pair("next")), /semantic version/u)
 })
 
 test("blocks unchanged pull-request versions and versions whose tag already exists", () => {
-  assert.equal(validatePullRequestVersion(pair("0.1.0-rc.13"), pair("0.1.0-rc.11"), false), "0.1.0-rc.13")
-  assert.equal(validatePullRequestVersion(pair("0.1.0-rc.13"), undefined, false), "0.1.0-rc.13")
+  assert.equal(validatePullRequestVersion(pair("0.1.0-rc.14"), pair("0.1.0-rc.11"), false), "0.1.0-rc.14")
+  assert.equal(validatePullRequestVersion(pair("0.1.0-rc.14"), undefined, false), "0.1.0-rc.14")
   assert.throws(() => validatePullRequestVersion(pair(), pair(), false), /must update/u)
   assert.throws(() => validatePullRequestVersion(pair(), pair("0.1.0-rc.11"), true), /already exists/u)
 })

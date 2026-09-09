@@ -12,14 +12,14 @@ describe("Worker liveness contract", () => {
     })
     expect(HealthEndpoint.summary).toContain("does not check database or provider readiness")
     expect(Schema.decodeUnknownSync(HealthResponse)({
-      status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.13",
-    })).toEqual({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.13" })
+      status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.14",
+    })).toEqual({ status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.14" })
   })
 
   it("does not describe invented status, runtime, or version values as valid", () => {
     for (const changed of [{ status: "database-healthy" }, { runtime: "go" }, { version: "1.0.0" }]) {
       expect(() => Schema.decodeUnknownSync(HealthResponse)({
-        status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.13", ...changed,
+        status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.14", ...changed,
       })).toThrow()
     }
   })

@@ -333,7 +333,10 @@ export const ProxyStatsWindow = Schema.Struct({
   requests: Count, avg_rps: Schema.Number, avg_latency_ms: Schema.NullOr(Schema.Number),
   status_counts: ProxyStatusCounts, proxy_failures: Count,
 })
-export const ProxySeriesPoint = Schema.Struct({ ...ProxyStatsWindow.fields, start: Schema.String, end: Schema.String })
+export const ProxySeriesPoint = Schema.Struct({
+  start: Schema.String, end: Schema.String, requests: Count,
+  avg_latency_ms: Schema.NullOr(Schema.Number), status_counts: ProxyStatusCounts, proxy_failures: Count,
+})
 export const ProxyStatsResponse = Schema.Struct({
   now: Schema.String,
   windows: Schema.Record(Schema.String, ProxyStatsWindow),

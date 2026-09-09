@@ -39,7 +39,7 @@ describe("batched player CWL history", () => {
     const groups = [
       { ...seeds[0], state: "ended", rounds: [["#W1"]], clan_tags: ["#A", "#O1"] },
       { ...seeds[1], state: "ended", rounds: [["#W2"], ["#MISSING"]], clan_tags: ["#B", "#O2"] },
-      { ...seeds[2], state: "inWar", rounds: [["#W3"]], clan_tags: ["#C", "#O3"] },
+      { ...seeds[2], state: "inWar", rounds: [["#W3", "#W4"]], clan_tags: ["#C", "#O3", "#OTHER1", "#OTHER2"] },
     ].map(({ cwl_id, season, state, rounds, cwl_league_id, war_size, clan_tags }) =>
       ({ cwl_id, season, state, rounds, cwl_league_id, war_size, clan_tags }))
     const wars = [
@@ -47,6 +47,9 @@ describe("batched player CWL history", () => {
       { war_id: "2", war_tag: "#W2", state: "warEnded", size: 15, end_time: "2026-07-03T00:00:00Z", clan_tag: "#B", opponent_tag: "#O2", clan_stars: 5, opponent_stars: 0, clan_destruction_percentage: 90, opponent_destruction_percentage: 0 },
       { war_id: "3", war_tag: "#W3", state: "warEnded", size: 15, end_time: "2026-06-03T00:00:00Z", clan_tag: "#C", opponent_tag: "#O3", clan_stars: 5, opponent_stars: 0, clan_destruction_percentage: 90, opponent_destruction_percentage: 0 },
     ]
+    // Other clans' completed wars cannot contribute a placement while this
+    // group is ongoing, so their full archives must not be fetched.
+    wars.push({ ...wars[2]!, war_id: "4", war_tag: "#W4", clan_tag: "#OTHER1", opponent_tag: "#OTHER2" })
     const frames = new Map(wars.map((war, index) => [index, zstdCompressSync(
       JSON.stringify(storedWar(war.war_tag, war.clan_tag, (index + 1) * 10)), { dictionary })]))
     const counts = { seeds: 0, groups: 0, wars: 0, locators: 0 }

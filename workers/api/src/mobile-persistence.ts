@@ -111,15 +111,25 @@ interface UpgradeRow { readonly value: JsonObject; readonly updated_at: Date | s
 const upgradeState = (principal: ApiPrincipal, userId: string, rawTag: string, preferences: boolean, value?: JsonObject): Runtime<UpgradeRow> => Effect.gen(function* () {
   const tag = yield* normalizedTag(rawTag)
   const sql = yield* SqlClient.SqlClient
+  // One statement gives the ownership check and data the same snapshot without
+  // serializing read-only requests against account/link mutations.
+  if (value === undefined) {
+    const rows = yield* database(sql<UpgradeRow & { active: boolean; linked_tag: string | null }>`
+      SELECT ${principal.kind === "user" ? sql`EXISTS(SELECT 1 FROM auth_users WHERE user_id = ${userId})` : sql`true`} AS active,
+        link.tag AS linked_tag, COALESCE(state.${preferences ? sql`preferences` : sql`data`}, '{}'::jsonb) AS value, state.updated_at
+      FROM (SELECT 1) anchor
+      LEFT JOIN player_links link ON link.user_id = ${userId} AND link.tag = ${tag} AND link.is_verified = true
+      LEFT JOIN ${preferences ? sql`player_upgrade_preferences` : sql`player_upgrades`} state ON state.player_tag = link.tag`)
+    const row = rows[0]
+    if (!row?.active) return yield* new Unauthenticated({ message: "User session is no longer valid" })
+    if (row.linked_tag === null) return yield* new NotFound({ message: "Verified linked player not found" })
+    return { value: row.value, updated_at: row.updated_at }
+  }
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     if (principal.kind === "user") yield* lockAuthenticatedUser(userId)
     const links = yield* sql`SELECT tag FROM player_links WHERE user_id = ${userId} AND tag = ${tag} AND is_verified = true FOR UPDATE`
     if (links.length === 0) return yield* new NotFound({ message: "Verified linked player not found" })
-    const rows = value === undefined
-      ? preferences
-        ? yield* sql<UpgradeRow>`SELECT preferences AS value, updated_at FROM player_upgrade_preferences WHERE player_tag = ${tag}`
-        : yield* sql<UpgradeRow>`SELECT data AS value, updated_at FROM player_upgrades WHERE player_tag = ${tag}`
-      : preferences
+    const rows = preferences
         ? yield* sql<UpgradeRow>`INSERT INTO player_upgrade_preferences (player_tag, preferences, updated_at) VALUES (${tag}, ${JSON.stringify(value)}::jsonb, now())
             ON CONFLICT (player_tag) DO UPDATE SET preferences = player_upgrade_preferences.preferences || EXCLUDED.preferences, updated_at = now()
             RETURNING preferences AS value, updated_at`

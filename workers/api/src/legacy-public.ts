@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
+import { selectClanWarIds } from "./public-war.js"
 import { loadArchiveWars } from "./war-archive.js"
 import { badgeUrls, clashTime, type ArchivedClan, type ArchivedMember, type ArchivedWar } from "./war-archive-model.js"
 
@@ -118,8 +119,7 @@ const queryWarIds = (tag: string, query: URLSearchParams, player: boolean) => Ef
       CROSS JOIN LATERAL unnest(history.war_ids) selected(war_id) JOIN wars war ON war.war_id = selected.war_id
       WHERE history.player_tag = ${tag} AND war.prep_time >= ${start} AND war.prep_time <= ${end}
       ORDER BY war.prep_time DESC, war.war_id DESC LIMIT ${limit}`
-    : sql<{ war_id: string }>`SELECT war_id::text FROM wars WHERE (clan_tag = ${tag} OR opponent_tag = ${tag})
-      AND prep_time >= ${start} AND prep_time <= ${end} ORDER BY end_time DESC LIMIT ${limit}`
+    : selectClanWarIds(tag, start, end, [], limit, true)
   ).pipe(Effect.mapError(databaseFailure), Effect.map((rows) => rows.map((row) => row.war_id)))
 })
 const buildPlayerWarHit = (tag: string, war: ArchivedWar) => {

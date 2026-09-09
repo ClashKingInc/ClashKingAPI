@@ -38,7 +38,9 @@ const loadGatewayAccess = (
   if (!/^\d+$/u.test(applicationId)) return yield* new UpstreamUnavailable({ cause: "Missing Discord application scope", message: "Discord authorization cache is temporarily unavailable" })
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<GatewayAccessRow>`
-    SELECT guild.id AS guild_id, guild.data AS guild_data, guild.members_complete,
+    SELECT guild.id AS guild_id,
+      CASE WHEN jsonb_typeof(guild.data) = 'object' THEN jsonb_build_object('owner_id', guild.data->'owner_id')
+        ELSE guild.data END AS guild_data, guild.members_complete,
       COALESCE(member_roles.roles, ARRAY[]::text[]) AS member_roles,
       COALESCE(role_permissions.permissions, ARRAY[]::text[]) AS role_permissions
     FROM discord_cache.guilds guild

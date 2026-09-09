@@ -10,7 +10,8 @@ import { dispatchMobilePersistence, recordSuccessfulProxySearch } from "./mobile
 const userId = "7534567890123456789"
 const bindings = {} as WorkerBindings
 const testLayer = (principal: ApiPrincipal = { kind: "user", userId }, expired = false, rows?: readonly object[]) => {
-  const query = vi.fn(() => rows === undefined ? Effect.die("Unexpected database query") : Effect.succeed(rows))
+  const executed = vi.fn()
+  const query = vi.fn(() => rows === undefined ? Effect.die("Unexpected database query") : Effect.sync(() => { executed(); return rows }))
   const auth = vi.fn(() => expired ? Effect.fail(new Unauthenticated({ message: "Invalid or expired token" })) : Effect.succeed(principal))
   const layer = Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, query as unknown as SqlClient.SqlClient),
@@ -19,7 +20,7 @@ const testLayer = (principal: ApiPrincipal = { kind: "user", userId }, expired =
       requireBot: () => principal.kind === "bot" ? Effect.succeed(principal) : Effect.fail(new Unauthenticated({ message: "Bot token required" })),
     }),
   )
-  return { layer, query, auth }
+  return { layer, query, auth, executed }
 }
 const request = (path: string, method = "GET", body?: unknown) => new Request(`https://api.clashk.ing${path}`, {
   method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
@@ -69,6 +70,24 @@ describe("mobile persistence dispatcher", () => {
     const fixture = testLayer()
     await expect(Effect.runPromise(dispatchMobilePersistence(request(`/v2/links/${userId}/bookmarks/order`, "PUT", { type: "player", ordered_tags }), bindings)
       .pipe(Effect.provide(fixture.layer)))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+  })
+
+  it("reads upgrades in one snapshot without opening a transaction or locking rows", async () => {
+    const fixture = testLayer({ kind: "user", userId }, false, [{ active: true, linked_tag: "#P0Y", value: { saved: true }, updated_at: null }])
+    const response = await Effect.runPromise(dispatchMobilePersistence(request(`/v2/links/${userId}/%23P0Y/upgrades`), bindings).pipe(Effect.provide(fixture.layer)))
+    expect(await response?.json()).toMatchObject({ data: { saved: true } })
+    expect(fixture.executed).toHaveBeenCalledOnce()
+    expect((fixture.query.mock.calls.at(-1) as unknown as [TemplateStringsArray])[0].join("")).not.toContain("FOR UPDATE")
+  })
+
+  it.each([
+    [{ active: false, linked_tag: "#P0Y", value: {}, updated_at: null }, "Unauthenticated"],
+    [{ active: true, linked_tag: null, value: {}, updated_at: null }, "NotFound"],
+  ] as const)("rejects unauthorized upgrade reads in the same snapshot", async (row, error) => {
+    const fixture = testLayer({ kind: "user", userId }, false, [row])
+    await expect(Effect.runPromise(dispatchMobilePersistence(request(`/v2/links/${userId}/%23P0Y/upgrades`), bindings).pipe(Effect.provide(fixture.layer))))
+      .rejects.toMatchObject({ _tag: error })
+    expect(fixture.executed).toHaveBeenCalledOnce()
   })
 
   it.each([{ data: null }, { data: [] }, { data: "not an object" }, { data: 12 }])("rejects non-object saved upgrade data $data", async ({ data }) => {

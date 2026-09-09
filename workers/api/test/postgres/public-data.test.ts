@@ -8,6 +8,7 @@ import { WorkerEnvironment, type WorkerBindings } from "../../src/environment.js
 import { queryClanCwlSeasons, queryPlayerCwlHistory } from "../../src/public-cwl.js"
 import { queryClanRecords } from "../../src/public-changes.js"
 import { queryLeaderboardHistory, queryClanLeaderboardHistory } from "../../src/public-history.js"
+import { selectClanWarIds } from "../../src/public-war.js"
 import { readArchiveWar } from "../../src/war-archive.js"
 import producer from "../fixtures/war-producer.json"
 
@@ -41,6 +42,30 @@ describe("public data against canonical Goose migrations", () => {
       expect(history.items[0]).toMatchObject({ teamSize: 15, missedAttacks: 0, placement: { clan: 1, group: 1 },
         clan: { totalStars: 13, placement: { group: 1, global: null } }, attacks: [{ round: 1, stars: 3, defender: { tag: "#QYY" } }] })
     }).pipe(Effect.provideService(WorkerEnvironment, bindings), Effect.provide(layer), Effect.scoped))
+  })
+  it("selects newest wars across both indexed clan sides with numeric ties and no duplicates", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const clan = "#UNION", other = "#OTHER"
+      const rows = yield* sql<{ war_id: number }>`INSERT INTO wars
+        (clan_tag,opponent_tag,prep_time,start_time,end_time,size,war_type,state)
+        VALUES
+        (${clan},${other},'2026-08-01','2026-08-02','2026-08-03',15,'random','ended'),
+        (${other},${clan},'2026-08-02','2026-08-03','2026-08-04',15,'cwl','ended'),
+        (${clan},${clan},'2026-08-03','2026-08-04','2026-08-05',15,'friendly','ended')
+        RETURNING war_id`
+      const start = new Date("2026-08-01"), end = new Date("2026-08-31")
+      expect(yield* selectClanWarIds(clan, start, end, [], 2)).toEqual(rows.slice(1).reverse().map((row) => ({ war_id: String(row.war_id) })))
+      expect(yield* selectClanWarIds(clan, start, end, ["random"], 2)).toEqual([{ war_id: String(rows[0]!.war_id) }])
+      expect(yield* selectClanWarIds(clan, start, new Date("2026-08-02"), [], 5, true))
+        .toEqual(rows.slice(0, 2).reverse().map((row) => ({ war_id: String(row.war_id) })))
+      const ties = yield* sql<{ war_id: number }>`INSERT INTO wars
+        (clan_tag,opponent_tag,prep_time,start_time,end_time,size,war_type,state)
+        SELECT ${clan},${other},'2026-08-06'::timestamptz,'2026-08-07'::timestamptz,'2026-08-08'::timestamptz,15,'random','ended'
+        FROM generate_series(1, 13) RETURNING war_id`
+      expect(yield* selectClanWarIds(clan, start, end, [], 5))
+        .toEqual([...ties].sort((a, b) => b.war_id - a.war_id).slice(0, 5).map((row) => ({ war_id: String(row.war_id) })))
+    }).pipe(Effect.provide(layer), Effect.scoped))
   })
   it("queries clan records and historical leaderboard summaries without invented table columns", async () => {
     await Effect.runPromise(Effect.gen(function* () {

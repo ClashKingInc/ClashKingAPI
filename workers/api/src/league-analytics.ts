@@ -22,6 +22,7 @@ import {
   parsePlayerHistoryWindow,
   type AnalyticsWindow,
 } from "./league-analytics-query.js"
+import { hashNormalizedArmy, parseArmyLinkQuery } from "./army-link.js"
 import { hasStaticItemId, lookupStaticItem } from "./static-metadata.js"
 
 const database = <A>(message: string, effect: Effect.Effect<A, unknown, SqlClient.SqlClient>) => effect.pipe(
@@ -56,8 +57,6 @@ const positiveId = (raw: string, label: string): Effect.Effect<string, InvalidRe
   },
   catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: `Invalid ${label}` }),
 })
-const exactHash = (raw: string): Effect.Effect<string, InvalidRequest> => /^[0-9a-f]{64}$/u.test(raw)
-  ? Effect.succeed(raw) : Effect.fail(new InvalidRequest({ message: "Invalid army hash" }))
 const normalizedLoot = (value: unknown) => {
   const raw = parseJson<Record<string, unknown>>(value as Record<string, unknown> | string)
   return { gold: number(raw.gold as number ?? 0), elixir: number(raw.elixir as number ?? 0), darkElixir: number(raw.darkElixir as number ?? 0) }
@@ -85,7 +84,6 @@ interface BattleRow {
   duration_seconds: number | null
   looted_resources: unknown
   share_code: string | null
-  army_hash: string
 }
 const battle = (row: BattleRow, mode: "ranked" | "legend") => {
   const stars = number(row.stars), destruction = number(row.destruction_percentage)
@@ -94,11 +92,10 @@ const battle = (row: BattleRow, mode: "ranked" | "legend") => {
   return { time: iso(row.battle_time), townHallLevel: number(row.player_town_hall),
     opponent: { tag: row.opponent_tag, name: row.opponent_name?.trim() || "Unknown", townHallLevel: number(row.opponent_town_hall) },
     stars, destructionPercentage: destruction, duration: row.duration_seconds === null ? null : number(row.duration_seconds),
-    lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code, armyHash: row.army_hash, trophies }
+    lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code, trophies }
 }
 const battleSql = `SELECT b.battle_time,b.direction,b.player_town_hall,b.opponent_tag,p.name AS opponent_name,
-  b.opponent_town_hall,b.stars,b.destruction_percentage,b.duration_seconds,b.looted_resources,b.share_code,
-  encode(b.army_hash,'hex') AS army_hash
+  b.opponent_town_hall,b.stars,b.destruction_percentage,b.duration_seconds,b.looted_resources,b.share_code
   FROM battles_ranked b LEFT JOIN basic_player p ON p.tag=b.opponent_tag`
 
 interface RankedMemberRow {
@@ -281,8 +278,8 @@ export const queryArmySearch = (query: URLSearchParams, now = new Date()) => dat
     .filter((row) => row.players >= options.minimumPlayers) }
 }))
 
-const resolveFamily = (rawHash: string) => database("Army family lookup failed", Effect.gen(function* () {
-  const hash = yield* exactHash(rawHash), sql = yield* SqlClient.SqlClient
+const resolveFamily = (hash: string) => database("Army family lookup failed", Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<{ army_hash: string; family_name: string; representative_share_code: string }>(`
     SELECT encode(f.anchor_army_hash,'hex') army_hash,f.family_name,f.representative_share_code
     FROM army_families f WHERE f.anchor_army_hash=decode($1,'hex')
@@ -312,12 +309,14 @@ const aggregateFamily = (family: { army_hash: string; family_name: string; repre
         AND COALESCE(m.anchor_army_hash,b.army_hash)=decode($3,'hex')`, [window.start, window.end, family.army_hash])
     return { ...result, players: number(counts[0]?.players ?? 0) }
   }))
-export const queryArmyDetail = (rawHash: string, query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
-  const window = yield* parsePlayerHistoryWindow(query, now, 90)
-  return yield* aggregateFamily(yield* resolveFamily(rawHash), window)
+export const queryArmyDetail = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
+  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
+  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 90)
+  return yield* aggregateFamily(yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), window)
 })
-export const queryArmyTimeline = (rawHash: string, query: URLSearchParams, now = new Date()) => database("Army family timeline query failed", Effect.gen(function* () {
-  const window = yield* parsePlayerHistoryWindow(query, now, 365), family = yield* resolveFamily(rawHash), sql = yield* SqlClient.SqlClient
+export const queryArmyTimeline = (query: URLSearchParams, now = new Date()) => database("Army family timeline query failed", Effect.gen(function* () {
+  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
+  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 365), family = yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<{ day: Date | string; attacks: number | string; players: number | string; zero: number | string; one: number | string; two: number | string; three: number | string; destruction: number | string; duration: number | string }>(`
     SELECT day,attack_count attacks,distinct_player_count players,zero_star_count zero,one_star_count one,two_star_count two,
       three_star_count three,destruction_percentage_sum destruction,duration_seconds_sum duration
@@ -417,14 +416,8 @@ export const dispatchLeagueAnalytics = (request: Request) => Effect.gen(function
     return yield* response(PlayerLeagueHistoryResponse, yield* queryPlayerLeagueHistory(tag, url.searchParams))
   }
   if (url.pathname === "/v2/stats/armies") return yield* response(ArmySearchResponse, yield* queryArmySearch(url.searchParams))
-  if (parts.length === 5 && parts[1] === "v2" && parts[2] === "stats" && parts[3] === "armies") {
-    const [hash = ""] = yield* decodedParts(parts, [4])
-    return yield* response(ArmyDetailResponse, yield* queryArmyDetail(hash, url.searchParams))
-  }
-  if (parts.length === 6 && parts[1] === "v2" && parts[2] === "stats" && parts[3] === "armies" && parts[5] === "timeline") {
-    const [hash = ""] = yield* decodedParts(parts, [4])
-    return yield* response(ArmyTimelineResponse, yield* queryArmyTimeline(hash, url.searchParams))
-  }
+  if (url.pathname === "/v2/stats/armies/detail") return yield* response(ArmyDetailResponse, yield* queryArmyDetail(url.searchParams))
+  if (url.pathname === "/v2/stats/armies/timeline") return yield* response(ArmyTimelineResponse, yield* queryArmyTimeline(url.searchParams))
   if (url.pathname === "/v2/stats/league/hit-rates") return yield* response(LeagueHitRateHistoryResponse, yield* queryHitRateHistory(url.searchParams))
   if (parts.length === 8 && parts[1] === "v2" && parts[2] === "stats" && parts[3] === "league" && parts[4] === "tournaments" && parts[6] === "tiers") {
     if (url.search !== "") return yield* new InvalidRequest({ message: "Ranked tier statistics do not accept query parameters" })

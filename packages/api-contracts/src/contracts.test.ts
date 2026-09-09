@@ -21,7 +21,7 @@ describe("canonical endpoint contracts", () => {
       ["GET", "/v2/stats/ranked"],
       ["GET", "/v2/stats/war"],
       ["GET", "/v2/stats/cwl"],
-      ["GET", "/v2/stats/armies/:armyHash/timeline"],
+      ["GET", "/v2/stats/armies/timeline"],
       ["GET", "/v2/stats/wars/hitrates"],
       ["GET", "/v2/stats/wars/summary"],
       ["GET", "/v2/stats/cwl/townhalls"],

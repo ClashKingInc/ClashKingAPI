@@ -8,6 +8,7 @@ import { zstdCompressSync } from "node:zlib"
 import { databaseLayer } from "../../src/database.js"
 import { WorkerEnvironment, type WorkerBindings } from "../../src/environment.js"
 import { dispatchPublicClanExtra } from "../../src/public-clan-extra.js"
+import { prepareStaticMetadata } from "../../src/static-metadata.js"
 import producerWar from "../fixtures/war-producer.json"
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -16,7 +17,8 @@ const clanTag = "#PYY8822", groupId = "ClanExtra001"
 const archive = { ...producerWar, warTag: "#CLANWAR", clan: { ...producerWar.clan, tag: clanTag, badgeToken: "fixture-badge" } }
 const packedBytes = zstdCompressSync(Buffer.from(JSON.stringify(archive)), { dictionary: readFileSync(new URL("../../assets/war-json.zdict", import.meta.url)) })
 const get = vi.fn(async (_key: string, _options: unknown) => ({ body: new ReadableStream(), arrayBuffer: async () => new Uint8Array(packedBytes).buffer }))
-const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, WAR_ARCHIVE: { get } } as unknown as WorkerBindings
+const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, WAR_ARCHIVE: { get }, ASSETS: { get: async (key: string) => ({ json: async () => ({ items: key.includes("capital_leagues")
+  ? [{ _id: 85_000_001, name: "Bronze League III" }] : [{ _id: 48_000_000, name: "Unranked" }] }) }) } } as unknown as WorkerBindings
 const runtime = ManagedRuntime.make(Layer.merge(databaseLayer(bindings), Layer.succeed(WorkerEnvironment, bindings)))
 const run = (path: string) => Effect.gen(function* () {
   const response = yield* dispatchPublicClanExtra(new Request(`https://api.clashk.ing/v2${path}`), bindings)
@@ -29,6 +31,7 @@ const execute = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient | WorkerE
 describe("public clan extra reads against authoritative Goose migrations", () => {
   afterAll(() => runtime.dispose())
   beforeAll(async () => {
+    await Effect.runPromise(prepareStaticMetadata(bindings, ["war_leagues", "capital_leagues"]))
     await execute(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       yield* sql`INSERT INTO basic_clan (tag, name, description, clan_level, clan_points, builder_base_points, capital_points,

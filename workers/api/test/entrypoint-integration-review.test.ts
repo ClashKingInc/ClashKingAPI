@@ -42,6 +42,31 @@ const request = async (path: string, method = 'GET', origin: string | null = 'ht
 afterEach(()=>{databaseState.mode='healthy';vi.restoreAllMocks()})
 
 describe('actual fetch entrypoint service composition and dispatcher order',()=>{
+  it.each([undefined, 'x'.repeat(513)])('uses developer-token validation for shared links, not user JWT authentication %#', async (token) => {
+    const response = await request('/v2/links/shared', 'POST', null, {
+      'content-type': 'application/json',
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+    }, { player_tags: ['#P0Y'] })
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ code: 'unauthenticated', message: 'Invalid developer API token' })
+  })
+  it('passes an opaque developer token through the real router to its database lookup', async () => {
+    databaseState.mode = 'sql'
+    const response = await request('/v2/links/shared', 'POST', null, {
+      'content-type': 'application/json', authorization: 'Bearer fixture-developer-token',
+    }, { player_tags: ['#P0Y'] })
+    // The unavailable SQL fixture proves this reached developer-token lookup;
+    // the shadowing user handler rejected this token as a JWT before any SQL.
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: 'upstream_unavailable' })
+  })
+  it('continues requiring user or bot authentication for personal link mutations', async () => {
+    const response = await request('/v2/links/123456789012345678', 'POST', null, {
+      'content-type': 'application/json', authorization: 'Bearer fixture-developer-token',
+    }, { player_tag: '#P0Y' })
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ message: 'Invalid or expired token' })
+  })
   it('exports only the retained API coordinators', () => {
     expect(Object.keys(workerExports).sort()).toEqual(['default'])
   })

@@ -207,7 +207,7 @@ export const route = (request: Request, bindings: WorkerBindings,
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.15" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.16" })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -273,6 +273,10 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (authResponse !== undefined) return authResponse
     const accountResponse = yield* dispatchAccountMutations(request)
     if (accountResponse !== undefined) return accountResponse
+    // Literal /links/shared must reach developer-token validation before
+    // /links/:userId can interpret "shared" as a user ID.
+    const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
+    if (botAdjacentResponse !== undefined) return botAdjacentResponse
     const linkResponse = yield* dispatchLinkMutations(request, bindings)
     if (linkResponse !== undefined) return linkResponse
     const billingResponse = yield* dispatchBillingMutations(request, bindings)
@@ -283,8 +287,6 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (contentResponse !== undefined) return contentResponse
     const announcementResponse = yield* dispatchAnnouncementMutations(request)
     if (announcementResponse !== undefined) return announcementResponse
-    const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
-    if (botAdjacentResponse !== undefined) return botAdjacentResponse
     const moderationResponse = yield* dispatchBotRuntime(request, bindings)
     if (moderationResponse !== undefined) return moderationResponse
     // Discord command orchestration is deferred to the Bot specification. Its

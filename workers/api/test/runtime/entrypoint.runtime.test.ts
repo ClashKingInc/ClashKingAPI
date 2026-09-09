@@ -70,12 +70,19 @@ it("runs the complete fetch entrypoint inside workerd without external services"
         const document = await response.json() as { paths: Record<string, Record<string, unknown>> }
         expect(document.paths["/v2/home/activity"]?.post).toBeDefined()
         expect(document.paths["/v2/home/activity"]?.query).toBeUndefined()
+        expect(document.paths["/cwl/{clan_tag}/{season}"]?.get).toBeDefined()
+        expect(document.paths["/player/{player_tag}/join-leave"]?.get).toBeDefined()
+        expect(document.paths["/v2/stats/overview"]).toBeUndefined()
         expect(Object.keys(document.paths).filter(path => path.startsWith("/v2/admin/"))).toEqual([
           "/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries",
         ])
       } else await response.body?.cancel()
     }
     expect(outboundRequests).toBe(0)
+    const openCorsPaths = new Set([
+      "/v2/health", "/v2/counts/players/builder-halls",
+      "/v2/player/%23P0Y/ranked/invalid/group", "/v2/media/base_missing.png",
+    ])
     for (const [method, path, status] of [
       ["GET", "/v2/health", 200],
       ["GET", "/v2/counts/players/builder-halls", 501],
@@ -115,7 +122,8 @@ it("runs the complete fetch entrypoint inside workerd without external services"
       })
       expect(response.status, `${method} ${path}`).toBe(status)
       expect(response.headers.get("x-request-id")).toBe("workerd-entrypoint")
-      expect(response.headers.get("access-control-allow-origin")).toBe("https://app.example.test")
+      expect(response.headers.get("access-control-allow-origin")).toBe(openCorsPaths.has(path) ? "*" : "https://app.example.test")
+      expect(response.headers.has("access-control-allow-credentials")).toBe(!openCorsPaths.has(path))
       if (status >= 400) expect(await response.json()).toMatchObject({ request_id: "workerd-entrypoint" })
       if (method === "OPTIONS") expect(response.headers.get("access-control-allow-headers")).toContain("Authorization")
       if (path === "/v2/auth/web/refresh") expect(response.headers.has("set-cookie")).toBe(false)

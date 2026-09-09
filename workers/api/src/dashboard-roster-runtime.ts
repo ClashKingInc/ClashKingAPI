@@ -2003,7 +2003,7 @@ export const dispatchDashboardRoster = (
         }
       }
     }
-    if (match.route.operation === "refreshMember" || match.route.operation === "submitSignup") {
+    if (["manageMembers", "refreshRosters", "refreshMember", "submitSignup"].includes(match.route.operation)) {
       yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
     }
     const operations = yield* DashboardRosterOperations

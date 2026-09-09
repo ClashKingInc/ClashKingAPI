@@ -15,7 +15,8 @@ const serverId = "6834567890123456891", userId = "7834567890123456891", clanTag 
 const principal = { kind: "user" as const, userId }
 const player = { tag: playerTag, name: "Eligibility fixture", townHallLevel: 17, trophies: 5000,
   clan: { tag: clanTag, name: "Fixture clan" }, troops: [], spells: [], heroes: [] }
-const bindings = { CLASH_PROXY: { fetch: async () => Response.json(player) } } as unknown as WorkerBindings
+const bindings = { ASSETS: { get: async () => ({ json: async () => ({ items: [] }) }) },
+  CLASH_PROXY: { fetch: async () => Response.json(player) } } as unknown as WorkerBindings
 const discord = Layer.succeed(DiscordApi, {
   request: () => Effect.succeed({ user: { id: userId, username: "Applicant", avatar: null } }),
   token: () => Effect.die("Unexpected OAuth"),

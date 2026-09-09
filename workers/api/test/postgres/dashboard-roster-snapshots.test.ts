@@ -16,13 +16,13 @@ const layer = Layer.merge(PgClient.layer({ url: Redacted.make(databaseUrl) }), L
   resolve: () => Effect.succeed(access),
   require: (_request, id) => id === serverId ? Effect.succeed(access) : Effect.fail(new Forbidden({ message: "Unauthorized server" })),
 }))
-const bindings = { ROSTER_REFRESH_COOLDOWN_MINUTES: "15", CLASH_PROXY: { fetch: async (request: Request) => {
+const bindings = { ROSTER_REFRESH_COOLDOWN_MINUTES: "15", ASSETS: { get: async () => ({ json: async () => ({ items: [] }) }) }, CLASH_PROXY: { fetch: async (request: Request) => {
   const tag = decodeURIComponent(new URL(request.url).pathname.split("/").at(-1)!)
   if (tag === "#PQG") return new Response(null, { status: 404 })
   if (tag === "#PQY") return new Response(null, { status: 503 })
   return Response.json({ tag, name: "Fresh player", townHallLevel: 17, trophies: 5200,
     troops: [], spells: [], heroes: [], clan: { tag: '#PQL', name: 'New clan' } })
-} } } as WorkerBindings
+} } } as unknown as WorkerBindings
 const refresh = (rosterId: string, scope: "data" | "role", server = serverId) => dispatchDashboardRosterSnapshots(new Request(
   `https://api.clashk.ing/v2/server/${server}/rosters/${rosterId}/refresh`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope }),

@@ -27,6 +27,9 @@ const player = { tag: playerTag, name: "Fresh player", townHallLevel: 17, trophi
 }
 const bindings = {
   HYPERDRIVE: { connectionString: databaseUrl },
+  ASSETS: { get: async (key: string) => ({ json: async () => ({ items: key === "static_data/heroes.json"
+    ? [{ _id: 28_000_000, name: "Barbarian King", village: "home", levels: [{ level: 95, required_townhall: 17 }] }]
+    : [] }) }) },
   CLASH_PROXY: { fetch: async (request: Request) => request.url.includes("/clans/")
     ? Response.json({ tag: clanTag, name: "Fixture clan", memberList: [
       { tag: playerTag, name: "Fresh player", townHallLevel: 17, trophies: 5200, role: "member" },

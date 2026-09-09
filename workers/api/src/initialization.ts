@@ -94,7 +94,7 @@ export const initializationRuntimeRoutes = [{ method: "POST", path: "/v2/initial
 export const dispatchInitialization = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
   if (request.method !== "POST" || new URL(request.url).pathname !== InitializationEndpoint.path) return undefined
   const user = yield* (yield* AuthIdentity).requireUser(request)
-  yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes", "league_tiers", "war_leagues", "capital_leagues"])
+  yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes", "league_tiers", "builder_leagues", "war_leagues", "capital_leagues"])
   const body = yield* readBoundedJson(request)
   const input = yield* Schema.decodeUnknownEffect(InitializationEndpoint.body)(body).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid initialization payload" })))
   const response = yield* initializeMobileAccount(input.player_tags, user.userId, bindings).pipe(Effect.provideService(WorkerEnvironment, bindings))

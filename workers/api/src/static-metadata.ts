@@ -128,14 +128,10 @@ export const calculateRosterMaxPercent = (player: RosterProgressPlayer): number 
 export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<string> => {
   const staticMatch = pathname.match(/^\/v2\/static\/([^/]+)\//u)
   if (staticMatch?.[1]) { try { return [decodeURIComponent(staticMatch[1])] } catch { return [] } }
-  if (pathname === "/v2/initialization") return ["troops", "spells", "heroes", "league_tiers", "war_leagues", "capital_leagues"]
   if (/^\/v2\/player\/[^/]+\/history\/changes$/u.test(pathname)) return ["troops", "heroes", "spells", "pets", "equipment"]
   if (pathname === "/v2/player/search" || /^\/v2\/player\/[^/]+\/(?:legend-history|ranked\/\d+\/|league\/history|leaderboard-history\/)/u.test(pathname)) return ["league_tiers"]
   if (/^\/v2\/(?:ranked\/|leaderboard\/|stats\/league\/)/u.test(pathname)) return ["league_tiers"]
   if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment"]
   if (/^\/v2\/(?:clan\/search|clan\/[^/]+\/(?:cached|rankings|cwl)|player\/[^/]+\/cwl)/u.test(pathname)) return ["war_leagues", "capital_leagues"]
-  if (/^\/v2\/roster\/(?:refresh|refresh-data|refresh-batch)(?:\/|$)/u.test(pathname)
-    || /^\/v2\/roster\/[^/]+\/members\/[^/]+\/refresh$/u.test(pathname)
-    || /^\/v2\/server\/[^/]+\/rosters\/[^/]+\/submissions$/u.test(pathname)) return ["troops", "spells", "heroes"]
   return []
 }

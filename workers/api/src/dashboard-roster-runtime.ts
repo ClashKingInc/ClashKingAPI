@@ -22,6 +22,7 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
 import { readBoundedJson } from "./request-body.js"
 import { hydrateRosterMember, loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
+import { prepareStaticMetadata } from "./static-metadata.js"
 import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership } from "./dashboard-roster-membership.js"
 
 type RosterAuth = "bot" | "public" | "user-or-bot"
@@ -2001,6 +2002,9 @@ export const dispatchDashboardRoster = (
           yield* authorization.require(request, source.server_id, { managerOnly: true, write: true })
         }
       }
+    }
+    if (match.route.operation === "refreshMember" || match.route.operation === "submitSignup") {
+      yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
     }
     const operations = yield* DashboardRosterOperations
     const response = yield* operations.execute(match.route.operation, {

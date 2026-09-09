@@ -7,6 +7,7 @@ import type { WorkerBindings } from "./environment.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
+import { prepareStaticMetadata } from "./static-metadata.js"
 
 export const dashboardRosterSnapshotRoutes = [
   { method: "POST", path: "/v2/roster/refresh-batch" },
@@ -106,6 +107,7 @@ export const dispatchDashboardRosterSnapshots = (request: Request, bindings: Wor
       return yield* new InvalidRequest({ message: "1 to 25 unique roster UUIDs are required" })
     }
     yield* (yield* ServerAuthorization).require(request, body.serverId, { section: "rosters", write: true })
+    yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
     const sql = yield* SqlClient.SqlClient
     const rosters = yield* Effect.forEach(body.rosterIds, (rosterId) => refreshData(sql, bindings, body.serverId, rosterId).pipe(
       Effect.map((result) => ({ rosterId, status: result.status, refreshedPlayers: result.refreshedPlayers,
@@ -137,6 +139,7 @@ export const dispatchDashboardRosterSnapshots = (request: Request, bindings: Wor
   const body = yield* readBoundedJson(request).pipe(Effect.flatMap(Schema.decodeUnknownEffect(endpoint.body)),
     Effect.catchTag("SchemaError", () => Effect.fail(new InvalidRequest({ message: "Request body failed schema validation" }))))
   yield* (yield* ServerAuthorization).require(request, serverId, { section: "rosters", write: true })
+  if (body.scope === "data") yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
   const sql = yield* SqlClient.SqlClient
   const result = body.scope === "data" ? yield* refreshData(sql, bindings, serverId, params.rosterId)
     : yield* database(sql.withTransaction(Effect.gen(function* () {

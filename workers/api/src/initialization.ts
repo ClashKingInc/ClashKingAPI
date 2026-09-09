@@ -7,7 +7,7 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { publicTag } from "./public-war.js"
-import { lookupStaticItem } from "./static-metadata.js"
+import { lookupStaticItem, prepareStaticMetadata } from "./static-metadata.js"
 import { queryMobilePlayerRankingsBatch, queryPlayerLegendHistoryBatch } from "./public-player-extra.js"
 import { currentWarSummary } from "./current-war-summary.js"
 import { queryInitializationWarStats } from "./initialization-war-stats.js"
@@ -94,6 +94,7 @@ export const initializationRuntimeRoutes = [{ method: "POST", path: "/v2/initial
 export const dispatchInitialization = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
   if (request.method !== "POST" || new URL(request.url).pathname !== InitializationEndpoint.path) return undefined
   const user = yield* (yield* AuthIdentity).requireUser(request)
+  yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes", "league_tiers", "war_leagues", "capital_leagues"])
   const body = yield* readBoundedJson(request)
   const input = yield* Schema.decodeUnknownEffect(InitializationEndpoint.body)(body).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid initialization payload" })))
   const response = yield* initializeMobileAccount(input.player_tags, user.userId, bindings).pipe(Effect.provideService(WorkerEnvironment, bindings))

@@ -1,7 +1,7 @@
 import {
   BotPlayerRankingsEndpoint, BotPlayerLegendHistoryEndpoint, BotLegendSeasonEndpoint,
   BotPlayerWarAttacksEndpoint, BotClanCapitalLeaderboardEndpoint,
-  publicPlayerExtraEndpoints, type AnyEndpoint, type BattlelogEntry,
+  publicPlayerExtraEndpoints, type AnyEndpoint,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
@@ -116,37 +116,32 @@ const safeNumber = (raw: string | number) => Effect.try({ try: () => {
   return number
 }, catch: failure })
 interface RankedRow {
-  player_tag: string; player_name: string; clan_tag: string | null; clan_name: string | null; placement: number; league_trophies: number;
-  attack_win_count: number; attack_lose_count: number; defense_win_count: number; defense_lose_count: number; group_tag: string; league_tier_id: number;
+  player_tag: string; player_name: string; placement: number; league_trophies: number; group_tag: string; league_tier_id: number;
+  town_hall: number; maximum_battle_count: number; registered_attack_count: number; registered_defense_count: number;
+  observed_attack_count: number; observed_defense_count: number; missing_real_attacks: number; missing_real_defenses: number;
+  attacks_complete: boolean; defenses_complete: boolean; promoted: boolean; demoted: boolean;
 }
-const rankedMember = ({ player_tag, player_name, clan_tag, clan_name, group_tag, league_tier_id, ...row }: RankedRow, includeGroup: boolean) => ({
-  name: player_name, tag: player_tag, ...row, ...(clan_tag === null ? {} : { clan_tag }), ...(clan_name === null ? {} : { clan_name }),
+const rankedMember = ({ player_tag, player_name, group_tag, league_tier_id, ...row }: RankedRow, includeGroup: boolean) => ({
+  name: player_name, tag: player_tag, ...row,
   ...(includeGroup ? { group_tag, league_tier_id } : {}),
 })
-export const queryPlayerRanked = (rawTag: string, rawSeason: string, query: URLSearchParams, group: boolean) => Effect.gen(function* () {
+export const queryPlayerRankedGroup = (rawTag: string, rawSeason: string) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), season = yield* integerPath(rawSeason, "season"), sql = yield* SqlClient.SqlClient
-  const start = new Date(season * 1000), end = new Date((season + 7 * 86400) * 1000)
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return yield* new InvalidRequest({ message: "Invalid season" })
-  const rows = yield* sql<RankedRow>`SELECT player_tag, player_name, clan_tag, clan_name, placement, league_trophies,
-    attack_win_count, attack_lose_count, defense_win_count, defense_lose_count, group_tag, league_tier_id
+  const rows = yield* sql<RankedRow>`SELECT player_tag, player_name, placement, league_trophies,
+    group_tag, league_tier_id, town_hall, maximum_battle_count, registered_attack_count, registered_defense_count,
+    observed_attack_count, observed_defense_count, missing_real_attacks, missing_real_defenses,
+    attacks_complete, defenses_complete, promoted, demoted
     FROM ranked_league_group_members WHERE season_id = ${String(season)}::bigint AND player_tag = ${tag}`.pipe(Effect.mapError(failure))
   const row = rows[0]
-  if (!row) return group ? { tag, season, group: null, members: [] } : { tag, season, member: null, battlelogs: [] }
+  if (!row) return { tag, season, group: null, members: [] }
   const member = rankedMember(row, true)
-  if (group) {
-    const members = yield* sql<RankedRow>`SELECT player_tag, player_name, clan_tag, clan_name, placement, league_trophies,
-      attack_win_count, attack_lose_count, defense_win_count, defense_lose_count, group_tag, league_tier_id
-      FROM ranked_league_group_members WHERE season_id = ${String(season)}::bigint AND group_tag = ${row.group_tag}
-      ORDER BY placement, player_tag`.pipe(Effect.mapError(failure))
-    return { season, group_tag: row.group_tag, league_tier_id: row.league_tier_id, player: member, members: members.map((item) => rankedMember(item, false)), count: members.length }
-  }
-  const requested = Number(query.get("limit") ?? 100), limit = Math.max(1, Math.min(200, Number.isInteger(requested) ? requested : 100))
-  const battles = yield* sql<Omit<typeof BattlelogEntry.Type, "timestamp"> & { timestamp: Date | string }>`
-    SELECT battle_id::text, player_tag, player_name, player_th AS player_townhall, opponent_tag, opponent_name, opponent_th AS opponent_townhall,
-      battle_type, attack, stars, destruction_percentage, gold, elixir, dark_elixir, "timestamp", army_items, army_counts, duration, army_share_code
-    FROM battlelogs WHERE player_tag = ${tag} AND battle_type = 'ranked' AND "timestamp" >= ${start} AND "timestamp" < ${end}
-    ORDER BY "timestamp" DESC, battle_id DESC LIMIT ${limit}`.pipe(Effect.mapError(failure))
-  return { tag, season, member, battlelogs: battles.map((battle) => ({ ...battle, timestamp: isoTimestamp(battle.timestamp) })) }
+  const members = yield* sql<RankedRow>`SELECT player_tag, player_name, placement, league_trophies,
+    group_tag, league_tier_id, town_hall, maximum_battle_count, registered_attack_count, registered_defense_count,
+    observed_attack_count, observed_defense_count, missing_real_attacks, missing_real_defenses,
+    attacks_complete, defenses_complete, promoted, demoted
+    FROM ranked_league_group_members WHERE season_id = ${String(season)}::bigint AND group_tag = ${row.group_tag}
+    ORDER BY placement, player_tag`.pipe(Effect.mapError(failure))
+  return { season, group_tag: row.group_tag, league_tier_id: row.league_tier_id, player: member, members: members.map((item) => rankedMember(item, false)), count: members.length }
 })
 
 export const queryPlayerTypedLeaderboardHistory = (rawTag: string, type: string) => Effect.gen(function* () {
@@ -252,7 +247,6 @@ export const queryPlayerWarAttacks = (rawTag: string, query: URLSearchParams) =>
 export const publicPlayerExtraRuntimeRoutes = [
   { method: "GET", path: "/v2/player/:tag/rankings" },
   { method: "GET", path: "/v2/player/:tag/legend-history" },
-  { method: "GET", path: "/v2/player/:playerTag/ranked/:season/battlelog" },
   { method: "GET", path: "/v2/player/:playerTag/ranked/:season/group" },
   { method: "GET", path: "/v2/player/:playerTag/leaderboard-history/:leaderboardType" },
   { method: "GET", path: "/v2/player/:playerTag/join-leave/shared" },
@@ -270,8 +264,7 @@ const execute = (operation: string, path: Record<string, string>, query: URLSear
     case "botPlayerWarAttacks": return queryPlayerWarAttacks(path.tag!, query)
     case "botLegendSeason": return queryLegendSeasonHistory(path.season!, query)
     case "botClanCapitalLeaderboard": return queryCapitalGoldLeaderboard(path.locationId!, query)
-    case "getPlayerRankedBattlelog": return queryPlayerRanked(path.playerTag!, path.season!, query, false)
-    case "getPlayerRankedGroup": return queryPlayerRanked(path.playerTag!, path.season!, query, true)
+    case "getPlayerRankedGroup": return queryPlayerRankedGroup(path.playerTag!, path.season!)
     case "getPlayerTypedLeaderboardHistory": return queryPlayerTypedLeaderboardHistory(path.playerTag!, path.leaderboardType!)
     case "getPlayerJoinLeaveShared": return queryPlayerJoinLeaveShared(path.playerTag!, query.get("tag") ?? "")
     case "getPlayerStatHistory": return queryPlayerStatHistory(path.playerTag!, query)

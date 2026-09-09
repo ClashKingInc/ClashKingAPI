@@ -21,7 +21,7 @@ test("OpenAPI documents exact public Worker liveness without readiness claims", 
     assert.deepEqual(response.required.sort(), ["runtime", "status", "version"])
     assert.deepEqual(response.properties.status.enum, ["ok"])
     assert.deepEqual(response.properties.runtime.enum, ["cloudflare-worker"])
-    assert.deepEqual(response.properties.version.enum, ["0.1.0-rc.4"])
+    assert.deepEqual(response.properties.version.enum, ["0.1.0-rc.12"])
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -71,8 +71,8 @@ describe("actual proxy entrypoint preserves user authentication", () => {
     expect(state.observe).toHaveBeenCalledExactlyOnceWith(
       { kind: "user", userId: "fixture-user", deviceId: "fixture-device" }, result.request, expect.any(Response),
     )
-    // One entrypoint cleanup task plus the retained search observation.
-    expect(result.tasks).toHaveLength(2)
+    // Entrypoint cleanup, Sentry flush/dispose, and the retained search observation.
+    expect(result.tasks).toHaveLength(3)
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
@@ -83,7 +83,7 @@ describe("actual proxy entrypoint preserves user authentication", () => {
     expect(state.query).not.toHaveBeenCalled()
     expect(result.upstream).not.toHaveBeenCalled()
     expect(state.observe).not.toHaveBeenCalled()
-    expect(result.tasks).toHaveLength(1)
+    expect(result.tasks).toHaveLength(2)
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 

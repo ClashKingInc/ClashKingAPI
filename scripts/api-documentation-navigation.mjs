@@ -18,6 +18,16 @@ const additions = new Map([
   ["DELETE /v2/auth/me", "App Authentication"],
   ["GET /v2/health", "Health"],
   ["GET /v2/leaderboard/{}/clan/capital-gold", "Leaderboard"],
+  ["GET /v2/player/{}/legend/{}/battlelog", "Player"],
+  ["GET /v2/player/{}/league/history", "Player"],
+  ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
+  ["GET /v2/ranked/{}/groups/{}", "Player"],
+  ["GET /v2/stats/armies", "Stats"],
+  ["GET /v2/stats/armies/{}", "Stats"],
+  ["GET /v2/stats/armies/{}/timeline", "Stats"],
+  ["GET /v2/stats/league/hit-rates", "Stats"],
+  ["GET /v2/stats/league/tournaments/{}/tiers/{}", "Stats"],
+  ["GET /v2/stats/legend/days", "Stats"],
   ["GET /v2/media/{}", "Media"],
   ["POST /v2/roster/account-groups/query", "Roster Builder"],
   ["POST /v2/roster/ai/usage", "Roster Builder"],
@@ -30,6 +40,7 @@ const additions = new Map([
   ["GET /v2/ticket-transcripts/{}/attachments/{}", "Ticket Transcripts"],
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
+  ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
   ?? (path.startsWith("/proxy/v1/") ? "Clash API Proxy" : undefined)
   // Two original generic static-data operations had no tag at all.
   ?? (path.startsWith("/v2/static/") ? "Static Data" : undefined)

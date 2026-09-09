@@ -12,7 +12,7 @@ import type { WorkerBindings } from "../../src/environment.js"
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Run through clashking_schemas/scripts/with-test-timescale.sh")
 const serverId = "1334567890123456789", channelId = "2334567890123456789"
-const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, DISCORD_BOT_TOKEN: "test-only", API_BOT_TOKEN: "test-only" } as WorkerBindings
+const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, DISCORD_BOT_TOKEN: "test-only", DISCORD_CLIENT_ID: "999", API_BOT_TOKEN: "test-only" } as WorkerBindings
 const layer = Layer.mergeAll(databaseLayer(bindings),
   Layer.succeed(DiscordApi, { request: (path) => Effect.succeed(path === "/users/@me" ? { id: "3334567890123456789" } : path === `/channels/${channelId}` ? { id: channelId, guild_id: serverId, type: 0 } : path === `/guilds/${serverId}/webhooks` ? [{ id: "4334567890123456789", type: 1, channel_id: channelId, user: { id: "3334567890123456789" } }] : path === "/webhooks/4334567890123456789" ? { id: "4334567890123456789", type: 1, channel_id: channelId } : []), token: () => Effect.die("Unexpected OAuth") }),
   Layer.succeed(DiscordCredentials, { accessToken: () => Effect.die("Unexpected credentials") }),
@@ -23,14 +23,14 @@ const execute = (endpoint: AnyEndpoint, body: unknown = {}, path: Readonly<Recor
 })
 
 describe("Dashboard server SQL against authoritative Goose schema", () => {
-  it("creates a missing server settings row without treating missing command history as inactivity", async () => {
+  it("lists a bot-present guild without creating settings, then explicitly activates it", async () => {
     const discoveredServerId = "1334567890123456791"
     const discovered = { id: discoveredServerId, name: "New Discord server", owner: true, permissions: "8", features: [] }
     const principal = { kind: "user" as const, userId: "3334567890123456789" }
     const guildLayer = Layer.mergeAll(
       databaseLayer(bindings),
       Layer.succeed(DiscordApi, {
-        request: (path) => Effect.succeed(path.startsWith("/users/@me/guilds") ? [discovered] : discovered),
+        request: (path) => path.startsWith("/users/@me/guilds") ? Effect.succeed([discovered]) : Effect.die(`Unexpected Discord request ${path}`),
         token: () => Effect.die("Unexpected OAuth"),
       }),
       Layer.succeed(DiscordCredentials, { accessToken: () => Effect.succeed("oauth-token") }),
@@ -40,18 +40,28 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       }),
     )
     await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const generation = "00000000-0000-4000-8000-000000000101"
+      yield* sql`INSERT INTO discord_cache.gateway_shards (application_id, shard_id, shard_count, generation, healthy, heartbeat_at)
+        VALUES (${bindings.DISCORD_CLIENT_ID}, 0, 1, ${generation}::uuid, true, now())`
+      yield* sql`INSERT INTO discord_cache.guilds (id, data, application_id, shard_id, generation, available, metadata_complete, updated_at)
+        VALUES (${discoveredServerId}, ${JSON.stringify(discovered)}::jsonb, ${bindings.DISCORD_CLIENT_ID}, 0, ${generation}::uuid, true, true, now())`
       const result = Schema.decodeUnknownSync(dashboardEndpoints.dashboardGuilds.response)(yield* executeDashboardServerCore({
         endpoint: dashboardEndpoints.dashboardGuilds, body: {}, path: {}, query: {}, bindings, principal,
         request: new Request("https://api.clashk.ing/v2/guilds"),
       }))
       expect(result).toEqual([expect.objectContaining({
-        id: discoveredServerId, name: "New Discord server", has_bot: true, inactive: false,
+        id: discoveredServerId, name: "New Discord server", has_bot: true, inactive: true,
       })])
       expect(result[0]).not.toHaveProperty("last_command_at")
-      const sql = yield* SqlClient.SqlClient
+      expect(yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${discoveredServerId}`).toEqual([])
+      yield* executeDashboardServerCore({
+        endpoint: dashboardEndpoints.reactivateServer, body: {}, path: { serverId: discoveredServerId }, query: {}, bindings, principal,
+        request: new Request(`https://api.clashk.ing/v2/server/${discoveredServerId}/reactivate`, { method: "POST" }),
+      })
       expect(yield* sql<{ id: string; name: string; last_command_at: Date | null }>`
         SELECT id, name, last_command_at FROM servers WHERE id = ${discoveredServerId}
-      `).toEqual([{ id: discoveredServerId, name: "New Discord server", last_command_at: null }])
+      `).toEqual([{ id: discoveredServerId, name: "New Discord server", last_command_at: expect.any(Date) }])
     }).pipe(Effect.provide(guildLayer), Effect.scoped))
   })
 
@@ -72,6 +82,24 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       expect((yield* read()).require_api_token_when_linking).toBe(false)
     }).pipe(Effect.provide(layer),Effect.scoped))
   })
+  it("repairs retained server logs without violating the nullable-scope unique key", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO servers (id,name) VALUES (${serverId},'Integration server') ON CONFLICT DO NOTHING`
+      yield* sql`INSERT INTO server_logs (server_id,clan_tag,type,webhook_id,disabled,disabled_reason)
+        VALUES (${serverId},NULL,'reddit_feed','4334567890123456790',true,'Destination was deleted')`
+      yield* execute(dashboardEndpoints.saveServerLogs, { channel_id: channelId, log_types: ["reddit_feed"] })
+      const afterSave = yield* sql<{ disabled: boolean; disabled_reason: string | null }>`
+        SELECT disabled,disabled_reason FROM server_logs WHERE server_id=${serverId} AND clan_tag IS NULL AND type='reddit_feed'`
+      expect(afterSave).toEqual([{ disabled: false, disabled_reason: null }])
+      yield* sql`UPDATE server_logs SET disabled=true,disabled_reason='Destination was deleted'
+        WHERE server_id=${serverId} AND clan_tag IS NULL AND type='reddit_feed'`
+      yield* execute(dashboardEndpoints.updateServerLogsState, { log_types: ["reddit_feed"], disabled: false })
+      const afterEnable = yield* sql<{ disabled: boolean; disabled_reason: string | null }>`
+        SELECT disabled,disabled_reason FROM server_logs WHERE server_id=${serverId} AND clan_tag IS NULL AND type='reddit_feed'`
+      expect(afterEnable).toEqual([{ disabled: false, disabled_reason: null }])
+    }).pipe(Effect.provide(layer),Effect.scoped))
+  })
   it("round-trips giveaway multipart settings, weighted entries and reroll history", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
@@ -80,10 +108,11 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       for (const [key,value] of Object.entries({ prize: "Gold Pass", channel_id: channelId, winners: "1", now: "true", end_time: "2099-10-01T12:00:00Z", roles_json: JSON.stringify([channelId]), boosters_json: JSON.stringify([{ value: 2, roles: [channelId] }]) })) body.set(key,value)
       const created = Schema.decodeUnknownSync(dashboardEndpoints.createServerGiveaway.response)(yield* execute(dashboardEndpoints.createServerGiveaway, body))
       const path = { serverId, giveawayId: created.giveawayId }
+      yield* sql`UPDATE giveaways SET disabled=true,disabled_reason='Destination was deleted' WHERE id=${created.giveawayId}`
       body.set("prize","Updated Prize")
       yield* execute(dashboardEndpoints.updateServerGiveaway, body, path)
       const listed = Schema.decodeUnknownSync(dashboardEndpoints.serverGiveaways.response)(yield* execute(dashboardEndpoints.serverGiveaways))
-      expect(listed.upcoming[0]).toMatchObject({ prize: "Updated Prize", channelId, roles: [channelId], updated: true })
+      expect(listed.upcoming[0]).toMatchObject({ prize: "Updated Prize", channelId, roles: [channelId], updated: true, disabled: false, disabled_reason: null })
       const single = Schema.decodeUnknownSync(dashboardEndpoints.serverGiveaway.response)(yield* execute(dashboardEndpoints.serverGiveaway, {}, path))
       expect(single.id).toBe(created.giveawayId)
       const otherId = "5334567890123456789"
@@ -105,9 +134,10 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       const created = Schema.decodeUnknownSync(dashboardEndpoints.createServerReminder.response)(yield* execute(dashboardEndpoints.createServerReminder, { type: "Clan Capital", clan_tag: "poy", channel_id: channelId, time: "1.5hr", roles: ["leader", "coLeader"], townhall_filter: [16,17], point_threshold: 2000 }))
       expect(created.server_id).toBe(serverId)
       const path = { serverId, reminderId: created.reminder_id }
+      yield* sql`UPDATE reminders SET disabled=true,disabled_reason='Destination was deleted' WHERE id=${created.reminder_id}::uuid`
       yield* execute(dashboardEndpoints.updateServerReminder, { custom_text: "Attack", point_threshold: 0, roles: [] }, path)
       const listed = Schema.decodeUnknownSync(dashboardEndpoints.serverReminders.response)(yield* execute(dashboardEndpoints.serverReminders))
-      expect(listed.capital_reminders[0]).toMatchObject({ channel_id: channelId, clan_tag: "#P0Y", roles: [], point_threshold: 0, townhall_filter: [16,17], custom_text: "Attack" })
+      expect(listed.capital_reminders[0]).toMatchObject({ channel_id: channelId, clan_tag: "#P0Y", roles: [], point_threshold: 0, townhall_filter: [16,17], custom_text: "Attack", disabled: false, disabled_reason: null })
       const raw = yield* sql<{ minutes_remaining: number; data: { channel: string }; roles: string[] }>`SELECT minutes_remaining,data,roles FROM reminders WHERE id=${created.reminder_id}::uuid`
       expect(raw[0]?.minutes_remaining).toBe(90)
       expect(raw[0]?.data.channel).toBe(channelId)
@@ -176,9 +206,70 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       expect(withoutButton?.components).toEqual([])
       expect(withoutButton?.button_settings).toEqual({})
       yield* execute(dashboardEndpoints.deleteTicketPanel, {}, panelPath)
-      expect(yield* sql`SELECT name FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName}`).toEqual([])
-      // The baseline delete frees the (server_id, name) identity for recreation.
+      expect(yield* sql`SELECT name FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName} AND archived_at IS NULL`).toEqual([])
+      // Archiving frees the active (server_id, name) identity for recreation.
       yield* execute(dashboardEndpoints.createTicketPanel, { name: panelName })
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+
+  it("normalizes legacy ticket settings and emoji IDs before response validation", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const panelName = "Legacy applications", customId = "legacy_apply"
+      yield* sql`INSERT INTO servers (id, name) VALUES (${serverId}, 'Integration server') ON CONFLICT (id) DO NOTHING`
+      yield* sql`INSERT INTO ticket_panels (id, server_id, name, components, data)
+        VALUES (
+          '00000000-0000-4000-8000-000000000201'::uuid,
+          ${serverId},
+          ${panelName},
+          jsonb_build_array(
+            jsonb_build_object(
+              'id', '00000000-0000-4000-8000-000000000202',
+              'custom_id', ${customId}::text,
+              'label', 'Apply',
+              'style', 1,
+              'type', 2,
+              'emoji', jsonb_build_object('id', 1234567890123456789::numeric, 'name', 'custom')
+            ),
+            jsonb_build_object(
+              'id', '00000000-0000-4000-8000-000000000203',
+              'custom_id', 'legacy_null_emoji',
+              'label', 'Ask',
+              'style', 2,
+              'type', 2,
+              'emoji', NULL
+            )
+          ),
+          jsonb_build_object(
+            ${`${customId}_settings`}::text,
+            jsonb_build_object(
+              'questions', NULL,
+              'mod_role', ${channelId}::text,
+              'apply_clans', NULL,
+              'roles_to_add', NULL,
+              'roles_to_remove', NULL,
+              'townhall_requirements', NULL,
+              'private_thread', false,
+              'account_apply', false,
+              'player_info', false
+            ),
+            'open-category', 3234567890123456789::numeric
+          )
+        )`
+
+      const result = Schema.decodeUnknownSync(dashboardEndpoints.ticketPanels.response)(yield* execute(dashboardEndpoints.ticketPanels))
+      const panel = result.items.find((item) => item.name === panelName)
+      expect(panel?.components[0]?.emoji?.id).toBe("1234567890123456789")
+      expect(panel?.components[1]).not.toHaveProperty("emoji")
+      expect(panel?.open_category).toBe("3234567890123456789")
+      expect(panel?.button_settings[customId]).toMatchObject({
+        questions: [],
+        mod_role: [channelId],
+        apply_clans: [],
+        roles_to_add: [],
+        roles_to_remove: [],
+        townhall_requirements: {},
+      })
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 
@@ -201,8 +292,6 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       yield* execute(dashboardEndpoints.deleteAutoboard, {}, { serverId, autoboardId: created.id })
       const targets = yield* sql<{ target: string }>`SELECT target FROM autoboard_targets WHERE autoboard_id=${created.id}::uuid`
       expect(targets).toHaveLength(0)
-      const ledger = yield* sql<{ resource_id: string }>`SELECT resource_id FROM discord_managed_resources WHERE resource_id='4334567890123456789'`
-      expect(ledger).toHaveLength(0)
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

@@ -6,7 +6,7 @@ import { executeDashboardGiveaways, giveawayEntrants, giveawayWinnerValue, parse
 import { DashboardServerOperations, dispatchDashboardServer, type DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { AuthIdentity } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
-import { DatabaseFailure, Forbidden, NotFound, RateLimited } from "./errors.js"
+import { DatabaseFailure, Forbidden } from "./errors.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import type { WorkerBindings } from "./environment.js"
 const form = () => { const value = new FormData(); for (const [key, item] of Object.entries({ prize: "Gold Pass", channel_id: "1334567890123456789", winners: "2", now: "true", end_time: "2026-10-01T12:00:00" })) value.set(key,item); return value }
@@ -27,13 +27,12 @@ describe("Giveaway validation and weighted entry reporting", () => {
   })
   it("resolves winner identity without rounding IDs and matches the pinned Go avatar behavior", async () => {
     const userId = "1334567890123456789"
-    const value = await Effect.runPromise(giveawayWinnerValue("2334567890123456789", { user_id: userId, status: "winner" }).pipe(Effect.provideService(DiscordApi, { request: () => Effect.succeed({ nick: "Captain", user: { id: userId, username: "captain", discriminator: "1000" } }), token: () => Effect.die("Unexpected token") })))
+    const value = await Effect.runPromise(giveawayWinnerValue("2334567890123456789", { user_id: userId, status: "winner" }, { nick: "Captain", user: { id: userId, username: "captain", discriminator: "1000" } }))
     expect(value).toMatchObject({ userId, username: "Captain", avatarUrl: `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`, inServer: true })
   })
-  it("marks only missing members absent and preserves upstream rate limiting", async () => {
-    const run = (failure: NotFound | RateLimited) => Effect.runPromise(giveawayWinnerValue("2334567890123456789", { user_id: "1334567890123456789", username: "Previous winner" }).pipe(Effect.provideService(DiscordApi, { request: () => Effect.fail(failure), token: () => Effect.die("Unexpected token") })))
-    expect(await run(new NotFound({ message: "Missing" }))).toMatchObject({ username: "Previous winner", inServer: false })
-    await expect(run(new RateLimited({ message: "Wait", retryAfterSeconds: 5 }))).rejects.toMatchObject({ _tag: "RateLimited" })
+  it("uses the stored winner name when absent from the verified complete snapshot, without Discord calls", async () => {
+    expect(await Effect.runPromise(giveawayWinnerValue("2334567890123456789", { user_id: "1334567890123456789", username: "Previous winner" })))
+      .toMatchObject({ username: "Previous winner", inServer: false })
   })
 })
 

@@ -171,15 +171,21 @@ export const ensureCwlLeagueIds = (tag: string) => Effect.gen(function* () {
   })).pipe(Effect.mapError(failure))
 })
 
+export const selectCwlSeasonGroups = (groups: readonly CwlGroup[], limit: number): readonly CwlGroup[] => {
+  const selected: CwlGroup[] = [], seen = new Set<string>()
+  for (const group of [...groups].reverse()) {
+    if (seen.has(group.season)) continue
+    seen.add(group.season)
+    selected.push(group)
+    if (selected.length === limit) break
+  }
+  return selected
+}
+
 export const queryClanCwlSeasons = (rawTag: string, query: URLSearchParams) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), limit = yield* historyLimit(query, 12)
   yield* ensureCwlLeagueIds(tag)
-  const groups = yield* loadCwlGroups(tag), selected: CwlGroup[] = [], seen = new Set<string>()
-  for (const group of [...groups].reverse()) {
-    if (group.state !== "ended" || seen.has(group.season)) continue
-    seen.add(group.season); selected.push(group)
-    if (selected.length === limit) break
-  }
+  const selected = selectCwlSeasonGroups(yield* loadCwlGroups(tag), limit)
   const wars = yield* loadCwlWars(selected)
   return { items: selected.map((group) => ({ season: group.season, state: group.state, warSize: group.war_size && group.war_size > 0 ? group.war_size : null,
     warLeague: warLeague(group.cwl_league_id), rank: null, stars: null, destruction: null, rounds: null, ...cwlSummary(group, wars, tag) })) }

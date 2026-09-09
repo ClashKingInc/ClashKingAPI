@@ -15,7 +15,7 @@ const document = paths => ({ openapi: "3.1.1", info: { title: "fixture" }, paths
 test("compact navigation retains every pinned original feature tag with normalized parameters", () => {
   assert.equal(source.sourceCommit, "cf7371e4a32b4a37afd7c80ff83c72ef29b425e4")
   assert.equal(source.sourcePath, "internal/swaggerdocs/openapi.json")
-  assert.equal(source.operations.length, 290)
+  assert.equal(source.operations.length, 292)
   const paths = {}
   for (const [method, path] of source.operations) {
     paths[currentPath(path)] ??= {}
@@ -43,9 +43,9 @@ test("compact navigation retains every pinned original feature tag with normaliz
   assert.deepEqual(Object.keys(source).sort(), ["operations", "primaryTagOrder", "sourceCommit", "sourcePath", "tagOrder"])
 })
 
-test("six retired QUERY methods provide POST navigation only, never a runtime compatibility shim", () => {
+test("the retired home QUERY method remains POST while statistics reads are GET", () => {
   assert.deepEqual(source.operations.filter(([method]) => method === "QUERY").map(([, path]) => path).sort(), [
-    "/v2/home/activity", "/v2/stats/armies", "/v2/stats/cwl", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war",
+    "/v2/home/activity",
   ])
   assert.equal(normalizeDocumentationPath("/v2/links/{userId}/{playerTag}"), "/v2/links/{}/{}")
   assert.throws(() => applyFeatureNavigation(document({ "/v2/home/activity": { query: {} } })), /QUERY is not a supported/)

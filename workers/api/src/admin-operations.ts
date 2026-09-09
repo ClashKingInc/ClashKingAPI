@@ -12,7 +12,7 @@ import { SqlClient } from "effect/unstable/sql"
 
 import type { AdminPrincipal } from "./access.js"
 import { appUpdateInternals } from "./app-updates.js"
-import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { Conflict, DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
 import { decryptPushToken } from "./push-secrets.js"
 import { executeTrackingRead } from "./tracking-operations.js"
@@ -63,6 +63,55 @@ interface DeveloperApplicationRow {
   readonly token_prefix: string
   readonly updated_at: Date | string
 }
+
+interface ArmyFamilyAdminRow {
+  readonly army_hash: string
+  readonly family_name: string
+  readonly representative_share_code: string
+  readonly source: "ai" | "admin" | "fallback"
+  readonly created_at: Date | string
+  readonly updated_at: Date | string
+}
+const adminArmyFamily = (row: ArmyFamilyAdminRow) => ({
+  armyHash: row.army_hash,
+  name: row.family_name,
+  representativeShareCode: row.representative_share_code,
+  source: row.source,
+  createdAt: iso(row.created_at),
+  updatedAt: iso(row.updated_at),
+})
+
+const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed", Effect.gen(function* () {
+  const query = asRecord(input.query)
+  const search = typeof query.search === "string" ? query.search.trim() : ""
+  const limit = typeof query.limit === "number" ? query.limit : 100
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`SELECT encode(anchor_army_hash,'hex') army_hash,family_name,
+    representative_share_code,source,created_at,updated_at FROM army_families
+    WHERE $1='' OR family_name ILIKE '%'||$1||'%' OR encode(anchor_army_hash,'hex') LIKE lower($1)||'%'
+    ORDER BY updated_at DESC,anchor_army_hash LIMIT $2`, [search, limit])
+  return { items: rows.map(adminArmyFamily) }
+}))
+
+const updateArmyFamily = (input: AdminOperationInput) => database("Army family update failed", Effect.gen(function* () {
+  const path = asRecord(input.path), body = asRecord(input.body)
+  const hash = String(path.armyHash ?? ""), rawName = String(body.name ?? "")
+  const name = rawName.trim().replace(/\s+/gu, " ")
+  if (!/^[0-9a-f]{64}$/u.test(hash)) return yield* new InvalidRequest({ message: "Invalid army hash" })
+  if (name.length === 0 || name.length > 120) return yield* new InvalidRequest({ message: "Army family name must contain 1 to 120 characters" })
+  const sql = yield* SqlClient.SqlClient
+  yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
+  const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
+    WHERE lower(family_name)=lower($1) AND anchor_army_hash<>decode($2,'hex')) exists`, [name, hash])
+  if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
+  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`UPDATE army_families SET family_name=$1,source='admin',named_by_subject=$2,
+    naming_model=NULL,naming_prompt_version=NULL,updated_at=now() WHERE anchor_army_hash=decode($3,'hex')
+    RETURNING encode(anchor_army_hash,'hex') army_hash,family_name,representative_share_code,source,created_at,updated_at`,
+  [name, input.principal.id, hash])
+  if (rows[0] === undefined) return yield* new NotFound({ message: "Army family not found" })
+  yield* audit(input, "army_family.rename", "army_family", hash, `Renamed army family to ${name}`)
+  return adminArmyFamily(rows[0])
+}))
 
 interface PostRow {
   readonly also_push_on_publish: boolean
@@ -184,7 +233,8 @@ const parseJson = <A>(value: A | string): A => typeof value === "string" ? JSON.
 
 const isApiFailure = (cause: unknown): cause is ApiFailure => {
   if (typeof cause !== "object" || cause === null || !("_tag" in cause)) return false
-  return ["DatabaseFailure", "Forbidden", "InvalidRequest", "NotFound", "Unauthenticated", "UpstreamUnavailable"]
+  return ["Conflict", "DatabaseFailure", "Forbidden", "InvalidRequest", "NotFound", "NotImplemented",
+    "PayloadTooLarge", "RateLimited", "Unauthenticated", "UnprocessableEntity", "UpstreamUnavailable"]
     .includes(String(cause._tag))
 }
 
@@ -790,12 +840,12 @@ const dashboard = (input: AdminOperationInput) => database("Admin dashboard look
       count(*) FILTER (WHERE status IN ('failed','partial'))::int failed, max(attempted_at) last_attempt
     FROM attempts`, [days]))[0] ?? {}
   const daily = yield* sql.unsafe<Record<string, number | string>>(`WITH dates AS (
-      SELECT generate_series((now()::date - ($1::int - 1)), now()::date, interval '1 day')::date day),
+      SELECT generate_series((now()::date - ($1::int - 1)), now()::date, interval '1 day')::date AS day),
     attempts AS (
-      SELECT attempted_at::date day, eligible_count, sent_count, skipped_count, status FROM admin_post_delivery_attempts
+      SELECT attempted_at::date AS day, eligible_count, sent_count, skipped_count, status FROM admin_post_delivery_attempts
         WHERE attempted_at >= now() - ($1::int * interval '1 day')
       UNION ALL
-      SELECT attempted_at::date day, eligible_count, sent_count, skipped_count, status FROM admin_campaign_delivery_attempts
+      SELECT attempted_at::date AS day, eligible_count, sent_count, skipped_count, status FROM admin_campaign_delivery_attempts
         WHERE attempted_at >= now() - ($1::int * interval '1 day'))
     SELECT to_char(d.day,'YYYY-MM-DD') date, count(a.day)::int attempts,
       COALESCE(sum(a.eligible_count),0)::int eligible, COALESCE(sum(a.sent_count),0)::int sent,
@@ -803,7 +853,7 @@ const dashboard = (input: AdminOperationInput) => database("Admin dashboard look
       count(a.day) FILTER (WHERE a.status IN ('failed','partial'))::int failed
     FROM dates d LEFT JOIN attempts a ON a.day=d.day GROUP BY d.day ORDER BY d.day`, [days])
   const audienceDaily = yield* sql.unsafe<Record<string, number | string>>(`WITH dates AS (
-      SELECT generate_series((now()::date - ($1::int - 1)), now()::date, interval '1 day')::date day)
+      SELECT generate_series((now()::date - ($1::int - 1)), now()::date, interval '1 day')::date AS day)
     SELECT to_char(d.day,'YYYY-MM-DD') date, COALESCE(k.devices_total,0)::int total,
       COALESCE(k.devices_production,0)::int production, COALESCE(k.devices_sandbox,0)::int sandbox,
       COALESCE(k.devices_opted_in,0)::int opted_in
@@ -1357,6 +1407,8 @@ const operationFor = (
     case "adminProxyStats": return proxyStats(input)
     case "adminTrackingSummary": return executeTrackingRead("summary", input.query)
     case "adminTrackingTimeseries": return executeTrackingRead("timeseries", input.query)
+    case "adminArmyFamilies": return listArmyFamilies(input)
+    case "adminUpdateArmyFamily": return updateArmyFamily(input)
     case "adminListDeveloperApplications": return listDeveloperApplications()
     case "adminCreateDeveloperApplication": return createDeveloperApplication(input)
     case "adminGetDeveloperApplication": return getDeveloperApplication(input)
@@ -1396,6 +1448,7 @@ const operationFor = (
 
 const databaseMutations = new Set([
   "adminCreateDeveloperApplication", "adminUpdateDeveloperApplication", "adminDeleteDeveloperApplication",
+  "adminUpdateArmyFamily",
   "adminCreateFeatureFlag", "adminUpdateFeatureFlag", "adminUpdateAppReleaseChannel",
   "adminCreatePost", "adminUpdatePost", "adminArchivePost", "adminRestorePostRevision",
   "adminPublishPost", "adminPushPost", "adminDuplicatePost", "adminCreateCampaign", "adminUpdateCampaign",

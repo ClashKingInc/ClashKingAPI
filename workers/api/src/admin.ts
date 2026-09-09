@@ -23,6 +23,8 @@ export const adminRuntimeRoutes = [
   { method: "GET", path: "/v2/admin/proxy/stats" },
   { method: "GET", path: "/v2/admin/tracking/summary" },
   { method: "GET", path: "/v2/admin/tracking/timeseries" },
+  { method: "GET", path: "/v2/admin/stats/armies" },
+  { method: "PATCH", path: "/v2/admin/stats/armies/:armyHash" },
   { method: "GET", path: "/v2/admin/developer-applications" },
   { method: "POST", path: "/v2/admin/developer-applications" },
   { method: "GET", path: "/v2/admin/developer-applications/:applicationId" },

@@ -6,10 +6,10 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { packageNames, parsePackOutput, validatePack, validatePair, verify } from "./api-package-release.mjs"
 
-const version = "0.1.0-rc.4", tag = `v${version}`, commit = "a".repeat(40)
+const version = "0.1.0-rc.12", tag = `v${version}`, commit = "a".repeat(40)
 const packages = () => packageNames.map(name => ({ name, version,
   dependencies: { effect: "4.0.0-rc.112", ...(name === packageNames[1] ? { [packageNames[0]]: version } : {}) },
-  peerDependencies: { effect: "4.0.0-rc.112" },
+  peerDependencies: { effect: "4.0.0-rc.112", ...(name === packageNames[0] ? { "@clashking/clash-contract": ">=0.1.2 <2" } : {}) },
   exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
 }))
 const bytes = Buffer.from("test tarball bytes")
@@ -28,12 +28,15 @@ test("accepts npm workspace pack output and rejects ambiguous output", () => {
 
 test("requires a coherent package pair and matching GitHub Release tag", () => {
   assert.equal(validatePair(...packages(), tag), version)
-  for (const badTag of [undefined, "api-packages-v0.1.0-rc.4", "v0.1.0-rc.3"]) {
+  for (const badTag of [undefined, "api-packages-v0.1.0-rc.12", "v0.1.0-rc.5"]) {
     assert.throws(() => validatePair(...packages(), badTag), /Release tag/u)
   }
   const pair = packages()
-  pair[1].dependencies[packageNames[0]] = "^0.1.0-rc.4"
+  pair[1].dependencies[packageNames[0]] = "^0.1.0-rc.12"
   assert.throws(() => validatePair(...pair, tag), /exact contracts/u)
+  const invalidPeer = packages()
+  invalidPeer[0].peerDependencies["@clashking/clash-contract"] = "0.1.2"
+  assert.throws(() => validatePair(...invalidPeer, tag), /released Clash contract/u)
 })
 
 test("checks package identity, exported files, and exact bytes", () => {

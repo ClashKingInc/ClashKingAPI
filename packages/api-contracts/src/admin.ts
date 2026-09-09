@@ -382,6 +382,19 @@ export const AppUpdateChannel = Schema.Struct({ channel: AppReleaseTrack, platfo
 export const AppUpdateChannelInput = Schema.Struct({ expectedUpdatedAt: Schema.NullOr(AppReleaseDateTimeInput), activeVersion: Schema.NullOr(AppReleaseVersionInput), rollbackTargetVersion: Schema.NullOr(AppReleaseVersionInput), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateScheduleInput) }).annotate({ parseOptions: { onExcessProperty: "error" } })
 export const AppReleasesResponse = Schema.Struct({ releases: Schema.Array(AppReleaseMarker), channels: Schema.Array(AppUpdateChannel) })
 
+export const AdminArmyFamily = Schema.Struct({
+  armyHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  name: Schema.String,
+  representativeShareCode: Schema.String,
+  source: Schema.Literals(["ai", "admin", "fallback"]),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+})
+export const AdminArmyFamiliesResponse = Schema.Struct({ items: Schema.Array(AdminArmyFamily) })
+export const UpdateAdminArmyFamilyInput = Schema.Struct({
+  name: Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120)),
+}).annotate({ parseOptions: { onExcessProperty: "error" } })
+
 const adminRead = { auth: "admin" as const, body: NoBody, bodyMode: "none" as const, responseMode: "json" as const, successStatus: 200 }
 const adminJson = { auth: "admin" as const, bodyMode: "json" as const, responseMode: "json" as const, successStatus: 200 }
 const IdPath = Schema.Struct({ id: UUID })
@@ -393,6 +406,8 @@ export const AdminAuditEndpoint = defineEndpoint({ ...adminRead, operationId: "a
 export const AdminProxyStatsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminProxyStats", method: "GET", path: "/v2/admin/proxy/stats", summary: "Get proxy statistics", pathParams: NoPathParams, query: Schema.Struct({ series: Schema.optionalKey(Schema.Literals(["1m", "5m", "15m", "30m", "1h"])), lookback: Schema.optionalKey(Schema.Literals(["1h", "6h", "12h", "24h", "48h"])), endpoints: Schema.optionalKey(Schema.Literals(["24h", "7d"])), limit: Schema.optionalKey(IntBetween(1, 100)) }), response: ProxyStatsResponse })
 export const AdminTrackingSummaryEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingSummary", method: "GET", path: "/v2/admin/tracking/summary", summary: "Get tracking health summary", pathParams: NoPathParams, query: NoQuery, response: TrackingSummaryResponse })
 export const AdminTrackingTimeseriesEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingTimeseries", method: "GET", path: "/v2/admin/tracking/timeseries", summary: "Get tracking timeseries", pathParams: NoPathParams, query: Schema.Struct({ window: Schema.Literals(["15m", "1h", "6h", "24h"]), script: Schema.optionalKey(Schema.String), domain: Schema.optionalKey(Schema.String) }), response: TrackingTimeSeriesResponse })
+export const AdminArmyFamiliesEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilies", method: "GET", path: "/v2/admin/stats/armies", summary: "List and search army families", pathParams: NoPathParams, query: Schema.Struct({ search: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(120))), limit: Schema.optionalKey(IntBetween(1, 200)) }), response: AdminArmyFamiliesResponse })
+export const AdminUpdateArmyFamilyEndpoint = defineEndpoint({ ...adminJson, operationId: "adminUpdateArmyFamily", method: "PATCH", path: "/v2/admin/stats/armies/:armyHash", summary: "Rename an army family", pathParams: Schema.Struct({ armyHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)) }), query: NoQuery, body: UpdateAdminArmyFamilyInput, response: AdminArmyFamily })
 
 export const AdminListDeveloperApplicationsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminListDeveloperApplications", method: "GET", path: "/v2/admin/developer-applications", summary: "List developer applications", pathParams: NoPathParams, query: NoQuery, response: Schema.Array(DeveloperApplication) })
 export const AdminCreateDeveloperApplicationEndpoint = defineEndpoint({ ...adminJson, successStatus: 201, operationId: "adminCreateDeveloperApplication", method: "POST", path: "/v2/admin/developer-applications", summary: "Create a developer application", pathParams: NoPathParams, query: NoQuery, body: CreateDeveloperApplicationInput, response: CreatedDeveloperApplication })
@@ -438,6 +453,7 @@ export const adminEndpoints = {
   me: AdminMeEndpoint, dashboard: AdminDashboardEndpoint, audit: AdminAuditEndpoint,
   proxyStats: AdminProxyStatsEndpoint, trackingSummary: AdminTrackingSummaryEndpoint,
   trackingTimeseries: AdminTrackingTimeseriesEndpoint,
+  armyFamilies: AdminArmyFamiliesEndpoint, updateArmyFamily: AdminUpdateArmyFamilyEndpoint,
   listDeveloperApplications: AdminListDeveloperApplicationsEndpoint,
   createDeveloperApplication: AdminCreateDeveloperApplicationEndpoint,
   getDeveloperApplication: AdminGetDeveloperApplicationEndpoint,

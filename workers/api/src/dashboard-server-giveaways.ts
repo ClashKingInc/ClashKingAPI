@@ -4,14 +4,15 @@ import { SqlClient } from "effect/unstable/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { uploadMediaFile, mediaFileUrl } from "./dashboard-upload.js"
 import { DiscordApi } from "./discord-api.js"
+import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, RateLimited, Forbidden, Unauthenticated, PayloadTooLarge, type ApiFailure } from "./errors.js"
 
 export const dashboardGiveawayOperationIds = ["serverGiveaways", "serverGiveaway", "createServerGiveaway", "updateServerGiveaway", "deleteServerGiveaway", "giveawayEntries", "rerollGiveaway"] as const
 const StoredWinner = Schema.Struct({ user_id: DecimalSnowflake, status: Schema.optionalKey(Schema.Literals(["winner", "rerolled"])), timestamp: Schema.optionalKey(Schema.String), reason: Schema.optionalKey(Schema.String), username: Schema.optionalKey(Schema.String) })
 const Member = Schema.Struct({ nick: Schema.optionalKey(Schema.NullOr(Schema.String)), avatar: Schema.optionalKey(Schema.NullOr(Schema.String)), user: Schema.Struct({ id: DecimalSnowflake, username: Schema.String, global_name: Schema.optionalKey(Schema.NullOr(Schema.String)), avatar: Schema.optionalKey(Schema.NullOr(Schema.String)), discriminator: Schema.optionalKey(Schema.String) }) })
-interface Row { readonly id: string; readonly server_id: string; readonly prize: string; readonly channel_id: string | null; readonly status: string; readonly start_time: Date | string | null; readonly end_time: Date | string | null; readonly winners: number; readonly mentions: readonly string[]; readonly text_above_embed: string; readonly text_in_embed: string; readonly text_on_end: string; readonly image_url: string | null; readonly profile_picture_required: boolean; readonly coc_account_required: boolean; readonly roles_mode: string; readonly roles: readonly string[]; readonly boosters: unknown; readonly entries: unknown; readonly winners_list: unknown; readonly updated: boolean; readonly message_id: string | null; readonly event_pending: string | null; readonly event_pending_at: Date | string | null; readonly created_at: Date | string; readonly updated_at: Date | string }
-const columns = "id,server_id,prize,channel_id,status,start_time,end_time,winners,mentions,text_above_embed,text_in_embed,text_on_end,image_url,profile_picture_required,coc_account_required,roles_mode,roles,boosters,entries,winners_list,updated,message_id,event_pending,event_pending_at,created_at,updated_at"
+interface Row { readonly id: string; readonly server_id: string; readonly prize: string; readonly channel_id: string | null; readonly status: string; readonly start_time: Date | string | null; readonly end_time: Date | string | null; readonly winners: number; readonly mentions: readonly string[]; readonly text_above_embed: string; readonly text_in_embed: string; readonly text_on_end: string; readonly image_url: string | null; readonly profile_picture_required: boolean; readonly coc_account_required: boolean; readonly roles_mode: string; readonly roles: readonly string[]; readonly boosters: unknown; readonly entries: unknown; readonly winners_list: unknown; readonly updated: boolean; readonly disabled: boolean; readonly disabled_reason: string | null; readonly message_id: string | null; readonly event_pending: string | null; readonly event_pending_at: Date | string | null; readonly created_at: Date | string; readonly updated_at: Date | string }
+const columns = "id,server_id,prize,channel_id,status,start_time,end_time,winners,mentions,text_above_embed,text_in_embed,text_on_end,image_url,profile_picture_required,coc_account_required,roles_mode,roles,boosters,entries,winners_list,updated,disabled,disabled_reason,message_id,event_pending,event_pending_at,created_at,updated_at"
 const omitUndefined = (value: Readonly<Record<string, unknown>>) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined))
 const timestamp = (value: Date | string | null): string => value === null ? "" : value instanceof Date ? value.toISOString() : value
 const stored = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Stored giveaway failed schema validation" })))
@@ -61,9 +62,7 @@ export const giveawayEntrants = (entries: readonly Schema.Schema.Type<typeof Giv
   for (const entry of entries) { const id = typeof entry === "string" ? entry : entry.user_id; counts.set(id, (counts.get(id) ?? 0) + 1) }
   return { totalEntries: entries.length, uniqueUsers: counts.size, entrants: [...counts].map(([userId, count]) => ({ userId, entries: count, winChance: entries.length === 0 ? 0 : Math.round(count / entries.length * 10000) / 100 })) }
 }
-export const giveawayWinnerValue = (serverId: string, winner: Schema.Schema.Type<typeof StoredWinner>) => Effect.gen(function* () {
-  const discord = yield* DiscordApi
-  const member = yield* discord.request(`/guilds/${serverId}/members/${winner.user_id}`).pipe(Effect.flatMap((value) => Schema.decodeUnknownEffect(Member)(value).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord member response failed schema validation" })))), Effect.catch((failure) => failure instanceof NotFound ? Effect.succeed(undefined) : Effect.fail(failure)))
+export const giveawayWinnerValue = (serverId: string, winner: Schema.Schema.Type<typeof StoredWinner>, member?: typeof Member.Type) => Effect.sync(() => {
   const user = member?.user, avatar = member?.avatar ?? user?.avatar
   const extension = avatar?.startsWith("a_") ? "gif" : "png"
   const discriminator = user?.discriminator ?? "0"
@@ -73,11 +72,20 @@ export const giveawayWinnerValue = (serverId: string, winner: Schema.Schema.Type
   const avatarUrl = member === undefined ? undefined : member.avatar ? `https://cdn.discordapp.com/guilds/${serverId}/users/${winner.user_id}/avatars/${member.avatar}.${extension}` : user?.avatar ? `https://cdn.discordapp.com/avatars/${winner.user_id}/${user.avatar}.${extension}` : `https://cdn.discordapp.com/embed/avatars/${defaultAvatar}.png`
   return omitUndefined({ userId: winner.user_id, username: member?.nick ?? user?.global_name ?? user?.username ?? winner.username, avatarUrl, inServer: member !== undefined, status: winner.status ?? "winner", timestamp: winner.timestamp, reason: winner.reason })
 })
-const rowValue = (row: Row) => Effect.gen(function* () {
+const rowValue = (row: Row, members: ReadonlyMap<string, typeof Member.Type>) => Effect.gen(function* () {
   const winners = yield* stored(Schema.Array(StoredWinner), row.winners_list)
-  const winnersList = yield* Effect.forEach(winners, (winner) => giveawayWinnerValue(row.server_id, winner), { concurrency: 10 })
+  const winnersList = yield* Effect.forEach(winners, (winner) => giveawayWinnerValue(row.server_id, winner, members.get(winner.user_id)))
   const imageUrl = row.image_url && /^[^/\\]+$/u.test(row.image_url) ? mediaFileUrl(`giveaway_${row.image_url}`) : undefined
-  return yield* stored(Giveaway, omitUndefined({ id: row.id, serverId: row.server_id, prize: row.prize, channelId: row.channel_id ?? undefined, status: row.status, start: timestamp(row.start_time), end: timestamp(row.end_time), winners: row.winners, mentions: row.mentions, textAboveEmbed: row.text_above_embed, textInEmbed: row.text_in_embed, textOnEnd: row.text_on_end, imageUrl, profilePictureRequired: row.profile_picture_required, cocAccountRequired: row.coc_account_required, rolesMode: row.roles_mode, roles: row.roles, boosters: row.boosters, entries: row.entries, winnersList, updated: row.updated, messageId: row.message_id ?? undefined, eventPending: row.event_pending ?? undefined, eventPendingAt: row.event_pending_at === null ? undefined : timestamp(row.event_pending_at), createdAt: timestamp(row.created_at), updatedAt: timestamp(row.updated_at) }))
+  return yield* stored(Giveaway, omitUndefined({ id: row.id, serverId: row.server_id, prize: row.prize, channelId: row.channel_id ?? undefined, status: row.status, start: timestamp(row.start_time), end: timestamp(row.end_time), winners: row.winners, mentions: row.mentions, textAboveEmbed: row.text_above_embed, textInEmbed: row.text_in_embed, textOnEnd: row.text_on_end, imageUrl, profilePictureRequired: row.profile_picture_required, cocAccountRequired: row.coc_account_required, rolesMode: row.roles_mode, roles: row.roles, boosters: row.boosters, entries: row.entries, winnersList, updated: row.updated, disabled: row.disabled, disabled_reason: row.disabled_reason, messageId: row.message_id ?? undefined, eventPending: row.event_pending ?? undefined, eventPendingAt: row.event_pending_at === null ? undefined : timestamp(row.event_pending_at), createdAt: timestamp(row.created_at), updatedAt: timestamp(row.updated_at) }))
+})
+
+const winnerMembers = (input: DashboardServerOperationInput, serverId: string, rows: ReadonlyArray<Row>) => Effect.gen(function* () {
+  const winners = yield* Effect.forEach(rows, row => stored(Schema.Array(StoredWinner), row.winners_list))
+  const ids = [...new Set(winners.flat().map(winner => winner.user_id))]
+  if (ids.length === 0) return new Map<string, typeof Member.Type>()
+  const raw = yield* readDashboardGatewayCollection(input.bindings.DISCORD_CLIENT_ID, serverId, "members", ids)
+  const members = yield* stored(Schema.Array(Member), raw)
+  return new Map(members.map(member => [member.user.id, member]))
 })
 
 export const executeDashboardGiveaways = (input: DashboardServerOperationInput): Effect.Effect<unknown, ApiFailure, SqlClient.SqlClient | DiscordApi> => Effect.gen(function* () {
@@ -85,13 +93,14 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
   const serverId = typeof input.path.serverId === "string" ? input.path.serverId : "", id = typeof input.path.giveawayId === "string" ? input.path.giveawayId : crypto.randomUUID()
   if (operation === "serverGiveaways") {
     const rows = yield* sql.unsafe<Row>(`SELECT ${columns} FROM giveaways WHERE server_id=$1 ORDER BY COALESCE(end_time,updated_at) DESC`, [serverId])
-    const items = yield* Effect.forEach(rows, rowValue)
+    const members = yield* winnerMembers(input, serverId, rows)
+    const items = yield* Effect.forEach(rows, row => rowValue(row, members))
     return { ongoing: items.filter((item) => item.status === "ongoing"), upcoming: items.filter((item) => item.status === "scheduled"), ended: items.filter((item) => item.status === "ended"), total: items.length }
   }
   if (operation === "giveawayEntries" || operation === "serverGiveaway") {
     const row = (yield* sql.unsafe<Row>(`SELECT ${columns} FROM giveaways WHERE server_id=$1 AND id=$2`, [serverId, id]))[0]
     if (row === undefined) return yield* new NotFound({ message: "Giveaway not found" })
-    if (operation === "serverGiveaway") return yield* rowValue(row)
+    if (operation === "serverGiveaway") return yield* rowValue(row, yield* winnerMembers(input, serverId, [row]))
     return { giveawayId: id, serverId, ...giveawayEntrants(yield* stored(Schema.Array(GiveawayEntry), row.entries)) }
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
@@ -134,7 +143,7 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
     }
     const values = [id,serverId,body.prize,body.channelId,body.start.toISOString(),body.end.toISOString(),body.winners,body.mentions,body.textAboveEmbed,body.textInEmbed,body.textOnEnd,image,body.profilePictureRequired,body.cocAccountRequired,body.rolesMode,body.roles,JSON.stringify(body.boosters)]
     if (operation === "createServerGiveaway") yield* sql.unsafe(`INSERT INTO giveaways (id,server_id,prize,channel_id,status,start_time,end_time,winners,mentions,text_above_embed,text_in_embed,text_on_end,image_url,profile_picture_required,coc_account_required,roles_mode,roles,boosters) VALUES ($1,$2,$3,$4,'scheduled',$5::timestamptz,$6::timestamptz,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`, values)
-    else yield* sql.unsafe(`UPDATE giveaways SET prize=$3,channel_id=$4,start_time=$5::timestamptz,end_time=$6::timestamptz,winners=$7,mentions=$8,text_above_embed=$9,text_in_embed=$10,text_on_end=$11,image_url=$12,profile_picture_required=$13,coc_account_required=$14,roles_mode=$15,roles=$16,boosters=$17::jsonb,updated=true,updated_at=now() WHERE id=$1 AND server_id=$2`, values)
+    else yield* sql.unsafe(`UPDATE giveaways SET prize=$3,channel_id=$4,start_time=$5::timestamptz,end_time=$6::timestamptz,winners=$7,mentions=$8,text_above_embed=$9,text_in_embed=$10,text_on_end=$11,image_url=$12,profile_picture_required=$13,coc_account_required=$14,roles_mode=$15,roles=$16,boosters=$17::jsonb,updated=true,disabled=false,disabled_reason=NULL,updated_at=now() WHERE id=$1 AND server_id=$2`, values)
     return { message: operation === "createServerGiveaway" ? "Giveaway created successfully" : "Giveaway updated successfully", giveawayId: id, serverId }
   }))
 }).pipe(Effect.mapError((cause) => cause instanceof DatabaseFailure || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof UpstreamUnavailable || cause instanceof RateLimited || cause instanceof Forbidden || cause instanceof Unauthenticated || cause instanceof PayloadTooLarge ? cause : new DatabaseFailure({ cause, message: "Giveaway database operation failed" })))

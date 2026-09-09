@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-workspace",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.12",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -15,7 +15,7 @@
     "build": "npm run build --workspace @clashking/api-contracts && npm run build --workspace @clashking/api-client && npm run build --workspace @clashking/api-worker",
     "clean": "node -e \"for (const path of ['dist','packages/api-contracts/dist','packages/api-client/dist','workers/api/dist','workers/api/documentation-assets']) require('fs').rmSync(path,{recursive:true,force:true})\"",
     "dev": "npm run docs:build && node scripts/local-api-database.mjs run",
-    "contracts:pack": "npm pack --workspace @clashking/api-contracts --pack-destination dist/packages && npm pack --workspace @clashking/api-client --pack-destination dist/packages",
+    "contracts:pack": "node -e \"require('fs').mkdirSync('dist/packages',{recursive:true})\" && npm pack --workspace @clashking/api-contracts --pack-destination dist/packages && npm pack --workspace @clashking/api-client --pack-destination dist/packages",
     "openapi:generate": "npm run build --workspace @clashking/api-contracts && node scripts/generate-openapi.mjs",
     "openapi:check": "npm run openapi:generate && node scripts/check-openapi.mjs",
     "docs:build": "npm run openapi:generate && node scripts/build-api-documentation.mjs",
@@ -40,7 +40,8 @@
     "wrangler": "4.128.0"
   },
   "dependencies": {
+    "@bokuweb/zstd-wasm": "0.0.27",
     "@clashking/clash-contract": "file:vendor/clashking-clash-contract-0.1.2.tgz",
-    "@bokuweb/zstd-wasm": "0.0.27"
+    "@sentry/cloudflare": "10.73.0"
   }
 }

@@ -1,6 +1,5 @@
 import { Schema } from "effect"
 import { defineEndpoint, NoBody, NoQuery } from "./endpoint.js"
-import { BattlelogEntry } from "./expo-player.js"
 import { LeaderboardHistoryItem } from "./expo-rankings.js"
 
 const PlayerPath = Schema.Struct({ playerTag: Schema.String })
@@ -8,12 +7,15 @@ const RankedPath = Schema.Struct({ playerTag: Schema.String, season: Schema.Numb
 const OptionalNumber = Schema.optionalKey(Schema.Number)
 const OptionalString = Schema.optionalKey(Schema.String)
 export const RankedPlayerMember = Schema.Struct({
-  name: Schema.String, tag: Schema.String, clan_tag: OptionalString, clan_name: OptionalString,
-  placement: Schema.Number, league_trophies: Schema.Number, attack_win_count: Schema.Number,
-  attack_lose_count: Schema.Number, defense_win_count: Schema.Number, defense_lose_count: Schema.Number,
+  name: Schema.String, tag: Schema.String, placement: Schema.Number, league_trophies: Schema.Number,
+  town_hall: Schema.Number, maximum_battle_count: Schema.Number,
+  registered_attack_count: Schema.Number, registered_defense_count: Schema.Number,
+  observed_attack_count: Schema.Number, observed_defense_count: Schema.Number,
+  missing_real_attacks: Schema.Number, missing_real_defenses: Schema.Number,
+  attacks_complete: Schema.Boolean, defenses_complete: Schema.Boolean,
+  promoted: Schema.Boolean, demoted: Schema.Boolean,
   group_tag: OptionalString, league_tier_id: OptionalNumber,
 })
-export const PlayerRankedBattlelogResponse = Schema.Struct({ tag: Schema.String, season: Schema.Number, member: Schema.NullOr(RankedPlayerMember), battlelogs: Schema.Array(BattlelogEntry) })
 export const PlayerRankedGroupResponse = Schema.Union([
   Schema.Struct({ tag: Schema.String, season: Schema.Number, group: Schema.Null, members: Schema.Array(RankedPlayerMember) }),
   Schema.Struct({ season: Schema.Number, group_tag: Schema.String, league_tier_id: Schema.Number, player: RankedPlayerMember, members: Schema.Array(RankedPlayerMember), count: Schema.Number }),
@@ -31,14 +33,13 @@ export const PlayerStatHistoryResponse = Schema.Struct({ items: Schema.Array(Sch
 export const TrophyBucketsResponse = Schema.Struct({ league_tier_id: Schema.Number, items: Schema.Array(Schema.Struct({ bucket: Schema.Number, players: Schema.Number, trophies: Schema.Number })), count: Schema.Number })
 
 const common = { method: "GET", auth: "public", body: NoBody, bodyMode: "none", responseMode: "json", successStatus: 200 } as const
-export const PlayerRankedBattlelogEndpoint = defineEndpoint({ ...common, operationId: "getPlayerRankedBattlelog", path: "/v2/player/:playerTag/ranked/:season/battlelog", summary: "Get a player's ranked season battles", pathParams: RankedPath, query: Schema.Struct({ limit: OptionalNumber }), response: PlayerRankedBattlelogResponse })
 export const PlayerRankedGroupEndpoint = defineEndpoint({ ...common, operationId: "getPlayerRankedGroup", path: "/v2/player/:playerTag/ranked/:season/group", summary: "Get a player's ranked season group", pathParams: RankedPath, query: NoQuery, response: PlayerRankedGroupResponse })
 export const PlayerTypedLeaderboardHistoryEndpoint = defineEndpoint({ ...common, operationId: "getPlayerTypedLeaderboardHistory", path: "/v2/player/:playerTag/leaderboard-history/:leaderboardType", summary: "Get a player's official leaderboard history", pathParams: Schema.Struct({ playerTag: Schema.String, leaderboardType: Schema.Literals(["player_home_trophies", "player_builder_base_trophies"]) }), query: NoQuery, response: PlayerTypedLeaderboardHistoryResponse })
 export const PlayerJoinLeaveSharedEndpoint = defineEndpoint({ ...common, operationId: "getPlayerJoinLeaveShared", path: "/v2/player/:playerTag/join-leave/shared", summary: "Get the time two players shared clans", pathParams: PlayerPath, query: Schema.Struct({ tag: Schema.String }), response: PlayerJoinLeaveSharedResponse })
 export const PlayerStatHistoryEndpoint = defineEndpoint({ ...common, operationId: "getPlayerStatHistory", path: "/v2/player/:playerTag/history/stats", summary: "Get positive player activity changes", pathParams: PlayerPath, query: Schema.Struct({ type: PlayerStatType, limit: OptionalNumber, "time[after]": OptionalString, "time[before]": OptionalString }), response: PlayerStatHistoryResponse })
 export const TrophyBucketsEndpoint = defineEndpoint({ ...common, operationId: "getTrophyBuckets", path: "/v2/leaderboard/:leagueTierId/trophy-buckets", summary: "Get current trophy buckets for a league tier", pathParams: Schema.Struct({ leagueTierId: Schema.Number }), query: NoQuery, response: TrophyBucketsResponse })
 export const publicPlayerExtraEndpoints = {
-  playerRankedBattlelog: PlayerRankedBattlelogEndpoint, playerRankedGroup: PlayerRankedGroupEndpoint,
+  playerRankedGroup: PlayerRankedGroupEndpoint,
   playerTypedLeaderboardHistory: PlayerTypedLeaderboardHistoryEndpoint, playerJoinLeaveShared: PlayerJoinLeaveSharedEndpoint,
   playerStatHistory: PlayerStatHistoryEndpoint, trophyBuckets: TrophyBucketsEndpoint,
 } as const

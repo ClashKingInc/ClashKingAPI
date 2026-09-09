@@ -19,7 +19,7 @@ describe("public dispatcher input boundary", () => {
     await expect(run("/v2/player/%23P0Y/join-leave?limit=1")).rejects.toMatchObject({ _tag: "Unauthenticated" })
   })
   it("rejects malformed path and typed query values before accessing any provider", async () => {
-    for (const path of ["/v2/player/search", "/v2/player/search?query=Valid&limit=no", "/v2/leaderboard/townhalls/no", "/v2/clan/%ZZ/records", "/v2/player/%23P0Y/battlelog/history?attack=maybe"]) {
+    for (const path of ["/v2/player/search", "/v2/player/search?query=Valid&limit=no", "/v2/leaderboard/townhalls/no", "/v2/clan/%ZZ/records"]) {
       await expect(run(path)).rejects.toMatchObject({ _tag: "InvalidRequest" })
     }
   })

@@ -15,6 +15,7 @@ interface WorkerSecrets {
   readonly MOBILE_PUSH_FCM_PROJECT_ID?: string
   readonly MOBILE_PUSH_FCM_SERVICE_ACCOUNT_JSON?: string
   readonly SENTRY_DSN_MOBILE?: string
+  readonly SENTRY_DSN_API?: string
   readonly SMTP_USERNAME: string
   readonly SMTP_PASSWORD: string
   readonly STRIPE_RESTRICTED_KEY: string

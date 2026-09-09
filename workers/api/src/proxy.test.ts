@@ -37,4 +37,30 @@ describe("proxyRequest", () => {
     expect(response.headers.get("etag")).toBe('"player-v1"')
     expect(response.headers.get("x-upstream-secret")).toBeNull()
   })
+
+  it.each(["maintenance", "inMaintenance"])("normalizes the explicit %s upstream maintenance reason", async (reason) => {
+    const bindings = { CLASH_PROXY: { fetch: async () => Response.json({ reason, message: "provider detail" }, {
+      status: 503, headers: { "retry-after": "30" },
+    }) } } as unknown as WorkerBindings
+    const response = await Effect.runPromise(proxyRequest(new Request("https://api.clashk.ing/proxy/v1/clans/%23P0Y"), bindings))
+    expect(response.status).toBe(503)
+    expect(response.headers.get("retry-after")).toBe("30")
+    expect(await response.json()).toEqual({ reason: "maintenance", message: "Clash of Clans is currently under maintenance." })
+  })
+
+  it.each([
+    Response.json({ reason: "temporarilyUnavailable", message: "generic" }, { status: 503 }),
+    new Response("not-json", { status: 503, headers: { "content-type": "application/json" } }),
+  ])("does not classify a generic or malformed 503 as maintenance", async (upstream) => {
+    const bindings = { CLASH_PROXY: { fetch: async () => upstream.clone() } } as unknown as WorkerBindings
+    const response = await Effect.runPromise(proxyRequest(new Request("https://api.clashk.ing/proxy/v1/clans/%23P0Y"), bindings))
+    expect(response.status).toBe(503)
+    expect(await response.text()).not.toContain('"reason":"maintenance"')
+  })
+
+  it("keeps binding failures distinct from Clash maintenance", async () => {
+    const bindings = { CLASH_PROXY: { fetch: async () => { throw new Error("offline") } } } as unknown as WorkerBindings
+    await expect(Effect.runPromise(proxyRequest(new Request("https://api.clashk.ing/proxy/v1/clans/%23P0Y"), bindings)))
+      .rejects.toMatchObject({ _tag: "UpstreamUnavailable", message: "Clash proxy service binding failed" })
+  })
 })

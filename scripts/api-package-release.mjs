@@ -6,6 +6,7 @@ import { basename, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 export const packageNames = ["@clashking/api-contracts", "@clashking/api-client"]
+const clashContractRange = ">=0.1.2 <2"
 const readJson = path => JSON.parse(readFileSync(path, "utf8"))
 const digest = (bytes, algorithm, encoding) => createHash(algorithm).update(bytes).digest(encoding)
 const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/u
@@ -17,6 +18,10 @@ export function validatePair(contracts, client, tag) {
   }
   if (client.dependencies?.[contracts.name] !== contracts.version) throw new Error("Client must depend on the exact contracts version")
   if (!/^\d+\.\d+\.\d+-rc\.\d+$/u.test(contracts.dependencies?.effect ?? "")) throw new Error("Effect must use an exact RC version")
+  if (contracts.peerDependencies?.["@clashking/clash-contract"] !== clashContractRange
+    || contracts.dependencies?.["@clashking/clash-contract"] !== undefined) {
+    throw new Error(`API contracts must use the released Clash contract as peer ${clashContractRange}`)
+  }
   for (const pkg of [contracts, client]) {
     if (pkg.dependencies?.effect !== contracts.dependencies?.effect || pkg.peerDependencies?.effect !== contracts.dependencies?.effect) {
       throw new Error("API package Effect versions must agree exactly")

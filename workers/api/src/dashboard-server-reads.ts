@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
+import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
 import type { WorkerBindings } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
@@ -15,7 +16,7 @@ const OptionalText = Schema.optionalKey(Schema.NullOr(Schema.String))
 const Member = Schema.Struct({
   user: Schema.Struct({ id: DecimalSnowflake, username: Schema.String, global_name: OptionalText,
     avatar: OptionalText, discriminator: Schema.String, bot: Schema.optionalKey(Schema.Boolean) }),
-  nick: OptionalText, avatar: OptionalText, roles: Schema.Array(DecimalSnowflake),
+  nick: OptionalText, avatar: OptionalText, roles: Schema.optionalKey(Schema.Array(DecimalSnowflake)),
 })
 const Members = Schema.Array(Member)
 type DiscordMember = typeof Member.Type
@@ -46,31 +47,8 @@ export const serverMemberAvatar = (serverId: string, member: DiscordMember): str
 }
 
 const fetchMembers = (bindings: WorkerBindings, serverId: string) => Effect.gen(function* () {
-  const cacheKey = `dashboard:server-links:members:v1:${serverId}`
-  const cached = yield* Effect.tryPromise({ try: () => bindings.API_CACHE.get(cacheKey, "json"),
-    catch: (cause) => new UpstreamUnavailable({ cause, message: "Server member cache read failed" }) })
-  if (cached !== null) return yield* decode(Members, cached)
-  const discord = yield* DiscordApi
-  const members = new Map<string, DiscordMember>()
-  let fetched = 0
-  let after = "0"
-  while (fetched < 5000) {
-    const batch = yield* discord.request(`/guilds/${serverId}/members?limit=1000&after=${after}`).pipe(Effect.flatMap((body) => decode(Members, body)))
-    if (batch.length === 0) break
-    const previousAfter = after
-    for (const member of batch) {
-      fetched++
-      if (BigInt(member.user.id) > BigInt(after)) after = member.user.id
-      if (member.user.bot !== true) members.set(member.user.id, member)
-      if (fetched === 5000) break
-    }
-    if (batch.length < 1000) break
-    if (after === previousAfter) return yield* new UpstreamUnavailable({ cause: after, message: "Discord member pagination did not advance" })
-  }
-  const result = [...members.values()]
-  yield* Effect.tryPromise({ try: () => bindings.API_CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 900 }),
-    catch: (cause) => new UpstreamUnavailable({ cause, message: "Server member cache write failed" }) })
-  return result
+  const members = yield* readDashboardGatewayCollection(bindings.DISCORD_CLIENT_ID, serverId, "members").pipe(Effect.flatMap(body => decode(Members, body)))
+  return members.filter(member => member.user.bot !== true)
 })
 
 export const parseServerLinksQuery = (raw: string) => {
@@ -105,8 +83,7 @@ export const getDashboardServerLinks = (bindings: WorkerBindings, serverId: stri
   const offset = Math.max(0, numericQuery(query.offset, 0))
   const parsed = parseServerLinksQuery(query.query ?? "")
   const members = yield* fetchMembers(bindings, serverId)
-  const discord = yield* DiscordApi
-  const roles = (yield* discord.request(`/guilds/${serverId}/roles`).pipe(Effect.flatMap((body) => decode(Roles, body))))
+  const roles = (yield* readDashboardGatewayCollection(bindings.DISCORD_CLIENT_ID, serverId, "roles").pipe(Effect.flatMap((body) => decode(Roles, body))))
     .filter((role) => role.id !== serverId && role.name !== "@everyone" && !role.managed)
     .map(({ managed: _managed, ...role }) => role).sort((a, b) => b.position - a.position)
   const allowedRoles = new Set(roles.map((role) => role.id))
@@ -123,7 +100,7 @@ export const getDashboardServerLinks = (bindings: WorkerBindings, serverId: stri
   const filtered: Array<LinksResponse["members"][number]> = []
   for (const member of members) {
     const links = byUser.get(member.user.id) ?? []
-    if (parsed.roleIds.length > 0 && !parsed.roleIds.some((id) => member.roles.includes(id))) continue
+    if (parsed.roleIds.length > 0 && !parsed.roleIds.some((id) => member.roles?.includes(id))) continue
     if (parsed.playerTag !== "" && !links.some((row) => row.tag === parsed.playerTag)) continue
     if (parsed.text !== "" && !member.user.username.toLowerCase().includes(parsed.text) && !memberName(member).toLowerCase().includes(parsed.text)) continue
     if (query.account_filter === "none" && links.length > 0) continue

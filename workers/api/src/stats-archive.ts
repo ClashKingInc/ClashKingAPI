@@ -1,8 +1,8 @@
-import type { StatsWarRequest } from "@clashking/api-contracts"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { DatabaseFailure } from "./errors.js"
+import type { StatsWarRequest } from "./stats-internal.js"
 
 export interface ArchiveDailyMetric {
   readonly date: string

@@ -14,6 +14,8 @@ export * from "./current-war-summary.js"
 export * from "./initialization.js"
 export * from "./app-announcements.js"
 export * from "./stats.js"
+export * from "./stats-history.js"
+export * from "./league-analytics.js"
 export * from "./billing-webhook.js"
 export * from "./media.js"
 
@@ -28,12 +30,12 @@ import { publicPlayerExtraEndpoints } from "./public-player-extra.js"
 import { InitializationEndpoint } from "./initialization.js"
 import { AppAnnouncementsEndpoint, AppAnnouncementCreateEndpoint, AppAnnouncementUpdateEndpoint, AppAnnouncementArchiveEndpoint } from "./app-announcements.js"
 import {
-  StatsArmiesEndpoint,
   StatsCwlEndpoint,
-  StatsItemsEndpoint,
   StatsRankedEndpoint,
   StatsWarEndpoint,
 } from "./stats.js"
+import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { statsHistoryEndpoints } from "./stats-history.js"
 import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 
@@ -41,6 +43,8 @@ export const endpoints = {
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,
   ...publicPlayerExtraEndpoints,
+  ...leagueAnalyticsEndpoints,
+  ...statsHistoryEndpoints,
   initialization: InitializationEndpoint,
   appAnnouncements: AppAnnouncementsEndpoint,
   createAppAnnouncement: AppAnnouncementCreateEndpoint,
@@ -52,9 +56,8 @@ export const endpoints = {
   appConfig: AppConfigEndpoint,
   homeActivity: HomeActivityEndpoint,
   health: HealthEndpoint,
-  statsArmies: StatsArmiesEndpoint,
+  statsArmies: ArmySearchEndpoint,
   statsCwl: StatsCwlEndpoint,
-  statsItems: StatsItemsEndpoint,
   statsRanked: StatsRankedEndpoint,
   statsWar: StatsWarEndpoint,
   billingStripeWebhook: BillingStripeWebhookEndpoint,

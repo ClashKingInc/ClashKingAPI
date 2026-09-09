@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 vi.mock("./war-archive-decoder.js", () => ({ decodeArchiveFrame: vi.fn() }))
-import { StoredCwlRounds, cwlStandings, cwlSummary, decodeStoredCwlRounds, nextCwlLeague, type CwlGroup, type CwlWar } from "./public-cwl.js"
+import { StoredCwlRounds, cwlStandings, cwlSummary, decodeStoredCwlRounds, nextCwlLeague, selectCwlSeasonGroups, type CwlGroup, type CwlWar } from "./public-cwl.js"
 import { historyKind, trophySeason } from "./public-history.js"
 import { playerChangeTypes } from "./public-changes.js"
 
@@ -33,6 +33,13 @@ describe("public CWL calculations", () => {
     expect(nextCwlLeague(48000018, 7, 8, "2026-08")).toBe(48000018)
     expect(nextCwlLeague(48000018, 7, 8, "2026-09")).toBe(48000017)
     expect(nextCwlLeague(48000000, 1, 8, "2026-08")).toBe(48000000)
+  })
+  it("keeps the current in-war season in bounded clan history", () => {
+    const current = { ...group, cwl_id: "current", season: "2026-09-03", state: "inWar" }
+    const next = { ...group, cwl_id: "next", season: "2026-09-04", state: "preparation" }
+    expect(selectCwlSeasonGroups([group, current], 1)).toEqual([current])
+    expect(selectCwlSeasonGroups([group, current], 2)).toEqual([current, group])
+    expect(selectCwlSeasonGroups([current, next], 2).map((item) => item.season)).toEqual(["2026-09-04", "2026-09-03"])
   })
   it("rejects prototype keys as public selectors", async () => {
     for (const raw of ["toString", "constructor", "__proto__"]) {

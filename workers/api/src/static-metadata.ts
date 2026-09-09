@@ -40,6 +40,10 @@ export const lookupStaticItem = (category: string, idOrName: number | string): S
     ...(url === undefined ? {} : { iconUrls: { tiny: url, small: url, medium: url, large: url } }) }
 }
 
+/** True only for numeric identifiers present in the pinned static release. */
+export const hasStaticItemId = (category: string, id: number): boolean =>
+  sections[category]?.some((item) => item.id === id) ?? false
+
 export interface StaticNameQuery {
   readonly locale?: string | undefined
   readonly name?: string | undefined

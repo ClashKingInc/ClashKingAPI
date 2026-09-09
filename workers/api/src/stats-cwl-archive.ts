@@ -1,8 +1,8 @@
-import type { StatsCwlRequest } from "@clashking/api-contracts"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { DatabaseFailure, UpstreamUnavailable } from "./errors.js"
+import type { StatsCwlRequest } from "./stats-internal.js"
 import type { ArchiveDailyMetric } from "./stats-archive.js"
 
 /** Uploaded coverage, histograms, pending wars and league attribution share one

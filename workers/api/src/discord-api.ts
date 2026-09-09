@@ -1,11 +1,9 @@
-import { Context, Effect, Layer, Option } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { Context, Effect, Layer } from "effect"
 
 import type { ApiFailure } from "./errors.js"
 import { Forbidden, InvalidRequest, NotFound, RateLimited, UpstreamUnavailable } from "./errors.js"
 import { WorkerEnvironment } from "./environment.js"
 import { readBoundedJson } from "./request-body.js"
-import { makeDiscordRequestCoordination } from "./discord-request-coordination.js"
 
 export interface DiscordRequestOptions {
   readonly body?: unknown
@@ -46,34 +44,23 @@ const retryAfterMilliseconds = async (response: Response): Promise<{ delay: numb
   return { delay: delays.length === 0 ? 1_000 : Math.max(...delays), global }
 }
 
-const fetchDiscord = (request: Request, coordination: ReturnType<ReturnType<typeof makeDiscordRequestCoordination>>) => Effect.tryPromise({
+const fetchDiscord = (request: Request) => Effect.tryPromise({
   try: async () => {
     const startedAt = Date.now()
     const retryRequest = request.clone() as unknown as Request
-    await Effect.runPromise(coordination.before)
     const first = await fetch(request)
-    const observe = async (response: Response) => {
-      if (response.headers.get("x-ratelimit-remaining") === "0") {
-        const seconds = Number(response.headers.get("x-ratelimit-reset-after"))
-        if (Number.isFinite(seconds) && seconds > 0) await Effect.runPromise(coordination.cooldown(seconds * 1_000, false).pipe(Effect.catch(() => Effect.void)))
-      }
-    }
-    if (first.status !== 429) { await observe(first); return first }
+    if (first.status !== 429) return first
     const limited = await retryAfterMilliseconds(first)
     const delay = limited.delay
-    await Effect.runPromise(coordination.cooldown(delay, limited.global))
     if (delay >= 15_000 - (Date.now() - startedAt)) {
       throw new RateLimited({ message: "Discord API is rate limited", retryAfterSeconds: Math.max(1, Math.ceil(delay / 1_000)) })
     }
     await new Promise((resolve) => setTimeout(resolve, delay))
-    await Effect.runPromise(coordination.before)
     const retry = await fetch(retryRequest)
     if (retry.status === 429) {
       const next = await retryAfterMilliseconds(retry)
-      await Effect.runPromise(coordination.cooldown(next.delay, next.global))
       throw new RateLimited({ message: "Discord API is rate limited", retryAfterSeconds: Math.max(1, Math.ceil(next.delay / 1_000)) })
     }
-    await observe(retry)
     return retry
   },
   catch: (cause) => cause instanceof RateLimited ? cause : new UpstreamUnavailable({ cause, message: "Discord API request failed" }),
@@ -130,8 +117,6 @@ export class DiscordApi extends Context.Service<
     Effect.gen(function* () {
       const bindings = yield* WorkerEnvironment
       const origin = bindings.DISCORD_API_ORIGIN.replace(/\/+$/u, "")
-      const sql = Option.getOrUndefined(yield* Effect.serviceOption(SqlClient.SqlClient))
-      const coordinate = makeDiscordRequestCoordination(sql)
 
       const request = (path: string, options: DiscordRequestOptions = {}) => {
         if (!path.startsWith("/") || path.startsWith("//")) {
@@ -153,7 +138,7 @@ export class DiscordApi extends Context.Service<
           signal: AbortSignal.timeout(15_000),
           ...(body === undefined ? {} : { body }),
         })
-        return fetchDiscord(discordRequest, coordinate(discordRequest)).pipe(
+        return fetchDiscord(discordRequest).pipe(
           Effect.flatMap(classify),
           Effect.flatMap(parseJson),
           Effect.withSpan("DiscordApi.request", { attributes: { "http.request.method": options.method ?? "GET" } }),
@@ -174,7 +159,7 @@ export class DiscordApi extends Context.Service<
           },
           body: form,
         })
-        return fetchDiscord(discordRequest, coordinate(discordRequest)).pipe(
+        return fetchDiscord(discordRequest).pipe(
           Effect.flatMap(classify),
           Effect.flatMap(parseJson),
           Effect.withSpan("DiscordApi.token"),

@@ -47,22 +47,16 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
     }).pipe(Effect.provide(layer),Effect.scoped))
   })
 
-  it("uses ranked season membership and an exclusive seven-day battle boundary", async () => {
+  it("uses ranked season membership from the migration 008 roster shape", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient, season = Date.parse('2026-08-01T00:00:00Z')/1000
-      yield* sql`INSERT INTO ranked_league_group_members(season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,attack_win_count,attack_lose_count,defense_win_count,defense_lose_count) VALUES
-        (${String(season)}::bigint,'#GROUP',105000034,'#P0Y','Player',2,6000,1,2,3,4),
-        (${String(season)}::bigint,'#GROUP',105000034,'#P0L','Other',1,6100,1,2,3,4),
-        (${String(season+604800)}::bigint,'#GROUP',105000034,'#QQQ','Next season',1,6200,1,2,3,4)`
-      for (const [time,type] of [['2026-08-01T00:00:00Z','ranked'],['2026-08-08T00:00:00Z','ranked'],['2026-08-02T00:00:00Z','friendly']] as const) {
-        yield* sql`INSERT INTO battlelogs(battle_id,player_tag,player_th,opponent_tag,opponent_th,battle_type,attack,stars,destruction_percentage,gold,elixir,dark_elixir,"timestamp",army_items,army_counts,player_name,opponent_name,duration,army_share_code)
-          VALUES (${crypto.randomUUID()}::uuid,'#P0Y',18,'#P0L',17,${type},true,3,100,1,2,3,${time}::timestamptz,ARRAY['Barbarian'],'{"Barbarian":1}'::jsonb,'Player','Other',120,'army')`
-      }
-      expect(yield* get(`player/%23P0Y/ranked/${season}/battlelog`)).toMatchObject({ season,member:{name:'Player',placement:2},battlelogs:[{timestamp:'2026-08-01T00:00:00.000Z',player_townhall:18}] })
+      yield* sql`INSERT INTO ranked_league_group_members(season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,town_hall,maximum_battle_count,registered_attack_count,registered_defense_count,observed_attack_count,observed_defense_count,promoted,demoted) VALUES
+        (${String(season)}::bigint,'#GROUP',105000034,'#P0Y','Player',2,6000,18,12,10,8,9,8,false,true),
+        (${String(season)}::bigint,'#GROUP',105000034,'#P0L','Other',1,6100,17,12,12,8,12,8,true,false),
+        (${String(season+604800)}::bigint,'#GROUP',105000034,'#QQQ','Next season',1,6200,18,12,12,8,12,8,false,false)`
       const group = yield* get(`player/%23P0Y/ranked/${season}/group`)
-      expect(group).toMatchObject({ season,count:2,members:[{tag:'#P0L'},{tag:'#P0Y'}] })
+      expect(group).toMatchObject({ season,count:2,player:{tag:'#P0Y',town_hall:18,missing_real_attacks:1,defenses_complete:true,demoted:true},members:[{tag:'#P0L'},{tag:'#P0Y'}] })
       expect(yield* get(`player/%23QQQ/ranked/${season}/group`)).toEqual({ tag:'#QQQ',season,group:null,members:[] })
-      expect(yield* get(`player/%23QQQ/ranked/${season}/battlelog`)).toEqual({ tag:'#QQQ',season,member:null,battlelogs:[] })
     }).pipe(Effect.provide(layer),Effect.scoped))
   })
 
@@ -108,7 +102,7 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
       expect(yield* get('player/%23PYY/war/attacks?type=random')).toMatchObject({items:[{side:'defense',attackOrder:2},{side:'attack',attackOrder:1}]})
     }).pipe(Effect.provide(layer),Effect.scoped))
   })
-  it("registers exactly the six missing shared contracts", () => expect(Object.keys(publicPlayerExtraEndpoints)).toHaveLength(6))
+  it("registers exactly the five additional shared contracts", () => expect(Object.keys(publicPlayerExtraEndpoints)).toHaveLength(5))
 
   it.each([
     'player/%ZZ/rankings', 'player/%23P0Y/ranked/nope/group', 'player/%23P0Y/leaderboard-history/clan_home_points',

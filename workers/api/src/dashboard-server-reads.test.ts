@@ -23,12 +23,16 @@ const link = (user_id = userA, tag = "#2PP", verified = true) => ({ user_id, tag
 type Rows = ReadonlyArray<Readonly<Record<string, unknown>>>
 function fixture(options: {
   cached?: unknown
+  cacheUnavailable?: boolean
   members?: ReadonlyArray<unknown>
   discord?: DiscordApi["Service"]["request"]
   query?: (text: string, values: ReadonlyArray<unknown>) => Effect.Effect<Rows, unknown>
 } = {}) {
-  const query = vi.fn(options.query ?? ((text: string) => Effect.succeed(text.includes("FROM servers") ? [{ id: serverId }] : [link()])))
-  const sql = ((parts: TemplateStringsArray, ...values: ReadonlyArray<unknown>) => query(parts.join("?"), values)) as SqlClient.SqlClient
+  const dataQuery = options.query ?? ((text: string) => Effect.succeed(text.includes("FROM servers") ? [{ id: serverId }] : [link()]))
+  const query = vi.fn((text: string, values: ReadonlyArray<unknown>) => text.includes("FROM discord_cache.guilds")
+    ? Effect.succeed(options.cacheUnavailable ? [] : [{items: text.includes("FROM discord_cache.members") ? options.members ?? options.cached ?? [member()] : roles}])
+    : dataQuery(text, values))
+  const sql = Object.assign((parts: TemplateStringsArray, ...values: ReadonlyArray<unknown>) => query(parts.join("?"), values), {unsafe:query}) as unknown as SqlClient.SqlClient
   const discord = vi.fn(options.discord ?? ((path: string) => Effect.succeed(path.endsWith("/roles") ? roles : options.members ?? [member()])))
   const get = vi.fn().mockResolvedValue(options.cached ?? null)
   const put = vi.fn().mockResolvedValue(undefined)
@@ -46,9 +50,10 @@ describe("server linked-member read", () => {
     expect(result.roles.map((role) => role.id)).toEqual([roleB, roleA])
     expect(result.members[0]).toMatchObject({ user_id: userA, display_name: "Player", account_count: 1, linked_accounts: [{ player_tag: "#2PP", town_hall: 17, is_verified: true, added_at: "2026-09-01T00:00:00Z" }] })
     expect(f.query.mock.calls[0]?.[1]).toEqual([serverId])
-    expect(f.query.mock.calls[1]?.[0]).toContain("links.hidden = false")
-    expect(f.query.mock.calls[1]?.[1]).toEqual([[userA, userB]])
-    expect(f.put).toHaveBeenCalledWith(`dashboard:server-links:members:v1:${serverId}`, expect.any(String), { expirationTtl: 900 })
+    expect(f.query.mock.calls.find(([statement]) => statement.includes("links.hidden = false"))?.[1]).toEqual([[userA, userB]])
+    expect(f.put).not.toHaveBeenCalled()
+    expect(f.get).not.toHaveBeenCalled()
+    expect(f.discord).not.toHaveBeenCalled()
     expect(Schema.decodeUnknownSync(ServerLinksEndpoint.response)(result)).toEqual(result)
   })
 
@@ -57,8 +62,7 @@ describe("server linked-member read", () => {
     const result = await Effect.runPromise(getDashboardServerLinks(f.bindings, serverId, { query: `<@&${roleA}> <@&${roleB}> eta`, limit: 1, offset: 1 }).pipe(Effect.provide(f.layer)))
     expect(result.filtered_members).toBe(2)
     expect(result.members.map((item) => item.user_id)).toEqual([userB])
-    expect(f.discord).toHaveBeenCalledOnce()
-    expect(f.discord).toHaveBeenCalledWith(`/guilds/${serverId}/roles`)
+    expect(f.discord).not.toHaveBeenCalled()
     expect(f.put).not.toHaveBeenCalled()
   })
 
@@ -80,21 +84,15 @@ describe("server linked-member read", () => {
   it("rejects managed/everyone/unknown role filters before querying links", async () => {
     const f = fixture()
     await expect(Effect.runPromise(getDashboardServerLinks(f.bindings, serverId, { query: "<@&777777777777777777>" }).pipe(Effect.provide(f.layer)))).rejects.toMatchObject({ _tag: "InvalidRequest" })
-    expect(f.query).toHaveBeenCalledOnce()
+    expect(f.query.mock.calls.some(([statement]) => statement.includes("FROM player_links"))).toBe(false)
   })
 
-  it("keeps snowflake member cursors exact and caps the fetch at 5000 including bots", async () => {
-    let page = 0
-    const f = fixture({ discord: (path) => {
-      if (path.endsWith("/roles")) return Effect.succeed(roles)
-      const batch = Array.from({ length: 1000 }, (_, index) => member(String(9_000_000_000_000_000_000n + BigInt(page * 1000 + index))))
-      page++
-      return Effect.succeed(batch)
-    } })
+  it("includes the complete guild beyond 5000 members while capping the response page", async () => {
+    const f = fixture({ members: Array.from({length:6000}, (_,index) => member(String(9_000_000_000_000_000_000n + BigInt(index)))) })
     const result = await Effect.runPromise(getDashboardServerLinks(f.bindings, serverId, { limit: 6000 }).pipe(Effect.provide(f.layer)))
-    expect(page).toBe(5)
-    expect(result.total_members).toBe(5000)
-    expect(f.discord.mock.calls[1]?.[0]).toBe(`/guilds/${serverId}/members?limit=1000&after=9000000000000000999`)
+    expect(result.total_members).toBe(6000)
+    expect(result.members).toHaveLength(5000)
+    expect(f.discord).not.toHaveBeenCalled()
   })
 
   it("sorts equal account counts by case-insensitive display name then exact user ID", async () => {
@@ -103,17 +101,25 @@ describe("server linked-member read", () => {
     expect(result.members.map((item) => item.user_id)).toEqual([userA, userB])
   })
 
-  it("fails missing server before Discord/cache access and preserves Discord errors", async () => {
+  it("fails missing server and incomplete snapshots without falling back to Discord", async () => {
     const missing = fixture({ query: () => Effect.succeed([]) })
     await expect(Effect.runPromise(getDashboardServerLinks(missing.bindings, serverId, {}).pipe(Effect.provide(missing.layer)))).rejects.toMatchObject({ _tag: "NotFound" })
     expect(missing.get).not.toHaveBeenCalled()
-    const limited = fixture({ discord: () => Effect.fail(new RateLimited({ message: "limited", retryAfterSeconds: 5 })) })
-    await expect(Effect.runPromise(getDashboardServerLinks(limited.bindings, serverId, {}).pipe(Effect.provide(limited.layer)))).rejects.toMatchObject({ _tag: "RateLimited", retryAfterSeconds: 5 })
+    const limited = fixture({ cacheUnavailable: true, discord: () => Effect.fail(new RateLimited({ message: "limited", retryAfterSeconds: 5 })) })
+    await expect(Effect.runPromise(getDashboardServerLinks(limited.bindings, serverId, {}).pipe(Effect.provide(limited.layer)))).rejects.toMatchObject({ _tag: "UpstreamUnavailable" })
+    expect(limited.discord).not.toHaveBeenCalled()
   })
 
   it("rejects numeric Discord response IDs instead of silently rounding", async () => {
     const f = fixture({ members: [{ ...member(), user: { ...member().user, id: 123 } }] })
     await expect(Effect.runPromise(getDashboardServerLinks(f.bindings, serverId, {}).pipe(Effect.provide(f.layer)))).rejects.toMatchObject({ _tag: "UpstreamUnavailable" })
+  })
+
+  it("treats omitted empty Go role lists as no roles, without dropping the member", async () => {
+    const {roles: _roles, ...withoutRoles} = member(userA)
+    const f = fixture({members:[withoutRoles]})
+    expect((await Effect.runPromise(getDashboardServerLinks(f.bindings,serverId,{}).pipe(Effect.provide(f.layer)))).total_members).toBe(1)
+    expect((await Effect.runPromise(getDashboardServerLinks(f.bindings,serverId,{query:`<@&${roleA}>`}).pipe(Effect.provide(f.layer)))).filtered_members).toBe(0)
   })
 
   it("matches guild/user animated avatar and legacy/default avatar selection", () => {

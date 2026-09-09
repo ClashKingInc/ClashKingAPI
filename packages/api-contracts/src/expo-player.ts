@@ -3,21 +3,13 @@ import { Schema } from "effect"
 import { defineEndpoint, NoBody, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 import { HistoryQuery, JsonValue, PlayerTagPath } from "./expo-common.js"
+export { PlayerBattlelogHistoryEndpoint, PlayerBattlelogHistoryResponse } from "./league-analytics.js"
 
 const NotFound = [{ status: 404, body: ErrorResponse }] as const
 export const SearchLeagueReference = Schema.Struct({ id: Schema.Number, name: Schema.String })
 export const SearchPlayerClan = Schema.Struct({ name: Schema.optionalKey(Schema.String), tag: Schema.String, badge: Schema.optionalKey(Schema.String), clanLevel: Schema.optionalKey(Schema.Number) })
 export const SearchPlayerResult = Schema.Struct({ name: Schema.String, tag: Schema.String, townHallLevel: Schema.Number, leagueTier: Schema.optionalKey(SearchLeagueReference), clan: Schema.optionalKey(SearchPlayerClan) })
 export const SearchPlayerResponse = Schema.Struct({ items: Schema.Array(SearchPlayerResult), pagination: Schema.Struct({ limit: Schema.Number, hasMore: Schema.Boolean, nextCursor: Schema.NullOr(Schema.String) }) })
-export const BattlelogEntry = Schema.Struct({
-  battle_id: Schema.String, player_tag: Schema.String, player_name: Schema.String, player_townhall: Schema.Number,
-  opponent_tag: Schema.String, opponent_name: Schema.String, opponent_townhall: Schema.Number,
-  battle_type: Schema.String, attack: Schema.Boolean, stars: Schema.Number, destruction_percentage: Schema.Number,
-  gold: Schema.Number, elixir: Schema.Number, dark_elixir: Schema.Number, timestamp: Schema.String,
-  army_items: Schema.Array(Schema.String), army_counts: Schema.Record(Schema.String, Schema.Number),
-  duration: Schema.Number, army_share_code: Schema.String,
-})
-export const PlayerBattlelogHistoryResponse = Schema.Struct({ player_tag: Schema.String, items: Schema.Array(BattlelogEntry), count: Schema.Number, limit: Schema.Number, time: Schema.Struct({ start: Schema.String, end: Schema.String }) })
 export const PlayerChangeRecord = Schema.Struct({
   time: Schema.String, townhall_level: Schema.NullOr(Schema.Number), type: Schema.String,
   item: Schema.optionalKey(Schema.Struct({ name: Schema.String, id: Schema.Number })),
@@ -48,7 +40,6 @@ const PlayerWarAttack = Schema.Struct({ stars: Schema.Number, destructionPercent
 export const PlayerWarStatsResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ teamSize: Schema.Number, attacksPerMember: Schema.Number, preparationStartTime: Schema.String, startTime: Schema.optionalKey(Schema.String), endTime: Schema.String, clan: PlayerWarClan, opponent: PlayerWarClan, type: Schema.String, player: PlayerWarMember, attacks: Schema.Array(PlayerWarAttack), defenses: Schema.Array(PlayerWarAttack) })) })
 
 export const PlayerSearchEndpoint = defineEndpoint({ operationId: "searchExpoPlayers", method: "GET", path: "/v2/player/search", auth: "public", summary: "Search players for the Expo app", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({}), query: Schema.Struct({ query: Schema.String, limit: Schema.optionalKey(Schema.Number), cursor: Schema.optionalKey(Schema.String), clanTags: Schema.optionalKey(Schema.String), leagueIds: Schema.optionalKey(Schema.String), townhallLevels: Schema.optionalKey(Schema.String) }), response: SearchPlayerResponse, responseMode: "json", successStatus: 200 })
-export const PlayerBattlelogHistoryEndpoint = defineEndpoint({ operationId: "getExpoPlayerBattlelogHistory", method: "GET", path: "/v2/player/:playerTag/battlelog/history", auth: "public", summary: "Get stored player battlelog history", body: NoBody, bodyMode: "none", pathParams: PlayerTagPath, query: Schema.Struct({ limit: Schema.optionalKey(Schema.Number), days: Schema.optionalKey(Schema.Number), start: Schema.optionalKey(Schema.String), end: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), attack: Schema.optionalKey(Schema.Boolean) }), response: PlayerBattlelogHistoryResponse, responseMode: "json", successStatus: 200, errors: NotFound })
 export const PlayerChangesEndpoint = defineEndpoint({ operationId: "getExpoPlayerChanges", method: "GET", path: "/v2/player/:playerTag/history/changes", auth: "public", summary: "Get player change history", body: NoBody, bodyMode: "none", pathParams: PlayerTagPath, query: HistoryQuery, response: PlayerChangesResponse, responseMode: "json", successStatus: 200, errors: NotFound })
 export const PlayerCwlHistoryEndpoint = defineEndpoint({ operationId: "getExpoPlayerCwlHistory", method: "GET", path: "/v2/player/:playerTag/cwl/history", auth: "public", summary: "Get player CWL history", body: NoBody, bodyMode: "none", pathParams: PlayerTagPath, query: Schema.Struct({ limit: Schema.optionalKey(Schema.Number) }), response: PlayerCwlHistoryResponse, responseMode: "json", successStatus: 200, errors: NotFound })
 export const PlayerTimersEndpoint = defineEndpoint({ operationId: "getExpoPlayerTimers", method: "GET", path: "/v2/player/:playerTag/timers", auth: "public", summary: "Get player timers", body: NoBody, bodyMode: "none", pathParams: PlayerTagPath, query: NoQuery, response: PlayerTimersResponse, responseMode: "json", successStatus: 200, errors: NotFound })

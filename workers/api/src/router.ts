@@ -5,15 +5,8 @@ import {
   HomeActivityRequest,
   HomeActivityResponse,
   HealthResponse,
-  StatsArmiesRequest,
-  StatsArmiesResponse,
-  StatsCwlRequest,
-  StatsItemsRequest,
-  StatsItemsResponse,
   StatsPerformanceResponse,
   StatsOverviewResponse,
-  StatsRankedRequest,
-  StatsWarRequest,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 
@@ -52,20 +45,27 @@ import { proxyRequest } from "./proxy.js"
 import { queryHomeActivity } from "./home.js"
 import { readBoundedJson } from "./request-body.js"
 import {
-  queryArmyStats,
   queryCwlStats,
   queryGroupedCounts,
   queryGlobalCounts,
-  queryItemStats,
   queryRankedStats,
   queryStatsOverview,
   queryWarStats,
+  parseStatsCwlQuery,
+  parseStatsRankedQuery,
+  parseStatsWarQuery,
 } from "./stats.js"
+import { dispatchLeagueAnalytics } from "./league-analytics.js"
+import { dispatchStatsHistory } from "./stats-history.js"
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" }
 
 const json = (body: unknown, status = 200): Response =>
   Response.json(body, { status, headers: jsonHeaders })
+const parseStatsQuery = <A>(parse: () => A) => Effect.try({
+  try: parse,
+  catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Statistics query is invalid" }),
+})
 
 export const failureResponse = (failure: ApiFailure, requestId: string): Response => {
   switch (failure._tag) {
@@ -183,7 +183,7 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.4" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.12" })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -197,25 +197,17 @@ export const route = (request: Request, bindings: WorkerBindings,
       const principal = yield* auth.requireUserOrBot(request)
       return yield* encodeJson(HomeActivityResponse, yield* queryHomeActivity(body, principal))
     }
-    if (request.method === "POST" && url.pathname === "/v2/stats/armies") {
-      const body = yield* decodeJson(request, StatsArmiesRequest)
-      return yield* encodeJson(StatsArmiesResponse, yield* queryArmyStats(body))
+    if (request.method === "GET" && url.pathname === "/v2/stats/ranked") {
+      const query = yield* parseStatsQuery(() => parseStatsRankedQuery(url.searchParams))
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryRankedStats(query))
     }
-    if (request.method === "POST" && url.pathname === "/v2/stats/items") {
-      const body = yield* decodeJson(request, StatsItemsRequest)
-      return yield* encodeJson(StatsItemsResponse, yield* queryItemStats(body))
+    if (request.method === "GET" && url.pathname === "/v2/stats/war") {
+      const query = yield* parseStatsQuery(() => parseStatsWarQuery(url.searchParams))
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryWarStats(query))
     }
-    if (request.method === "POST" && url.pathname === "/v2/stats/ranked") {
-      const body = yield* decodeJson(request, StatsRankedRequest)
-      return yield* encodeJson(StatsPerformanceResponse, yield* queryRankedStats(body))
-    }
-    if (request.method === "POST" && url.pathname === "/v2/stats/war") {
-      const body = yield* decodeJson(request, StatsWarRequest)
-      return yield* encodeJson(StatsPerformanceResponse, yield* queryWarStats(body))
-    }
-    if (request.method === "POST" && url.pathname === "/v2/stats/cwl") {
-      const body = yield* decodeJson(request, StatsCwlRequest)
-      return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(body))
+    if (request.method === "GET" && url.pathname === "/v2/stats/cwl") {
+      const query = yield* parseStatsQuery(() => parseStatsCwlQuery(url.searchParams))
+      return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(query))
     }
     if (request.method === "GET" && url.pathname === "/v2/stats/overview") {
       return yield* encodeJson(StatsOverviewResponse, yield* queryStatsOverview({
@@ -223,6 +215,10 @@ export const route = (request: Request, bindings: WorkerBindings,
         ...(url.searchParams.get("end_date") === null ? {} : { end_date: url.searchParams.get("end_date") as string }),
       }))
     }
+    const analyticsResponse = yield* dispatchLeagueAnalytics(request)
+    if (analyticsResponse !== undefined) return analyticsResponse
+    const statsHistoryResponse = yield* dispatchStatsHistory(request)
+    if (statsHistoryResponse !== undefined) return statsHistoryResponse
     if (request.method === "GET" && url.pathname === "/v2/counts") {
       return yield* encodeJson(GlobalCounts, yield* queryGlobalCounts)
     }
@@ -311,9 +307,12 @@ export const route = (request: Request, bindings: WorkerBindings,
 export const recoverRoute = (requestId: string) =>
   Effect.catch((failure: ApiFailure) => Effect.succeed(failureResponse(failure, requestId)))
 
-export const recoverDefect = Effect.catchCause(() => {
+export const recoverDefectWith = (onDefect?: () => void) => Effect.catchCause(() => {
   // Schema defects can carry response tokens and SQL defects can carry bound
   // parameters. Do not serialize arbitrary causes into application logs.
+  onDefect?.()
   console.error(JSON.stringify({ level: "error", event: "unhandled_effect_failure" }))
   return Effect.succeed(json({ code: "internal_error", message: "Internal server error" }, 500))
 })
+
+export const recoverDefect = recoverDefectWith()

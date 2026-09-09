@@ -11,10 +11,10 @@ import { ServerAuthorization } from "../../src/server-authorization.js"
 
 if (!process.env.TEST_DATABASE_URL || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Disposable Goose Timescale required")
 const server="1534567890123456789",other="2534567890123456789",user="3534567890123456789",role="4534567890123456789"
-let permission="0",roles=[role],proxyCalls=0
+let proxyCalls=0
 const bindings={HYPERDRIVE:{connectionString:process.env.TEST_DATABASE_URL},CLASH_PROXY:{fetch:async()=>{
   proxyCalls++;return Response.json({name:"Moderation fixture"})
-}}} as unknown as WorkerBindings
+}},DISCORD_CLIENT_ID:"999"} as unknown as WorkerBindings
 const db=databaseLayer(bindings)
 const dependencies=Layer.mergeAll(db,WorkerEnvironment.layer(bindings),
   Layer.succeed(AuthIdentity,{requireBot:()=>Effect.die("Unexpected bot-only authentication"),
@@ -22,11 +22,7 @@ const dependencies=Layer.mergeAll(db,WorkerEnvironment.layer(bindings),
     requireUserOrBot:(request:Request)=>Effect.succeed(request.headers.get("authorization")==="Bearer fixture-bot"
       ?{kind:"bot" as const}:{kind:"user" as const,userId:user})}),
   Layer.succeed(DiscordCredentials,{accessToken:()=>Effect.succeed("fixture-access")}),
-  Layer.succeed(DiscordApi,{request:(path:string)=>{
-    if(path==="/users/@me/guilds?limit=200&with_counts=true")return Effect.succeed([{id:server,owner:false,permissions:permission}])
-    if(path===`/guilds/${server}/members/${user}`||path===`/guilds/${other}/members/${user}`)return Effect.succeed({roles})
-    return Effect.die(new Error(`Unexpected Discord path ${path}`))
-  },token:()=>Effect.die("Unexpected OAuth mutation")}),
+  Layer.succeed(DiscordApi,{request:()=>Effect.die("Unexpected Discord authorization request"),token:()=>Effect.die("Unexpected OAuth mutation")}),
 )
 const layer=Layer.mergeAll(BotModerationStore.layer,ServerAuthorization.layer).pipe(Layer.provideMerge(dependencies))
 const run=<A,E>(effect:Effect.Effect<A,E,SqlClient.SqlClient|ServerAuthorization|BotModerationStore>)=>Effect.runPromise(effect.pipe(Effect.provide(layer),Effect.scoped))
@@ -40,6 +36,13 @@ it("runs all moderation routes through canonical section authorization and real 
   await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient
     yield* sql`INSERT INTO servers(id,name) VALUES(${server},'Moderation fixture'),(${other},'Other fixture') ON CONFLICT DO NOTHING`
     yield* sql`INSERT INTO auth_users(user_id,provider) VALUES(${user},'discord') ON CONFLICT DO NOTHING`
+    yield* sql`INSERT INTO discord_cache.gateway_shards(application_id,shard_id,shard_count,generation,healthy,heartbeat_at,last_applied_sequence)
+      VALUES('999',0,1,'11111111-1111-4111-8111-111111111111',true,clock_timestamp(),1)`
+    yield* sql`INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete)
+      VALUES(${server},'{"owner_id":"999"}'::jsonb,'999',0,'11111111-1111-4111-8111-111111111111',true,true,true),
+        (${other},'{"owner_id":"999"}'::jsonb,'999',0,'11111111-1111-4111-8111-111111111111',true,true,true)`
+    yield* sql`INSERT INTO discord_cache.members(guild_id,user_id,data) VALUES(${server},${user},${JSON.stringify({roles:[role]})}::jsonb)`
+    yield* sql`INSERT INTO discord_cache.roles(guild_id,id,data) VALUES(${server},${role},${JSON.stringify({id:role,permissions:"0"})}::jsonb)`
     yield* sql`INSERT INTO dashboard_role_grants(server_id,role_id,section,access_level) VALUES(${server},${role},'moderation','view')`
   }))
   expect((await dispatch("GET",`${server}/bans`))?.status).toBe(200)
@@ -62,19 +65,18 @@ it("runs all moderation routes through canonical section authorization and real 
   await expect(dispatch("DELETE",`${other}/strikes/${created.strike_id}`)).rejects.toMatchObject({_tag:"Forbidden"})
   expect((await dispatch("DELETE",`${server}/strikes/${created.strike_id}`))?.status).toBe(200)
   expect((await dispatch("DELETE",`${server}/bans/%23P0Y`))?.status).toBe(200)
-  roles=[]
   await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient
-    yield* sql`UPDATE discord_cache.dashboard_access SET expires_at=clock_timestamp()-interval '1 second'`
+    yield* sql`UPDATE discord_cache.members SET data='{"roles":[]}'::jsonb WHERE guild_id=${server} AND user_id=${user}`
   }))
   await expect(dispatch("GET",`${server}/bans`)).rejects.toMatchObject({_tag:"Forbidden"})
   for(const bits of ["8","32"]){
-    permission=bits
     await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient
-      yield* sql`UPDATE discord_cache.dashboard_access SET expires_at=clock_timestamp()-interval '1 second'`
+      yield* sql`UPDATE discord_cache.members SET data=${JSON.stringify({roles:[role]})}::jsonb WHERE guild_id=${server} AND user_id=${user}`
+      yield* sql`UPDATE discord_cache.roles SET data=${JSON.stringify({id:role,permissions:bits})}::jsonb WHERE guild_id=${server} AND id=${role}`
     }))
     expect((await dispatch("GET",`${server}/strikes`))?.status).toBe(200)
   }
-  permission="0";expect((await dispatch("GET",`${other}/bans`,undefined,true))?.status).toBe(200)
+  expect((await dispatch("GET",`${other}/bans`,undefined,true))?.status).toBe(200)
 })
 
 it("preserves omitted strike defaults and counts only active strikes after creation", async () => {

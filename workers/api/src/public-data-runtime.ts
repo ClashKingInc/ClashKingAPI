@@ -4,7 +4,7 @@ import { AuthIdentity } from "./auth.js"
 import { InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { queryBasicWar, queryClanWars, queryPlayerWarStats, queryPreviousWar } from "./public-war.js"
-import { queryPlayerBattlelog, queryPlayerTimers } from "./public-player.js"
+import { queryPlayerTimers } from "./public-player.js"
 import { queryJoinLeave } from "./public-join-leave.js"
 import { queryPlayerLeaderboard, queryClanLeaderboard } from "./public-leaderboards.js"
 import { queryPlayerSearch } from "./public-search.js"
@@ -30,7 +30,6 @@ export const publicDataRuntimeRoutes = [
   { method: "GET", path: "/v2/clan/:clanTag/wars" },
   { method: "GET", path: "/v2/player/:playerTag/war/stats" },
   { method: "GET", path: "/v2/player/:playerTag/timers" },
-  { method: "GET", path: "/v2/player/:playerTag/battlelog/history" },
   { method: "GET", path: "/v2/player/:playerTag/join-leave" },
   { method: "GET", path: "/v2/player/:playerTag/join-leave/totals" },
   { method: "GET", path: "/v2/clan/:clanTag/join-leave" },
@@ -85,7 +84,6 @@ const executePublicData = (operation: string, path: Readonly<Record<string, stri
     case "getExpoClanWars": return yield* queryClanWars(path.clanTag ?? "", query, false)
     case "getExpoPlayerWarStats": return yield* queryPlayerWarStats(path.playerTag ?? "", query)
     case "getExpoPlayerTimers": return yield* queryPlayerTimers(path.playerTag ?? "")
-    case "getExpoPlayerBattlelogHistory": return yield* queryPlayerBattlelog(path.playerTag ?? "", query)
     case "getExpoPlayerJoinLeave": return yield* queryJoinLeave(path.playerTag ?? "", query, "player")
     case "getExpoPlayerJoinLeaveTotals": return yield* queryJoinLeave(path.playerTag ?? "", query, "player", true)
     case "getExpoClanJoinLeave": return yield* queryJoinLeave(path.clanTag ?? "", query, "clan")

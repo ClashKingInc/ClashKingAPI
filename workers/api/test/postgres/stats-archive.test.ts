@@ -37,18 +37,18 @@ describe("canonical archive regular statistics", () => {
       yield* sql`INSERT INTO war_archive_pending (war_id, end_time, payload)
         VALUES (${wars[0]!.war_id}, '2026-08-02T12:00:00Z', ${JSON.stringify(payload)}::jsonb)`
       const equal = yield* queryWarStats({ dates })
-      expect(equal.metrics.sample_size).toBe(4)
-      expect(equal.metrics.average_stars).toBe(1.5)
-      expect(equal.metrics.average_destruction).toBe(70)
-      expect(equal.metrics.three_star_rate).toBe(0.25)
+      expect(equal.metrics.sampleSize).toBe(4)
+      expect(equal.metrics.averageStars).toBe(1.5)
+      expect(equal.metrics.averageDestruction).toBe(70)
+      expect(equal.metrics.threeStarRate).toBe(0.25)
       const before = yield* queryWarStats({ dates, equal_townhalls: false })
-      expect(before.metrics.sample_size).toBe(5)
-      expect(before.metrics.average_stars).toBeCloseTo(1.8)
-      expect(before.metrics.average_destruction).toBeCloseTo(76)
+      expect(before.metrics.sampleSize).toBe(5)
+      expect(before.metrics.averageStars).toBeCloseTo(1.8)
+      expect(before.metrics.averageDestruction).toBeCloseTo(76)
       expect(before.metrics.daily).toHaveLength(2)
       const selected = yield* queryWarStats({ dates, townhall_level: 18, opponent_townhall_level: 17, equal_townhalls: false })
-      expect(selected.metrics.sample_size).toBe(1)
-      expect(selected.metrics.three_star_rate).toBe(1)
+      expect(selected.metrics.sampleSize).toBe(1)
+      expect(selected.metrics.threeStarRate).toBe(1)
       const finalized = { byDay: { "2026-08-02": { regularHitRates: { "18:17": {
         attacks: 1, zeroStars: outcome(0, 0), oneStars: outcome(0, 0), twoStars: outcome(0, 0),
         threeStars: { attacks: 1, durationSeconds: 0 },

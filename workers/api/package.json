@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-worker",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.12",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "types": "wrangler types --cwd ../.. workers/api/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@clashking/api-contracts": "0.1.0-rc.4",
+    "@clashking/api-contracts": "0.1.0-rc.12",
     "@effect/sql-pg": "4.0.0-rc.112",
     "bcryptjs": "3.0.3",
     "effect": "4.0.0-rc.112",

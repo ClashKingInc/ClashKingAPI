@@ -9,7 +9,7 @@ describe("Bot endpoint contracts", () => {
   it("uses the canonical reminder response with in-game ranks rather than Discord role IDs", () => {
     expect(botEndpoints.reminders.response).toBe(RemindersResponse)
     const payload = { war_reminders: [], clan_games_reminders: [], inactivity_reminders: [], roster_reminders: [],
-      capital_reminders: [{ id: "reminder", type: "Clan Capital", time: "1 hr", roles: ["leader", "coLeader", "admin", "member"], townhall_filter: [15, 16] }] }
+      capital_reminders: [{ id: "reminder", type: "Clan Capital", time: "1 hr", roles: ["leader", "coLeader", "admin", "member"], townhall_filter: [15, 16], disabled: false, disabled_reason: null }] }
     expect(Schema.decodeUnknownSync(botEndpoints.reminders.response)(payload)).toEqual(payload)
   })
   it("uses the canonical name-based ticket panels and nested Town Hall requirements", () => {
@@ -38,7 +38,7 @@ describe("Bot endpoint contracts", () => {
     // absence of an error list is not a Bot contract requirement.
     expect(endpoints.some((endpoint) => endpoint.path.startsWith("/v2/runtime/"))).toBe(false)
     expect(ProxyPlayerEndpoint.errors?.map(({ status }) => status))
-      .toEqual([400, 403, 404, 429])
+      .toEqual([400, 403, 404, 429, 503])
   })
 
   it("keeps required current query fields in the runtime schema", () => {

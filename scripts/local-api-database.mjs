@@ -1,12 +1,13 @@
 import { execFileSync, spawn } from "node:child_process"
-import { cpSync, mkdtempSync, readdirSync, unlinkSync, rmdirSync } from "node:fs"
+import { cpSync, mkdtempSync, readFileSync, readdirSync, unlinkSync, rmdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { randomUUID } from "node:crypto"
 import { pipeline } from "node:stream/promises"
+import { parseEnv } from "node:util"
 import pg from "pg"
-import { loadLocalApiSecrets } from "./local-api-keychain.mjs"
+import { loadLocalApiSecrets, loadLocalDiscordCredentials } from "./local-api-keychain.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
@@ -27,7 +28,19 @@ if (!endpoint.startsWith("unix://") || process.env.DOCKER_HOST && process.env.DO
 process.env.DOCKER_HOST = endpoint
 delete process.env.DOCKER_CONTEXT
 const [image, ...migrations] = output("bash", ["-ec", 'source "$1"; printf "%s\\n" "$fixture_image" "${fixture_sources[@]}"', "local-profile", join(schema, "scripts/retained-api-profile.sh")]).split("\n")
-if (!image?.includes("@sha256:") || migrations.at(-1) !== "028_discord_coordination.sql") throw new Error("Unexpected authoritative retained API profile")
+if (!image?.includes("@sha256:") || migrations.join(",") !== [
+  "001_initial_stats.sql",
+  "002_initial_settings.sql",
+  "003_tracking_observability.sql",
+  "004_developer_link_grants.sql",
+  "005_remove_legacy_admin_auth.sql",
+  "006_simplify_developer_applications.sql",
+  "007_worker_api.sql",
+  "008_ranked_battle_history.sql",
+  "009_league_army_analytics.sql",
+  "010_cwl_season_statistics.sql",
+  "011_active_verified_players.sql",
+].join(",")) throw new Error("Unexpected authoritative retained API profile")
 
 function inspect() {
   const ids = docker("ps", "-aq", "--filter", `name=^/${name}$`)
@@ -132,9 +145,21 @@ async function copyFrom(source) {
 }
 
 async function runApi() {
-  await migrate()
+  await ensure()
+  if (!(await exists())) throw new Error("Local API database does not exist; run the explicit migrate or copy-from action first")
+  if (await exists(importName)) throw new Error("An unfinished local import exists; inspect it before starting the API")
   const secrets = loadLocalApiSecrets()
+  const discord = loadLocalDiscordCredentials()
+  const infrastructureSecretsPath = process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env")
+  const infrastructure = parseEnv(readFileSync(infrastructureSecretsPath, "utf8"))
+  const r2AccessKeyId = infrastructure.R2_ACCESS_KEY_ID ?? ""
+  const r2SecretAccessKey = infrastructure.R2_SECRET_ACCESS_KEY ?? ""
+  if (r2AccessKeyId.length < 8 || r2SecretAccessKey.length < 16) throw new Error("Shared local R2 bridge credentials are missing")
   const environment = { ...process.env, CLASHKING_PERSISTENT_LOCAL_API: "1", CLASHKING_LOCAL_DATABASE_URL: connection(),
+    R2_ACCESS_KEY_ID: r2AccessKeyId, R2_SECRET_ACCESS_KEY: r2SecretAccessKey,
+    CLASHKING_LOCAL_DISCORD_CLIENT_ID: discord.clientId,
+    CLASHKING_LOCAL_DISCORD_CLIENT_SECRET: discord.clientSecret,
+    CLASHKING_LOCAL_DISCORD_BOT_TOKEN: discord.botToken,
     ...Object.fromEntries(Object.entries(secrets).map(([key, value]) => [`CLASHKING_LOCAL_${key}`, value])) }
   delete environment.CLASHKING_DISPOSABLE_TIMESCALE
   delete environment.TEST_DATABASE_URL

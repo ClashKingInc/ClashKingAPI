@@ -27,9 +27,11 @@ for (const [path, methods] of Object.entries(document.paths)) for (const [method
   }
   operations++
 }
-for (const path of ["/v2/stats/armies", "/v2/stats/items", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl", "/v2/home/activity"]) {
-  if (!document.paths[path]?.post) throw new Error(`Missing canonical POST ${path}`)
+if (!document.paths["/v2/stats/armies"]?.get || document.paths["/v2/stats/armies"]?.post) throw new Error("Army search must be canonical GET only")
+for (const path of ["/v2/stats/armies", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"]) {
+  if (!document.paths[path]?.get || document.paths[path]?.post) throw new Error(`Statistics read must be canonical GET only: ${path}`)
 }
+if (!document.paths["/v2/home/activity"]?.post) throw new Error("Missing canonical POST /v2/home/activity")
 const exportContent = document.paths["/v2/exports/war/cwl-summary"]?.get.responses["200"].content
 if (!exportContent?.["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]) throw new Error("Missing XLSX media type")
 console.log(`Validated ${operations} OpenAPI operations and ${references} local schema references`)

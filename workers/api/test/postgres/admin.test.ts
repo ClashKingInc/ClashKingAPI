@@ -23,6 +23,30 @@ const run = (path: string, method = "GET", body?: unknown) => dispatchAdmin(new 
   Effect.flatMap((response) => response!.status === 204 ? Effect.succeed(undefined) : Effect.promise(() => response!.json())))
 
 describe("Admin handlers against authoritative Goose migrations", () => {
+  it("lists and renames immutable army-family anchors while preserving admin provenance", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const first = "11".repeat(32), second = "22".repeat(32)
+      yield* sql`INSERT INTO army_compositions (army_hash,normalized_share_code) VALUES
+        (decode(${first},'hex'),'u1x1'),(decode(${second},'hex'),'u2x1')`
+      yield* sql`INSERT INTO army_families (anchor_army_hash,representative_share_code,family_name,source) VALUES
+        (decode(${first},'hex'),'u1x1','Fallback 11-11','fallback'),
+        (decode(${second},'hex'),'u2x1','Existing family','fallback')`
+      expect(yield* run("/stats/armies?search=Fallback&limit=10")).toEqual({ items: [expect.objectContaining({
+        armyHash: first, name: "Fallback 11-11", source: "fallback",
+      })] })
+      expect(yield* run(`/stats/armies/${first}`, "PATCH", { name: "  Renamed   family  " })).toMatchObject({
+        armyHash: first, name: "Renamed family", source: "admin",
+      })
+      expect(yield* Effect.flip(run(`/stats/armies/${first}`, "PATCH", { name: "Existing family" })))
+        .toMatchObject({ _tag: "Conflict" })
+      expect(yield* sql`SELECT source,named_by_subject,naming_model,naming_prompt_version
+        FROM army_families WHERE anchor_army_hash=decode(${first},'hex')`).toEqual([{
+        source: "admin", named_by_subject: principal.id, naming_model: null, naming_prompt_version: null,
+      }])
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+
   it("uses migration006 developer metadata for create/list/get/update/revoke with exact BIGINT usage", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient

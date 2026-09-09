@@ -174,6 +174,21 @@ export const LinksOrderEndpoint = defineEndpoint({
   successStatus: 200,
 })
 
+export const LinksActivityEndpoint = defineEndpoint({
+  operationId: "updateExpoLinkActivity",
+  method: "PATCH",
+  path: "/v2/links/:userId/last-login",
+  auth: "user-or-bot",
+  summary: "Record app activity for a user's verified Clash accounts",
+  body: NoBody,
+  bodyMode: "none",
+  pathParams: UserPath,
+  query: NoQuery,
+  response: Schema.Struct({ timestamp: Schema.String, updated_count: Schema.Number }),
+  responseMode: "json",
+  successStatus: 200,
+})
+
 export const BookmarksListEndpoint = defineEndpoint({
   operationId: "listExpoBookmarks",
   method: "GET",

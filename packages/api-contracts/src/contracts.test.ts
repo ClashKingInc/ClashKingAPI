@@ -4,21 +4,27 @@ import { adminEndpoints, AppConfigResponse, endpoints } from "./index.js"
 import { Schema } from "effect"
 
 describe("canonical endpoint contracts", () => {
-  it("exposes the six former QUERY operations only as POST", () => {
+  it("uses GET for every public statistics read", () => {
     expect([
       endpoints.homeActivity,
       endpoints.statsArmies,
-      endpoints.statsItems,
       endpoints.statsRanked,
       endpoints.statsWar,
       endpoints.statsCwl,
+      endpoints.armyTimeline,
+      endpoints.warHitrates,
+      endpoints.warSummary,
+      endpoints.cwlTownHalls,
     ].map(({ method, path }) => [method, path])).toEqual([
       ["POST", "/v2/home/activity"],
-      ["POST", "/v2/stats/armies"],
-      ["POST", "/v2/stats/items"],
-      ["POST", "/v2/stats/ranked"],
-      ["POST", "/v2/stats/war"],
-      ["POST", "/v2/stats/cwl"],
+      ["GET", "/v2/stats/armies"],
+      ["GET", "/v2/stats/ranked"],
+      ["GET", "/v2/stats/war"],
+      ["GET", "/v2/stats/cwl"],
+      ["GET", "/v2/stats/armies/:armyHash/timeline"],
+      ["GET", "/v2/stats/wars/hitrates"],
+      ["GET", "/v2/stats/wars/summary"],
+      ["GET", "/v2/stats/cwl/townhalls"],
     ])
   })
 
@@ -37,7 +43,7 @@ describe("canonical endpoint contracts", () => {
   })
 
   it("keeps every Admin operation under the central /v2/admin namespace", () => {
-    expect(Object.keys(adminEndpoints)).toHaveLength(39)
+    expect(Object.keys(adminEndpoints)).toHaveLength(41)
     expect(Object.values(adminEndpoints).every(({ auth, path, operationId }) =>
       auth === (operationId === "adminTrackingSummary" || operationId === "adminTrackingTimeseries" ? "admin-or-bot" : "admin") && path.startsWith("/v2/admin/"),
     )).toBe(true)

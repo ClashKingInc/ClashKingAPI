@@ -47,6 +47,7 @@ import {
   BookmarksListEndpoint,
   BookmarksOrderEndpoint,
   LinksAddEndpoint,
+  LinksActivityEndpoint,
   LinksListEndpoint,
   LinksOrderEndpoint,
   LinksRemoveEndpoint,
@@ -114,12 +115,12 @@ import {
   ProxyPlayerRankingsEndpoint,
 } from "./proxy.js"
 import {
-  StatsArmiesEndpoint,
   StatsCwlEndpoint,
-  StatsItemsEndpoint,
   StatsRankedEndpoint,
   StatsWarEndpoint,
 } from "./stats.js"
+import { leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { statsHistoryEndpoints } from "./stats-history.js"
 
 export * from "./expo-auth.js"
 export * from "./expo-clan.js"
@@ -131,14 +132,18 @@ export * from "./expo-player.js"
 export * from "./expo-rankings.js"
 export * from "./expo-stats.js"
 export * from "./expo-war.js"
+export * from "./league-analytics.js"
+export * from "./stats-history.js"
 export * from "./proxy.js"
 export { AppConfigEndpoint, AppConfigResponse } from "./app-config.js"
 export type { AnyEndpoint, EndpointRequest, EndpointResponse } from "./endpoint.js"
-export { StatsArmiesEndpoint, StatsArmiesRequest, StatsCwlEndpoint, StatsCwlRequest,
-  StatsItemsEndpoint, StatsItemsRequest, StatsRankedEndpoint, StatsRankedRequest,
-  StatsWarEndpoint, StatsWarRequest } from "./stats.js"
+export { StatsCwlEndpoint, StatsCwlQuery,
+  StatsRankedEndpoint, StatsRankedQuery,
+  StatsWarEndpoint, StatsWarQuery } from "./stats.js"
 
 export const expoEndpoints = {
+  ...leagueAnalyticsEndpoints,
+  ...statsHistoryEndpoints,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,
@@ -160,6 +165,7 @@ export const expoEndpoints = {
   authWebLogout: AuthWebLogoutEndpoint,
   linksList: LinksListEndpoint,
   linksAdd: LinksAddEndpoint,
+  linksActivity: LinksActivityEndpoint,
   linksRemove: LinksRemoveEndpoint,
   linksVisibility: LinksVisibilityEndpoint,
   linksOrder: LinksOrderEndpoint,
@@ -219,8 +225,6 @@ export const expoEndpoints = {
   clanLocationCounts: ClanLocationCountsEndpoint,
   cwlLeagueCounts: CwlLeagueCountsEndpoint,
   clanCapitalLeagueCounts: ClanCapitalLeagueCountsEndpoint,
-  statsArmies: StatsArmiesEndpoint,
-  statsItems: StatsItemsEndpoint,
   statsRanked: StatsRankedEndpoint,
   statsWar: StatsWarEndpoint,
   statsCwl: StatsCwlEndpoint,

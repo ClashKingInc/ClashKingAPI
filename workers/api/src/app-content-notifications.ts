@@ -15,6 +15,7 @@ import type { WorkerBindings } from "./environment.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { encryptPushToken, hashPushToken } from "./push-secrets.js"
 import { readBoundedJson } from "./request-body.js"
+import { notifyTracking } from "./tracking-wake.js"
 
 export type AppContentNotificationBindings = WorkerBindings & { readonly DATA_ENCRYPTION_KEY?: string }
 type Announcement = typeof AppAnnouncement.Type
@@ -292,6 +293,7 @@ const putPreferences = (principal: UserPrincipal, body: PreferencesRequest) =>
         body.warStateEnabled, body.warRemindersEnabled, body.raidRemindersEnabled, body.eventsEnabled,
         body.announcementsEnabled, body.monthlySupportEnabled, reminders, raidReminders])
       if (rows.length === 0) return yield* new NotFound({ message: "Notification device is not registered" })
+      yield* notifyTracking(sql, { kind: "mobile_reminder_config", userId: principal.userId })
       return {
         ...body, deviceId, environment, reminderTimings: reminders, raidReminderTimings: raidReminders,
         accounts: yield* accountRows(principal.userId),

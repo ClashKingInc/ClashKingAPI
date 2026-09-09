@@ -23,12 +23,10 @@ export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => 
 ).pipe(Layer.provide(Reactivity.layer))
 
 export const databaseLayer = (bindings: WorkerBindings) => lazyDatabaseLayer(
-  PgClient.make({
+  PgClient.makeClient({
     url: Redacted.make(bindings.HYPERDRIVE.connectionString),
     applicationName: "clashking-api-worker",
     connectTimeout: "10 seconds",
-    idleTimeout: "30 seconds",
-    maxConnections: 5,
   }),
 )
 

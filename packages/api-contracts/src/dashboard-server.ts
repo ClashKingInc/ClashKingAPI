@@ -277,6 +277,7 @@ export const ServerLog = Schema.Struct({
   channel_id: OptionalString,
   thread_id: OptionalNullableString,
   disabled: Schema.Boolean,
+  disabled_reason: OptionalNullableString,
 })
 export const ServerLogsResponse = Schema.Struct({
   logs: Schema.Array(ServerLog),
@@ -375,6 +376,8 @@ export const Reminder = Schema.Struct({
   attack_threshold: OptionalNumber,
   roster_id: OptionalString,
   ping_type: OptionalString,
+  disabled: Schema.Boolean,
+  disabled_reason: OptionalNullableString,
 })
 export const RemindersResponse = Schema.Struct({
   war_reminders: Schema.Array(Reminder),
@@ -544,6 +547,8 @@ export const Giveaway = Schema.Struct({
   entries: Schema.Array(GiveawayEntry),
   winnersList: Schema.Array(GiveawayWinner),
   updated: Schema.Boolean,
+  disabled: Schema.Boolean,
+  disabled_reason: OptionalNullableString,
   messageId: OptionalString,
   eventPending: OptionalString,
   eventPendingAt: OptionalString,

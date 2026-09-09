@@ -2,6 +2,7 @@ import { Effect } from "effect"
 
 import { UpstreamUnavailable } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
+import { readBoundedJson } from "./request-body.js"
 
 const requestHeaderAllowlist = [
   "accept",
@@ -24,6 +25,23 @@ const responseHeaderAllowlist = [
   "last-modified",
   "retry-after",
 ] as const
+
+const maintenanceReasons = new Set(["maintenance", "inmaintenance"])
+
+export const normalizeClashMaintenance = async (response: Response, headers: Headers): Promise<Response> => {
+  if (response.status !== 503 || !response.headers.get("content-type")?.toLowerCase().includes("application/json")) return response
+  try {
+    const value = await Effect.runPromise(readBoundedJson(response.clone(), 4_096))
+    const reason = typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as { reason?: unknown }).reason === "string"
+      ? (value as { reason: string }).reason.trim().toLowerCase()
+      : ""
+    if (!maintenanceReasons.has(reason)) return response
+    await response.body?.cancel().catch(() => undefined)
+    return Response.json({ reason: "maintenance", message: "Clash of Clans is currently under maintenance." }, { status: 503, headers })
+  } catch {
+    return response
+  }
+}
 
 export const proxyRequest = (request: Request, bindings: WorkerBindings) =>
   Effect.tryPromise({
@@ -49,11 +67,12 @@ export const proxyRequest = (request: Request, bindings: WorkerBindings) =>
         const value = response.headers.get(name)
         if (value !== null) responseHeaders.set(name, value)
       }
-      return new Response(response.body, {
+      const proxied = new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
         headers: responseHeaders,
       })
+      return normalizeClashMaintenance(proxied, responseHeaders)
     },
     catch: (cause) => new UpstreamUnavailable({
       cause,

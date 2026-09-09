@@ -4,7 +4,7 @@ import { SqlClient } from "effect/unstable/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
 import { validateDiscordDestination } from "./discord-destination.js"
-import { compensateCreatedDiscordResource, createLogWebhook, lockServerDiscordResources, recordCreatedDiscordResource } from "./discord-managed-resources.js"
+import { compensateCreatedDiscordResource, createLogWebhook, lockServerDiscordResources } from "./discord-managed-resources.js"
 import { discordWebhookAvatar } from "./discord-profile-image.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, RateLimited, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
@@ -133,7 +133,6 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
     }
     if (webhookId === undefined) {
       created = yield* createLogWebhook(serverId, write.channelId, prepared.botProfile.name, prepared.avatar)
-      yield* recordCreatedDiscordResource(created)
       webhookId = created.id
     }
     const schedule = write.schedule, weekdays = schedule?.kind === "weekdays" ? schedule.weekdays : null

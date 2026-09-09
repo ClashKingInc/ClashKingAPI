@@ -334,6 +334,7 @@ const authorizeServerRoute = (
       write: endpoint.auth.endsWith("write"),
       managerOnly: endpoint.auth.startsWith("server-manager-"),
       section: sectionFor(endpoint.path),
+      ...(endpoint.operationId === "reactivateServer" ? { freshOauthManager: true } : {}),
     })
     return authorized.principal
   })

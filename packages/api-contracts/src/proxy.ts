@@ -20,6 +20,7 @@ import {
 } from "@clashking/clash-contract/effect"
 import { Schema } from "effect"
 import { defineEndpoint, NoBody, NoPathParams, NoQuery, type ContractSchema } from "./endpoint.js"
+import { ErrorResponse } from "./errors.js"
 
 export const ProxyPlayerResponse = Player
 export const ProxyBattlelogResponse = BattleLogResponse
@@ -33,9 +34,15 @@ export const ProxyWarlogResponse = ClanWarLogResponse
 export const ProxyWarResponse = ClanWar
 export const ProxyCwlGroupResponse = ClanWarLeagueGroup
 export const ProxyLocationsResponse = LocationListResponse
+export const ProxyMaintenanceErrorResponse = Schema.Struct({
+  reason: Schema.Literal("maintenance"),
+  message: Schema.String,
+})
+export const ProxyUnavailableErrorResponse = Schema.Union([ProxyMaintenanceErrorResponse, ErrorResponse])
 const ProxyErrors = [
   { status: 400, body: ClientErrorResponse }, { status: 403, body: ClientErrorResponse },
   { status: 404, body: ClientErrorResponse }, { status: 429, body: ClientErrorResponse },
+  { status: 503, body: ProxyUnavailableErrorResponse },
 ] as const
 
 const proxyGet = <

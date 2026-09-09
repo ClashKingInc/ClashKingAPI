@@ -5,23 +5,90 @@ import { SqlClient } from "effect/unstable/sql"
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
 import { DiscordCredentials } from "./discord-credentials.js"
-import { cachedDiscordAccess } from "./discord-access-cache.js"
 import { WorkerEnvironment } from "./environment.js"
-import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { DatabaseFailure, Forbidden, InvalidRequest, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
 const Guilds = Schema.Array(Schema.Struct({
   id: DecimalSnowflake,
   owner: Schema.Boolean,
   permissions: Schema.String,
 }))
-const Member = Schema.Struct({ roles: Schema.Array(DecimalSnowflake) })
+export const gatewayHeartbeatFreshnessSeconds = 45
+
+interface GatewayAccessRow {
+  readonly guild_id: string
+  readonly guild_data: unknown
+  readonly members_complete: boolean
+  readonly member_roles: ReadonlyArray<string>
+  readonly role_permissions: ReadonlyArray<string>
+}
+
+const CachedGuild = Schema.Struct({ owner_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
+
+/** Loads only current, healthy metadata for one application generation. Missing
+ * rows are retryable because an unavailable or incomplete Gateway cache cannot
+ * safely prove either access or absence. */
+const loadGatewayAccess = (
+  applicationId: string,
+  userId: string,
+  guildIds: ReadonlyArray<string>,
+) => Effect.gen(function* () {
+  const ids = [...new Set(guildIds)]
+  if (ids.length === 0) return new Map<string, GatewayAccessRow & { readonly owner: boolean }>()
+  if (!/^\d+$/u.test(applicationId)) return yield* new UpstreamUnavailable({ cause: "Missing Discord application scope", message: "Discord authorization cache is temporarily unavailable" })
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql<GatewayAccessRow>`
+    SELECT guild.id AS guild_id, guild.data AS guild_data, guild.members_complete,
+      COALESCE(member_roles.roles, ARRAY[]::text[]) AS member_roles,
+      COALESCE(role_permissions.permissions, ARRAY[]::text[]) AS role_permissions
+    FROM discord_cache.guilds guild
+    JOIN discord_cache.gateway_shards shard
+      ON (shard.application_id, shard.shard_id) = (guild.application_id, guild.shard_id)
+    LEFT JOIN discord_cache.members member ON member.guild_id = guild.id AND member.user_id = ${userId}
+    LEFT JOIN LATERAL (
+      SELECT array_agg(value) AS roles
+      FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(member.data->'roles') = 'array'
+        THEN member.data->'roles' ELSE '[]'::jsonb END) value
+    ) member_roles ON true
+    LEFT JOIN LATERAL (
+      SELECT array_agg(role.data->>'permissions') FILTER (WHERE role.data->>'permissions' ~ '^[0-9]+$') AS permissions
+      FROM discord_cache.roles role
+      WHERE role.guild_id = guild.id AND role.id = ANY(COALESCE(member_roles.roles, ARRAY[]::text[]))
+    ) role_permissions ON true
+    WHERE guild.id = ANY(${ids}::text[])
+      AND guild.application_id = ${applicationId}
+      AND guild.generation = shard.generation
+      AND guild.available AND guild.metadata_complete AND shard.healthy
+      AND shard.heartbeat_at > clock_timestamp() - ${gatewayHeartbeatFreshnessSeconds} * interval '1 second'
+  `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Discord authorization cache could not be read" })))
+  if (rows.length !== ids.length) return yield* new UpstreamUnavailable({ cause: "Gateway metadata is not ready", message: "Discord authorization cache is temporarily unavailable" })
+  const result = new Map<string, GatewayAccessRow & { readonly owner: boolean }>()
+  for (const row of rows) {
+    const guild = yield* Schema.decodeUnknownEffect(CachedGuild)(row.guild_data).pipe(
+      Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord authorization cache is temporarily unavailable" })),
+    )
+    result.set(row.guild_id, { ...row, owner: guild.owner_id === userId })
+  }
+  return result
+})
+
+const roleIsManager = (permissions: ReadonlyArray<string>): boolean => permissions.some((value) => {
+  if (!/^\d+$/u.test(value)) return false
+  const bits = BigInt(value)
+  return (bits & 8n) !== 0n || (bits & 32n) !== 0n
+})
 
 /** Reuse a just-fetched OAuth list. This is internal server code, never caller
  * supplied claims. Only guilds with configured grants need a member lookup. */
-export const resolveListedGuildAccess = (principal: ApiPrincipal, guilds: ReadonlyArray<typeof Guilds.Type[number]>) => Effect.gen(function* () {
+export const resolveListedGuildAccess = (
+  principal: ApiPrincipal,
+  applicationId: string,
+  guilds: ReadonlyArray<typeof Guilds.Type[number]>,
+) => Effect.gen(function* () {
   const result = new Map<string, ServerAccess>()
   for (const guild of guilds) result.set(guild.id, { principal, manager: discordGuildManager(guild), sections: {} })
   if (principal.kind !== "user") return result
+  const cache = yield* loadGatewayAccess(applicationId, principal.userId, guilds.map((guild) => guild.id))
   const candidates = guilds.filter((guild) => !result.get(guild.id)!.manager).map((guild) => guild.id)
   if (candidates.length === 0) return result
   const sql = yield* SqlClient.SqlClient
@@ -31,20 +98,17 @@ export const resolveListedGuildAccess = (principal: ApiPrincipal, guilds: Readon
     WHERE grant_row.server_id = ANY(${candidates}::text[])
       AND EXISTS(SELECT 1 FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord')
   `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Dashboard role grants are unavailable" })))
-  const discord = yield* DiscordApi
-  yield* Effect.forEach([...new Set(rows.map((row) => row.server_id))], (serverId) => Effect.gen(function* () {
-    const member = yield* discord.request(`/guilds/${serverId}/members/${principal.userId}`).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(Member)),
-      Effect.catch((cause) => cause instanceof NotFound || cause instanceof Forbidden
-        ? Effect.succeed({ roles: [] as ReadonlyArray<string> })
-        : Effect.fail(new UpstreamUnavailable({ cause, message: "Discord member authorization failed" }))),
-    )
+  for (const serverId of new Set(rows.map((row) => row.server_id))) {
+    if (!cache.get(serverId)!.members_complete) {
+      return yield* new UpstreamUnavailable({ cause: "Gateway members are not ready", message: "Discord authorization cache is temporarily unavailable" })
+    }
+    const memberRoles = cache.get(serverId)!.member_roles
     const sections: Record<string, "manage" | "view"> = {}
-    for (const grant of rows) if (grant.server_id === serverId && member.roles.includes(grant.role_id)) {
+    for (const grant of rows) if (grant.server_id === serverId && memberRoles.includes(grant.role_id)) {
       if (sections[grant.section] !== "manage") sections[grant.section] = grant.access_level
     }
-    result.set(serverId, { principal, manager: false, sections, discordRoles: member.roles })
-  }), { concurrency: 4 })
+    result.set(serverId, { principal, manager: false, sections, discordRoles: memberRoles })
+  }
   return result
 })
 
@@ -57,6 +121,7 @@ export interface ServerAccess {
 }
 
 export interface ServerAccessRequirement {
+  readonly freshOauthManager?: boolean
   readonly managerOnly?: boolean
   readonly section?: string
   readonly write?: boolean
@@ -101,39 +166,28 @@ export class ServerAuthorization extends Context.Service<
       const credentials = yield* DiscordCredentials
       const bindings = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment))
 
-      const resolve = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, forceLive = false) {
+      const resolve = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, freshOauthManager = false) {
         yield* Schema.decodeUnknownEffect(DecimalSnowflake)(serverId).pipe(
           Effect.mapError(() => new InvalidRequest({ message: "server_id must be a decimal-string Discord snowflake" })),
         )
         const principal = yield* auth.requireUserOrBot(request)
         if (principal.kind === "bot") return { principal, manager: true, sections: {} }
-        const live = Effect.gen(function* () {
+        const applicationId = bindings?.DISCORD_CLIENT_ID?.trim() ?? ""
+        const cached = yield* loadGatewayAccess(applicationId, principal.userId, [serverId])
+        const gateway = cached.get(serverId)!
+        if (freshOauthManager) {
           const accessToken = yield* credentials.accessToken(principal.userId, principal.deviceId)
           const guilds = yield* discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: accessToken }).pipe(
             Effect.flatMap((value) => Schema.decodeUnknownEffect(Guilds)(value).pipe(
               Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord guild authorization response is invalid" })))),
           )
           const guild = guilds.find((candidate) => candidate.id === serverId)
-          if (guild !== undefined && discordGuildManager(guild)) return { manager: true, roles: [] as ReadonlyArray<string> }
-
-          const sql = yield* SqlClient.SqlClient
-          const users = yield* sql<{ user_id: string }>`
-            SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord'
-          `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Discord identity lookup failed" })))
-          const discordUserId = users[0]?.user_id
-          if (discordUserId === undefined) return { manager: false, roles: [] as ReadonlyArray<string> }
-          const member = yield* discord.request(`/guilds/${serverId}/members/${discordUserId}`).pipe(
-            Effect.flatMap(Schema.decodeUnknownEffect(Member)),
-            Effect.catch((cause) => cause instanceof NotFound || cause instanceof Forbidden
-              ? Effect.succeed({ roles: [] as ReadonlyArray<string> })
-              : Effect.fail(new UpstreamUnavailable({ cause, message: "Discord member authorization failed" }))),
-          )
-          return { manager: false, roles: member.roles }
-        })
-        // All non-read methods stay live, including semantic reads using POST.
-        // Calling resolve directly from a write handler cannot bypass this rule.
-        const claims = yield* bindings === undefined ? live : cachedDiscordAccess(bindings, principal, serverId, live,
-          forceLive || request.method !== "GET" && request.method !== "HEAD")
+          return { principal, manager: guild !== undefined && discordGuildManager(guild), sections: {} }
+        }
+        if (!gateway.owner && !gateway.members_complete) {
+          return yield* new UpstreamUnavailable({ cause: "Gateway members are not ready", message: "Discord authorization cache is temporarily unavailable" })
+        }
+        const claims = { manager: gateway.owner || roleIsManager(gateway.role_permissions), roles: gateway.member_roles }
         if (claims.manager || claims.roles.length === 0) return { principal, manager: claims.manager, sections: {} }
         const sql = yield* SqlClient.SqlClient
         const grants = yield* sql.unsafe<{ section: string; access_level: "manage" | "view" }>(`
@@ -150,7 +204,7 @@ export class ServerAuthorization extends Context.Service<
         serverId: string,
         requirement: ServerAccessRequirement,
       ) {
-        const access = yield* resolve(request, serverId, requirement.write === true)
+        const access = yield* resolve(request, serverId, requirement.freshOauthManager === true)
         if (!serverAccessAllows(access, requirement)) {
           return yield* new Forbidden({ message: "You do not have access to this dashboard section" })
         }

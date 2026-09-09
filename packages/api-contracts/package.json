@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-contracts",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.12",
   "license": "SEE LICENSE IN LICENSE",
   "description": "Browser-safe Effect schemas and endpoint metadata for the ClashKing v2 API",
   "repository": {
@@ -34,7 +34,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@clashking/clash-contract": "0.1.2",
     "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
@@ -42,6 +41,7 @@
     "vitest": "4.1.11"
   },
   "peerDependencies": {
+    "@clashking/clash-contract": ">=0.1.2 <2",
     "effect": "4.0.0-rc.112"
   },
   "publishConfig": {

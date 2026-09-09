@@ -8,7 +8,7 @@ import { badgeUrls } from "./war-archive-model.js"
 const Snapshot = Schema.Struct({
   generated_at: Schema.String,
   items: Schema.Array(Schema.Struct({
-    rank: Schema.Number, tag: Schema.String, name: Schema.String, townhall_level: Schema.Number, trophies: Schema.Number,
+    rank: Schema.Number, tag: Schema.String, name: Schema.String, leagueGroupId: Schema.String, townhall_level: Schema.Number, trophies: Schema.Number,
     league: Schema.Struct({ id: Schema.Number, name: Schema.String, badge: Schema.String }),
     clan: Schema.NullOr(Schema.Struct({ tag: Schema.String, name: Schema.NullOr(Schema.String), badge: Schema.String })),
   })),
@@ -34,6 +34,7 @@ interface PlayerLeaderboardRow {
   readonly name: string
   readonly townhall_level: number
   readonly trophies: number
+  readonly league_group_tag: string | null
   readonly league_id: number | null
   readonly clan_tag: string | null
   readonly clan_name: string | null
@@ -45,7 +46,7 @@ export const queryPlayerLeaderboard = (_bindings: unknown, family: "townhall" | 
   if (!/^\d+$/u.test(rawId) || !Number.isSafeInteger(id) || id < 1) return yield* new InvalidRequest({ message: "Invalid leaderboard identifier" })
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<PlayerLeaderboardRow>(`SELECT row_number() OVER (ORDER BY p.trophies DESC,p.tag)::integer AS rank,
-    p.tag,p.name,p.townhall_level,p.trophies,p.league_id,p.clan_tag,c.name AS clan_name,c.badge_token AS clan_badge_token
+    p.tag,p.name,p.townhall_level,p.trophies,p.league_group_tag,p.league_id,p.clan_tag,c.name AS clan_name,c.badge_token AS clan_badge_token
     FROM basic_player p LEFT JOIN basic_clan c ON c.tag=p.clan_tag
     WHERE ${family === "townhall" ? "p.townhall_level=$1" : "p.league_id=$1"}
     ORDER BY p.trophies DESC,p.tag LIMIT $2`, [id, leaderboardLimit(query)]).pipe(
@@ -55,7 +56,7 @@ export const queryPlayerLeaderboard = (_bindings: unknown, family: "townhall" | 
     const league = row.league_id === null ? undefined : lookupStaticItem("league_tiers", row.league_id)
     const clanBadge = row.clan_badge_token === null ? undefined : badgeUrls(row.clan_badge_token).medium
     return {
-      rank: row.rank, tag: row.tag, name: row.name, townhall_level: row.townhall_level, trophies: row.trophies,
+      rank: row.rank, tag: row.tag, name: row.name, leagueGroupId: row.league_group_tag ?? "", townhall_level: row.townhall_level, trophies: row.trophies,
       ...(row.league_id === null ? {} : { league_id: row.league_id }),
       ...(league === undefined ? {} : { league: { id: league.id, name: league.name, badge: league.iconUrls?.medium ?? "" } }),
       ...(row.clan_tag === null ? {} : { clan_tag: row.clan_tag }),

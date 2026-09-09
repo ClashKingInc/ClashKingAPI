@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-contracts",
-  "version": "0.1.0-rc.16",
+  "version": "0.1.0-rc.17",
   "license": "SEE LICENSE IN LICENSE",
   "description": "Browser-safe Effect schemas and endpoint metadata for the ClashKing v2 API",
   "repository": {

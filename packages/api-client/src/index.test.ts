@@ -58,6 +58,35 @@ describe("portable cancellation", () => {
     expect(fetchSignal?.reason).toMatchObject({ name: "AbortError" })
   })
 
+  it("aborts a service-binding fetch when its Effect fiber is interrupted", async () => {
+    let started!: () => void
+    const fetchStarted = new Promise<void>((resolve) => { started = resolve })
+    let fetchSignal: AbortSignal | undefined
+    const client = createApiClient({
+      transport: serviceBindingTransport({
+        fetch: (request) => {
+          fetchSignal = request.signal
+          started()
+          return new Promise((_resolve, reject) => {
+            request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true })
+          })
+        },
+      }),
+    })
+    const interruption = new AbortController()
+    const pending = Effect.runPromise(
+      client.execute(adminEndpoints.archivePost, input),
+      { signal: interruption.signal },
+    ).catch(() => undefined)
+
+    await fetchStarted
+    interruption.abort(new Error("Fiber interrupted"))
+    await pending
+
+    expect(fetchSignal?.aborted).toBe(true)
+    expect(fetchSignal?.reason).toMatchObject({ name: "AbortError" })
+  })
+
   it("preserves explicit caller cancellation through the HTTP interruption bridge", async () => {
     const caller = new AbortController()
     let fetchStarted!: () => void
@@ -623,6 +652,20 @@ describe("createApiClient", () => {
     ).rejects.toMatchObject({ _tag: "RequestBuildError", operationId: "brokenPath" })
   })
 
+  it("reports request contract encoding failures as request build errors", async () => {
+    const endpoint = defineEndpoint({
+      operationId: "invalidRequestInput", method: "GET", path: "/v2/player/:tag", auth: "public",
+      summary: "Exercise runtime-invalid request input", bodyMode: "none",
+      pathParams: Schema.Struct({ tag: Schema.String }), query: Schema.Struct({}), body: Schema.Struct({}),
+      response: Schema.Struct({}), responseMode: "json", successStatus: 200,
+    })
+    const client = createApiClient({ transport: serviceBindingTransport({ fetch: async () => Response.json({}) }) })
+
+    await expect(Effect.runPromise(client.execute(endpoint, {
+      path: { tag: 123 } as unknown as { tag: string }, query: {}, body: {},
+    }))).rejects.toMatchObject({ _tag: "RequestBuildError", operationId: "invalidRequestInput" })
+  })
+
   it("single-flights one browser refresh and replays each unauthorized request once", async () => {
     let attempts = 0
     let refreshes = 0
@@ -742,5 +785,16 @@ describe("createApiClient", () => {
     expect((await Effect.runPromise(transport.execute(request))).status).toBe(401)
     expect(clone).not.toHaveBeenCalled()
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it.each(["/v2/auth/me", "/v2/auth/export"])("refreshes the protected authentication endpoint %s", async (path) => {
+    let authorized = false
+    const refresh = vi.fn(async () => { authorized = true })
+    const transport = withUnauthorizedRefresh({
+      transport: serviceBindingTransport({ fetch: async () => new Response(null, { status: authorized ? 204 : 401 }) }),
+      refresh,
+    })
+    expect((await Effect.runPromise(transport.execute(new Request(`https://api.test${path}`)))).status).toBe(204)
+    expect(refresh).toHaveBeenCalledOnce()
   })
 })

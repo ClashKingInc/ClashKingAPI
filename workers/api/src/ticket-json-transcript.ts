@@ -168,9 +168,10 @@ export async function storeTicketTranscript(bucket: R2Bucket, capability: string
 }
 
 export function isJsonTranscriptRequest(request: Request): boolean {
-  const path = new URL(request.url).pathname
+  let path = new URL(request.url).pathname
+  try { path = decodeURIComponent(path) } catch { return true }
   // Invalid and former HTML paths stay inside the quiet boundary too.
-  return path === namespace || path.startsWith(`${namespace}/`)
+  return /^\/v2\/ticket-transcripts(?:\/|$)/iu.test(path)
 }
 const safeHeaders = () => new Headers({
   "cache-control": "no-store", "referrer-policy": "no-referrer",

@@ -34,13 +34,6 @@ export const DeleteServerLinkEndpoint = defineEndpoint({
   responseMode: "json", successStatus: 200, summary: "Delete a link only after Clash confirms the player is gone",
 })
 
-export const UpdateLinkLastLoginEndpoint = defineEndpoint({
-  auth: "user-or-bot", body: NoBody, bodyMode: "none", method: "PATCH", operationId: "updateLinkLastLogin",
-  path: "/v2/links/:userId/last-login", pathParams: Schema.Struct({ userId: Schema.String }), query: NoQuery,
-  response: Schema.Struct({ timestamp: Schema.String, updated_count: Schema.Number }),
-  responseMode: "json", successStatus: 200, summary: "Record one server timestamp for the subject's verified links",
-})
-
 export const UpsertBaseVoteEndpoint = defineEndpoint({
   auth: "bot", body: Schema.Struct({ direction: Schema.Literals(["up", "down"]) }), bodyMode: "json",
   method: "PUT", operationId: "upsertBaseVote", path: "/v2/bases/:baseId/votes/:voterId",
@@ -66,7 +59,6 @@ export const botAdjacentEndpoints = {
   sharedLinksLookup: SharedLinksLookupEndpoint,
   createServerLink: CreateServerLinkEndpoint,
   deleteServerLink: DeleteServerLinkEndpoint,
-  updateLinkLastLogin: UpdateLinkLastLoginEndpoint,
   upsertBaseVote: UpsertBaseVoteEndpoint,
   removeBaseVote: RemoveBaseVoteEndpoint,
   recordBaseDownload: RecordBaseDownloadEndpoint,

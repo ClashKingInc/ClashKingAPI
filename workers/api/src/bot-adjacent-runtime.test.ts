@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest"
 import { AuthIdentity } from "./auth.js"
 import { BotAdjacentStore, botAdjacentRuntimeRoutes, dispatchBotAdjacentRuntime } from "./bot-adjacent-runtime.js"
 import type { WorkerBindings } from "./environment.js"
-import { Forbidden } from "./errors.js"
 import { ServerAuthorization } from "./server-authorization.js"
 
 const bindings = {} as WorkerBindings
@@ -47,9 +46,9 @@ describe("Bot-adjacent runtime", () => {
     expect(sharedLinksLookup).not.toHaveBeenCalled()
   })
 
-  it("lists nine canonical operations and does not revive the old clan-list alias", async () => {
-    expect(botAdjacentRuntimeRoutes).toHaveLength(8)
-    expect(new Set(botAdjacentRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(8)
+  it("lists seven canonical operations and does not revive the old clan-list alias", async () => {
+    expect(botAdjacentRuntimeRoutes).toHaveLength(7)
+    expect(new Set(botAdjacentRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(7)
     const response = await Effect.runPromise(dispatchBotAdjacentRuntime(
       new Request(`https://api.clashk.ing/v2/link/server/${serverId}/clan/list`), bindings,
     ).pipe(Effect.provide(testLayer())))
@@ -88,15 +87,6 @@ describe("Bot-adjacent runtime", () => {
     await expect(Effect.runPromise(dispatchBotAdjacentRuntime(request, bindings).pipe(Effect.provide(testLayer({ createServerLink })))))
       .rejects.toMatchObject({ _tag: "InvalidRequest" })
     expect(createServerLink).not.toHaveBeenCalled()
-  })
-
-  it("rejects a login update for another user before mutation", async () => {
-    const updateLinkLastLogin = vi.fn(() => Effect.succeed({ timestamp: "2026-09-03T00:00:00.000Z", updated_count: 0 }))
-    const error = await Effect.runPromise(dispatchBotAdjacentRuntime(
-      new Request("https://api.clashk.ing/v2/links/someone-else/last-login", { method: "PATCH" }), bindings,
-    ).pipe(Effect.provide(testLayer({ updateLinkLastLogin })), Effect.flip))
-    expect(error).toBeInstanceOf(Forbidden)
-    expect(updateLinkLastLogin).not.toHaveBeenCalled()
   })
 
   it("records a base vote without converting the voter ID to a number", async () => {

@@ -5,7 +5,7 @@ import { SqlClient } from "effect/unstable/sql"
 import { AuthIdentity, bearerToken } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
-import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { commitServerScopedLink,readServerLinkTokenPolicy,requireServerLinkToken } from "./server-scoped-linking.js"
@@ -18,7 +18,6 @@ export const botAdjacentRuntimeRoutes = [
   { method: "POST", path: "/v2/links/shared", operation: "sharedLinksLookup" },
   { method: "POST", path: "/v2/links/server/:serverId", operation: "createServerLink" },
   { method: "DELETE", path: "/v2/links/server/:serverId", operation: "deleteServerLink" },
-  { method: "PATCH", path: "/v2/links/:userId/last-login", operation: "updateLinkLastLogin" },
   { method: "GET", path: "/v2/server/:serverId/clans-basic", operation: "serverClans" },
   { method: "PUT", path: "/v2/bases/:baseId/votes/:voterId", operation: "upsertBaseVote" },
   { method: "DELETE", path: "/v2/bases/:baseId/votes/:voterId", operation: "removeBaseVote" },
@@ -79,7 +78,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
   readonly sharedLinksLookup: (token: string, body: SharedRequest) => Effect.Effect<typeof botEndpoints.sharedLinksLookup.response.Type, OperationFailure>
   readonly createServerLink: (serverId: string, tag: string, userId: string, apiToken?: string) => Effect.Effect<LinkMutation, OperationFailure>
   readonly deleteServerLink: (serverId: string, tag: string) => Effect.Effect<LinkMutation, OperationFailure>
-  readonly updateLinkLastLogin: (userId: string) => Effect.Effect<typeof botEndpoints.updateLinkLastLogin.response.Type, OperationFailure>
   readonly serverClans: (serverId: string) => Effect.Effect<typeof botEndpoints.serverClans.response.Type, OperationFailure>
   readonly upsertBaseVote: (baseId: string, voterId: string, direction: "up" | "down") => Effect.Effect<typeof botEndpoints.upsertBaseVote.response.Type, OperationFailure>
   readonly removeBaseVote: (baseId: string, voterId: string) => Effect.Effect<void, OperationFailure>
@@ -118,18 +116,6 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
       createServerLink: (serverId, tag, userId, apiToken) => createDashboardServerLink(bindings, serverId, tag, userId, apiToken).pipe(
         Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(DiscordApi, discord)),
       deleteServerLink: (_serverId, tag) => deleteDashboardServerLink(bindings, tag).pipe(Effect.provideService(SqlClient.SqlClient, sql)),
-      updateLinkLastLogin: (userId) => Effect.gen(function* () {
-        const rows = yield* db(sql<{ timestamp: Date | string; updated_count: number }>`
-          WITH server_time AS (SELECT now() AS value), updated AS (
-            UPDATE player_links links SET last_login = server_time.value, updated_at = server_time.value
-            FROM server_time WHERE links.user_id = ${userId} AND links.is_verified = true RETURNING server_time.value)
-          SELECT server_time.value AS timestamp, count(updated.value)::int AS updated_count
-          FROM server_time LEFT JOIN updated ON true GROUP BY server_time.value
-        `)
-        const row = rows[0]
-        if (row === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Login timestamp was not returned" })
-        return { timestamp: new Date(row.timestamp).toISOString(), updated_count: row.updated_count }
-      }),
       serverClans: (serverId) => db(sql<{ tag: string; name: string }>`SELECT sc.tag, clan.name
         FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag
         WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
@@ -191,13 +177,6 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
         }
         const tag = yield* input(() => normalizeTag(url.searchParams.get("playerTag") ?? ""))
         return yield* encode(botEndpoints.deleteServerLink.response, yield* store.deleteServerLink(serverId, tag))
-      }
-      case "updateLinkLastLogin": {
-        const principal = yield* auth.requireUserOrBot(request)
-        const userId = params.userId ?? ""
-        if (userId.length === 0) return yield* new InvalidRequest({ message: "User ID is required" })
-        if (principal.kind === "user" && principal.userId !== userId) return yield* new Forbidden({ message: "You can only update your own login" })
-        return yield* encode(botEndpoints.updateLinkLastLogin.response, yield* store.updateLinkLastLogin(userId))
       }
       case "serverClans": {
         const serverId = yield* snowflake("serverId")

@@ -4,7 +4,6 @@ import { SqlClient } from "effect/unstable/sql"
 import { Reactivity } from "effect/unstable/reactivity"
 
 import type { WorkerBindings } from "./environment.js"
-import { DatabaseFailure } from "./errors.js"
 
 /** Capture one request scope, but acquire its pool only when a query executes.
  * No sockets or request-owned promises escape into global state. */
@@ -29,16 +28,4 @@ export const databaseLayer = (bindings: WorkerBindings) => lazyDatabaseLayer(
     connectTimeout: "10 seconds",
     acquireForStream: true,
   }),
-)
-
-export const refreshMaterializedViews = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  yield* sql`REFRESH MATERIALIZED VIEW CONCURRENTLY api_global_counts`
-  yield* sql`REFRESH MATERIALIZED VIEW CONCURRENTLY api_league_tier_counts`
-  return "refreshed" as const
-}).pipe(
-  Effect.mapError(
-    (cause) => new DatabaseFailure({ cause, message: "Materialized view refresh failed" }),
-  ),
-  Effect.withSpan("Database.refreshMaterializedViews"),
 )

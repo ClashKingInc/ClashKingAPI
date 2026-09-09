@@ -88,6 +88,8 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
           }
           user = discordAuthUser(current)
         } else return yield* new Unauthenticated({ message: "User identity is not configured" })
+        yield* database(sql`UPDATE player_links SET last_login = now(), updated_at = now()
+          WHERE user_id = ${principal.userId} AND is_verified = true`)
         const counts = yield* database(sql<{ follower_count: number }>`SELECT COUNT(DISTINCT bookmarks.user_id)::float8 AS follower_count
           FROM player_links AS links JOIN user_bookmarks AS bookmarks ON bookmarks.tag = links.tag AND bookmarks.entity_type = 'player'
           WHERE links.user_id = ${principal.userId} AND links.is_verified = true`)

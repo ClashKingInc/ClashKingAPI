@@ -47,6 +47,7 @@ export const dispatchDashboardRosterAIUsage = (request: Request, meteringSecret:
   const inputCost = money(inputUnits), outputCost = money(outputUnits), totalCost = money(inputUnits + outputUnits)
   const sql = yield* SqlClient.SqlClient
   yield* sql.withTransaction(Effect.gen(function* () {
+    yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`
     const row = (yield* sql<{ input_tokens: string; cached_input_tokens: string; cache_write_tokens: string;
       output_tokens: string; reasoning_tokens: string; total_tokens: string; input_cost_usd: string; output_cost_usd: string }>`
       SELECT input_tokens::text, cached_input_tokens::text, cache_write_tokens::text, output_tokens::text, reasoning_tokens::text,

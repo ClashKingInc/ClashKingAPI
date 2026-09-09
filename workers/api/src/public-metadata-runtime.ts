@@ -45,9 +45,11 @@ export class GuildActivityStore extends Context.Service<GuildActivityStore, {
           WHERE sc.server_id = ${guildId} ORDER BY sc.tag
         `)
         const entries = yield* Effect.forEach(clans, (clan) => Effect.tryPromise({
-          try: async () => {
+          try: async (interruption) => {
+            const signal = AbortSignal.any([interruption, AbortSignal.timeout(15_000)])
             const response = await bindings.CLASH_PROXY.fetch(new Request(
-              `http://clash-proxy/v1/clans/${encodeURIComponent(clan.tag)}`,
+              `http://clash-proxy.internal/v1/clans/${encodeURIComponent(clan.tag)}`,
+              { signal, redirect: "error" },
             ))
             if (!response.ok) {
               await response.body?.cancel()
@@ -57,7 +59,7 @@ export class GuildActivityStore extends Context.Service<GuildActivityStore, {
             return { ...clan, members: value.memberList ?? [] }
           },
           catch: () => undefined,
-        }).pipe(Effect.catch(() => Effect.succeed(undefined))), { concurrency: 5 })
+        }).pipe(Effect.timeout("15 seconds"), Effect.catch(() => Effect.succeed(undefined))), { concurrency: 5 })
         // Existing Go behavior omits clans whose upstream fetch/decode fails.
         const available = entries.filter((clan): clan is SummaryClan => clan !== undefined)
         const tags = [...new Set(available.flatMap((clan) => clan.members.map((member) => member.tag)))]

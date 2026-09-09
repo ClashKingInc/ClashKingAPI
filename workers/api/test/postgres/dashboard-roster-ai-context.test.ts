@@ -50,8 +50,8 @@ it("authorizes trusted roster attachments, rejects cross-server attachment reuse
       VALUES (${foreignServerId}, ${userId}, 'global-budget-fixture', 'openai', 'gpt-5.6-luna', 1, 1, 10, 10) RETURNING id::text`)[0]!.id
     expect(yield* context([own]).pipe(Effect.flip)).toMatchObject({ _tag: 'RateLimited', message: 'The monthly free roster AI budget has been used' })
     yield* sql`UPDATE roster_ai_usage SET input_cost_usd = 0, total_cost_usd = 0 WHERE id = ${globalCost}`
-    // Preserved admission policy: both requests are allowed before either settles;
-    // the shared mutex is not an estimated-cost reservation.
+    // The shared lock serializes admission against settled spend. It does not
+    // reserve an estimated charge, so two unsettled admissions remain valid.
     const admissions = yield* Effect.all([context([own]), context([own])], { concurrency: 2 })
     for (const admission of admissions) {
       const authorized = Schema.decodeUnknownSync(dashboardEndpoints.dashboardRosterAIContext.response)(yield* Effect.promise(() => admission!.json()))

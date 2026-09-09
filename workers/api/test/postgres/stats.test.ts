@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { beforeAll, describe, expect, it } from "vitest"
 
-import { databaseLayer, refreshMaterializedViews } from "../../src/database.js"
+import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
 import { queryGlobalCounts, queryGroupedCounts } from "../../src/stats.js"
 
@@ -24,11 +24,8 @@ describe("Stats against authoritative Goose migrations", () => {
       yield* sql`REFRESH MATERIALIZED VIEW war_league_counts`
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
-  it("refreshes and reads actual count views through the production database layer", async () => {
-    const result = await Effect.runPromise(Effect.gen(function* () {
-      yield* refreshMaterializedViews
-      return yield* queryGlobalCounts
-    }).pipe(Effect.provide(layer), Effect.scoped))
+  it("reads actual count views through the production database layer", async () => {
+    const result = await Effect.runPromise(queryGlobalCounts.pipe(Effect.provide(layer), Effect.scoped))
     expect(result).toEqual({
       players_in_war: 0, clans_in_war: 0, total_join_leaves: 0,
       players_in_legends: 0, player_count: 0, clan_count: 0, wars_stored: 0,

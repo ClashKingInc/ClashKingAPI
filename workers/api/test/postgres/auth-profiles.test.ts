@@ -117,6 +117,9 @@ describe("Discord auth and current user against authoritative Goose migrations",
         ('ignored-clan','clan','#P0YQQQ'),('ignored-unverified','player','#P0YQQG')`
       const me = yield* auth.currentUser({ kind: "user", userId: id })
       expect(me).toMatchObject({ user_id: id, username: "Email reader", auth_methods: ["email"], account_summary: { follower_count: 2 } })
+      expect(yield* sql`SELECT tag,last_login IS NOT NULL AS active FROM player_links WHERE user_id=${id} ORDER BY tag`).toEqual([
+        { tag: "#P0YQQG", active: false }, { tag: "#P0YQQQ", active: true }, { tag: "#P0YQQR", active: true },
+      ])
     }), discord)
     expect(discord.request).not.toHaveBeenCalled()
   })

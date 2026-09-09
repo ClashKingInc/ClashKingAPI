@@ -41,6 +41,7 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   yield* (yield* ServerAuthorization).require(request, body.serverId, { section: "rosters", write: true })
   const sql = yield* SqlClient.SqlClient
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {
+    yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`
     const identity = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord' FOR SHARE`
     if (identity.length !== 1) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })
     const rows = yield* sql<{ id: string; alias: string; clan_tag: string | null; revision: number; signup_questions: unknown; member_count: number }>`

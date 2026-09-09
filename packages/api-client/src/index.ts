@@ -58,7 +58,7 @@ export type ApiStatusResult<E extends AnyEndpoint> = EndpointStatusResult<E>
 export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 const fetchWithInterruption = async (
-  fetcher: typeof fetch,
+  fetcher: (request: Request) => Promise<Response>,
   request: Request,
   interruption: AbortSignal,
 ): Promise<Response> => {
@@ -85,7 +85,7 @@ const fetchWithInterruption = async (
 export const httpTransport = (fetcher: typeof fetch = globalThis.fetch): ApiTransport => ({
   execute: (request) =>
     Effect.tryPromise({
-      try: (interruption) => fetchWithInterruption(fetcher, request, interruption),
+      try: (interruption) => fetchWithInterruption((next) => fetcher(next), request, interruption),
       catch: (cause) => new TransportError({ cause, message: "ClashKing API transport failed" }),
     }),
 })
@@ -93,7 +93,7 @@ export const httpTransport = (fetcher: typeof fetch = globalThis.fetch): ApiTran
 export const serviceBindingTransport = (binding: ApiBinding): ApiTransport => ({
   execute: (request) =>
     Effect.tryPromise({
-      try: () => binding.fetch(request),
+      try: (interruption) => fetchWithInterruption((next) => binding.fetch(next), request, interruption),
       catch: (cause) => new TransportError({ cause, message: "ClashKing API service binding failed" }),
     }),
 })
@@ -107,11 +107,16 @@ export interface UnauthorizedRefreshOptions {
 
 export const withUnauthorizedRefresh = (options: UnauthorizedRefreshOptions): ApiTransport => {
   let inFlight: Promise<void> | undefined
+  const refreshExemptPaths = new Set([
+    "/v2/auth/email", "/v2/auth/web/email",
+    "/v2/auth/discord", "/v2/auth/web/discord",
+    "/v2/auth/refresh", "/v2/auth/web/refresh",
+  ])
   return {
     execute: (request) =>
       Effect.gen(function* () {
         const shouldRefresh = options.shouldRefresh?.(request)
-          ?? !new URL(request.url).pathname.startsWith("/v2/auth/")
+          ?? !refreshExemptPaths.has(new URL(request.url).pathname)
         const replay = shouldRefresh ? request.clone() : undefined
         const response = yield* options.transport.execute(request)
         if (response.status !== 401 || !shouldRefresh) return response
@@ -191,9 +196,9 @@ const encodeContractPart = <A>(
   schema: Schema.Codec<A, unknown, never, never>,
   value: unknown,
   operationId: string,
-): Effect.Effect<unknown, ResponseDecodeError> =>
+): Effect.Effect<unknown, RequestBuildError> =>
   Schema.encodeUnknownEffect(schema)(value).pipe(
-    Effect.mapError((cause) => new ResponseDecodeError({ cause, operationId })),
+    Effect.mapError((cause) => new RequestBuildError({ cause, operationId })),
   )
 
 const encodedObject = (value: unknown, part: string): Readonly<Record<string, unknown>> => {

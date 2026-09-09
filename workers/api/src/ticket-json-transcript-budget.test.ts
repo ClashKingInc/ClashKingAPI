@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
-import { assertTranscriptJsonBudget, storeTicketTranscript } from "./ticket-json-transcript.js"
+import { assertTranscriptJsonBudget, isJsonTranscriptRequest, storeTicketTranscript } from "./ticket-json-transcript.js"
 import { jsonTranscriptFixture } from "../test/fixtures/json-transcript.js"
 
 describe("transcript JSON preflight budget", () => {
+  it("keeps encoded, case-varied and malformed transcript namespaces inside the quiet boundary", () => {
+    for (const path of ["/v2/ticket-transcripts/secret", "/v2/ticket%2Dtranscripts/secret", "/V2/TICKET-TRANSCRIPTS/secret", "/v2/%zz"]) {
+      expect(isJsonTranscriptRequest(new Request(`https://api.clashk.ing${path}`))).toBe(true)
+    }
+    expect(isJsonTranscriptRequest(new Request("https://api.clashk.ing/v2/health"))).toBe(false)
+    expect(isJsonTranscriptRequest(new Request("https://api.clashk.ing/v2/ticket-transcripts-extra"))).toBe(false)
+  })
+
   it.each([
     null, true, false, 0, -0, 1e30, "plain", "é漢字😀\ud800\udfff\u0000\b\f\n\r\t\\\"",
     { unicode: "😀", values: [1, true, null, { empty: [] }] },

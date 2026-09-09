@@ -28,7 +28,7 @@ describe("Bot endpoint contracts", () => {
     const endpoints = Object.values(botEndpoints)
     const operationIds = endpoints.map((endpoint) => endpoint.operationId)
 
-    expect(endpoints).toHaveLength(64)
+    expect(endpoints).toHaveLength(63)
     expect(new Set(operationIds).size).toBe(operationIds.length)
     expect(endpoints.every((endpoint) =>
       endpoint.path.startsWith("/v2/"),

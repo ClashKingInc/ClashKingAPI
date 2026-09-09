@@ -27,6 +27,7 @@ export const databaseLayer = (bindings: WorkerBindings) => lazyDatabaseLayer(
     url: Redacted.make(bindings.HYPERDRIVE.connectionString),
     applicationName: "clashking-api-worker",
     connectTimeout: "10 seconds",
+    acquireForStream: true,
   }),
 )
 

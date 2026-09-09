@@ -65,6 +65,21 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
     }).pipe(Effect.provide(guildLayer), Effect.scoped))
   })
 
+  it("reads server clans concurrently while retaining missing-server and empty-server behavior", async () => {
+    const readServerId = "1334567890123456792"
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      expect(yield* execute(dashboardEndpoints.serverClans, {}, { serverId: readServerId }).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
+      yield* sql`INSERT INTO servers (id, name) VALUES (${readServerId}, 'Clan list test')`
+      expect(yield* execute(dashboardEndpoints.serverClans, {}, { serverId: readServerId })).toEqual([])
+      yield* sql`INSERT INTO basic_clan (tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received)
+        VALUES ('#PGQ','Clan list',true,10,20,'',0,0)`
+      yield* sql`INSERT INTO server_clans (server_id,tag) VALUES (${readServerId},'#PGQ')`
+      expect(Schema.decodeUnknownSync(dashboardEndpoints.serverClans.response)(yield* execute(dashboardEndpoints.serverClans, {}, { serverId: readServerId })))
+        .toEqual([expect.objectContaining({ tag: "#PGQ", name: "Clan list", member_count: 20 })])
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+
   it("defaults the linking token policy off and preserves it when omitted from partial settings updates", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient

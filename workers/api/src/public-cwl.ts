@@ -176,8 +176,12 @@ export const ensureCwlLeagueIds = (tag: string) => Effect.gen(function* () {
   }
   if (!assignments.size && !sizes.size && !hasHistory) return
   yield* sql.withTransaction(Effect.gen(function* () {
-    for (const [id, league] of assignments) yield* sql`UPDATE cwl_groups SET cwl_league_id = ${league} WHERE cwl_id = ${id} AND cwl_league_id IS NULL`
-    for (const [id, size] of sizes) yield* sql`UPDATE cwl_groups SET war_size = ${size} WHERE cwl_id = ${id} AND war_size IS NULL`
+    if (assignments.size) yield* sql`UPDATE cwl_groups g SET cwl_league_id = patch.league
+      FROM unnest(${[...assignments.keys()]}::text[], ${[...assignments.values()]}::integer[]) AS patch(id, league)
+      WHERE g.cwl_id = patch.id AND g.cwl_league_id IS NULL`
+    if (sizes.size) yield* sql`UPDATE cwl_groups g SET war_size = patch.size
+      FROM unnest(${[...sizes.keys()]}::text[], ${[...sizes.values()]}::integer[]) AS patch(id, size)
+      WHERE g.cwl_id = patch.id AND g.war_size IS NULL`
     if (hasHistory) {
       const remaining = yield* sql<{ count: string }>`SELECT count(*)::text AS count FROM cwl_groups g JOIN cwl_group_clans c ON c.cwl_id = g.cwl_id
         WHERE c.clan_tag = ${tag} AND g.cwl_league_id IS NULL AND left(g.season, 7) < '2026-09'`
@@ -224,6 +228,7 @@ type PlayerItem = typeof PlayerCwlHistoryResponse.Type.items[number]
 export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), limit = yield* historyLimit(query, 6)
   let seeds = yield* playerSeeds(tag, limit)
+  if (!seeds.length) return { items: [] }
   const missing = new Set(seeds.filter((seed) => !seed.cwl_league_id).map((seed) => seed.clan_tag))
   for (const clan of missing) yield* ensureCwlLeagueIds(clan)
   if (missing.size) seeds = yield* playerSeeds(tag, limit)
@@ -249,7 +254,12 @@ export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) =>
     const rounds = new Map(group.rounds.flatMap((tags, index) => tags.filter(validTag).map((tag) => [tag, index + 1] as const)))
     const context: HistoryContext = { seed, group, completed, rounds, attacks: [], scores: new Map(), sizes: new Set(), missedAttacks: 0 }
     contexts.push(context)
+    const needsGroupPlacement = group.state.toLowerCase() === "ended"
+      && completed.length === group.rounds.flat().filter(validTag).length
     for (const row of completed) {
+      // Incomplete seasons cannot expose placement yet. Only the player's
+      // clan wars are needed for their attacks/misses; standings use SQL facts.
+      if (!needsGroupPlacement && row.clan_tag !== seed.clan_tag && row.opponent_tag !== seed.clan_tag) continue
       const owners = contextsByWar.get(row.war_id) ?? []
       owners.push(context)
       contextsByWar.set(row.war_id, owners)
@@ -281,7 +291,7 @@ export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) =>
           stars: attack.stars, destructionPercentage: attack.destructionPercentage, order: attack.order, duration: attack.duration })
       }
     }
-  }))
+  }), { unordered: true })
   const items: PlayerItem[] = []
   for (const context of contexts) {
     const { seed, group, completed, attacks, scores, sizes, missedAttacks } = context

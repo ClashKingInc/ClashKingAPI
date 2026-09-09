@@ -100,6 +100,8 @@ describe("mobile persistence against authoritative Goose migrations", () => {
       expect(patched.preferences).toEqual({ kept: true, nested: { first: 3 }, nullable: null })
       expect(Schema.decodeUnknownSync(UpgradePreferencesResponse)(yield* run(`${base}/upgrade-preferences`)).preferences).toEqual(patched.preferences)
       yield* sql`UPDATE player_links SET is_verified = false WHERE tag = '#UP0Y'`
+      expect(yield* run(`${base}/upgrades`).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
+      expect(yield* run(`${base}/upgrade-preferences`).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
       expect(yield* run(`${base}/upgrades`, "PUT", { data: {} }).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
       expect(yield* run(`${base}/upgrade-preferences`, "PATCH", { preferences: {} }).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
     }).pipe(Effect.provide(userLayer(upgradeUser)), Effect.scoped))

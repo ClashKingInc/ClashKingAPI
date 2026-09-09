@@ -66,13 +66,28 @@ export const queryPreviousWar = (rawTag: string, rawTime: string) => Effect.gen(
   return officialArchiveWar(war, tag)
 })
 
+/** Each side can stop at the page limit using its (tag, end_time) index.
+ * UNION also handles a malformed/self-opponent row without returning it twice. */
+export const selectClanWarIds = (tag: string, start: Date, end: Date, types: readonly string[], limit: number, preparationWindow = false) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const timeColumn = preparationWindow ? sql`prep_time` : sql`end_time`
+  const typeFilter = types.length ? sql`AND war_type = ANY(${[...types]}::text[])` : sql``
+  return yield* sql<{ war_id: string }>`
+    SELECT war_id::text FROM (
+      (SELECT war_id, end_time FROM wars WHERE clan_tag = ${tag}
+        AND ${timeColumn} >= ${start} AND ${timeColumn} <= ${end} ${typeFilter}
+        ORDER BY end_time DESC, war_id DESC LIMIT ${limit})
+      UNION
+      (SELECT war_id, end_time FROM wars WHERE opponent_tag = ${tag}
+        AND ${timeColumn} >= ${start} AND ${timeColumn} <= ${end} ${typeFilter}
+        ORDER BY end_time DESC, war_id DESC LIMIT ${limit})
+    ) selected ORDER BY selected.end_time DESC, selected.war_id DESC LIMIT ${limit}`.pipe(Effect.mapError(databaseFailure))
+})
+
 export const queryClanWars = (rawTag: string, query: URLSearchParams, warlog: boolean) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag)
   const options = yield* historyOptions(query, warlog ? 50 : 15)
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<{ war_id: string }>`SELECT war_id::text FROM wars
-    WHERE (clan_tag = ${tag} OR opponent_tag = ${tag}) AND end_time >= ${options.start} AND end_time <= ${options.end}
-      AND war_type = ANY(${options.types}::text[]) ORDER BY end_time DESC LIMIT ${options.limit}`.pipe(Effect.mapError(databaseFailure))
+  const rows = yield* selectClanWarIds(tag, options.start, options.end, options.types, options.limit)
   const archives = yield* loadArchiveWars(rows.map((row) => row.war_id))
   const wars = rows.flatMap(({ war_id }) => {
     const war = archives.get(war_id)

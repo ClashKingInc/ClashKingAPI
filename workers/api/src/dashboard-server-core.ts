@@ -473,8 +473,11 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   }
   if (operation === "serverClansBasic") return (yield* clanSettingsRows(serverId)).map(({ tag, name }) => ({ tag, name }))
   if (operation === "serverClans") {
-    yield* requireRow(yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId}`, "Server not found")
-    const rows = yield* sql.unsafe<ClanRow>(`${clanSelect} ORDER BY clan.name, sc.tag`, [serverId])
+    const [servers, rows] = yield* Effect.all([
+      sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId}`,
+      sql.unsafe<ClanRow>(`${clanSelect} ORDER BY clan.name, sc.tag`, [serverId]),
+    ], { concurrency: 2 })
+    yield* requireRow(servers, "Server not found")
     return rows.map((row) => ({ tag: row.tag, name: row.name, ...(row.badge_token ? { badge_url: `https://api-assets.clashofclans.com/badges/200/${row.badge_token.replace(/\.png$/u, "")}.png` } : {}), level: row.clan_level, member_count: row.member_count, added_at: iso(row.added_at), settings: { abbreviation: row.abbreviation, ...optional("category", row.category) } }))
   }
   if (operation === "serverClanSettings") {

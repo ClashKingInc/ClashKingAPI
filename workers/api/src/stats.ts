@@ -1,3 +1,4 @@
+import { rankedPeriodPredicate } from "./ranked-period.js"
 import type { StatsPerformanceResponse } from "@clashking/api-contracts"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
@@ -184,19 +185,13 @@ export const queryRankedStats = (
     const sql = yield* SqlClient.SqlClient
     const params = [window.start, window.endExclusive, request.townhall_level, request.ranked_league_tier_id]
     const source = `FROM (
-      SELECT b."timestamp" AS event_time, b.stars::int AS stars,
-        b.destruction_percentage::float8 AS destruction_percentage
-      FROM battlelogs b
-      JOIN LATERAL (
-        SELECT membership.league_tier_id
-        FROM ranked_league_group_members membership
-        WHERE membership.player_tag = b.player_tag
-          AND membership.season_id = to_char(b."timestamp" AT TIME ZONE 'UTC', 'YYYYMM')::bigint
-        ORDER BY membership.group_tag LIMIT 1
-      ) ranked ON true
-      WHERE b.attack = true AND lower(b.battle_type) IN ('ranked', 'legend')
-        AND b."timestamp" >= $1 AND b."timestamp" < $2
-        AND b.player_th = $3 AND ranked.league_tier_id = $4
+      SELECT b.battle_time AS event_time,b.stars::int stars,b.destruction_percentage::float8 destruction_percentage
+      FROM battles_ranked b
+      WHERE b.direction='attack' AND b.battle_mode='ranked'
+        AND b.battle_time >= $1 AND b.battle_time < $2 AND b.player_town_hall=$3
+        AND EXISTS (SELECT 1 FROM ranked_league_group_members membership
+          WHERE membership.player_tag=b.player_tag AND membership.league_tier_id=$4
+            AND ${rankedPeriodPredicate("b.battle_time", "membership.season_id")})
     ) source`
     const rows = yield* sql.unsafe<MetricRow>(`SELECT ${metricColumns} ${source}`, params)
     const daily = yield* sql.unsafe<DailyMetricRow>(

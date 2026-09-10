@@ -69,7 +69,7 @@ export const StatsRankedEndpoint = defineEndpoint({
   method: "GET",
   path: "/v2/stats/ranked",
   auth: "public",
-  summary: "Query ranked performance",
+  summary: "Query non-Legend Ranked attacks attributed to their tournament group period",
   body: NoBody,
   bodyMode: "none",
   pathParams: NoPathParams,

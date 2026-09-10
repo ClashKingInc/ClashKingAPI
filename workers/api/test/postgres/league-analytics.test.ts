@@ -1,154 +1,103 @@
-import { createHash } from "node:crypto"
 import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it } from "vitest"
-
 import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
-import {
-  dispatchLeagueAnalytics,
-  queryArmyDetail,
-  queryArmySearch,
-  queryArmyTimeline,
-  queryHitRateHistory,
-  queryLegendBattlelog,
-  queryLegendDays,
-  queryPlayerBattlelogHistory,
-  queryRankedBattlelog,
-  queryRankedGroup,
-  queryTierStatistics,
-} from "../../src/league-analytics.js"
-import { prepareStaticMetadata } from "../../src/static-metadata.js"
+import { queryArmyDetail, queryArmySearch, queryArmyTimeline, queryLegendBattlelog, queryPlayerBattlelogHistory, queryRankedBattlelog, queryLegendDays } from "../../src/league-analytics.js"
+import { queryAdminFamilies, queryAdminFamilyMembers } from "../../src/army-family-analytics.js"
+import { queryRankedStats } from "../../src/stats.js"
 
 const url = process.env.TEST_DATABASE_URL
-if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
+if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use schema-owned disposable Timescale")
 const layer = databaseLayer({ HYPERDRIVE: { connectionString: url } } as WorkerBindings)
-const fixtureHash = (code: string) => createHash("sha256").update(new Uint8Array([2])).update(code).digest("hex")
-const anchor = fixtureHash("u1x10")
-const memberHash = fixtureHash("u2x1-1x9")
-const season = Math.floor(Date.parse("2026-09-07T05:00:00.000Z") / 1000)
+const run = <A,E>(effect: Effect.Effect<A,E,SqlClient.SqlClient>) => Effect.runPromise(effect.pipe(Effect.provide(layer),Effect.scoped))
+const range = (before = "2026-09-08") => new URLSearchParams({ "time[after]": "2026-09-07", "time[before]": before })
+let familyId: string
 
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.scoped))
-
-describe("league analytics against authoritative Goose migrations 008 and 009", () => {
-  it("keeps exact battle modes separate and reads only the permanent family and league relations", async () => {
-    await Effect.runPromise(prepareStaticMetadata({ ASSETS: { get: async (key: string) => ({ json: async () => ({ items: [{
-      _id: key.includes("heroes") ? 28_000_000 : key.includes("pets") ? 73_000_000 : key.includes("equipment") ? 90_000_000 : 105_000_034,
-      name: "Fixture metadata",
-    }] }) }) } } as unknown as Pick<WorkerBindings, "ASSETS">, ["league_tiers", "heroes", "pets", "equipment"]))
-    await run(Effect.gen(function* () {
+describe.sequential("code families against authoritative migrations through 015", () => {
+  it("creates code-only fixtures with no composition dictionary", async () => {
+    familyId = await run(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
-      yield* sql`INSERT INTO army_compositions
-        (army_hash,normalized_share_code,main_troops,heroes,equipment)
-        VALUES
-        (decode(${anchor},'hex'),'u1x10','[{"id":1,"quantity":10}]'::jsonb,ARRAY[28000000],
-          '[{"equipmentId":90000000,"heroId":28000000}]'::jsonb),
-        (decode(${memberHash},'hex'),'u2x1-1x9','[{"id":1,"quantity":9},{"id":2,"quantity":1}]'::jsonb,
-          ARRAY[28000000],'[{"equipmentId":90000000,"heroId":28000000}]'::jsonb)`
-      yield* sql`INSERT INTO army_families
-        (anchor_army_hash,representative_share_code,family_name,source)
-        VALUES (decode(${anchor},'hex'),'u1x10','Fallback ab-ab','fallback')`
-      yield* sql`INSERT INTO army_family_members
-        (army_hash,anchor_army_hash,troop_housing_similarity,spell_capacity_similarity,heroes_exact,
-          equipment_similarity,equipment_difference_count,matching_version)
-        VALUES (decode(${memberHash},'hex'),decode(${anchor},'hex'),0.9,1,true,1,0,'v1')`
-      yield* sql`INSERT INTO ranked_league_group_members
-        (season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,
-          attack_win_count,attack_loss_count,defense_win_count,defense_loss_count,town_hall,
-          maximum_battle_count,attack_star_count,defense_star_count)
-        VALUES (${season},'#P',105000034,'#2','Player',1,100,1,0,1,1,18,4,3,3)`
-      yield* sql`INSERT INTO battles_ranked
-        (player_tag,opponent_tag,battle_time,battle_mode,direction,player_town_hall,opponent_town_hall,
-          stars,destruction_percentage,duration_seconds,looted_resources,share_code,army_hash)
-        VALUES
-        ('#2','#P','2026-09-07T06:00:00Z','ranked','attack',18,18,3,100,120,
-          '{"gold":10,"elixir":20,"darkElixir":3}'::jsonb,'u1x10',decode(${anchor},'hex')),
-        ('#2','#P','2026-09-07T07:00:00Z','ranked','defense',18,18,2,97,110,
-          '{}'::jsonb,'u1x10',decode(${anchor},'hex')),
-        ('#2','#P','2026-09-07T08:00:00Z','legend','attack',18,18,1,80,100,
-          '{}'::jsonb,'u2x1-1x9',decode(${memberHash},'hex')),
-        ('#2','#P','2026-09-08T08:00:00Z','legend','attack',18,18,2,90,110,
-          '{}'::jsonb,'u1x10',decode(${anchor},'hex'))`
-      yield* sql`INSERT INTO battles_farming
-        (player_tag,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code)
-        VALUES ('#2','2026-09-07T09:00:00Z',3,100,90,
-          '{"gold":30,"elixir":40,"darkElixir":5}'::jsonb,'u1x10')`
-      yield* sql`INSERT INTO army_family_daily_stats
-        (anchor_army_hash,day,attack_count,distinct_player_count,zero_star_count,one_star_count,
-          two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum)
-        VALUES
-          (decode(${anchor},'hex'),'2026-09-07',10,3,1,2,3,4,850,1200),
-          (decode(${anchor},'hex'),'2026-09-08',5,2,0,1,2,2,450,550)`
-      yield* sql`INSERT INTO league_hitrate_stats
-        (period_kind,period_start,league_tier_id,town_hall,attack_count,zero_star_count,one_star_count,two_star_count,three_star_count)
-        VALUES ('ranked_season',to_timestamp(${season}),105000034,18,10,1,2,3,4)`
-      yield* sql`INSERT INTO ranked_league_tier_stats
-        (season_id,league_tier_id,group_count,distinct_player_count,participating_player_count,
-          trophy_p10,trophy_p25,trophy_p50,trophy_p75,trophy_p90,town_halls,
-          average_group_first_last_trophy_range,average_first_second_trophy_gap)
-        VALUES (${season},105000034,1,10,8,10,25,50,75,90,
-          '[{"level":18,"count":10}]'::jsonb,80,5)`
-      yield* sql`INSERT INTO legend_daily_stats
-        (day,league_tier_id,town_hall,attack_count,distinct_player_count,perfect_320_player_count,
-          zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,
-          duration_seconds_sum,hero_stats,pet_stats,equipment_stats,pet_hero_assignments)
-        VALUES ('2026-09-07',105000034,18,4,1,0,0,1,1,2,350,440,
-          '[{"id":28000000,"uses":4,"triples":2},{"id":99999999,"uses":1,"triples":0}]'::jsonb,
-          '[]'::jsonb,'[]'::jsonb,'[]'::jsonb)`
+      const rows = yield* sql<{ family_id: string }>`INSERT INTO army_families(representative_share_code,name,hero_ids,equipment_ids)
+        VALUES ('u1x0',NULL,ARRAY[28000000],ARRAY[90000000]) RETURNING family_id::text`
+      const id = rows[0]!.family_id
+      yield* sql`INSERT INTO army_family_members(share_code,family_id,troop_similarity,spell_similarity,equipment_similarity)
+        VALUES ('u1x0',${id}::bigint,1,1,1),('u2x0',${id}::bigint,.9,.9,.75)`
+      yield* sql`INSERT INTO army_families(representative_share_code,name) VALUES ('u3x0','Inactive family')`
+      yield* sql`INSERT INTO ranked_league_group_members(season_id,group_tag,league_tier_id,player_tag,player_name,placement,league_trophies,
+        attack_win_count,attack_loss_count,defense_win_count,defense_loss_count,town_hall,maximum_battle_count,attack_star_count,defense_star_count)
+        VALUES (1788757200,'#P',105000033,'#2','Player',1,100,1,0,1,0,18,4,3,0)`
+      yield* sql`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,battle_mode,direction,player_town_hall,opponent_town_hall,
+        stars,destruction_percentage,duration_seconds,looted_resources,share_code) VALUES
+        ('#2','#P','2026-09-07T05:09:59.999Z','legend','attack',18,17,3,100,100,'{"gold":7}',NULL),
+        ('#2','#P','2026-09-07T05:10:00Z','legend','attack',18,17,3,100,100,'{"gold":17,"elixir":5,"darkElixir":2}','u1x0'),
+        ('#2','#P','2026-09-07T06:00:00Z','legend','attack',18,18,2,90,NULL,'{}','u2x0'),
+        ('#Q','#P','2026-09-07T07:00:00Z','legend','attack',17,18,1,50,60,'{}','u1x0'),
+        ('#2','#P','2026-09-07T08:00:00Z','legend','defense',18,18,0,0,1,NULL,'u1x0'),
+        ('#2','#P','2026-09-07T09:00:00Z','ranked','attack',18,18,3,100,90,'{"gold":50}','u1x0'),
+        ('#2','#P','2026-09-07T10:00:00Z','ranked','defense',18,18,0,0,1,NULL,'u1x0'),
+        ('#2','#P','2026-09-08T05:10:00Z','legend','attack',18,18,3,100,120,'{}','u2x0'),
+        ('#2','#P','2026-09-08T06:00:00Z','legend','attack',18,18,3,100,NULL,'{}',NULL),
+        ('#2','#P','2026-09-14T05:00:00Z','ranked','attack',18,18,0,0,1,'{}','u1x0')`
+      yield* sql`INSERT INTO battles_farming(player_tag,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code)
+        VALUES ('#2','2026-09-07T11:00:00Z',2,90,120,'{"gold":30}','u1x0')`
+      yield* sql`INSERT INTO army_family_daily_stats_v2(family_id,day,attack_count,distinct_player_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum,duration_count)
+        VALUES (${id}::bigint,'2026-09-07',3,2,0,1,1,1,240,160,2),(${id}::bigint,'2026-09-08',1,1,0,0,0,1,100,120,1)`
+      yield* sql`INSERT INTO legend_daily_stats_v2(day,attack_count,distinct_player_count,perfect_320_player_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum,duration_count)
+        VALUES ('2026-09-07',3,2,0,0,1,1,1,240,160,2),('2026-09-08',2,1,0,0,0,0,2,200,120,1),('2026-09-09',0,0,0,0,0,0,0,0,0,0)`
+      return id
     }))
-
-    const detail = await run(queryRankedBattlelog("#2", String(season)))
-    expect(detail).toMatchObject({ tag: "#2", registeredAttacks: 1, registeredDefenses: 2,
-      attackTrophies: 40, attacks: [expect.objectContaining({ opponent: { tag: "#P", name: "Unknown", townHallLevel: 18 } })] })
-    expect(detail.attacks).toHaveLength(1)
-    expect(detail.attacks[0]).not.toHaveProperty("armyHash")
-    expect(detail.defenses).toHaveLength(1)
-    const legend = await run(queryLegendBattlelog("#2", "2026-09-07", new Date("2026-09-07T12:00:00Z")))
-    expect(legend.attacks).toEqual([expect.objectContaining({ time: "2026-09-07T08:00:00.000Z" })])
-    expect(legend.defenses).toEqual([])
-    expect(legend.attacks[0]).not.toHaveProperty("armyHash")
-    expect((await run(queryPlayerBattlelogHistory("#2", new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
-    )))).items).toEqual([expect.objectContaining({ battleTime: "2026-09-07T09:00:00.000Z", stars: 3 })])
-
-    const group = await run(queryRankedGroup(String(season), "#P"))
-    expect(group.members[0]).toMatchObject({ tag: "#2", attackWins: 1, defenseLosses: 1 })
-
-    const family = await run(queryArmySearch(new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07&heroIds=28000000&equipmentIds=90000000&minimumPlayers=2",
-    )))
-    expect(family.items).toEqual([expect.objectContaining({ armyHash: anchor, attacks: 10, players: 3 })])
-    const multiDay = await run(queryArmySearch(new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-08&minimumPlayers=1",
-    )))
-    expect(multiDay.items).toEqual([expect.objectContaining({ armyHash: anchor, attacks: 15, players: 1 })])
-    expect(await run(queryArmyDetail(new URLSearchParams(
-      "armyLink=https%3A%2F%2Flink.clashofclans.com%2Fen%3Faction%3DCopyArmy%26army%3Du1x9-2x1&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
-    )))).toMatchObject({ armyHash: anchor, name: "Fallback ab-ab" })
-    expect((await run(queryArmyTimeline(new URLSearchParams(
-      "armyLink=u1x9-2x1&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
-    )))).items).toHaveLength(1)
-
-    const lookupQuery = new URLSearchParams({ armyLink: "https://link.clashofclans.com/en?action=CopyArmy&army=u1x10",
-      "time[after]": "2026-09-07", "time[before]": "2026-09-07" })
-    const response = await run(dispatchLeagueAnalytics(new Request(`https://api.test/v2/stats/armies/detail?${lookupQuery}`)))
-    expect(await response?.json()).toMatchObject({ armyHash: anchor, attacks: 10 })
-    await expect(run(queryArmyDetail(new URLSearchParams({ armyLink: "u1x99" })))).rejects.toMatchObject({ _tag: "NotFound" })
-    await expect(run(queryArmyDetail(new URLSearchParams()))).rejects.toMatchObject({ _tag: "InvalidRequest" })
-    expect(await run(dispatchLeagueAnalytics(new Request(`https://api.test/v2/stats/armies/${anchor}`)))).toBeUndefined()
-
-    const hitRates = await run(queryHitRateHistory(new URLSearchParams(
-      "mode=ranked&time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
-    )))
-    expect(hitRates.items[0]).toMatchObject({ mode: "ranked", attacks: 10, starCounts: { zero: 1, one: 2, two: 3, three: 4 } })
-    const legendDays = await run(queryLegendDays(new URLSearchParams(
-      "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07&leagueTierId=105000034",
-    )))
-    expect(legendDays.items[0]).toMatchObject({ attacks: 4, heroes: [{ id: 28000000, uses: 4, triples: 2 }] })
-    expect(await run(queryTierStatistics(String(season), "105000034"))).toMatchObject({
-      seasonId: String(season), groupCount: 1, playerCount: 10, participatingPlayers: 8,
-      townHallDistribution: [{ level: 18, count: 10 }],
-    })
+  })
+  it("unions distinct players across variants/days with correct duration and global denominator", async () => {
+    const q=range(); q.set("minimumPlayers","2");q.set("limit","1")
+    const rows=await run(queryArmySearch(q))
+    expect(rows.items[0]).toMatchObject({ familyId,name:null,attacks:4,players:2,averageDuration:280/3,totalLegendAttacks:5 })
+    expect(rows.items[0]).not.toHaveProperty("armyHash")
+    const detail=range();detail.set("armyLink","https://link.clashofclans.com/?action=CopyArmy&army=u1x0-1x0")
+    expect(await run(queryArmyDetail(detail))).toEqual(rows.items[0])
+    expect((await run(queryArmyTimeline(detail))).items.map(x=>x.players)).toEqual([2,1])
+    const daily=await run(queryLegendDays(range("2026-09-07")))
+    expect(daily.items[0]).toMatchObject({ attacks:3,players:2,averageDuration:80 })
+    expect(daily.items[0]).not.toHaveProperty("townHallLevel")
+  })
+  it("keeps inactive families searchable and paginates exact members", async () => {
+    const q=range();q.set("search","Inactive")
+    const found=await run(queryAdminFamilies(q))
+    expect(found.items[0]).toMatchObject({ name:"Inactive family",statistics:{attacks:0} })
+    const members=range();members.set("limit","1");members.set("includeStats","true")
+    const first=await run(queryAdminFamilyMembers(familyId,members))
+    expect(first.hasMore).toBe(true)
+    expect(first.items[0]).toMatchObject({ shareCode:"u1x0",statistics:{attacks:2,players:2,averageDuration:80} })
+    members.set("page","2")
+    expect((await run(queryAdminFamilyMembers(familyId,members))).items[0]?.shareCode).toBe("u2x0")
+  })
+  it("separates loot-free detail projections from all-mode compact attack history", async () => {
+    const history=await run(queryPlayerBattlelogHistory("#2",range("2026-09-07")))
+    expect(history.items.map(x=>x.battleMode)).toEqual(["farming","ranked","legend","legend","legend"])
+    expect(history.items[1]?.lootedResources.gold).toBe(50)
+    expect(history.items[3]?.lootedResources.gold).toBe(17)
+    const legend=await run(queryLegendBattlelog("#2","2026-09-07",new Date("2026-09-07T12:00:00Z")))
+    expect(legend.attacks).toHaveLength(2)
+    for(const item of [...legend.attacks,...legend.defenses]) expect(item).not.toHaveProperty("lootedResources")
+    const ranked=await run(queryRankedBattlelog("#2","1788757200"))
+    expect(ranked.attacks).toHaveLength(1)
+    for(const item of [...ranked.attacks,...ranked.defenses]) expect(item).not.toHaveProperty("lootedResources")
+    const stats=await run(queryRankedStats({ dates:{start_date:"2026-09-07",end_date:"2026-09-14"},townhall_level:18,ranked_league_tier_id:105000033 }))
+    expect(stats.metrics).toMatchObject({sampleSize:1,threeStarRate:1})
+  })
+  it("returns unavailable range players for a late row, missing day, or deleted raw history", async () => {
+    await run(Effect.gen(function*(){ const sql=yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,battle_mode,direction,player_town_hall,opponent_town_hall,stars,destruction_percentage,looted_resources,share_code)
+        VALUES ('#2','#P','2026-09-07T12:00:00Z','legend','attack',18,18,3,100,'{}','u1x0')`
+    }))
+    expect((await run(queryArmySearch(range()))).items[0]?.players).toBeNull()
+    const filtered=range();filtered.set("minimumPlayers","1")
+    await expect(run(queryArmySearch(filtered))).rejects.toMatchObject({_tag:"InvalidRequest"})
+    await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient;yield* sql`DELETE FROM battles_ranked WHERE battle_time='2026-09-07T12:00:00Z'`}))
+    expect((await run(queryArmySearch(range()))).items[0]?.players).toBe(2)
+    expect((await run(queryArmySearch(range("2026-09-10")))).items[0]?.players).toBeNull()
+    await run(Effect.gen(function*(){const sql=yield* SqlClient.SqlClient;yield* sql`DELETE FROM battles_ranked WHERE battle_mode='legend' AND direction='attack'`}))
+    expect((await run(queryArmySearch(range()))).items[0]?.players).toBeNull()
+    expect((await run(queryArmyTimeline(new URLSearchParams({...Object.fromEntries(range()),armyLink:"u1x0"})))).items[0]?.players).toBe(2)
   })
 })

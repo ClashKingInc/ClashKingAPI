@@ -30,7 +30,6 @@ export interface LeagueHitRateOptions {
 }
 export interface LegendDaysOptions {
   readonly window: AnalyticsWindow
-  readonly leagueTierId?: number
 }
 
 const day = 86_400_000
@@ -77,6 +76,32 @@ const parseTime = (raw: string, key: string, end: boolean): Date => {
   return value
 }
 const utcDay = (value: Date) => value.toISOString().slice(0, 10)
+/** Complete Legend days: inclusive date labels, or half-open aligned timestamps. */
+export const parseLegendAggregateWindow = (
+  query: URLSearchParams,
+  now = new Date(),
+  options: { readonly defaultDays?: number; readonly maximumDays: number },
+): AnalyticsWindow => {
+  const offset = (5 * 60 + 10) * 60_000
+  const boundary = (raw: string, key: string, before: boolean) => {
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/u.test(raw)
+    const value = parseTime(raw, key, false)
+    if (dateOnly) return new Date(value.valueOf() + offset + (before ? day : 0))
+    if ((value.valueOf() - offset) % day !== 0) throw invalid(`${key} must align to 05:10 UTC for complete Legend days`)
+    return value
+  }
+  const rawAfter = single(query, "time[after]"), rawBefore = single(query, "time[before]")
+  const end = rawBefore === undefined
+    ? new Date(Math.floor((now.valueOf() - offset) / day) * day + offset)
+    : boundary(rawBefore, "time[before]", true)
+  const start = rawAfter === undefined ? new Date(end.valueOf() - (options.defaultDays ?? 30) * day)
+    : boundary(rawAfter, "time[after]", false)
+  const calendarDays = (end.valueOf() - start.valueOf()) / day
+  if (calendarDays < 1) throw invalid("Time range must include at least one complete Legend day")
+  if (calendarDays > options.maximumDays) throw invalid(`Time range cannot exceed ${options.maximumDays} Legend days`)
+  return { start, end, firstDay: utcDay(start), lastDay: utcDay(new Date(end.valueOf() - day)), calendarDays }
+}
+
 export const parseAnalyticsWindow = (
   query: URLSearchParams,
   now = new Date(),
@@ -98,7 +123,7 @@ export const parseAnalyticsWindow = (
 export const parseArmySearchQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
   try: (): ArmySearchOptions => {
     assertKeys(query, new Set(["time[after]", "time[before]", "heroIds", "equipmentIds", "minimumAttacks", "minimumPlayers", "minimumTripleRate", "sort", "direction", "limit"]))
-    const window = parseAnalyticsWindow(query, now, { maximumDays: 30 })
+    const window = parseLegendAggregateWindow(query, now, { maximumDays: 30 })
     const sort = single(query, "sort") ?? "usage"
     if (!["usage", "tripleRate", "zeroStarRate", "averageDuration", "averageDestruction"].includes(sort)) throw invalid("Invalid sort")
     const direction = single(query, "direction") ?? "desc"
@@ -135,9 +160,8 @@ export const parseLeagueHitRateQuery = (query: URLSearchParams, now = new Date()
 
 export const parseLegendDaysQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
   try: (): LegendDaysOptions => {
-    assertKeys(query, new Set(["time[after]", "time[before]", "leagueTierId"]))
-    const leagueTierId = integer(query, "leagueTierId", 1, 2_147_483_647)
-    return { window: parseAnalyticsWindow(query, now, { maximumDays: 90 }), ...(leagueTierId === undefined ? {} : { leagueTierId }) }
+    assertKeys(query, new Set(["time[after]", "time[before]"]))
+    return { window: parseLegendAggregateWindow(query, now, { maximumDays: 90 }) }
   },
   catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid Legend-day query"),
 })

@@ -57,16 +57,15 @@ describe("league analytics calculations", () => {
   it("reads only the finalized daily/season hit-rate table", async () => {
     const calls: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
     const result = await run(queryHitRateHistory(new URLSearchParams("mode=legend&time%5Bafter%5D=2026-09-01&time%5Bbefore%5D=2026-09-08")), sql([[
-      { period_kind: "legend_day", period_start: "2026-09-07T05:00:00Z", league_tier_id: 105000034, town_hall: 18,
+      { day: "2026-09-07", league_tier_id: 105000034, town_hall: 18,
         attacks: 10, zero: 1, one: 2, two: 3, three: 4 },
     ]], calls))
-    expect(calls[0]?.query).toContain("FROM league_hitrate_stats")
+    expect(calls[0]?.query).toContain("FROM legend_daily_stats_v2")
     expect(calls[0]?.query).not.toContain("battles_ranked")
-    expect(result.items[0]).toEqual({ mode: "legend", day: "2026-09-07", league: expect.objectContaining({ id: 105000034 }),
-      townHallLevel: 18, attacks: 10, starCounts: { zero: 1, one: 2, two: 3, three: 4 } })
+    expect(result.items[0]).toEqual({ mode: "legend", day: "2026-09-07", attacks: 10, starCounts: { zero: 1, one: 2, two: 3, three: 4 } })
   })
 
-  it("reads compact player history only from farming battles", async () => {
+  it("reads compact general history across observed attack modes", async () => {
     const calls: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
     const result = await run(queryPlayerBattlelogHistory("#2", new URLSearchParams(
       "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-07",
@@ -75,34 +74,23 @@ describe("league analytics calculations", () => {
         duration_seconds: 90, looted_resources: { gold: 10 }, share_code: "u1x1" },
     ]], calls))
     expect(calls[0]?.query).toContain("FROM battles_farming")
-    expect(calls[0]?.query).not.toContain("battles_ranked")
-    expect(calls[0]?.query).not.toContain("UNION")
+    expect(calls[0]?.query).toContain("battles_ranked")
+    expect(calls[0]?.query).toContain("UNION ALL")
     expect(result.items).toEqual([expect.objectContaining({ battleTime: "2026-09-07T09:00:00.000Z", stars: 3 })])
   })
 
-  it("discovers immutable family anchors from daily family statistics", async () => {
-    const calls: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
-    const result = await run(queryArmySearch(new URLSearchParams("time%5Bafter%5D=2026-09-08&time%5Bbefore%5D=2026-09-08&heroIds=28000000&equipmentIds=90000000&minimumPlayers=2"), new Date("2026-09-08T12:00:00Z")), sql([[
-      { army_hash: "ab".repeat(32), family_name: "Hydra", representative_share_code: "u1x1", attacks: 10, players: 3,
-        zero: 1, one: 2, two: 3, three: 4, destruction: 850, duration: 1200 },
-    ]], calls))
-    expect(calls[0]?.query).toContain("FROM army_family_daily_stats")
-    expect(calls[0]?.query).toContain("JOIN army_families")
-    expect(calls[0]?.query).toContain("c.heroes @>")
-    expect(result.items[0]).toEqual({ armyHash: "ab".repeat(32), name: "Hydra", shareCode: "u1x1", attacks: 10, players: 3,
-      starCounts: { zero: 1, one: 2, two: 3, three: 4 }, averageDuration: 120, averageDestruction: 85 })
+  it("returns family identity, nullable names, and known-duration averages", async () => {
+    const result = await run(queryArmySearch(new URLSearchParams("time%5Bafter%5D=2026-09-08&time%5Bbefore%5D=2026-09-08")), sql([[
+      { complete: true, items: [{ family_id: "9007199254740993", name: null, representative_share_code: "u1x1", attacks: 10, players: 3,
+        zero: 1, one: 2, two: 3, three: 4, destruction: 850, duration: 1200, duration_count: 8, total_legend_attacks: 100 }] },
+    ]], []))
+    expect(result.items[0]).toEqual({ familyId: "9007199254740993", name: null, shareCode: "u1x1", attacks: 10, players: 3,
+      starCounts: { zero: 1, one: 2, two: 3, three: 4 }, averageDuration: 150, averageDestruction: 85, totalLegendAttacks: 100 })
   })
 
-  it("refines multi-day family players with exact distinct battle authors", async () => {
-    const calls: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
-    const result = await run(queryArmySearch(new URLSearchParams(
+  it("rejects a player filter when retained population is unavailable", async () => {
+    await expect(run(queryArmySearch(new URLSearchParams(
       "time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-08&minimumPlayers=2",
-    )), sql([[
-      { army_hash: "ab".repeat(32), family_name: "Hydra", representative_share_code: "u1x1", attacks: 10,
-        players: 4, zero: 1, one: 2, two: 3, three: 4, destruction: 850, duration: 1200 },
-    ], [{ army_hash: "ab".repeat(32), players: 2 }]], calls))
-    expect(calls[1]?.query).toContain("count(DISTINCT b.player_tag)")
-    expect(calls[1]?.query).toContain("b.battle_mode='legend'")
-    expect(result.items[0]?.players).toBe(2)
+    )), sql([[{ complete: false, items: [] }]], []))).rejects.toMatchObject({ _tag: "InvalidRequest" })
   })
 })

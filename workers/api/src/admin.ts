@@ -24,7 +24,8 @@ export const adminRuntimeRoutes = [
   { method: "GET", path: "/v2/admin/tracking/summary" },
   { method: "GET", path: "/v2/admin/tracking/timeseries" },
   { method: "GET", path: "/v2/admin/stats/armies" },
-  { method: "PATCH", path: "/v2/admin/stats/armies/:armyHash" },
+  { method: "PATCH", path: "/v2/admin/stats/armies/:familyId" },
+  { method: "GET", path: "/v2/admin/stats/armies/:familyId/members" },
   { method: "GET", path: "/v2/admin/developer-applications" },
   { method: "POST", path: "/v2/admin/developer-applications" },
   { method: "GET", path: "/v2/admin/developer-applications/:applicationId" },
@@ -103,12 +104,12 @@ export const matchAdminRoute = (request: Request): MatchedAdminRoute | undefined
   return undefined
 }
 
-const numberQueryFields = new Set(["days", "limit"])
+const numberQueryFields = new Set(["days", "limit", "page", "minimumAttacks", "minimumPlayers", "minimumTripleRate"])
 
 const queryInput = (endpoint: AnyEndpoint, url: URL): Readonly<Record<string, unknown>> => {
   const query: Record<string, unknown> = {}
   for (const [key, value] of url.searchParams) {
-    query[key] = numberQueryFields.has(key) ? Number(value) : value
+    query[key] = key === "includeStats" && (value === "true" || value === "false") ? value === "true" : numberQueryFields.has(key) ? Number(value) : value
   }
   if (endpoint.operationId === "adminTrackingTimeseries" && query.window === undefined) {
     query.window = "1h"

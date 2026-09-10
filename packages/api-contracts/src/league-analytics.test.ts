@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
-  ArmyHash,
+  ArmyFamilyId,
   ArmyDetailEndpoint,
   ArmyTimelineEndpoint,
   ArmySearchEndpoint,
@@ -16,7 +16,7 @@ import {
 
 const realBattle = { time: "2026-09-07T06:00:00Z", townHallLevel: 18,
   opponent: { tag: "#P0Y", name: "Unknown", townHallLevel: 18 }, stars: 3, destructionPercentage: 100,
-  duration: 120, lootedResources: { gold: 1, elixir: 2, darkElixir: 3 }, shareCode: "u1x1",
+  duration: 120, shareCode: "u1x1",
   trophies: 40 }
 
 describe("league analytics contracts", () => {
@@ -30,9 +30,9 @@ describe("league analytics contracts", () => {
     }
   })
 
-  it("accepts only lowercase exact army hashes", () => {
-    expect(Schema.decodeUnknownSync(ArmyHash)("ab".repeat(32))).toBe("ab".repeat(32))
-    expect(() => Schema.decodeUnknownSync(ArmyHash)("AB".repeat(32))).toThrow()
+  it("requires decimal-string family IDs", () => {
+    expect(Schema.decodeUnknownSync(ArmyFamilyId)("9007199254740993")).toBe("9007199254740993")
+    expect(() => Schema.decodeUnknownSync(ArmyFamilyId)("AB".repeat(32))).toThrow()
   })
 
   it("publishes the finalized GET paths", () => {

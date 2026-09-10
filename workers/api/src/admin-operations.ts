@@ -8,8 +8,9 @@ import {
 } from "@clashking/api-contracts"
 import { importPKCS8, SignJWT } from "jose"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient, SqlError } from "effect/unstable/sql"
 
+import { familyIdentity, parseFamilyId, queryAdminFamilies, queryAdminFamilyMembers, type FamilyIdentityRow } from "./army-family-analytics.js"
 import type { AdminPrincipal } from "./access.js"
 import { appUpdateInternals } from "./app-updates.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
@@ -64,53 +65,32 @@ interface DeveloperApplicationRow {
   readonly updated_at: Date | string
 }
 
-interface ArmyFamilyAdminRow {
-  readonly army_hash: string
-  readonly family_name: string
-  readonly representative_share_code: string
-  readonly source: "ai" | "admin" | "fallback"
-  readonly created_at: Date | string
-  readonly updated_at: Date | string
-}
-const adminArmyFamily = (row: ArmyFamilyAdminRow) => ({
-  armyHash: row.army_hash,
-  name: row.family_name,
-  representativeShareCode: row.representative_share_code,
-  source: row.source,
-  createdAt: iso(row.created_at),
-  updatedAt: iso(row.updated_at),
-})
-
-const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed", Effect.gen(function* () {
-  const query = asRecord(input.query)
-  const search = typeof query.search === "string" ? query.search.trim() : ""
-  const limit = typeof query.limit === "number" ? query.limit : 100
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`SELECT encode(anchor_army_hash,'hex') army_hash,family_name,
-    representative_share_code,source,created_at,updated_at FROM army_families
-    WHERE $1='' OR family_name ILIKE '%'||$1||'%' OR encode(anchor_army_hash,'hex') LIKE lower($1)||'%'
-    ORDER BY updated_at DESC,anchor_army_hash LIMIT $2`, [search, limit])
-  return { items: rows.map(adminArmyFamily) }
-}))
-
+const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed",
+  queryAdminFamilies(new URL(input.request.url).searchParams))
+const listArmyFamilyMembers = (input: AdminOperationInput) => database("Army member list failed",
+  queryAdminFamilyMembers(String(asRecord(input.path).familyId ?? ""), new URL(input.request.url).searchParams))
 const updateArmyFamily = (input: AdminOperationInput) => database("Army family update failed", Effect.gen(function* () {
-  const path = asRecord(input.path), body = asRecord(input.body)
-  const hash = String(path.armyHash ?? ""), rawName = String(body.name ?? "")
-  const name = rawName.trim().replace(/\s+/gu, " ")
-  if (!/^[0-9a-f]{64}$/u.test(hash)) return yield* new InvalidRequest({ message: "Invalid army hash" })
-  if (name.length === 0 || name.length > 120) return yield* new InvalidRequest({ message: "Army family name must contain 1 to 120 characters" })
+  const id = yield* parseFamilyId(asRecord(input.path).familyId)
+  const rawName = asRecord(input.body).name
+  if (rawName !== null && typeof rawName !== "string") return yield* new InvalidRequest({ message: "Name must be text or null" })
+  const name = rawName === null ? null : rawName.trim().replace(/\s+/gu," ")
+  if (name !== null && (name.length === 0 || name.length > 120)) return yield* new InvalidRequest({ message: "Name must contain 1 to 120 characters" })
   const sql = yield* SqlClient.SqlClient
-  yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
-  const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
-    WHERE lower(family_name)=lower($1) AND anchor_army_hash<>decode($2,'hex')) exists`, [name, hash])
-  if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
-  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`UPDATE army_families SET family_name=$1,source='admin',named_by_subject=$2,
-    naming_model=NULL,naming_prompt_version=NULL,updated_at=now() WHERE anchor_army_hash=decode($3,'hex')
-    RETURNING encode(anchor_army_hash,'hex') army_hash,family_name,representative_share_code,source,created_at,updated_at`,
-  [name, input.principal.id, hash])
-  if (rows[0] === undefined) return yield* new NotFound({ message: "Army family not found" })
-  yield* audit(input, "army_family.rename", "army_family", hash, `Renamed army family to ${name}`)
-  return adminArmyFamily(rows[0])
+  if (name !== null) {
+    yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
+    const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
+      WHERE lower(name)=lower($1) AND family_id<>$2::bigint) exists`, [name,id])
+    if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
+  }
+  const rows = yield* sql.unsafe<FamilyIdentityRow>(`UPDATE army_families SET name=$1 WHERE family_id=$2::bigint
+    RETURNING family_id::text,name,representative_share_code,hero_ids,equipment_ids`, [name,id]).pipe(
+      Effect.mapError(cause => cause instanceof SqlError.SqlError && cause.reason._tag === "UniqueViolation"
+        && cause.reason.constraint === "army_families_name_v2_unique"
+        ? new Conflict({ message: "An army family already uses this name" }) : cause),
+    )
+  if (!rows[0]) return yield* new NotFound({ message: "Army family not found" })
+  yield* audit(input, "army_family.rename", "army_family", id, name === null ? "Cleared army family name" : `Renamed army family to ${name}`)
+  return familyIdentity(rows[0])
 }))
 
 interface PostRow {
@@ -1408,6 +1388,7 @@ const operationFor = (
     case "adminTrackingSummary": return executeTrackingRead("summary", input.query)
     case "adminTrackingTimeseries": return executeTrackingRead("timeseries", input.query)
     case "adminArmyFamilies": return listArmyFamilies(input)
+    case "adminArmyFamilyMembers": return listArmyFamilyMembers(input)
     case "adminUpdateArmyFamily": return updateArmyFamily(input)
     case "adminListDeveloperApplications": return listDeveloperApplications()
     case "adminCreateDeveloperApplication": return createDeveloperApplication(input)

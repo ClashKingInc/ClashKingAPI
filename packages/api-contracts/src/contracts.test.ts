@@ -43,7 +43,7 @@ describe("canonical endpoint contracts", () => {
   })
 
   it("keeps every Admin operation under the central /v2/admin namespace", () => {
-    expect(Object.keys(adminEndpoints)).toHaveLength(41)
+    expect(Object.keys(adminEndpoints)).toHaveLength(42)
     expect(Object.values(adminEndpoints).every(({ auth, path, operationId }) =>
       auth === (operationId === "adminTrackingSummary" || operationId === "adminTrackingTimeseries" ? "admin-or-bot" : "admin") && path.startsWith("/v2/admin/"),
     )).toBe(true)

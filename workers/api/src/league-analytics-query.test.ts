@@ -1,11 +1,28 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { parseArmySearchQuery, parseLeagueHitRateQuery, parsePlayerHistoryWindow } from "./league-analytics-query.js"
+import { parseArmySearchQuery, parseLeagueHitRateQuery, parseLegendAggregateWindow, parsePlayerHistoryWindow } from "./league-analytics-query.js"
 
 const run = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect)
 
 describe("league analytics query parsing", () => {
+  it("maps inclusive day labels to half-open shifted days", () => {
+    const labels = new URLSearchParams({ "time[after]": "2026-09-08", "time[before]": "2026-09-08" })
+    const timestamps = new URLSearchParams({ "time[after]": "2026-09-08T05:10:00Z", "time[before]": "2026-09-09T05:10:00Z" })
+    const window = parseLegendAggregateWindow(labels, new Date(), { maximumDays: 30 })
+    expect(window).toEqual(parseLegendAggregateWindow(timestamps, new Date(), { maximumDays: 30 }))
+    expect(window).toMatchObject({ start: new Date("2026-09-08T05:10:00Z"), end: new Date("2026-09-09T05:10:00Z"), calendarDays: 1 })
+  })
+
+  it.each(["04:59:59", "05:00:00", "05:09:59.999", "05:10:00.001"])("rejects partial aggregate windows at %s", (time) => {
+    expect(() => parseLegendAggregateWindow(new URLSearchParams({ "time[after]": `2026-09-08T${time}Z`, "time[before]": "2026-09-09T05:10:00Z" }), new Date(), { maximumDays: 30 })).toThrow()
+  })
+
+  it("defaults to the latest completed day across the reset boundary", () => {
+    const parse = (time: string) => parseLegendAggregateWindow(new URLSearchParams(), new Date(`2026-09-09T${time}Z`), { defaultDays: 1, maximumDays: 30 })
+    expect(parse("05:09:59.999").firstDay).toBe("2026-09-07")
+    expect(parse("05:10:00").firstDay).toBe("2026-09-08")
+  })
   it("uses inclusive UTC time keys and a 30-day default", async () => {
     const now = new Date("2026-09-08T18:00:00Z")
     await expect(run(parseLeagueHitRateQuery(new URLSearchParams(), now))).resolves.toMatchObject({

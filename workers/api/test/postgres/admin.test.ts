@@ -23,27 +23,23 @@ const run = (path: string, method = "GET", body?: unknown) => dispatchAdmin(new 
   Effect.flatMap((response) => response!.status === 204 ? Effect.succeed(undefined) : Effect.promise(() => response!.json())))
 
 describe("Admin handlers against authoritative Goose migrations", () => {
-  it("lists and renames immutable army-family anchors while preserving admin provenance", async () => {
+  it("lists, renames, clears and concurrently validates permanent family names", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
-      const first = "11".repeat(32), second = "22".repeat(32)
-      yield* sql`INSERT INTO army_compositions (army_hash,normalized_share_code) VALUES
-        (decode(${first},'hex'),'u1x1'),(decode(${second},'hex'),'u2x1')`
-      yield* sql`INSERT INTO army_families (anchor_army_hash,representative_share_code,family_name,source) VALUES
-        (decode(${first},'hex'),'u1x1','Fallback 11-11','fallback'),
-        (decode(${second},'hex'),'u2x1','Existing family','fallback')`
-      expect(yield* run("/stats/armies?search=Fallback&limit=10")).toEqual({ items: [expect.objectContaining({
-        armyHash: first, name: "Fallback 11-11", source: "fallback",
-      })] })
-      expect(yield* run(`/stats/armies/${first}`, "PATCH", { name: "  Renamed   family  " })).toMatchObject({
-        armyHash: first, name: "Renamed family", source: "admin",
-      })
-      expect(yield* Effect.flip(run(`/stats/armies/${first}`, "PATCH", { name: "Existing family" })))
-        .toMatchObject({ _tag: "Conflict" })
-      expect(yield* sql`SELECT source,named_by_subject,naming_model,naming_prompt_version
-        FROM army_families WHERE anchor_army_hash=decode(${first},'hex')`).toEqual([{
-        source: "admin", named_by_subject: principal.id, naming_model: null, naming_prompt_version: null,
-      }])
+      const families = yield* sql<{ family_id: string }>`INSERT INTO army_families(representative_share_code,name)
+        VALUES ('u1x1','First family'),('u2x1','Existing family') RETURNING family_id::text`
+      const first = families[0]!.family_id, second = families[1]!.family_id
+      expect(yield* run("/stats/armies?search=First&limit=10")).toMatchObject({ items: [expect.objectContaining({
+        familyId: first, name: "First family", shareCode: "u1x1",
+      })],page:1,limit:10,hasMore:false })
+      expect(yield* run(`/stats/armies/${first}`, "PATCH", { name: "  Renamed   family  " })).toMatchObject({ familyId:first,name:"Renamed family" })
+      expect(yield* Effect.flip(run(`/stats/armies/${first}`, "PATCH", { name: "Existing family" }))).toMatchObject({ _tag:"Conflict" })
+      expect(yield* run(`/stats/armies/${first}`, "PATCH", { name:null })).toMatchObject({familyId:first,name:null})
+      expect(yield* sql`SELECT name FROM army_families WHERE family_id=${first}::bigint`).toEqual([{name:null}])
+      const results = yield* Effect.all([first,second].map(id => run(`/stats/armies/${id}`,"PATCH",{name:"Concurrent name"}).pipe(Effect.result)),{concurrency:2})
+      expect(results.filter(x=>x._tag === "Success")).toHaveLength(1)
+      expect(results.filter(x=>x._tag === "Failure")).toHaveLength(1)
+      expect(yield* sql`SELECT count(*)::int count FROM admin_audit_events WHERE action='army_family.rename'`).toEqual([{count:3}])
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 

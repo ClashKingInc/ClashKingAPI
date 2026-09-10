@@ -16,13 +16,12 @@ import { SqlClient } from "effect/unstable/sql"
 
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import {
-  parseArmySearchQuery,
   parseLeagueHitRateQuery,
   parseLegendDaysQuery,
   parsePlayerHistoryWindow,
-  type AnalyticsWindow,
 } from "./league-analytics-query.js"
-import { hashNormalizedArmy, parseArmyLinkQuery } from "./army-link.js"
+import { rankedPeriodPredicate } from "./ranked-period.js"
+import * as families from "./army-family-analytics.js"
 import { hasStaticItemId, lookupStaticItem } from "./static-metadata.js"
 
 const database = <A>(message: string, effect: Effect.Effect<A, unknown, SqlClient.SqlClient>) => effect.pipe(
@@ -92,7 +91,7 @@ const battle = (row: BattleRow, mode: "ranked" | "legend") => {
   return { time: iso(row.battle_time), townHallLevel: number(row.player_town_hall),
     opponent: { tag: row.opponent_tag, name: row.opponent_name?.trim() || "Unknown", townHallLevel: number(row.opponent_town_hall) },
     stars, destructionPercentage: destruction, duration: row.duration_seconds === null ? null : number(row.duration_seconds),
-    lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code, trophies }
+    shareCode: row.share_code, trophies }
 }
 const battleSql = `SELECT b.battle_time,b.direction,b.player_town_hall,b.opponent_tag,p.name AS opponent_name,
   b.opponent_town_hall,b.stars,b.destruction_percentage,b.duration_seconds,b.looted_resources,b.share_code
@@ -131,7 +130,7 @@ export const queryRankedBattlelog = (rawTag: string, rawSeason: string) => datab
   const roster = members[0]
   if (roster === undefined) return yield* new NotFound({ message: "Ranked tournament entry not found" })
   const rows = yield* sql.unsafe<BattleRow>(`${battleSql} WHERE b.player_tag=$1 AND b.battle_mode='ranked'
-    AND b.battle_time >= to_timestamp($2::bigint) AND b.battle_time < to_timestamp($2::bigint)+interval '7 days'
+    AND ${rankedPeriodPredicate("b.battle_time", "$2::bigint")}
     ORDER BY b.battle_time,b.direction,b.opponent_tag`, [tag, season])
   const values = rows.map((row) => battle(row, "ranked"))
   const attacks = values.filter((_, index) => rows[index]?.direction === "attack")
@@ -151,7 +150,7 @@ export const queryRankedBattlelog = (rawTag: string, rawSeason: string) => datab
 
 const legendWindow = (raw: string): { start: Date; end: Date } | undefined => {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(raw)) return undefined
-  const start = new Date(`${raw}T05:00:00.000Z`)
+  const start = new Date(`${raw}T05:10:00.000Z`)
   if (Number.isNaN(start.valueOf()) || start.toISOString().slice(0, 10) !== raw) return undefined
   return { start, end: new Date(start.valueOf() + 86_400_000) }
 }
@@ -182,11 +181,15 @@ export const queryLegendBattlelog = (rawTag: string, rawDay: string, now = new D
 
 export const queryPlayerBattlelogHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player battle history query failed", Effect.gen(function* () {
   const tag = yield* normalizeClashTag(rawTag), window = yield* parsePlayerHistoryWindow(query, now), sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<{ battle_time: Date | string; stars: number; destruction_percentage: number; duration_seconds: number | null; looted_resources: unknown; share_code: string | null }>(`
-    SELECT battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code FROM battles_farming
-      WHERE player_tag=$1 AND battle_time BETWEEN $2 AND $3
-    ORDER BY battle_time DESC`, [tag, window.start, window.end])
-  return { items: rows.map((row) => ({ battleTime: iso(row.battle_time), stars: number(row.stars),
+  const rows = yield* sql.unsafe<{ battle_mode: "farming" | "ranked" | "legend"; battle_time: Date | string; stars: number; destruction_percentage: number; duration_seconds: number | null; looted_resources: unknown; share_code: string | null }>(`
+    SELECT battle_mode,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code FROM (
+      SELECT 'farming'::text battle_mode,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code,0 source_order FROM battles_farming
+        WHERE player_tag=$1 AND battle_time BETWEEN $2 AND $3
+      UNION ALL
+      SELECT battle_mode,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code,1 source_order FROM battles_ranked
+        WHERE player_tag=$1 AND direction='attack' AND battle_time BETWEEN $2 AND $3
+    ) history ORDER BY battle_time DESC,source_order`, [tag, window.start, window.end])
+  return { items: rows.map((row) => ({ battleMode: row.battle_mode, battleTime: iso(row.battle_time), stars: number(row.stars),
     destructionPercentage: number(row.destruction_percentage), duration: row.duration_seconds === null ? null : number(row.duration_seconds),
     lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code })) }
 }))
@@ -222,127 +225,34 @@ export const queryPlayerLeagueHistory = (rawTag: string, query: URLSearchParams,
   return { items }
 }))
 
-interface FamilyRow {
-  army_hash: string; family_name: string; representative_share_code: string
-  attacks: number | string; players: number | string; zero: number | string; one: number | string; two: number | string; three: number | string
-  destruction: number | string | null; duration: number | string | null
-}
-const familyStatistics = (row: FamilyRow) => {
-  const attacks = number(row.attacks)
-  return { armyHash: row.army_hash, name: row.family_name, shareCode: row.representative_share_code, attacks,
-    players: number(row.players), starCounts: starCounts(row), averageDuration: average(row.duration, attacks),
-    averageDestruction: average(row.destruction, attacks) }
-}
-const familyFilters = (heroIds: readonly number[], equipmentIds: readonly number[], values: Array<unknown>) => {
-  const filters: string[] = []
-  if (heroIds.length > 0) { values.push(heroIds); filters.push(`c.heroes @> $${values.length}::integer[]`) }
-  if (equipmentIds.length > 0) {
-    values.push(equipmentIds)
-    filters.push(`NOT EXISTS (SELECT 1 FROM unnest($${values.length}::integer[]) requested(id)
-      WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(c.equipment) item WHERE (item->>'equipmentId')::integer=requested.id))`)
-  }
-  return filters
-}
-export const queryArmySearch = (query: URLSearchParams, now = new Date()) => database("Army family search failed", Effect.gen(function* () {
-  const options = yield* parseArmySearchQuery(query, now), sql = yield* SqlClient.SqlClient
-  const values: Array<unknown> = [options.window.firstDay, options.window.lastDay]
-  const filters = familyFilters(options.heroIds, options.equipmentIds, values)
-  values.push(options.minimumAttacks, options.window.calendarDays === 1 ? options.minimumPlayers : 0,
-    options.minimumTripleRate, options.limit)
-  const order = ({ usage: "attacks", tripleRate: "triple_rate", zeroStarRate: "zero_star_rate",
-    averageDuration: "average_duration", averageDestruction: "average_destruction" } as const)[options.sort]
-  const rows = yield* sql.unsafe<FamilyRow>(`WITH totals AS (
-    SELECT s.anchor_army_hash,sum(s.attack_count)::bigint attacks,sum(s.distinct_player_count)::bigint players,
-      sum(s.zero_star_count)::bigint zero,sum(s.one_star_count)::bigint one,sum(s.two_star_count)::bigint two,
-      sum(s.three_star_count)::bigint three,sum(s.destruction_percentage_sum)::bigint destruction,sum(s.duration_seconds_sum)::bigint duration
-    FROM army_family_daily_stats s WHERE s.day BETWEEN $1::date AND $2::date GROUP BY s.anchor_army_hash
-  ), measured AS (SELECT *,three::float8/NULLIF(attacks,0) triple_rate,zero::float8/NULLIF(attacks,0) zero_star_rate,
-      duration::float8/NULLIF(attacks,0) average_duration,destruction::float8/NULLIF(attacks,0) average_destruction FROM totals)
-  SELECT encode(f.anchor_army_hash,'hex') army_hash,f.family_name,f.representative_share_code,m.*
-  FROM measured m JOIN army_families f ON f.anchor_army_hash=m.anchor_army_hash
-  JOIN army_compositions c ON c.army_hash=f.anchor_army_hash
-  WHERE m.attacks >= $${values.length - 3} AND m.players >= $${values.length - 2} AND m.triple_rate >= $${values.length - 1}
-    ${filters.length === 0 ? "" : `AND ${filters.join(" AND ")}`}
-  ORDER BY ${order} ${options.direction.toUpperCase()},f.anchor_army_hash LIMIT $${values.length}`, values)
-  if (options.window.calendarDays === 1 || rows.length === 0) return { items: rows.map(familyStatistics) }
-  const counts = yield* sql.unsafe<{ army_hash: string; players: number | string }>(`SELECT
-    encode(COALESCE(m.anchor_army_hash,b.army_hash),'hex') army_hash,count(DISTINCT b.player_tag)::bigint players
-    FROM battles_ranked b LEFT JOIN army_family_members m ON m.army_hash=b.army_hash
-    JOIN army_families f ON f.anchor_army_hash=COALESCE(m.anchor_army_hash,b.army_hash)
-    WHERE b.battle_mode='legend' AND b.direction='attack' AND b.battle_time BETWEEN $1 AND $2
-      AND encode(f.anchor_army_hash,'hex')=ANY($3::text[])
-    GROUP BY COALESCE(m.anchor_army_hash,b.army_hash)`,
-  [options.window.start, options.window.end, rows.map((row) => row.army_hash)])
-  const players = new Map(counts.map((row) => [row.army_hash, number(row.players)]))
-  return { items: rows.map((row) => ({ ...familyStatistics(row), players: players.get(row.army_hash) ?? 0 }))
-    .filter((row) => row.players >= options.minimumPlayers) }
-}))
+export const queryArmySearch = (query: URLSearchParams, now = new Date()) => database("Army search failed", families.queryArmySearch(query, now))
+export const queryArmyDetail = (query: URLSearchParams, now = new Date()) => database("Army detail failed", families.queryArmyDetail(query, now))
+export const queryArmyTimeline = (query: URLSearchParams, now = new Date()) => database("Army timeline failed", families.queryArmyTimeline(query, now))
 
-const resolveFamily = (hash: string) => database("Army family lookup failed", Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<{ army_hash: string; family_name: string; representative_share_code: string }>(`
-    SELECT encode(f.anchor_army_hash,'hex') army_hash,f.family_name,f.representative_share_code
-    FROM army_families f WHERE f.anchor_army_hash=decode($1,'hex')
-    UNION ALL
-    SELECT encode(f.anchor_army_hash,'hex'),f.family_name,f.representative_share_code
-    FROM army_family_members m JOIN army_families f ON f.anchor_army_hash=m.anchor_army_hash
-    WHERE m.army_hash=decode($1,'hex') AND m.army_hash<>m.anchor_army_hash LIMIT 1`, [hash])
-  const family = rows[0]
-  if (family === undefined) return yield* new NotFound({ message: "Army family not found" })
-  return family
-}))
-const aggregateFamily = (family: { army_hash: string; family_name: string; representative_share_code: string }, window: AnalyticsWindow) =>
-  database("Army family statistics query failed", Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient
-    const rows = yield* sql.unsafe<FamilyRow>(`SELECT $1 army_hash,$2 family_name,$3 representative_share_code,
-      COALESCE(sum(attack_count),0)::bigint attacks,COALESCE(sum(distinct_player_count),0)::bigint players,
-      COALESCE(sum(zero_star_count),0)::bigint zero,COALESCE(sum(one_star_count),0)::bigint one,
-      COALESCE(sum(two_star_count),0)::bigint two,COALESCE(sum(three_star_count),0)::bigint three,
-      COALESCE(sum(destruction_percentage_sum),0)::bigint destruction,COALESCE(sum(duration_seconds_sum),0)::bigint duration
-      FROM army_family_daily_stats WHERE anchor_army_hash=decode($1,'hex') AND day BETWEEN $4::date AND $5::date`,
-    [family.army_hash, family.family_name, family.representative_share_code, window.firstDay, window.lastDay])
-    const result = familyStatistics(rows[0]!)
-    if (window.calendarDays === 1) return result
-    const counts = yield* sql.unsafe<{ players: number | string }>(`SELECT count(DISTINCT b.player_tag)::bigint players
-      FROM battles_ranked b LEFT JOIN army_family_members m ON m.army_hash=b.army_hash
-      WHERE b.battle_mode='legend' AND b.direction='attack' AND b.battle_time BETWEEN $1 AND $2
-        AND COALESCE(m.anchor_army_hash,b.army_hash)=decode($3,'hex')`, [window.start, window.end, family.army_hash])
-    return { ...result, players: number(counts[0]?.players ?? 0) }
-  }))
-export const queryArmyDetail = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
-  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
-  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 90)
-  return yield* aggregateFamily(yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), window)
-})
-export const queryArmyTimeline = (query: URLSearchParams, now = new Date()) => database("Army family timeline query failed", Effect.gen(function* () {
-  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query)
-  const window = yield* parsePlayerHistoryWindow(timeQuery, now, 365), family = yield* resolveFamily(yield* hashNormalizedArmy(shareCode)), sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<{ day: Date | string; attacks: number | string; players: number | string; zero: number | string; one: number | string; two: number | string; three: number | string; destruction: number | string; duration: number | string }>(`
-    SELECT day,attack_count attacks,distinct_player_count players,zero_star_count zero,one_star_count one,two_star_count two,
-      three_star_count three,destruction_percentage_sum destruction,duration_seconds_sum duration
-    FROM army_family_daily_stats WHERE anchor_army_hash=decode($1,'hex') AND day BETWEEN $2::date AND $3::date ORDER BY day`,
-  [family.army_hash, window.firstDay, window.lastDay])
-  return { armyHash: family.army_hash, name: family.family_name, shareCode: family.representative_share_code,
-    items: rows.map((row) => { const attacks = number(row.attacks); return { day: day(row.day), attacks, players: number(row.players),
-      starCounts: starCounts(row), averageDuration: average(row.duration, attacks), averageDestruction: average(row.destruction, attacks) } }) }
-}))
-
-interface HitRateRow { period_kind: "ranked_season" | "legend_day"; period_start: Date | string; league_tier_id: number; town_hall: number; attacks: number | string; zero: number | string; one: number | string; two: number | string; three: number | string }
+interface HitRateRow { period_start: Date | string; league_tier_id: number; town_hall: number; attacks: number | string; zero: number | string; one: number | string; two: number | string; three: number | string }
 export const queryHitRateHistory = (query: URLSearchParams, now = new Date()) => database("League hit-rate query failed", Effect.gen(function* () {
-  const options = yield* parseLeagueHitRateQuery(query, now), sql = yield* SqlClient.SqlClient, values: Array<unknown> = [options.window.start, options.window.end]
-  const filters = ["period_start BETWEEN $1 AND $2"]
-  if (options.mode !== undefined) { values.push(options.mode === "ranked" ? "ranked_season" : "legend_day"); filters.push(`period_kind=$${values.length}`) }
-  if (options.leagueTierId !== undefined) { values.push(options.leagueTierId); filters.push(`league_tier_id=$${values.length}`) }
-  if (options.townHallLevel !== undefined) { values.push(options.townHallLevel); filters.push(`town_hall=$${values.length}`) }
-  const rows = yield* sql.unsafe<HitRateRow>(`SELECT period_kind,period_start,league_tier_id,town_hall,attack_count attacks,
-    zero_star_count zero,one_star_count one,two_star_count two,three_star_count three FROM league_hitrate_stats
-    WHERE ${filters.join(" AND ")} ORDER BY period_start DESC,period_kind,league_tier_id,town_hall`, values)
-  return { items: rows.map((row) => { const common = { league: league(row.league_tier_id), townHallLevel: number(row.town_hall),
-    attacks: number(row.attacks), starCounts: starCounts(row) }
-    return row.period_kind === "ranked_season"
-      ? { mode: "ranked" as const, seasonId: String(Math.floor(new Date(row.period_start).valueOf() / 1000)), ...common }
-      : { mode: "legend" as const, day: day(row.period_start), ...common }
-  }) }
+  const options = yield* parseLeagueHitRateQuery(query, now), sql = yield* SqlClient.SqlClient
+  if (options.mode !== "ranked" && (options.leagueTierId !== undefined || options.townHallLevel !== undefined))
+    return yield* new InvalidRequest({ message: "leagueTierId and townHallLevel require mode=ranked; Legend totals have no tier or town hall dimension" })
+  const ranked: Array<{ mode: "ranked"; seasonId: string; league: ReturnType<typeof league>; townHallLevel: number; attacks: number; starCounts: ReturnType<typeof starCounts> }> = []
+  if (options.mode !== "legend") {
+    const values: unknown[] = [options.window.start, options.window.end], filters = ["period_start BETWEEN $1 AND $2", "period_kind='ranked_season'"]
+    if (options.leagueTierId !== undefined) { values.push(options.leagueTierId); filters.push(`league_tier_id=$${values.length}`) }
+    if (options.townHallLevel !== undefined) { values.push(options.townHallLevel); filters.push(`town_hall=$${values.length}`) }
+    const rows = yield* sql.unsafe<HitRateRow>(`SELECT period_start,league_tier_id,town_hall,attack_count attacks,
+      zero_star_count zero,one_star_count one,two_star_count two,three_star_count three FROM league_hitrate_stats
+      WHERE ${filters.join(" AND ")} ORDER BY period_start DESC,league_tier_id,town_hall`, values)
+    ranked.push(...rows.map(row => ({ mode: "ranked" as const, seasonId: String(Math.floor(new Date(row.period_start).valueOf()/1000)),
+      league: league(row.league_tier_id), townHallLevel: number(row.town_hall), attacks: number(row.attacks), starCounts: starCounts(row) })))
+  }
+  if (options.mode === "ranked") return { items: ranked }
+  const time = new URLSearchParams(query); time.delete("mode")
+  const window = yield* families.aggregateWindow(time, now)
+  const rows = yield* sql.unsafe<HitRateRow & { day: Date | string }>(`SELECT day,attack_count attacks,
+    zero_star_count zero,one_star_count one,two_star_count two,three_star_count three FROM legend_daily_stats_v2
+    WHERE day BETWEEN $1::date AND $2::date ORDER BY day DESC`, [window.firstDay,window.lastDay])
+  const items = [...ranked, ...rows.map(row => ({ mode: "legend" as const, day: day(row.day), attacks: number(row.attacks), starCounts: starCounts(row) }))]
+  return { items: items.sort((a,b) => (b.mode === "ranked" ? Number(b.seasonId)*1000 : Date.parse(b.day)) - (a.mode === "ranked" ? Number(a.seasonId)*1000 : Date.parse(a.day))) }
 }))
 
 interface TierRow { season_id: number | string; league_tier_id: number; group_count: number | string; distinct_player_count: number | string; participating_player_count: number | string; trophy_p10: number | null; trophy_p25: number | null; trophy_p50: number | null; trophy_p75: number | null; trophy_p90: number | null; town_halls: unknown; average_group_first_last_trophy_range: number | string | null; average_first_second_trophy_gap: number | string | null }
@@ -359,24 +269,22 @@ export const queryTierStatistics = (rawSeason: string, rawTier: string) => datab
       averageFirstPlaceGap: row.average_first_second_trophy_gap === null ? null : number(row.average_first_second_trophy_gap) } }
 }))
 
-interface LegendDayRow { day: Date | string; league_tier_id: number; town_hall: number; attacks: number | string; players: number | string; perfect_days: number | string; zero: number | string; one: number | string; two: number | string; three: number | string; destruction: number | string; duration: number | string; hero_stats: unknown; pet_stats: unknown; equipment_stats: unknown; pet_hero_assignments: unknown }
+interface LegendDayRow { day: Date | string; duration_count: number | string; attacks: number | string; players: number | string; perfect_days: number | string; zero: number | string; one: number | string; two: number | string; three: number | string; destruction: number | string; duration: number | string; hero_stats: unknown; pet_stats: unknown; equipment_stats: unknown; pet_hero_assignments: unknown }
 type Use = { id: number; uses: number; triples: number }
-type Assignment = { petId: number; heroId: number; uses: number; triples?: number }
+type Assignment = { petId: number; heroId: number; uses: number; triples: number }
 const currentUses = (value: unknown, category: "heroes" | "pets" | "equipment"): Use[] =>
   parseJson<Use[]>(value as Use[] | string).filter((item) => hasStaticItemId(category, item.id))
-const currentAssignments = (value: unknown): Array<{ petId: number; heroId: number; uses: number }> =>
+const currentAssignments = (value: unknown): Assignment[] =>
   parseJson<Assignment[]>(value as Assignment[] | string).filter((item) => hasStaticItemId("pets", item.petId) && hasStaticItemId("heroes", item.heroId))
-    .map(({ petId, heroId, uses }) => ({ petId, heroId, uses }))
+    .map(({ petId, heroId, uses, triples }) => ({ petId, heroId, uses, triples }))
 export const queryLegendDays = (query: URLSearchParams, now = new Date()) => database("Legend-day statistics query failed", Effect.gen(function* () {
   const options = yield* parseLegendDaysQuery(query, now), sql = yield* SqlClient.SqlClient, values: Array<unknown> = [options.window.firstDay, options.window.lastDay]
-  const tier = options.leagueTierId === undefined ? "" : (values.push(options.leagueTierId), ` AND league_tier_id=$${values.length}`)
-  const rows = yield* sql.unsafe<LegendDayRow>(`SELECT day,league_tier_id,town_hall,attack_count attacks,distinct_player_count players,
+  const rows = yield* sql.unsafe<LegendDayRow>(`SELECT day,duration_count,attack_count attacks,distinct_player_count players,
     perfect_320_player_count perfect_days,zero_star_count zero,one_star_count one,two_star_count two,three_star_count three,
     destruction_percentage_sum destruction,duration_seconds_sum duration,hero_stats,pet_stats,equipment_stats,pet_hero_assignments
-    FROM legend_daily_stats WHERE day BETWEEN $1::date AND $2::date${tier} ORDER BY day DESC,league_tier_id,town_hall`, values)
-  return { items: rows.map((row) => { const attacks = number(row.attacks); return { day: day(row.day), league: league(row.league_tier_id),
-    townHallLevel: number(row.town_hall), attacks, players: number(row.players), perfectDays: number(row.perfect_days), starCounts: starCounts(row),
-    averageDuration: average(row.duration, attacks), averageDestruction: average(row.destruction, attacks),
+    FROM legend_daily_stats_v2 WHERE day BETWEEN $1::date AND $2::date ORDER BY day DESC`, values)
+  return { items: rows.map((row) => { const attacks = number(row.attacks); return { day: day(row.day), attacks, players: number(row.players), perfectDays: number(row.perfect_days), starCounts: starCounts(row),
+    averageDuration: average(row.duration, number(row.duration_count)), averageDestruction: average(row.destruction, attacks),
     heroes: currentUses(row.hero_stats, "heroes"), pets: currentUses(row.pet_stats, "pets"), equipment: currentUses(row.equipment_stats, "equipment"),
     petAssignments: currentAssignments(row.pet_hero_assignments) } }) }
 }))

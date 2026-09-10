@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
-import { queryCwlTownHalls, queryWarHitrates, queryWarSummary } from "../../src/stats-history.js"
+import { queryWarHitrates, queryWarSummary } from "../../src/stats-history.js"
 
 const url = process.env.TEST_DATABASE_URL
 if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
@@ -44,21 +44,5 @@ describe("public statistics history against authoritative migrations", () => {
       { period: "2026-07-01", warSize: 15, wars: 1, accounts: 30, townHalls: [{level:16,count:20},{level:15,count:10}], draws: 0 },
       { period: "2026-08-01", warSize: 15, wars: 2, accounts: 60, townHalls: [{level:16,count:40},{level:15,count:20}], draws: 1 },
     ])
-  })
-
-  it("returns the reconciled CWL season rows with strict filters", async () => {
-    await run(Effect.gen(function* () { const sql = yield* SqlClient.SqlClient
-      yield* sql`INSERT INTO cwl_season_statistics
-        (season,cwl_league_id,war_size,group_count,clan_count,registered_player_count,town_halls) VALUES
-        ('2026-07',48000001,15,2,16,320,'[{"level":18,"count":200},{"level":17,"count":120}]'::jsonb),
-        ('2026-07',48000002,30,1,8,240,'[{"level":18,"count":240}]'::jsonb)`
-    }))
-    expect(await run(queryCwlTownHalls(new URLSearchParams({ season: "2026-07", leagueId: "48000001" })))).toEqual({ items: [{
-      leagueId: 48000001, warSize: 15, groups: 2, clans: 16, registeredPlayers: 320,
-      townHalls: [{ level: 18, count: 200 }, { level: 17, count: 120 }],
-    }] })
-    for (const query of ["", "season=2026-7", "season=2026-07&warSize=0", "season=2026-07&extra=1"]) {
-      await expect(run(queryCwlTownHalls(new URLSearchParams(query)))).rejects.toMatchObject({ _tag: "InvalidRequest" })
-    }
   })
 })

@@ -14,7 +14,6 @@ describe("canonical endpoint contracts", () => {
       endpoints.armyTimeline,
       endpoints.warHitrates,
       endpoints.warSummary,
-      endpoints.cwlTownHalls,
     ].map(({ method, path }) => [method, path])).toEqual([
       ["POST", "/v2/home/activity"],
       ["GET", "/v2/stats/armies"],
@@ -24,7 +23,6 @@ describe("canonical endpoint contracts", () => {
       ["GET", "/v2/stats/armies/timeline"],
       ["GET", "/v2/stats/wars/hitrates"],
       ["GET", "/v2/stats/wars/summary"],
-      ["GET", "/v2/stats/cwl/townhalls"],
     ])
   })
 

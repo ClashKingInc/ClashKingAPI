@@ -187,7 +187,7 @@ export const queryRankedStats = (
     const source = `FROM (
       SELECT b.battle_time AS event_time,b.stars::int stars,b.destruction_percentage::float8 destruction_percentage
       FROM battles_ranked b
-      WHERE b.direction='attack' AND b.battle_mode='ranked'
+      WHERE b.direction=1 AND b.battle_mode=1
         AND b.battle_time >= $1 AND b.battle_time < $2 AND b.player_town_hall=$3
         AND EXISTS (SELECT 1 FROM ranked_league_group_members membership
           WHERE membership.player_tag=b.player_tag AND membership.league_tier_id=$4

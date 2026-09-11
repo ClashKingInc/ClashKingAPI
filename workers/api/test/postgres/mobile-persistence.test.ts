@@ -69,7 +69,8 @@ describe("mobile persistence against authoritative Goose migrations", () => {
       expect(linked).toMatchObject({ _tag: "Conflict" })
       // The current schema allows only verified notification subscriptions.
       // Deleting a bookmark must never remove that independently-owned row.
-      yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, source) VALUES (${userId}, '#P0Y', 'verified')`
+      yield* sql`INSERT INTO player_links (tag, user_id, source, is_verified) VALUES ('#P0Y', ${userId}, 'discord', true)`
+      yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, enabled) VALUES (${userId}, '#P0Y', true)`
       yield* sql`INSERT INTO user_bookmarks (user_id, entity_type, tag) VALUES (${otherUserId}, 'player', '#P0Y')`
       yield* run(`${path}/player/%23P0Y`, "DELETE")
       expect(Schema.decodeUnknownSync(BookmarksResponse)(yield* run(`${path}?type=player`)).items.map((item) => item.tag)).toEqual(["#P0L"])

@@ -29,7 +29,7 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       const form = new FormData(); form.set("file", new File(["mock image"], "layout.png"))
       const uploaded = Schema.decodeUnknownSync(UploadBaseImageEndpoint.response)(yield* execute(UploadBaseImageEndpoint, form))
       expect(uploaded.url).toMatch(/^https:\/\/api\.clashk\.ing\/v2\/media\/base_.*\.png$/u)
-      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout", images: [uploaded.url], description: "Fixture base" }))
+      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout&id=TH17", images: [uploaded.url], description: "Fixture base" }))
       expect(created).toMatchObject({ serverId, channelId, messageId, downloadCount: 0, images: [uploaded.url] })
       const path = { serverId, baseId: created.id }
       const listed = Schema.decodeUnknownSync(BasesEndpoint.response)(yield* execute(BasesEndpoint))
@@ -38,14 +38,15 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       expect(fetched.messageId).toBe(messageId)
       const missing = yield* execute(BaseEndpoint, {}, { serverId: "6334567890123456788", baseId: created.id }).pipe(Effect.result)
       expect(missing._tag).toBe("Failure")
-      yield* sql`UPDATE bases SET downloaders = ${[userId]}::text[], upvoter_ids = ${[userId]}::text[] WHERE id = ${created.id}::uuid`
+      yield* sql`INSERT INTO base_downloaders(base_id,user_id) VALUES (${created.id}::bigint,${userId})`
+      yield* sql`INSERT INTO base_votes(base_id,user_id,vote) VALUES (${created.id}::bigint,${userId},1)`
       const profile = Schema.decodeUnknownSync(BaseDownloaderEndpoint.response)(yield* execute(BaseDownloaderEndpoint, {}, { ...path, userId }))
       expect(profile).toMatchObject({ userId, displayName: "Fixture user" })
       const updated = Schema.decodeUnknownSync(BaseEndpoint.response)(yield* execute(BaseEndpoint, {}, path))
       expect(updated).toMatchObject({ downloadCount: 1, upvotes: 1, downloaders: [userId] })
       const deleted = Schema.decodeUnknownSync(DeleteBaseEndpoint.response)(yield* execute(DeleteBaseEndpoint, {}, path))
       expect(deleted).toEqual({ baseId: created.id, databaseDeleted: true, discordMessageCleanup: "deleted" })
-      const rows = yield* sql`SELECT id FROM bases WHERE id = ${created.id}::uuid`
+      const rows = yield* sql`SELECT id FROM bases WHERE id = ${created.id}::bigint`
       expect(rows).toHaveLength(0)
     }).pipe(Effect.provide(layer), Effect.scoped))
     expect(put).toHaveBeenCalledOnce()

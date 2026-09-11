@@ -109,7 +109,7 @@ const numberQueryFields = new Set(["days", "limit", "page", "minimumAttacks", "m
 const queryInput = (endpoint: AnyEndpoint, url: URL): Readonly<Record<string, unknown>> => {
   const query: Record<string, unknown> = {}
   for (const [key, value] of url.searchParams) {
-    query[key] = key === "includeStats" && (value === "true" || value === "false") ? value === "true" : numberQueryFields.has(key) ? Number(value) : value
+    query[key] = numberQueryFields.has(key) ? Number(value) : value
   }
   if (endpoint.operationId === "adminTrackingTimeseries" && query.window === undefined) {
     query.window = "1h"

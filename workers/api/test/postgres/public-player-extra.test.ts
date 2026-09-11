@@ -63,12 +63,13 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
   it("maps typed leaderboard history, positive stat changes, capital totals and boundary buckets", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
-      yield* sql`INSERT INTO leaderboard_history_player_home(location_id,date,player_tag,player_name,exp_level,trophies,attack_wins,defense_wins,rank,league_id)
-        VALUES ('global','2026-08-01','#P0Y','Player',200,6000,10,20,4,29000022)`
+      yield* sql`INSERT INTO basic_player(tag,name,townhall_level) VALUES ('#P0Y','Player',18) ON CONFLICT (tag) DO UPDATE SET name=EXCLUDED.name`
+      yield* sql`INSERT INTO leaderboard_history_player_home(day,tag,trophies,global_rank)
+        VALUES ('2026-08-01','#P0Y',6000,4)`
       yield* sql`INSERT INTO leaderboard_history_player_builder_base(location_id,date,player_tag,player_name,exp_level,builder_base_trophies,rank)
         VALUES ('32000006','2026-08-02','#P0Y','Player',200,5000,2)`
-      expect(yield* get('player/%23P0Y/leaderboard-history/player_home_trophies')).toMatchObject({ type:'player_home_trophies',playerTag:'#P0Y',items:[{date:'2026-08-01',locationId:'global',details:{trophies:6000,rank:4,league:{id:29000022,name:'Legend League',iconUrls:{small:'https://example.test/legend.png'}}}}] })
-      expect(leagueFetch).toHaveBeenCalledTimes(1)
+      expect(yield* get('player/%23P0Y/leaderboard-history/player_home_trophies')).toMatchObject({ type:'player_home_trophies',playerTag:'#P0Y',items:[{date:'2026-08-01',locationId:'global',details:{trophies:6000,rank:4}}] })
+      expect(leagueFetch).not.toHaveBeenCalled()
       expect(yield* get('player/%23P0Y/leaderboard-history/player_builder_base_trophies')).toMatchObject({ items:[{details:{builderBaseTrophies:5000}}] })
       yield* sql`INSERT INTO player_stat_changes(event_time,player_tag,clan_tag,stat_type,previous_value,current_value,delta)
         VALUES ('2026-08-01T00:00:00Z','#P0Y',NULL,'capital_gold_donated',9876543210,9876543220,10),
@@ -86,6 +87,9 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
   it("reconciles shared clan intervals and reads both attack sides through the existing archive iterator", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received)
+        VALUES ('#P0C','Capital clan',true,0,0,'badge',0,0)
+        ON CONFLICT (tag) DO UPDATE SET name=EXCLUDED.name`
       for (const [player,type,time] of [['#PYY','join','2026-08-01T00:00:00Z'],['#PYY','leave','2026-08-01T02:00:00Z'],['#QYY','join','2026-08-01T00:30:00Z'],['#QYY','leave','2026-08-01T01:30:00Z']] as const)
         yield* sql`INSERT INTO join_leave_history("time","type",clan_tag,player_tag,player_name,townhall_level) VALUES (${time}::timestamptz,${type},'#P0C',${player},'Player',18)`
       expect(yield* get('player/%23PYY/join-leave/shared?tag=%23QYY')).toEqual({items:[{clan:{name:'Capital clan',tag:'#P0C'},minutes:60}]})

@@ -26,6 +26,7 @@ describe("Admin handlers against authoritative Goose migrations", () => {
   it("lists, renames, clears and concurrently validates permanent family names", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO army_compositions(share_code) VALUES ('u1x1'),('u2x1')`
       const families = yield* sql<{ family_id: string }>`INSERT INTO army_families(representative_share_code,name)
         VALUES ('u1x1','First family'),('u2x1','Existing family') RETURNING family_id::text`
       const first = families[0]!.family_id, second = families[1]!.family_id

@@ -10,7 +10,7 @@ import { ServerAuthorization } from "./server-authorization.js"
 const bindings = {} as WorkerBindings
 const serverId = "123456789012345678"
 const userId = "987654321098765432"
-const baseId = "019c95ab-f582-79a6-a309-6ea9202878cd"
+const baseId = "9007199254740993"
 const unusedSql = new Proxy(() => { throw new Error("Unexpected SQL call in dispatcher test") }, {
   get: () => { throw new Error("Unexpected SQL access in dispatcher test") },
 }) as unknown as SqlClient.SqlClient
@@ -46,9 +46,9 @@ describe("Bot-adjacent runtime", () => {
     expect(sharedLinksLookup).not.toHaveBeenCalled()
   })
 
-  it("lists seven canonical operations and does not revive the old clan-list alias", async () => {
-    expect(botAdjacentRuntimeRoutes).toHaveLength(7)
-    expect(new Set(botAdjacentRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(7)
+  it("lists ten canonical operations and does not revive the old clan-list alias", async () => {
+    expect(botAdjacentRuntimeRoutes).toHaveLength(10)
+    expect(new Set(botAdjacentRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(10)
     const response = await Effect.runPromise(dispatchBotAdjacentRuntime(
       new Request(`https://api.clashk.ing/v2/link/server/${serverId}/clan/list`), bindings,
     ).pipe(Effect.provide(testLayer())))
@@ -98,6 +98,20 @@ describe("Bot-adjacent runtime", () => {
     ), bindings).pipe(Effect.provide(testLayer({ upsertBaseVote }))))
     expect(upsertBaseVote).toHaveBeenCalledWith(baseId, userId, "up")
     await expect(response?.json()).resolves.toEqual({ baseId, voterId: userId, direction: "up" })
+  })
+
+  it("passes the Bot-derived description only through the post-edit finalize call", async () => {
+    const finalizeLegacyBase = vi.fn((id: string, guild: string, channel: string, description: string) => Effect.succeed({
+      baseId: id, serverId: guild, channelId: channel, description,
+    }))
+    const response = await Effect.runPromise(dispatchBotAdjacentRuntime(new Request(
+      `https://api.clashk.ing/v2/bases/${baseId}/finalize`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ serverId, channelId: userId, description: "Message content" }),
+      },
+    ), bindings).pipe(Effect.provide(testLayer({ finalizeLegacyBase }))))
+    expect(finalizeLegacyBase).toHaveBeenCalledWith(baseId, serverId, userId, "Message content")
+    await expect(response?.json()).resolves.toEqual({ baseId, serverId, channelId: userId, description: "Message content" })
   })
 
 })

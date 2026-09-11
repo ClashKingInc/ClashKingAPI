@@ -6,7 +6,8 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { packageNames, parsePackOutput, validatePack, validatePair, verify } from "./api-package-release.mjs"
 
-const version = "0.1.0-rc.18", tag = `v${version}`, commit = "a".repeat(40)
+const version = JSON.parse(readFileSync(new URL("../packages/api-contracts/package.json", import.meta.url), "utf8")).version
+const tag = `v${version}`, commit = "a".repeat(40)
 const packages = () => packageNames.map(name => ({ name, version,
   dependencies: { effect: "4.0.0-rc.112", ...(name === packageNames[1] ? { [packageNames[0]]: version } : {}) },
   peerDependencies: { effect: "4.0.0-rc.112", ...(name === packageNames[0] ? { "@clashking/clash-contract": ">=0.1.2 <2" } : {}) },

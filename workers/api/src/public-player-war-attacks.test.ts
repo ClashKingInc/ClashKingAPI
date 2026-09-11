@@ -1,8 +1,7 @@
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it, vi } from "vitest"
 
-import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { queryPlayerWarAttacks } from "./public-player-extra.js"
 
 const clan = (tag: string, attacker: string, defender: string, order: number) => ({
@@ -34,10 +33,8 @@ const fixture = (pages: readonly (readonly HistoryRow[])[], payloads: ReadonlyMa
     return Effect.die(`Unexpected SQL: ${statement}`)
   }) as unknown as SqlClient.SqlClient
   const sql = Object.assign(tag, { unsafe: history }) as unknown as SqlClient.SqlClient
-  const layer = Layer.merge(Layer.succeed(SqlClient.SqlClient, sql),
-    Layer.succeed(WorkerEnvironment, { WAR_ARCHIVE: { get: vi.fn() } } as unknown as WorkerBindings))
   return { history, locator, archive, run: (query: string) => Effect.runPromise(
-    queryPlayerWarAttacks("#PYY", new URLSearchParams(query)).pipe(Effect.provide(layer))),
+    queryPlayerWarAttacks("#PYY", new URLSearchParams(query)).pipe(Effect.provideService(SqlClient.SqlClient, sql))),
   }
 }
 

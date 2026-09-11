@@ -51,6 +51,9 @@ export const PrivacyExportResponse = Schema.Struct({
   discord_sessions: Schema.Array(JsonData),
   notification_accounts: Schema.Array(JsonData),
   notification_devices: Schema.Array(JsonData),
+  notification_preferences: Schema.Array(JsonData),
+  saved_bases: Schema.Array(JsonData),
+  base_slots: Schema.Array(JsonData),
   billing_subscription: Schema.Array(JsonData),
   subscription_entitlements: Schema.Array(JsonData),
 })

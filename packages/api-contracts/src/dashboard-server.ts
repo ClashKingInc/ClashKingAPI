@@ -778,6 +778,11 @@ export const CreateBaseRequest = Schema.Struct({
   images: Schema.Array(Schema.String),
   description: Schema.String,
 })
+export const UpdateBaseRequest = Schema.Struct({
+  baseLink: Schema.String,
+  images: Schema.Array(Schema.String),
+  description: Schema.String,
+}).annotate({ parseOptions: { onExcessProperty: "error" } })
 export const BaseDownloader = Schema.Struct({
   userId: Schema.String,
   displayName: Schema.NullOr(Schema.String),
@@ -1380,6 +1385,12 @@ export const CreateBaseEndpoint = defineEndpoint({
   method: "POST", operationId: "createDashboardBase", path: "/v2/server/:serverId/bases",
   pathParams: DashboardServerPath, query: NoQuery, response: Base, responseMode: "json",
   successStatus: 201, summary: "Create a server base",
+})
+export const UpdateBaseEndpoint = defineEndpoint({
+  auth: "server-manager-write", errors: [], body: UpdateBaseRequest, bodyMode: "json",
+  method: "PATCH", operationId: "updateDashboardBase", path: "/v2/server/:serverId/bases/:baseId",
+  pathParams: ServerBasePath, query: NoQuery, response: Base, responseMode: "json",
+  successStatus: 200, summary: "Update a server base",
 })
 export const DeleteBaseEndpoint = defineEndpoint({
   auth: "server-manager-write", errors: [{ status: 409, body: BaseDeleteFailure }, { status: 500, body: Schema.Union([BaseDeleteFailure, ErrorResponse]) }, { status: 502, body: Schema.Union([BaseDeleteFailure, ErrorResponse]) }, { status: 503, body: Schema.Union([BaseDeleteFailure, ErrorResponse]) }],

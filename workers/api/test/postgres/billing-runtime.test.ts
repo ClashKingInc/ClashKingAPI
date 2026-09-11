@@ -99,7 +99,8 @@ it("reconciles duplicates and out-of-order events without overwriting or resurre
     const sql = yield* SqlClient.SqlClient
     yield* seed(user)
     yield* sql`INSERT INTO billing_customers (user_id, stripe_customer_id) VALUES (${user}, ${`cus_${user}`})`
-    yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, source, active) VALUES (${user}, '#PQY', 'verified', true)`
+    yield* sql`INSERT INTO player_links(tag,user_id,source,is_verified) VALUES ('#PQY',${user},'discord',true)`
+    yield* sql`INSERT INTO mobile_notification_accounts(user_id,player_tag,enabled) VALUES (${user},'#PQY',true)`
     const first = event("evt_billing_first", user)
     yield* Effect.all([projectBillingEvent(first, f.gateway, "price_support"), projectBillingEvent(first, f.gateway, "price_support")], { concurrency: 2 })
     expect(reads).toHaveBeenCalledOnce()
@@ -129,7 +130,7 @@ it("reconciles duplicates and out-of-order events without overwriting or resurre
     yield* projectBillingEvent(event("evt_stale_active", user), f.gateway, "price_support")
     expect(yield* sql`SELECT active FROM subscription_entitlements WHERE user_id = ${user}`).toEqual([{ active: false }])
     expect(yield* f.request("subscription/assignment", "PUT", { serverId: serverA }).pipe(Effect.flip)).toMatchObject({ _tag: "Conflict" })
-    expect(yield* sql`SELECT active FROM mobile_notification_accounts WHERE user_id = ${user}`).toEqual([{ active: true }])
+    expect(yield* sql`SELECT enabled FROM mobile_notification_accounts WHERE user_id = ${user}`).toEqual([{ enabled: true }])
     expect(yield* projectBillingEvent({ ...event("evt_wrong_mode", user), livemode: true }, f.gateway, "price_support").pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
     expect(yield* sql`SELECT event_id FROM billing_webhook_events WHERE event_id = 'evt_wrong_mode'`).toEqual([])
   }).pipe(Effect.provide(f.layer), Effect.scoped))

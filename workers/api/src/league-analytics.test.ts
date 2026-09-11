@@ -24,7 +24,7 @@ const roster = { season_id: 1788739200, group_tag: "#P", league_tier_id: 1050000
   defense_win_count: 1, defense_loss_count: 1, defense_star_count: 3, league_trophies: 100, placement: 1 }
 const battle = { battle_time: "2026-09-07T06:00:00Z", player_town_hall: 18, opponent_tag: "#P", opponent_name: null,
   opponent_town_hall: 18, destruction_percentage: 97, duration_seconds: 120, looted_resources: { gold: 1 },
-  army_hash: "ab".repeat(32), share_code: "u1x1" }
+  share_code: "u1x1", family_id: "1" }
 
 describe("league analytics calculations", () => {
   it.each([[0, 10, 1], [1, 91, 15], [2, 98, 32], [3, 1, 40]])
@@ -39,9 +39,9 @@ describe("league analytics calculations", () => {
 
   it("synthesizes Ranked automatic defenses only when all registered real defenses are stored", async () => {
     const complete = await run(queryRankedBattlelog("#2", "1788739200"), sql([[roster], [
-      { ...battle, direction: "attack", stars: 3 },
-      { ...battle, direction: "defense", stars: 2 },
-      { ...battle, direction: "defense", battle_time: "2026-09-07T07:00:00Z", stars: 1, destruction_percentage: 91 },
+      { ...battle, direction: 1, stars: 3 },
+      { ...battle, direction: 2, stars: 2 },
+      { ...battle, direction: 2, battle_time: "2026-09-07T07:00:00Z", stars: 1, destruction_percentage: 91 },
     ]], []))
     expect(complete).not.toHaveProperty("automaticDefensesDerived")
     expect(complete.attacks[0]).not.toHaveProperty("armyHash")
@@ -49,7 +49,7 @@ describe("league analytics calculations", () => {
     expect(complete.defenses).toEqual([expect.objectContaining({ trophies: 9 }), expect.objectContaining({ trophies: 25 }),
       { trophies: 17, automatic: true }, { trophies: 17, automatic: true }])
     const incomplete = await run(queryRankedBattlelog("#2", "1788739200"), sql([[roster], [
-      { ...battle, direction: "defense", stars: 2 },
+      { ...battle, direction: 2, stars: 2 },
     ]], []))
     expect(incomplete.defenses).toHaveLength(1)
   })
@@ -60,7 +60,8 @@ describe("league analytics calculations", () => {
       { day: "2026-09-07", league_tier_id: 105000034, town_hall: 18,
         attacks: 10, zero: 1, one: 2, two: 3, three: 4 },
     ]], calls))
-    expect(calls[0]?.query).toContain("FROM legend_daily_stats_v2")
+    expect(calls[0]?.query).toContain("FROM legend_daily_stats")
+    expect(calls[0]?.query).toContain("cohort='legend_i'")
     expect(calls[0]?.query).not.toContain("battles_ranked")
     expect(result.items[0]).toEqual({ mode: "legend", day: "2026-09-07", attacks: 10, starCounts: { zero: 1, one: 2, two: 3, three: 4 } })
   })
@@ -81,11 +82,11 @@ describe("league analytics calculations", () => {
 
   it("returns family identity, nullable names, and known-duration averages", async () => {
     const result = await run(queryArmySearch(new URLSearchParams("time%5Bafter%5D=2026-09-08&time%5Bbefore%5D=2026-09-08")), sql([[
-      { complete: true, items: [{ family_id: "9007199254740993", name: null, representative_share_code: "u1x1", attacks: 10, players: 3,
-        zero: 1, one: 2, two: 3, three: 4, destruction: 850, duration: 1200, duration_count: 8, total_legend_attacks: 100 }] },
+      { items: [{ family_id: "9007199254740993", name: null, representative_share_code: "u1x1", hero_ids: [], equipment_ids: [], attacks: 10, players: 3,
+        zero: 1, one: 2, two: 3, three: 4, destruction: 850, duration: 1200, total_legend_attacks: 100 }] },
     ]], []))
     expect(result.items[0]).toEqual({ familyId: "9007199254740993", name: null, shareCode: "u1x1", attacks: 10, players: 3,
-      starCounts: { zero: 1, one: 2, two: 3, three: 4 }, averageDuration: 150, averageDestruction: 85, totalLegendAttacks: 100 })
+      starCounts: { zero: 1, one: 2, two: 3, three: 4 }, averageDuration: 120, averageDestruction: 85, totalLegendAttacks: 100 })
   })
 
   it("rejects a player filter when retained population is unavailable", async () => {

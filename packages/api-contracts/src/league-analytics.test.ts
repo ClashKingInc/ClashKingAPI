@@ -16,7 +16,7 @@ import {
 
 const realBattle = { time: "2026-09-07T06:00:00Z", townHallLevel: 18,
   opponent: { tag: "#P0Y", name: "Unknown", townHallLevel: 18 }, stars: 3, destructionPercentage: 100,
-  duration: 120, shareCode: "u1x1",
+  duration: 120, shareCode: "u1x1", familyId: "1",
   trophies: 40 }
 
 describe("league analytics contracts", () => {

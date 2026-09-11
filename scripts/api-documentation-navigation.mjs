@@ -41,6 +41,9 @@ const additions = new Map([
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
   ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
+  ?? (path.startsWith("/v2/bases/") ? "Bases" : undefined)
+  ?? (path.startsWith("/v2/server/") && path.includes("/bases") ? "Bases" : undefined)
+  ?? (path.startsWith("/v2/legends/") ? "Leaderboard" : undefined)
   ?? (path.startsWith("/proxy/v1/") ? "Clash API Proxy" : undefined)
   // Two original generic static-data operations had no tag at all.
   ?? (path.startsWith("/v2/static/") ? "Static Data" : undefined)

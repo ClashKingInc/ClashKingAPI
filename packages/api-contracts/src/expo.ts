@@ -1,4 +1,11 @@
 import { AppConfigEndpoint } from "./app-config.js"
+import {
+  AssignPersonalBaseSlotEndpoint,
+  ClearPersonalBaseSlotEndpoint,
+  PersonalBasesEndpoint,
+  SavePersonalBaseEndpoint,
+  UnsavePersonalBaseEndpoint,
+} from "./personal-bases.js"
 import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
 export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
@@ -142,6 +149,11 @@ export { StatsCwlEndpoint, StatsCwlQuery,
 export const expoEndpoints = {
   ...leagueAnalyticsEndpoints,
   ...statsHistoryEndpoints,
+  personalBases: PersonalBasesEndpoint,
+  savePersonalBase: SavePersonalBaseEndpoint,
+  unsavePersonalBase: UnsavePersonalBaseEndpoint,
+  assignPersonalBaseSlot: AssignPersonalBaseSlotEndpoint,
+  clearPersonalBaseSlot: ClearPersonalBaseSlotEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,

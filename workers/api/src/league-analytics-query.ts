@@ -13,6 +13,7 @@ export interface AnalyticsWindow {
 }
 export interface ArmySearchOptions {
   readonly window: AnalyticsWindow
+  readonly cohort: "legend_i" | "top_1000" | "top_200"
   readonly heroIds: readonly number[]
   readonly equipmentIds: readonly number[]
   readonly minimumAttacks: number
@@ -30,6 +31,7 @@ export interface LeagueHitRateOptions {
 }
 export interface LegendDaysOptions {
   readonly window: AnalyticsWindow
+  readonly cohort: "legend_i" | "top_1000" | "top_200"
 }
 
 const day = 86_400_000
@@ -122,15 +124,18 @@ export const parseAnalyticsWindow = (
 
 export const parseArmySearchQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
   try: (): ArmySearchOptions => {
-    assertKeys(query, new Set(["time[after]", "time[before]", "heroIds", "equipmentIds", "minimumAttacks", "minimumPlayers", "minimumTripleRate", "sort", "direction", "limit"]))
+    assertKeys(query, new Set(["time[after]", "time[before]", "cohort", "heroIds", "equipmentIds", "minimumAttacks", "minimumPlayers", "minimumTripleRate", "sort", "direction", "limit"]))
     const window = parseLegendAggregateWindow(query, now, { maximumDays: 30 })
     const sort = single(query, "sort") ?? "usage"
     if (!["usage", "tripleRate", "zeroStarRate", "averageDuration", "averageDestruction"].includes(sort)) throw invalid("Invalid sort")
     const direction = single(query, "direction") ?? "desc"
     if (direction !== "asc" && direction !== "desc") throw invalid("Invalid direction")
+    const cohort = single(query, "cohort") ?? "legend_i"
+    if (cohort !== "legend_i" && cohort !== "top_1000" && cohort !== "top_200") throw invalid("Invalid cohort")
     const maximumLimit = window.calendarDays === 1 ? 250 : 10
     return {
       window,
+      cohort,
       heroIds: idList(query, "heroIds"),
       equipmentIds: idList(query, "equipmentIds"),
       minimumAttacks: integer(query, "minimumAttacks", 0, 1_000_000_000) ?? 0,
@@ -160,8 +165,10 @@ export const parseLeagueHitRateQuery = (query: URLSearchParams, now = new Date()
 
 export const parseLegendDaysQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
   try: (): LegendDaysOptions => {
-    assertKeys(query, new Set(["time[after]", "time[before]"]))
-    return { window: parseLegendAggregateWindow(query, now, { maximumDays: 90 }) }
+    assertKeys(query, new Set(["time[after]", "time[before]", "cohort"]))
+    const cohort = single(query, "cohort") ?? "legend_i"
+    if (cohort !== "legend_i" && cohort !== "top_1000" && cohort !== "top_200") throw invalid("Invalid cohort")
+    return { window: parseLegendAggregateWindow(query, now, { maximumDays: 90 }), cohort }
   },
   catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid Legend-day query"),
 })

@@ -27,7 +27,7 @@ describe("account export/deletion against authoritative Goose migrations", () =>
     yield* sql`INSERT INTO auth_password_reset_tokens (email_hash,reset_code_hash,user_id,expires_at) VALUES ('privacy-email-hash','private-reset-code',${id},now()+interval '1 hour')`
     yield* sql`INSERT INTO player_links (tag,user_id,source,is_verified) VALUES ('#QPV',${id},'clashking',true),('#QPU',${other},'clashking',true)`
     yield* sql`INSERT INTO user_bookmarks (user_id,entity_type,tag) VALUES (${id},'player','#QPU'),(${other},'player','#QPV')`
-    yield* sql`INSERT INTO mobile_notification_deliveries (user_id,notification_key) VALUES (${id},'private-notification'),(${other},'other-notification')`
+    yield* sql`INSERT INTO mobile_notification_preferences (user_id,war_attacks_enabled) VALUES (${id},true),(${other},false)`
     yield* sql`INSERT INTO billing_customers (user_id,stripe_customer_id) VALUES (${id},'cus_private'),(${other},'cus_other')`
     yield* sql`INSERT INTO billing_subscriptions (user_id,provider_subscription_id,status,raw) VALUES (${id},'sub_private','active','{"secret":"private-provider-data"}')`
     yield* sql`INSERT INTO billing_webhook_events (provider,event_id,event_type,payload) VALUES
@@ -37,9 +37,10 @@ describe("account export/deletion against authoritative Goose migrations", () =>
     expect(exported.player_links).toHaveLength(1)
     expect(exported.discord_sessions).toHaveLength(1)
     expect(exported.billing_subscription).toHaveLength(1)
+    expect(exported.notification_preferences).toMatchObject([{ war_attacks_enabled: true }])
     for (const secret of ["privacy-email-hash", "private-password-hash", "private-access-token", "private-refresh-token", "private-session-token", "private-reset-code", "private-provider-data", "other-email-hash"]) expect(JSON.stringify(exported)).not.toContain(secret)
     const deleted = Schema.decodeUnknownSync(AuthDeleteEndpoint.response)(yield* deleteAccount(id))
-    expect(deleted).toMatchObject({ ok: true, deleted: { auth_users: 1, player_links: 1, auth_email_verifications: 1, mobile_notification_deliveries: 1, billing_webhook_events: 1 } })
+    expect(deleted).toMatchObject({ ok: true, deleted: { auth_users: 1, player_links: 1, auth_email_verifications: 1, mobile_notification_preferences: 1, billing_webhook_events: 1 } })
     expect(yield* sql`SELECT user_id FROM auth_users WHERE user_id IN (${id},${other})`).toEqual([{ user_id: other }])
     expect(yield* sql`SELECT email_hash FROM auth_email_verifications WHERE email_hash IN ('privacy-email-hash','other-email-hash')`).toEqual([{ email_hash: "other-email-hash" }])
     expect(yield* sql`SELECT event_id FROM billing_webhook_events WHERE event_id IN ('evt_private','evt_other')`).toEqual([{ event_id: "evt_other" }])

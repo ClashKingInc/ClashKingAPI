@@ -119,9 +119,9 @@ describe("Dashboard server real operations", () => {
     expect(discord).not.toHaveBeenCalled()
     expect(query).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("gateway_shards"), [serverId, bindings.DISCORD_CLIENT_ID, 45])
   })
-  it("implements the same 85 operations advertised by the dispatcher", () => {
-    expect(dashboardServerCoreOperationIds).toHaveLength(85)
-    expect(new Set(dashboardServerCoreOperationIds).size).toBe(85)
+  it("implements the same 86 operations advertised by the dispatcher", () => {
+    expect(dashboardServerCoreOperationIds).toHaveLength(86)
+    expect(new Set(dashboardServerCoreOperationIds).size).toBe(86)
   })
 
   it("executes the live service layer and validates channel output without numeric snowflake coercion", async () => {

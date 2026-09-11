@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ArmyFamilyId, ArmyResultStatistics, ArmySearchQuery, TimeRangeQuery } from "./league-analytics.js"
+import { ArmyFamilyId, ArmyResultStatistics, ArmySearchQuery } from "./league-analytics.js"
 
 import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endpoint.js"
 
@@ -270,10 +270,13 @@ export const LabDevice = Schema.Struct({
   war_attacks_enabled: Schema.Boolean,
   war_state_enabled: Schema.Boolean,
   war_reminders_enabled: Schema.Boolean,
+  raid_reminders_enabled: Schema.Boolean,
   events_enabled: Schema.Boolean,
   announcements_enabled: Schema.Boolean,
   monthly_support_enabled: Schema.Boolean,
+  legend_defenses_enabled: Schema.Boolean,
   reminder_timings: Schema.Array(Schema.Number),
+  raid_reminder_timings: Schema.Array(Schema.Number),
 })
 export const LabStatus = Schema.Struct({ ready: Schema.Boolean })
 export const LabSendInput = Schema.Struct({
@@ -406,16 +409,10 @@ const ArmyPagination = { page: Schema.Int, limit: Schema.Int, hasMore: Schema.Bo
 export const AdminArmyFamiliesResponse = Schema.Struct({ items: Schema.Array(AdminArmyFamilyListItem), ...ArmyPagination })
 export const AdminArmyFamilyMember = Schema.Struct({
   shareCode: Schema.String,
-  troopSimilarity: Schema.Number,
-  spellSimilarity: Schema.Number,
-  equipmentSimilarity: Schema.Number,
-  statistics: Schema.NullOr(ArmyResultStatistics),
 })
 export const AdminArmyFamilyMembersQuery = Schema.Struct({
-  ...TimeRangeQuery.fields,
   page: Schema.optionalKey(IntBetween(1, 1_000_000)),
   limit: Schema.optionalKey(IntBetween(1, 200)),
-  includeStats: Schema.optionalKey(Schema.Boolean),
 })
 export const AdminArmyFamilyMembersResponse = Schema.Struct({ familyId: ArmyFamilyId, items: Schema.Array(AdminArmyFamilyMember), ...ArmyPagination })
 export const UpdateAdminArmyFamilyInput = Schema.Struct({
@@ -435,7 +432,7 @@ export const AdminTrackingSummaryEndpoint = defineEndpoint({ ...adminRead, auth:
 export const AdminTrackingTimeseriesEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingTimeseries", method: "GET", path: "/v2/admin/tracking/timeseries", summary: "Get tracking timeseries", pathParams: NoPathParams, query: Schema.Struct({ window: Schema.Literals(["15m", "1h", "6h", "24h"]), script: Schema.optionalKey(Schema.String), domain: Schema.optionalKey(Schema.String) }), response: TrackingTimeSeriesResponse })
 export const AdminArmyFamiliesEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilies", method: "GET", path: "/v2/admin/stats/armies", summary: "Browse all army families; hero and equipment filters describe representatives", pathParams: NoPathParams, query: AdminArmyFamiliesQuery, response: AdminArmyFamiliesResponse })
 export const AdminUpdateArmyFamilyEndpoint = defineEndpoint({ ...adminJson, operationId: "adminUpdateArmyFamily", method: "PATCH", path: "/v2/admin/stats/armies/:familyId", summary: "Set or clear a family's manual name", pathParams: Schema.Struct({ familyId: ArmyFamilyId }), query: NoQuery, body: UpdateAdminArmyFamilyInput, response: AdminArmyFamily })
-export const AdminArmyFamilyMembersEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilyMembers", method: "GET", path: "/v2/admin/stats/armies/:familyId/members", summary: "Browse exact variants and similarity scores", pathParams: Schema.Struct({ familyId: ArmyFamilyId }), query: AdminArmyFamilyMembersQuery, response: AdminArmyFamilyMembersResponse })
+export const AdminArmyFamilyMembersEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilyMembers", method: "GET", path: "/v2/admin/stats/armies/:familyId/members", summary: "Browse exact share-code variants", pathParams: Schema.Struct({ familyId: ArmyFamilyId }), query: AdminArmyFamilyMembersQuery, response: AdminArmyFamilyMembersResponse })
 
 export const AdminListDeveloperApplicationsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminListDeveloperApplications", method: "GET", path: "/v2/admin/developer-applications", summary: "List developer applications", pathParams: NoPathParams, query: NoQuery, response: Schema.Array(DeveloperApplication) })
 export const AdminCreateDeveloperApplicationEndpoint = defineEndpoint({ ...adminJson, successStatus: 201, operationId: "adminCreateDeveloperApplication", method: "POST", path: "/v2/admin/developer-applications", summary: "Create a developer application", pathParams: NoPathParams, query: NoQuery, body: CreateDeveloperApplicationInput, response: CreatedDeveloperApplication })

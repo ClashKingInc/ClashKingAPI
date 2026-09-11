@@ -9,14 +9,14 @@ export interface FamilyIdentityRow {
 }
 interface FamilyStatisticsRow extends FamilyIdentityRow {
   attacks: number; players: number | null; zero: number; one: number; two: number; three: number
-  destruction: number; duration: number; duration_count: number; total_legend_attacks: number
+  destruction: number; duration: number; total_legend_attacks: number
 }
 export const familyIdentity = (row: FamilyIdentityRow) => ({ familyId: row.family_id, name: row.name,
   shareCode: row.representative_share_code, heroIds: row.hero_ids, equipmentIds: row.equipment_ids })
 export const resultStatistics = (row: Omit<FamilyStatisticsRow, keyof FamilyIdentityRow | "total_legend_attacks">) => ({
   attacks: Number(row.attacks), players: row.players === null ? null : Number(row.players),
   starCounts: { zero: Number(row.zero), one: Number(row.one), two: Number(row.two), three: Number(row.three) },
-  averageDuration: Number(row.duration_count) === 0 ? null : Number(row.duration) / Number(row.duration_count),
+  averageDuration: Number(row.attacks) === 0 ? null : Number(row.duration) / Number(row.attacks),
   averageDestruction: Number(row.attacks) === 0 ? null : Number(row.destruction) / Number(row.attacks),
 })
 const familyStatistics = (row: FamilyStatisticsRow) => ({ familyId: row.family_id, name: row.name,
@@ -33,26 +33,19 @@ export const aggregateWindow = (query: URLSearchParams, now = new Date(), maximu
   }, catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid Legend aggregate window" }),
 })
 
-/** Materialize one bounded raw scan for both coverage and exact union counts. */
-export const retainedPopulationCtes = `raw AS MATERIALIZED (
-  SELECT b.player_tag,b.share_code,b.stars,b.destruction_percentage,b.duration_seconds,(b.battle_time AT TIME ZONE 'UTC'-interval '5 hours 10 minutes')::date AS day
-  FROM battles_ranked b WHERE b.battle_mode='legend' AND b.direction='attack'
-    AND b.battle_time >= $3 AND b.battle_time < $4
-), raw_days AS (SELECT day,count(*) attacks FROM raw GROUP BY day), coverage AS (
-  SELECT $4::timestamptz <= now() AND count(*)=$5::integer AND COALESCE(bool_and(g.attack_count=COALESCE(r.attacks,0)),false) complete
-  FROM legend_daily_stats_v2 g LEFT JOIN raw_days r ON r.day=g.day
-  WHERE g.day BETWEEN $1::date AND $2::date
-)`
 const familyRead = (options: ArmySearchOptions, extra: { familyId?: string; search?: string; named?: string; page?: number; admin?: boolean } = {}) => Effect.gen(function* () {
+  if (options.window.calendarDays > 1 && options.minimumPlayers > 0) {
+    return yield* new InvalidRequest({ message: "minimumPlayers is available only for a single daily aggregate" })
+  }
   const sql = yield* SqlClient.SqlClient, w = options.window
-  const values: unknown[] = [w.firstDay, w.lastDay, w.start, w.end, w.calendarDays]
+  const values: unknown[] = [w.firstDay, w.lastDay, options.cohort]
   const filters: string[] = []
   const param = (value: unknown) => { values.push(value); return `$${values.length}` }
   if (extra.familyId) filters.push(`f.family_id=${param(extra.familyId)}::bigint`)
   if (extra.named === "named") filters.push("f.name IS NOT NULL")
   if (extra.named === "unnamed") filters.push("f.name IS NULL")
-  if (options.heroIds.length) filters.push(`f.hero_ids @> ${param(options.heroIds)}::integer[]`)
-  if (options.equipmentIds.length) filters.push(`f.equipment_ids @> ${param(options.equipmentIds)}::integer[]`)
+  if (options.heroIds.length) filters.push(`composition.heroes @> ${param(options.heroIds)}::integer[]`)
+  if (options.equipmentIds.length) filters.push(`composition.equipment @> ${param(options.equipmentIds.map((equipmentId) => ({ equipmentId })))}::jsonb`)
   if (extra.search) {
     let code: string | undefined
     try { code = normalizeArmyLink(extra.search) } catch { /* A plain name need not be a code. */ }
@@ -63,62 +56,69 @@ const familyRead = (options: ArmySearchOptions, extra: { familyId?: string; sear
   const minAttacks = param(options.minimumAttacks), minPlayers = param(options.minimumPlayers), minRate = param(options.minimumTripleRate)
   const limit = param(options.limit + (extra.admin ? 1 : 0)), offset = param(((extra.page ?? 1) - 1) * options.limit)
   const order = { usage: "attacks", tripleRate: "three::float8/NULLIF(attacks,0)", zeroStarRate: "zero::float8/NULLIF(attacks,0)",
-    averageDuration: "duration::float8/NULLIF(duration_count,0)", averageDestruction: "destruction::float8/NULLIF(attacks,0)" }[options.sort]
-  const multiple = w.calendarDays > 1
-  const result = yield* sql.unsafe<{ complete: boolean; items: FamilyStatisticsRow[] }>(`WITH
-    ${multiple ? retainedPopulationCtes : "inputs AS (SELECT $3::timestamptz,$4::timestamptz,$5::integer), coverage AS (SELECT true complete)"},
-    eligible AS (SELECT family_id,name,representative_share_code,hero_ids,equipment_ids FROM army_families f ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}),
+    averageDuration: "duration::float8/NULLIF(attacks,0)", averageDestruction: "destruction::float8/NULLIF(attacks,0)" }[options.sort]
+  const result = yield* sql.unsafe<{ items: FamilyStatisticsRow[] }>(`WITH eligible AS (SELECT f.family_id,f.name,f.representative_share_code,
+      composition.heroes hero_ids,ARRAY(SELECT (entry->>'equipmentId')::integer FROM jsonb_array_elements(composition.equipment) entry ORDER BY (entry->>'equipmentId')::integer) equipment_ids
+      FROM army_families f JOIN army_compositions composition ON composition.share_code=f.representative_share_code
+      ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}),
     totals AS (SELECT s.family_id,sum(s.attack_count)::bigint attacks,sum(s.distinct_player_count)::bigint day_players,
       sum(s.zero_star_count)::bigint zero,sum(s.one_star_count)::bigint one,sum(s.two_star_count)::bigint two,
       sum(s.three_star_count)::bigint three,sum(s.destruction_percentage_sum)::bigint destruction,
-      sum(s.duration_seconds_sum)::bigint duration,sum(s.duration_count)::bigint duration_count
-      FROM army_family_daily_stats_v2 s JOIN eligible f ON f.family_id=s.family_id
-      WHERE s.day BETWEEN $1::date AND $2::date GROUP BY s.family_id),
-    ${multiple ? `exact_players AS (SELECT m.family_id,count(DISTINCT r.player_tag)::bigint players FROM raw r
-      JOIN army_family_members m ON m.share_code=r.share_code JOIN eligible f ON f.family_id=m.family_id GROUP BY m.family_id),` : ""}
+      sum(s.duration_seconds_sum)::bigint duration
+      FROM army_family_daily_stats s JOIN eligible f ON f.family_id=s.family_id
+      WHERE s.day BETWEEN $1::date AND $2::date AND s.cohort=$3 GROUP BY s.family_id),
     measured AS (SELECT f.family_id::text family_id,f.name,f.representative_share_code,f.hero_ids,f.equipment_ids,
-      COALESCE(t.attacks,0) attacks,${multiple ? "CASE WHEN coverage.complete THEN COALESCE(p.players,0) ELSE NULL END" : "COALESCE(t.day_players,0)"} players,
+      COALESCE(t.attacks,0) attacks,${w.calendarDays > 1 ? "NULL::bigint" : "COALESCE(t.day_players,0)"} players,
       COALESCE(t.zero,0) zero,COALESCE(t.one,0) one,COALESCE(t.two,0) two,COALESCE(t.three,0) three,
-      COALESCE(t.destruction,0) destruction,COALESCE(t.duration,0) duration,COALESCE(t.duration_count,0) duration_count,
-      (SELECT COALESCE(sum(attack_count),0)::bigint FROM legend_daily_stats_v2 WHERE day BETWEEN $1::date AND $2::date) total_legend_attacks
-      FROM eligible f ${extra.admin || extra.familyId ? "LEFT" : "INNER"} JOIN totals t ON t.family_id=f.family_id
-      ${multiple ? "LEFT JOIN exact_players p ON p.family_id=f.family_id" : ""} CROSS JOIN coverage),
+      COALESCE(t.destruction,0) destruction,COALESCE(t.duration,0) duration,
+      (SELECT COALESCE(sum(attack_count),0)::bigint FROM legend_daily_stats WHERE day BETWEEN $1::date AND $2::date AND cohort=$3) total_legend_attacks
+      FROM eligible f ${extra.admin || extra.familyId ? "LEFT" : "INNER"} JOIN totals t ON t.family_id=f.family_id),
     selected AS (SELECT * FROM measured WHERE attacks>=${minAttacks} AND (${minPlayers}=0 OR players>=${minPlayers})
       AND (${minRate}=0 OR three::float8/NULLIF(attacks,0)>=${minRate})
       ORDER BY ${order} ${options.direction.toUpperCase()} NULLS LAST,family_id::bigint LIMIT ${limit} OFFSET ${offset})
-    SELECT complete,COALESCE((SELECT jsonb_agg(selected) FROM selected),'[]'::jsonb) items FROM coverage`, values)
-  const resultRow = result[0]
-  if (options.minimumPlayers > 0 && resultRow?.complete !== true) return yield* new InvalidRequest({ message: "minimumPlayers requires retained raw rows matching every selected daily closeout" })
-  return resultRow?.items ?? []
+    SELECT COALESCE((SELECT jsonb_agg(selected) FROM selected),'[]'::jsonb) items`, values)
+  return result[0]?.items ?? []
 })
-const basicOptions = (window: AnalyticsWindow): ArmySearchOptions => ({ window, heroIds: [], equipmentIds: [], minimumAttacks: 0,
+const basicOptions = (window: AnalyticsWindow, cohort: ArmySearchOptions["cohort"] = "legend_i"): ArmySearchOptions => ({ window, cohort, heroIds: [], equipmentIds: [], minimumAttacks: 0,
   minimumPlayers: 0, minimumTripleRate: 0, sort: "usage", direction: "desc", limit: 1 })
 export const queryArmySearch = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
-  const rows = yield* familyRead(yield* parseArmySearchQuery(query, now))
-  return { items: rows.map(familyStatistics) }
+  const options = yield* parseArmySearchQuery(query, now)
+  const rows = yield* familyRead(options)
+  return { cohort: options.cohort, items: rows.map(familyStatistics) }
+})
+const aggregateSelection = (query: URLSearchParams, now: Date, maximumDays: number) => Effect.gen(function* () {
+  const cohort = query.get("cohort") ?? "legend_i"
+  if (query.getAll("cohort").length > 1 || !["legend_i", "top_1000", "top_200"].includes(cohort)) {
+    return yield* new InvalidRequest({ message: "Invalid cohort" })
+  }
+  const time = new URLSearchParams(query)
+  time.delete("cohort")
+  return { cohort: cohort as ArmySearchOptions["cohort"], window: yield* aggregateWindow(time, now, maximumDays) }
 })
 export const resolveCodeFamily = (shareCode: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<FamilyIdentityRow>(`SELECT f.family_id::text,f.name,f.representative_share_code,f.hero_ids,f.equipment_ids
-    FROM army_family_members m JOIN army_families f ON f.family_id=m.family_id WHERE m.share_code=$1`, [shareCode])
+  const rows = yield* sql.unsafe<FamilyIdentityRow>(`SELECT f.family_id::text,f.name,f.representative_share_code,
+    composition.heroes hero_ids,ARRAY(SELECT (entry->>'equipmentId')::integer FROM jsonb_array_elements(composition.equipment) entry ORDER BY (entry->>'equipmentId')::integer) equipment_ids
+    FROM army_family_members m JOIN army_families f ON f.family_id=m.family_id
+    JOIN army_compositions composition ON composition.share_code=f.representative_share_code WHERE m.share_code=$1`, [shareCode])
   if (!rows[0]) return yield* new NotFound({ message: "Army family not found" })
   return rows[0]
 })
 export const queryArmyDetail = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
-  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query), window = yield* aggregateWindow(timeQuery, now)
-  const family = yield* resolveCodeFamily(shareCode), rows = yield* familyRead(basicOptions(window), { familyId: family.family_id })
+  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query), selection = yield* aggregateSelection(timeQuery, now, 90)
+  const family = yield* resolveCodeFamily(shareCode), rows = yield* familyRead(basicOptions(selection.window, selection.cohort), { familyId: family.family_id })
   if (!rows[0]) return yield* new NotFound({ message: "Army family not found" })
-  return familyStatistics(rows[0])
+  return { cohort: selection.cohort, ...familyStatistics(rows[0]) }
 })
 export const queryArmyTimeline = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
-  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query), window = yield* aggregateWindow(timeQuery, now, 365)
+  const { shareCode, timeQuery } = yield* parseArmyLinkQuery(query), selection = yield* aggregateSelection(timeQuery, now, 365), window = selection.window
   const family = yield* resolveCodeFamily(shareCode), sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<FamilyStatisticsRow & { day: string | Date }>(`SELECT s.day,s.attack_count attacks,s.distinct_player_count players,
     s.zero_star_count zero,s.one_star_count one,s.two_star_count two,s.three_star_count three,
-    s.destruction_percentage_sum destruction,s.duration_seconds_sum duration,s.duration_count,g.attack_count total_legend_attacks
-    FROM army_family_daily_stats_v2 s JOIN legend_daily_stats_v2 g ON g.day=s.day
-    WHERE s.family_id=$1::bigint AND s.day BETWEEN $2::date AND $3::date ORDER BY s.day`, [family.family_id, window.firstDay, window.lastDay])
-  return { familyId: family.family_id, name: family.name, shareCode: family.representative_share_code,
+    s.destruction_percentage_sum destruction,s.duration_seconds_sum duration,g.attack_count total_legend_attacks
+    FROM army_family_daily_stats s JOIN legend_daily_stats g ON g.day=s.day AND g.cohort=s.cohort
+    WHERE s.family_id=$1::bigint AND s.cohort=$2 AND s.day BETWEEN $3::date AND $4::date ORDER BY s.day`, [family.family_id, selection.cohort, window.firstDay, window.lastDay])
+  return { cohort: selection.cohort, familyId: family.family_id, name: family.name, shareCode: family.representative_share_code,
     items: rows.map(row => ({ day: new Date(row.day).toISOString().slice(0,10), ...resultStatistics(row), players: Number(row.players), totalLegendAttacks: Number(row.total_legend_attacks) })) }
 })
 export const queryAdminFamilies = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
@@ -147,33 +147,15 @@ export const parseFamilyPaging = (query: URLSearchParams) => Effect.try({ try: (
   return { page: read("page",1,1_000_000), limit: read("limit",100,200) }
 }, catch: cause => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid pagination" }) })
 
-export const queryAdminFamilyMembers = (rawId: string, query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
+export const queryAdminFamilyMembers = (rawId: string, query: URLSearchParams, _now = new Date()) => Effect.gen(function* () {
   const id = yield* parseFamilyId(rawId), paging = yield* parseFamilyPaging(query)
-  const include = query.get("includeStats") ?? "false"
-  if (include !== "true" && include !== "false") return yield* new InvalidRequest({ message: "Invalid includeStats" })
-  const time = new URLSearchParams(query)
-  for (const key of ["page", "limit", "includeStats"]) time.delete(key)
-  const window = yield* aggregateWindow(time, now, 30, 1), sql = yield* SqlClient.SqlClient
+  for (const key of query.keys()) if (key !== "page" && key !== "limit") return yield* new InvalidRequest({ message: `Unsupported query parameter: ${key}` })
+  const sql = yield* SqlClient.SqlClient
   const family = yield* sql.unsafe<{ family_id: string }>("SELECT family_id::text FROM army_families WHERE family_id=$1::bigint", [id])
   if (!family[0]) return yield* new NotFound({ message: "Army family not found" })
-  interface MemberRow {
-    share_code: string; troop_similarity: number; spell_similarity: number; equipment_similarity: number
-    stats: Parameters<typeof resultStatistics>[0] | null
-  }
-  const rows = yield* sql.unsafe<MemberRow>(`WITH ${include === "true" ? retainedPopulationCtes + "," : "inputs AS (SELECT $1::date,$2::date,$3::timestamptz,$4::timestamptz,$5::integer),"}
-    selected AS (SELECT share_code,troop_similarity,spell_similarity,equipment_similarity FROM army_family_members
-      WHERE family_id=$6::bigint ORDER BY share_code LIMIT $7 OFFSET $8)
-    SELECT selected.*,${include === "true" ? `CASE WHEN coverage.complete THEN
-      jsonb_build_object('attacks',count(b.*),'players',count(DISTINCT b.player_tag),
-        'zero',count(*) FILTER(WHERE b.stars=0),'one',count(*) FILTER(WHERE b.stars=1),
-        'two',count(*) FILTER(WHERE b.stars=2),'three',count(*) FILTER(WHERE b.stars=3),
-        'duration',COALESCE(sum(b.duration_seconds),0),'duration_count',count(b.duration_seconds),
-        'destruction',COALESCE(sum(b.destruction_percentage),0)) ELSE NULL END` : "NULL::jsonb"} stats
-    FROM selected ${include === "true" ? `CROSS JOIN coverage LEFT JOIN raw b ON b.share_code=selected.share_code
-      GROUP BY selected.share_code,selected.troop_similarity,selected.spell_similarity,selected.equipment_similarity,coverage.complete` : ""}
-    ORDER BY selected.share_code`, [window.firstDay,window.lastDay,window.start,window.end,window.calendarDays,id,paging.limit+1,(paging.page-1)*paging.limit])
+  const rows = yield* sql.unsafe<{ share_code: string }>(`SELECT share_code FROM army_family_members
+    WHERE family_id=$1::bigint ORDER BY share_code LIMIT $2 OFFSET $3`, [id,paging.limit+1,(paging.page-1)*paging.limit])
   return { familyId: id, ...paging, hasMore: rows.length > paging.limit, items: rows.slice(0,paging.limit).map(row => ({
-    shareCode: row.share_code, troopSimilarity: Number(row.troop_similarity), spellSimilarity: Number(row.spell_similarity),
-    equipmentSimilarity: Number(row.equipment_similarity), statistics: row.stats === null ? null : resultStatistics(row.stats),
+    shareCode: row.share_code,
   })) }
 })

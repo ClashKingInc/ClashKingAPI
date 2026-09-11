@@ -5,6 +5,7 @@ import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
 import { queryArmyDetail, queryArmySearch, queryArmyTimeline, queryLegendBattlelog, queryPlayerBattlelogHistory, queryRankedBattlelog, queryLegendDays } from "../../src/league-analytics.js"
 import { queryAdminFamilies, queryAdminFamilyMembers } from "../../src/army-family-analytics.js"
+import { legendDaySummaries } from "../../src/legends.js"
 import { queryRankedStats } from "../../src/stats.js"
 
 const url = process.env.TEST_DATABASE_URL
@@ -87,6 +88,13 @@ describe.sequential("code families against authoritative migration 017", () => {
     for(const item of [...ranked.attacks,...ranked.defenses]) expect(item).not.toHaveProperty("lootedResources")
     const stats=await run(queryRankedStats({ dates:{start_date:"2026-09-07",end_date:"2026-09-14"},townhall_level:18,ranked_league_tier_id:105000033 }))
     expect(stats.metrics).toMatchObject({sampleSize:1,threeStarRate:1})
+  })
+  it("summarizes requested players from stored Legend battles without per-player reads", async () => {
+    expect(await run(legendDaySummaries({ day: "2026-09-07", tags: ["#2", "#Q"] }, new Date("2026-09-08T05:10:00Z"))))
+      .toEqual({ items: [
+        { tag: "#2", attackTrophies: 69, defenseTrophies: 0, netTrophies: 69, attacks: 2, defenses: 1 },
+        { tag: "#Q", attackTrophies: 10, defenseTrophies: 0, netTrophies: 10, attacks: 1, defenses: 0 },
+      ] })
   })
   it("uses cohort aggregates without inferring cross-day distinct players", async () => {
     expect((await run(queryArmySearch(range()))).items[0]?.players).toBeNull()

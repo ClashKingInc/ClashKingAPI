@@ -10,6 +10,7 @@ export const LegendHistoricalRankRequest = Schema.Struct({
   day: Schema.String,
   tags: Schema.Array(Schema.String).check(Schema.isMaxLength(100)),
 }).annotate({ parseOptions: { onExcessProperty: "error" } })
+export const LegendDaySummariesRequest = LegendHistoricalRankRequest
 const LegendLocation = Schema.Struct({
   id: Schema.Int,
   name: Schema.String,
@@ -32,6 +33,15 @@ export const LegendTrophyBucket = Schema.Struct({
   playerCount: Schema.Int,
 })
 export const LegendTrophyBucketsResponse = Schema.Struct({ items: Schema.Array(LegendTrophyBucket) })
+export const LegendDaySummary = Schema.Struct({
+  tag: Schema.String,
+  attackTrophies: Schema.Int,
+  defenseTrophies: Schema.Int,
+  netTrophies: Schema.Int,
+  attacks: Schema.Int,
+  defenses: Schema.Int,
+})
+export const LegendDaySummariesResponse = Schema.Struct({ items: Schema.Array(LegendDaySummary) })
 
 const errors = [{ status: 400, body: ErrorResponse }] as const
 export const LegendRanksEndpoint = defineEndpoint({
@@ -43,6 +53,11 @@ export const LegendHistoricalRanksEndpoint = defineEndpoint({
   operationId: "getHistoricalLegendRanks", method: "POST", path: "/v2/legends/ranks/history", auth: "public",
   summary: "Get one daily Legend rank snapshot for up to 100 players", body: LegendHistoricalRankRequest, bodyMode: "json",
   pathParams: NoPathParams, query: NoQuery, response: LegendRanksResponse, responseMode: "json", successStatus: 200, errors,
+})
+export const LegendDaySummariesEndpoint = defineEndpoint({
+  operationId: "getLegendDaySummaries", method: "POST", path: "/v2/legends/days", auth: "public",
+  summary: "Get one Legend day's trophy summaries for up to 100 players", body: LegendDaySummariesRequest, bodyMode: "json",
+  pathParams: NoPathParams, query: NoQuery, response: LegendDaySummariesResponse, responseMode: "json", successStatus: 200, errors,
 })
 export const LegendTrophyBucketsEndpoint = defineEndpoint({
   operationId: "getLegendTrophyBuckets", method: "GET", path: "/v2/legends/trophy-buckets", auth: "public",
@@ -59,6 +74,7 @@ export const LegendHistoricalTrophyBucketsEndpoint = defineEndpoint({
 export const legendEndpoints = {
   legendRanks: LegendRanksEndpoint,
   historicalLegendRanks: LegendHistoricalRanksEndpoint,
+  legendDaySummaries: LegendDaySummariesEndpoint,
   legendTrophyBuckets: LegendTrophyBucketsEndpoint,
   historicalLegendTrophyBuckets: LegendHistoricalTrophyBucketsEndpoint,
 } as const

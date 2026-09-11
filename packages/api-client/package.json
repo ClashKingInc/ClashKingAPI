@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-client",
-  "version": "0.1.0-rc.17",
+  "version": "0.1.0-rc.24",
   "license": "SEE LICENSE IN LICENSE",
   "description": "Effect-based transport, auth, service-binding execution, and decoding for the ClashKing v2 API",
   "repository": {
@@ -26,7 +26,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@clashking/api-contracts": "0.1.0-rc.17",
+    "@clashking/api-contracts": "0.1.0-rc.24",
     "effect": "4.0.0-rc.112"
   },
   "devDependencies": {

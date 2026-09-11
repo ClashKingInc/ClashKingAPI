@@ -2,13 +2,15 @@ import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
-  ArmyHash,
+  ArmyFamilyId,
   ArmyDetailEndpoint,
   ArmyTimelineEndpoint,
   ArmySearchEndpoint,
   LeagueTierStatisticsEndpoint,
   LegendBattlelogResponse,
   LegendDaysEndpoint,
+  LegendPlayerDailySeriesEndpoint,
+  LegendPlayerDailySeriesResponse,
   PlayerBattlelogHistoryEndpoint,
   RankedBattlelogResponse,
   RankedGroupEndpoint,
@@ -16,7 +18,7 @@ import {
 
 const realBattle = { time: "2026-09-07T06:00:00Z", townHallLevel: 18,
   opponent: { tag: "#P0Y", name: "Unknown", townHallLevel: 18 }, stars: 3, destructionPercentage: 100,
-  duration: 120, lootedResources: { gold: 1, elixir: 2, darkElixir: 3 }, shareCode: "u1x1",
+  duration: 120, shareCode: "u1x1", familyId: "1",
   trophies: 40 }
 
 describe("league analytics contracts", () => {
@@ -30,20 +32,29 @@ describe("league analytics contracts", () => {
     }
   })
 
-  it("accepts only lowercase exact army hashes", () => {
-    expect(Schema.decodeUnknownSync(ArmyHash)("ab".repeat(32))).toBe("ab".repeat(32))
-    expect(() => Schema.decodeUnknownSync(ArmyHash)("AB".repeat(32))).toThrow()
+  it("requires decimal-string family IDs", () => {
+    expect(Schema.decodeUnknownSync(ArmyFamilyId)("9007199254740993")).toBe("9007199254740993")
+    expect(() => Schema.decodeUnknownSync(ArmyFamilyId)("AB".repeat(32))).toThrow()
   })
 
   it("publishes the finalized GET paths", () => {
-    expect([PlayerBattlelogHistoryEndpoint, RankedGroupEndpoint, ArmySearchEndpoint, LeagueTierStatisticsEndpoint, LegendDaysEndpoint]
+    expect([PlayerBattlelogHistoryEndpoint, LegendPlayerDailySeriesEndpoint, RankedGroupEndpoint, ArmySearchEndpoint, LeagueTierStatisticsEndpoint, LegendDaysEndpoint]
       .map((endpoint) => [endpoint.method, endpoint.path])).toEqual([
       ["GET", "/v2/player/:playerTag/battlelog/history"],
+      ["GET", "/v2/player/:playerTag/legend/series"],
       ["GET", "/v2/ranked/:seasonId/groups/:leagueGroupId"],
       ["GET", "/v2/stats/armies"],
       ["GET", "/v2/stats/league/tournaments/:seasonId/tiers/:leagueTierId"],
       ["GET", "/v2/stats/legend/days"],
     ])
+  })
+
+  it("publishes a compact player Legend trophy series", () => {
+    expect(Schema.decodeUnknownSync(LegendPlayerDailySeriesResponse)({ tag: "#P0Y", items: [
+      { day: "2026-09-07", attackTrophies: 120, defenseTrophies: -80, trophies: 40 },
+    ] })).toEqual({ tag: "#P0Y", items: [
+      { day: "2026-09-07", attackTrophies: 120, defenseTrophies: -80, trophies: 40 },
+    ] })
   })
 
   it("keeps Ranked and Legend battlelog responses free of collection state", () => {

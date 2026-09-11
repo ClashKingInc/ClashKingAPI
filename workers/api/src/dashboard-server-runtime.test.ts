@@ -57,8 +57,8 @@ describe("Dashboard server runtime dispatcher", () => {
     }
   })
   it("publishes a unique literal route inventory and ignores routes outside its slice", async () => {
-    expect(dashboardServerRuntimeRoutes).toHaveLength(85)
-    expect(new Set(dashboardServerRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(85)
+    expect(dashboardServerRuntimeRoutes).toHaveLength(86)
+    expect(new Set(dashboardServerRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(86)
     const shared = new Set([...Object.values(dashboardEndpoints), ...Object.values(botEndpoints)].map(({ method, path }) => `${method} ${path}`))
     expect(dashboardServerRuntimeRoutes.every(({ method, path }) => shared.has(`${method} ${path}`))).toBe(true)
     await expect(run(new Request("https://api.clashk.ing/v2/counts"))).resolves.toBeUndefined()

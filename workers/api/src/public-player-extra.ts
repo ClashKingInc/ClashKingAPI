@@ -9,7 +9,7 @@ import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type Ap
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { publicTag } from "./public-war.js"
 import { publicHistoryOptions, isoTimestamp } from "./public-player.js"
-import { leaderboardHistoryItem, historicalHomeLeagues } from "./public-history.js"
+import { leaderboardHistoryItem } from "./public-history.js"
 import { leaderboardLimit } from "./public-leaderboards.js"
 import { correctedJoinLeaveEvents, type JoinLeaveRow } from "./public-join-leave.js"
 import { forEachNewestPlayerWar } from "./war-archive.js"
@@ -142,12 +142,19 @@ export const queryPlayerTypedLeaderboardHistory = (rawTag: string, type: string)
   const tag = yield* publicTag(rawTag)
   if (type !== "player_home_trophies" && type !== "player_builder_base_trophies") return yield* new InvalidRequest({ message: "Invalid player leaderboard type" })
   const sql = yield* SqlClient.SqlClient
-  const table = type === "player_home_trophies" ? "leaderboard_history_player_home" : "leaderboard_history_player_builder_base"
+  if (type === "player_home_trophies") {
+    const rows = yield* sql<{ date: Date | string; player_tag: string; player_name: string; trophies: number; rank: number }>`
+      SELECT history.day AS date,history.tag AS player_tag,COALESCE(player.name,history.tag) AS player_name,
+        history.trophies,history.global_rank AS rank
+      FROM leaderboard_history_player_home history LEFT JOIN basic_player player ON player.tag=history.tag
+      WHERE history.tag=${tag} ORDER BY history.day DESC,history.global_rank`.pipe(Effect.mapError(failure))
+    return { type, playerTag: tag, items: rows.map((row) => ({ date: isoTimestamp(row.date).slice(0, 10), locationId: "global",
+      name: row.player_name, rank: row.rank, details: { tag: row.player_tag, name: row.player_name, trophies: row.trophies, rank: row.rank } })) }
+  }
+  const table = "leaderboard_history_player_builder_base"
   const rows = yield* sql<Parameters<typeof leaderboardHistoryItem>[0]>`SELECT * FROM ${sql(table)} WHERE player_tag = ${tag} ORDER BY date DESC, location_id, rank`.pipe(Effect.mapError(failure))
-  const leagues = type === "player_home_trophies" && rows.some((row) => row.league_id != null && row.league_id >= 29_000_000 && row.league_id < 30_000_000)
-    ? yield* historicalHomeLeagues(yield* WorkerEnvironment) : undefined
   return { type, playerTag: tag, items: rows.map((row) => ({ date: isoTimestamp(row.date).slice(0, 10), locationId: row.location_id,
-    name: row.player_name, rank: row.rank, details: leaderboardHistoryItem(row, type, leagues) })) }
+    name: row.player_name, rank: row.rank, details: leaderboardHistoryItem(row, type) })) }
 })
 
 export const queryPlayerStatHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => Effect.gen(function* () {

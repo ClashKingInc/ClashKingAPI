@@ -2,7 +2,7 @@ import { Effect } from "effect"
 
 import { InvalidRequest } from "./errors.js"
 
-/** Matches the canonical share-code ordering owned by DevKit's army-hash-v2 contract. */
+/** Matches the canonical share-code ordering owned by DevKit's canonical army-code contract. */
 export const normalizeArmyLink = (input: string): string => {
   const invalid = () => new InvalidRequest({ message: "armyLink must be a valid Clash army link or share code" })
   if (input.length > 8192) throw invalid()
@@ -53,15 +53,6 @@ export const normalizeArmyLink = (input: string): string => {
   }
   return parts.join("")
 }
-
-export const hashNormalizedArmy = (shareCode: string) => Effect.promise(async () => {
-  const code = new TextEncoder().encode(shareCode)
-  const bytes = new Uint8Array(code.length + 1)
-  bytes[0] = 2
-  bytes.set(code, 1)
-  const digest = await crypto.subtle.digest("SHA-256", bytes)
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
-})
 
 export const parseArmyLinkQuery = (query: URLSearchParams) => Effect.try({
   try: () => {

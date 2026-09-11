@@ -40,6 +40,13 @@ if (!image?.includes("@sha256:") || migrations.join(",") !== [
   "009_league_army_analytics.sql",
   "010_cwl_season_statistics.sql",
   "011_active_verified_players.sql",
+  "012_legend_only_army_compositions.sql",
+  "013_battle_player_time_identity.sql",
+  "014_ranked_defense_loot_nullable.sql",
+  "015_army_code_family_compatibility.sql",
+  "016_remove_cwl_season_statistics.sql",
+  "017_final_operational_contract.sql",
+  "018_personal_base_library.sql",
 ].join(",")) throw new Error("Unexpected authoritative retained API profile")
 
 function inspect() {

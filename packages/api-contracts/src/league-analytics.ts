@@ -4,9 +4,10 @@ import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 
 export const LeagueBattleMode = Schema.Literals(["ranked", "legend"])
+export const LegendCohort = Schema.Literals(["legend_i", "top_1000", "top_200"])
 export const LeagueAnalyticsSortDirection = Schema.Literals(["asc", "desc"])
-export const ArmyHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)).annotate({
-  description: "Lowercase SHA-256 hex for the version-2 normalized exact army.",
+export const ArmyFamilyId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u)).annotate({
+  description: "Permanent family ID as a decimal string; never convert to a JavaScript number.",
 })
 export const LeagueReference = Schema.Struct({ id: Schema.Int, name: Schema.String })
 export const StarCounts = Schema.Struct({ zero: Schema.Int, one: Schema.Int, two: Schema.Int, three: Schema.Int })
@@ -16,24 +17,26 @@ export const TimeRangeQuery = Schema.Struct({
   "time[before]": Schema.optionalKey(Schema.String),
 })
 
-export const LeagueBattle = Schema.Struct({
+const LeagueBattleFields = {
   time: Schema.String,
   townHallLevel: Schema.Int,
   opponent: Schema.Struct({ tag: Schema.String, name: Schema.String, townHallLevel: Schema.Int }),
   stars: Schema.Int,
   destructionPercentage: Schema.Number,
-  duration: Schema.NullOr(Schema.Int),
-  lootedResources: LootedResources,
+  duration: Schema.Int,
   shareCode: Schema.NullOr(Schema.String),
+  familyId: Schema.NullOr(ArmyFamilyId),
   trophies: Schema.Int,
-})
+} as const
+export const LeagueBattle = Schema.Struct(LeagueBattleFields).annotate({ parseOptions: { onExcessProperty: "error" } })
+export const LeagueDefense = LeagueBattle
 export const AutomaticLeagueDefense = Schema.Struct({ trophies: Schema.Int, automatic: Schema.Literal(true) })
 const BattlelogTotals = {
   attackTrophies: Schema.Int,
   defenseTrophies: Schema.Int,
   trophies: Schema.Int,
   attacks: Schema.Array(LeagueBattle),
-  defenses: Schema.Array(Schema.Union([LeagueBattle, AutomaticLeagueDefense])),
+  defenses: Schema.Array(Schema.Union([LeagueDefense, AutomaticLeagueDefense])),
 } as const
 export const RankedBattlelogResponse = Schema.Struct({
   tag: Schema.String,
@@ -46,14 +49,23 @@ export const RankedBattlelogResponse = Schema.Struct({
   ...BattlelogTotals,
 })
 export const LegendBattlelogResponse = Schema.Struct({ tag: Schema.String, day: Schema.String, ...BattlelogTotals })
+export const LegendPlayerDay = Schema.Struct({
+  day: Schema.String,
+  attackTrophies: Schema.Int,
+  defenseTrophies: Schema.Int,
+  trophies: Schema.Int,
+})
+export const LegendPlayerDailySeriesResponse = Schema.Struct({ tag: Schema.String, items: Schema.Array(LegendPlayerDay) })
 
 export const PlayerBattlelogHistoryItem = Schema.Struct({
+  battleMode: Schema.Literals(["farming", "ranked", "legend"]),
   battleTime: Schema.String,
   stars: Schema.Int,
   destructionPercentage: Schema.Number,
-  duration: Schema.NullOr(Schema.Int),
+  duration: Schema.Int,
   lootedResources: LootedResources,
   shareCode: Schema.NullOr(Schema.String),
+  familyId: Schema.NullOr(ArmyFamilyId),
 })
 export const PlayerBattlelogHistoryResponse = Schema.Struct({ items: Schema.Array(PlayerBattlelogHistoryItem) })
 
@@ -101,6 +113,7 @@ export const PlayerLeagueHistoryResponse = Schema.Struct({
 
 export const ArmySearchQuery = Schema.Struct({
   ...TimeRangeQuery.fields,
+  cohort: Schema.optionalKey(LegendCohort),
   heroIds: Schema.optionalKey(Schema.String),
   equipmentIds: Schema.optionalKey(Schema.String),
   minimumAttacks: Schema.optionalKey(Schema.Number),
@@ -110,20 +123,25 @@ export const ArmySearchQuery = Schema.Struct({
   direction: Schema.optionalKey(LeagueAnalyticsSortDirection),
   limit: Schema.optionalKey(Schema.Number),
 })
-export const ArmyStatistics = Schema.Struct({
-  armyHash: ArmyHash,
-  name: Schema.String,
-  shareCode: Schema.String,
+export const ArmyResultStatistics = Schema.Struct({
   attacks: Schema.Int,
-  players: Schema.Int,
+  players: Schema.NullOr(Schema.Int).annotate({ description: "Exact collected players. Null when retained raw rows cannot reproduce every selected daily closeout population; never a sum of player-days." }),
   starCounts: StarCounts,
   averageDuration: Schema.NullOr(Schema.Number),
   averageDestruction: Schema.NullOr(Schema.Number),
 })
-export const ArmySearchResponse = Schema.Struct({ items: Schema.Array(ArmyStatistics) })
-export const ArmyDetailResponse = ArmyStatistics
+export const ArmyStatistics = Schema.Struct({
+  familyId: ArmyFamilyId,
+  name: Schema.NullOr(Schema.String),
+  shareCode: Schema.String,
+  ...ArmyResultStatistics.fields,
+  totalLegendAttacks: Schema.Int.annotate({ description: "All selected Legend attacks including missing army codes; usage is attacks divided by this total." }),
+})
+export const ArmySearchResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(ArmyStatistics) })
+export const ArmyDetailResponse = Schema.Struct({ cohort: LegendCohort, ...ArmyStatistics.fields })
 export const ArmyTimelineItem = Schema.Struct({
   day: Schema.String,
+  totalLegendAttacks: Schema.Int,
   attacks: Schema.Int,
   players: Schema.Int,
   starCounts: StarCounts,
@@ -131,8 +149,9 @@ export const ArmyTimelineItem = Schema.Struct({
   averageDestruction: Schema.NullOr(Schema.Number),
 })
 export const ArmyTimelineResponse = Schema.Struct({
-  armyHash: ArmyHash,
-  name: Schema.String,
+  cohort: LegendCohort,
+  familyId: ArmyFamilyId,
+  name: Schema.NullOr(Schema.String),
   shareCode: Schema.String,
   items: Schema.Array(ArmyTimelineItem),
 })
@@ -150,7 +169,7 @@ const LeagueHitRateBase = {
   starCounts: StarCounts,
 } as const
 export const RankedHitRatePoint = Schema.Struct({ mode: Schema.Literal("ranked"), seasonId: Schema.String, ...LeagueHitRateBase })
-export const LegendHitRatePoint = Schema.Struct({ mode: Schema.Literal("legend"), day: Schema.String, ...LeagueHitRateBase })
+export const LegendHitRatePoint = Schema.Struct({ mode: Schema.Literal("legend"), day: Schema.String, attacks: Schema.Int, starCounts: StarCounts })
 export const LeagueHitRateHistoryResponse = Schema.Struct({
   items: Schema.Array(Schema.Union([RankedHitRatePoint, LegendHitRatePoint])),
 })
@@ -173,14 +192,11 @@ export const LeagueTierStatisticsResponse = Schema.Struct({
 })
 
 export const ItemUse = Schema.Struct({ id: Schema.Int, uses: Schema.Int, triples: Schema.Int })
-export const PetAssignmentUse = Schema.Struct({ petId: Schema.Int, heroId: Schema.Int, uses: Schema.Int })
+export const PetAssignmentUse = Schema.Struct({ petId: Schema.Int, heroId: Schema.Int, uses: Schema.Int, triples: Schema.Int })
 export const LegendDay = Schema.Struct({
   day: Schema.String,
-  league: LeagueReference,
-  townHallLevel: Schema.Int,
   attacks: Schema.Int,
   players: Schema.Int,
-  perfectDays: Schema.Int,
   starCounts: StarCounts,
   averageDuration: Schema.NullOr(Schema.Number),
   averageDestruction: Schema.NullOr(Schema.Number),
@@ -189,8 +205,8 @@ export const LegendDay = Schema.Struct({
   equipment: Schema.Array(ItemUse),
   petAssignments: Schema.Array(PetAssignmentUse),
 })
-export const LegendDaysQuery = Schema.Struct({ ...TimeRangeQuery.fields, leagueTierId: Schema.optionalKey(Schema.Number) })
-export const LegendDaysResponse = Schema.Struct({ items: Schema.Array(LegendDay) })
+export const LegendDaysQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendCohort) })
+export const LegendDaysResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(LegendDay) })
 
 const PublicErrors = [{ status: 400, body: ErrorResponse }, { status: 404, body: ErrorResponse }] as const
 const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q extends Schema.Codec<unknown, unknown, never, never>, R extends Schema.Codec<unknown, unknown, never, never>>(
@@ -199,13 +215,15 @@ const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q ext
   response, responseMode: "json", successStatus: 200, errors: PublicErrors })
 
 const PlayerSeasonPath = Schema.Struct({ playerTag: Schema.String, seasonId: Schema.String })
-export const ArmyLinkQuery = Schema.Struct({ ...TimeRangeQuery.fields, armyLink: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8192)).annotate({ description: "Clash CopyArmy link or raw army share code. URL-encode links when supplying this query parameter." }) })
+export const ArmyLinkQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendCohort), armyLink: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8192)).annotate({ description: "Clash CopyArmy link or raw army share code. URL-encode links when supplying this query parameter." }) })
 export const PlayerBattlelogHistoryEndpoint = publicGet("getPlayerBattlelogHistory", "/v2/player/:playerTag/battlelog/history",
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerBattlelogHistoryResponse, "Get stored player battle history")
 export const RankedBattlelogEndpoint = publicGet("getRankedBattlelog", "/v2/player/:playerTag/ranked/:seasonId/battlelog",
   PlayerSeasonPath, NoQuery, RankedBattlelogResponse, "Get one player's Ranked tournament battles")
 export const LegendBattlelogEndpoint = publicGet("getLegendBattlelog", "/v2/player/:playerTag/legend/:day/battlelog",
   Schema.Struct({ playerTag: Schema.String, day: Schema.String }), NoQuery, LegendBattlelogResponse, "Get one player's Legend-day battles")
+export const LegendPlayerDailySeriesEndpoint = publicGet("getLegendPlayerDailySeries", "/v2/player/:playerTag/legend/series",
+  Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, LegendPlayerDailySeriesResponse, "Get one player's daily Legend trophy series")
 export const RankedGroupEndpoint = publicGet("getRankedLeagueGroup", "/v2/ranked/:seasonId/groups/:leagueGroupId",
   Schema.Struct({ seasonId: Schema.String, leagueGroupId: Schema.String }), NoQuery, RankedGroupResponse, "Get one Ranked league group")
 export const PlayerLeagueHistoryEndpoint = publicGet("getPlayerLeagueHistory", "/v2/player/:playerTag/league/history",
@@ -227,6 +245,7 @@ export const leagueAnalyticsEndpoints = {
   playerBattlelogHistory: PlayerBattlelogHistoryEndpoint,
   rankedBattlelog: RankedBattlelogEndpoint,
   legendBattlelog: LegendBattlelogEndpoint,
+  legendPlayerDailySeries: LegendPlayerDailySeriesEndpoint,
   rankedGroup: RankedGroupEndpoint,
   playerLeagueHistory: PlayerLeagueHistoryEndpoint,
   armySearch: ArmySearchEndpoint,

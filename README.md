@@ -92,3 +92,53 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE).
 ## Supercell notice
 
 This project is not affiliated with, endorsed, sponsored, or specifically approved by Supercell. Clash of Clans and its related assets belong to Supercell. Use this API in line with Supercell's [Fan Content Policy](https://supercell.com/en/fan-content-policy/) and Terms of Service.
+
+### Army families and battle history (next release)
+
+Army statistics identify permanent families with decimal-string `familyId`, a
+nullable manually assigned `name`, and their fixed representative `shareCode`.
+Detail/timeline requests accept `armyLink` (full Clash link or canonical code).
+Hero/equipment filters match the representative, not individual attacks. Usage
+is `attacks / totalLegendAttacks`; the denominator includes uncoded attacks.
+Known duration averages divide by the number of non-null durations.
+
+Aggregate date-only `time[after]` and `time[before]` select inclusive Legend day
+labels. Day `2026-09-08` covers `[2026-09-08T05:10:00Z,
+2026-09-09T05:10:00Z)`. Timestamp ranges must align to those boundaries and use
+an exclusive `time[before]`; partial-day aggregate requests return 400. Public
+search defaults to 30 completed days (one-day limit 250; multi-day limit 10).
+Admin defaults to the latest completed day; timelines support 365 day labels.
+Unrelated raw history keeps its existing inclusive UTC time filters.
+
+Daily player counts are exact for the collected daily population. Multi-day
+`players` is a distinct union from retained raw attacks only when every selected
+completed day has a global closeout row and matching raw attack count, including
+zero-attack days and uncoded attacks. Otherwise `players` is null and an active
+`minimumPlayers` filter returns 400. This checks preservation of the closeout
+population, not whether every real game attack was collected. Raw coverage and
+player unions share one bounded scan; no permanent player set is stored.
+
+Admin family browsing supports search by name/ID/code/link, named/unnamed,
+representative filters, sorting, and `page`/`limit`/`hasMore`. Inactive families
+remain discoverable. PATCH `/v2/admin/stats/armies/:familyId` accepts a manual
+name or null to clear it. GET `/:familyId/members` lists codes and similarity
+scores; `includeStats=true` returns retained-window results, or null when
+coverage is unavailable.
+
+Detailed Ranked tournament and Legend-day battle responses omit loot on both
+attacks and defenses. GET `/v2/player/:playerTag/battlelog/history` returns all
+observed farming, ranked and legend attacks, globally ordered newest first,
+with required `battleMode` and stored `lootedResources`. The API does not add
+extra loot a second time. Opponent data is not invented for farming records.
+
+`/v2/stats/ranked` now measures non-Legend Ranked attacks within their actual
+Unix-second tournament membership period. This corrects the old `battlelogs`
+query's obsolete YYYYMM join; it is an explicit population correction, not
+unchanged mixed-mode behavior. Legend daily statistics have no tier/TH grouping.
+
+Deployment requires DevKit migrations 014 and 015, with the separately approved
+bounded defense-loot cleanup between them and old writers paused through the
+cutover. This API reads the new `*_daily_stats_v2` generation, preserving the old
+aggregates separately. Do not merge into the auto-deployed branch before the
+coordinated production schema gate is satisfied. Local tests and candidate
+package archives do not imply production readiness or publication.

@@ -14,7 +14,6 @@ describe("canonical endpoint contracts", () => {
       endpoints.armyTimeline,
       endpoints.warHitrates,
       endpoints.warSummary,
-      endpoints.cwlTownHalls,
     ].map(({ method, path }) => [method, path])).toEqual([
       ["POST", "/v2/home/activity"],
       ["GET", "/v2/stats/armies"],
@@ -24,7 +23,6 @@ describe("canonical endpoint contracts", () => {
       ["GET", "/v2/stats/armies/timeline"],
       ["GET", "/v2/stats/wars/hitrates"],
       ["GET", "/v2/stats/wars/summary"],
-      ["GET", "/v2/stats/cwl/townhalls"],
     ])
   })
 
@@ -43,7 +41,7 @@ describe("canonical endpoint contracts", () => {
   })
 
   it("keeps every Admin operation under the central /v2/admin namespace", () => {
-    expect(Object.keys(adminEndpoints)).toHaveLength(41)
+    expect(Object.keys(adminEndpoints)).toHaveLength(42)
     expect(Object.values(adminEndpoints).every(({ auth, path, operationId }) =>
       auth === (operationId === "adminTrackingSummary" || operationId === "adminTrackingTimeseries" ? "admin-or-bot" : "admin") && path.startsWith("/v2/admin/"),
     )).toBe(true)

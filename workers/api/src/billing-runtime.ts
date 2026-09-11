@@ -254,10 +254,6 @@ export const projectBillingEvent = (event: typeof Event.Type, gateway: BillingGa
         }
         yield* sql`UPDATE billing_subscriptions SET initial_assignment_applied = true WHERE user_id = ${userId}`
       }
-      yield* sql`WITH ranked AS (SELECT player_tag, row_number() OVER (ORDER BY created_at, player_tag) AS position
-          FROM mobile_notification_accounts WHERE user_id = ${userId} AND source = 'bookmarked')
-        UPDATE mobile_notification_accounts account SET active = ${entitled} AND ranked.position <= 10, updated_at = now()
-        FROM ranked WHERE account.user_id = ${userId} AND account.player_tag = ranked.player_tag AND account.source = 'bookmarked'`
     }
     yield* sql`INSERT INTO billing_webhook_events (provider, event_id, event_type, payload)
       VALUES ('stripe', ${event.id}, ${event.type}, ${JSON.stringify(event)}::jsonb) ON CONFLICT DO NOTHING`

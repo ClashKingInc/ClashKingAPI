@@ -8,8 +8,9 @@ import {
 } from "@clashking/api-contracts"
 import { importPKCS8, SignJWT } from "jose"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient, SqlError } from "effect/unstable/sql"
 
+import { familyIdentity, parseFamilyId, queryAdminFamilies, queryAdminFamilyMembers, type FamilyIdentityRow } from "./army-family-analytics.js"
 import type { AdminPrincipal } from "./access.js"
 import { appUpdateInternals } from "./app-updates.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
@@ -64,53 +65,36 @@ interface DeveloperApplicationRow {
   readonly updated_at: Date | string
 }
 
-interface ArmyFamilyAdminRow {
-  readonly army_hash: string
-  readonly family_name: string
-  readonly representative_share_code: string
-  readonly source: "ai" | "admin" | "fallback"
-  readonly created_at: Date | string
-  readonly updated_at: Date | string
-}
-const adminArmyFamily = (row: ArmyFamilyAdminRow) => ({
-  armyHash: row.army_hash,
-  name: row.family_name,
-  representativeShareCode: row.representative_share_code,
-  source: row.source,
-  createdAt: iso(row.created_at),
-  updatedAt: iso(row.updated_at),
-})
-
-const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed", Effect.gen(function* () {
-  const query = asRecord(input.query)
-  const search = typeof query.search === "string" ? query.search.trim() : ""
-  const limit = typeof query.limit === "number" ? query.limit : 100
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`SELECT encode(anchor_army_hash,'hex') army_hash,family_name,
-    representative_share_code,source,created_at,updated_at FROM army_families
-    WHERE $1='' OR family_name ILIKE '%'||$1||'%' OR encode(anchor_army_hash,'hex') LIKE lower($1)||'%'
-    ORDER BY updated_at DESC,anchor_army_hash LIMIT $2`, [search, limit])
-  return { items: rows.map(adminArmyFamily) }
-}))
-
+const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed",
+  queryAdminFamilies(new URL(input.request.url).searchParams))
+const listArmyFamilyMembers = (input: AdminOperationInput) => database("Army member list failed",
+  queryAdminFamilyMembers(String(asRecord(input.path).familyId ?? ""), new URL(input.request.url).searchParams))
 const updateArmyFamily = (input: AdminOperationInput) => database("Army family update failed", Effect.gen(function* () {
-  const path = asRecord(input.path), body = asRecord(input.body)
-  const hash = String(path.armyHash ?? ""), rawName = String(body.name ?? "")
-  const name = rawName.trim().replace(/\s+/gu, " ")
-  if (!/^[0-9a-f]{64}$/u.test(hash)) return yield* new InvalidRequest({ message: "Invalid army hash" })
-  if (name.length === 0 || name.length > 120) return yield* new InvalidRequest({ message: "Army family name must contain 1 to 120 characters" })
+  const id = yield* parseFamilyId(asRecord(input.path).familyId)
+  const rawName = asRecord(input.body).name
+  if (rawName !== null && typeof rawName !== "string") return yield* new InvalidRequest({ message: "Name must be text or null" })
+  const name = rawName === null ? null : rawName.trim().replace(/\s+/gu," ")
+  if (name !== null && (name.length === 0 || name.length > 120)) return yield* new InvalidRequest({ message: "Name must contain 1 to 120 characters" })
   const sql = yield* SqlClient.SqlClient
-  yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
-  const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
-    WHERE lower(family_name)=lower($1) AND anchor_army_hash<>decode($2,'hex')) exists`, [name, hash])
-  if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
-  const rows = yield* sql.unsafe<ArmyFamilyAdminRow>(`UPDATE army_families SET family_name=$1,source='admin',named_by_subject=$2,
-    naming_model=NULL,naming_prompt_version=NULL,updated_at=now() WHERE anchor_army_hash=decode($3,'hex')
-    RETURNING encode(anchor_army_hash,'hex') army_hash,family_name,representative_share_code,source,created_at,updated_at`,
-  [name, input.principal.id, hash])
-  if (rows[0] === undefined) return yield* new NotFound({ message: "Army family not found" })
-  yield* audit(input, "army_family.rename", "army_family", hash, `Renamed army family to ${name}`)
-  return adminArmyFamily(rows[0])
+  if (name !== null) {
+    yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
+    const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
+      WHERE lower(name)=lower($1) AND family_id<>$2::bigint) exists`, [name,id])
+    if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
+  }
+  const rows = yield* sql.unsafe<FamilyIdentityRow>(`WITH updated AS (
+      UPDATE army_families SET name=$1,updated_at=now() WHERE family_id=$2::bigint
+      RETURNING family_id,name,representative_share_code
+    ) SELECT updated.family_id::text,updated.name,updated.representative_share_code,composition.heroes hero_ids,
+      ARRAY(SELECT (entry->>'equipmentId')::integer FROM jsonb_array_elements(composition.equipment) entry ORDER BY (entry->>'equipmentId')::integer) equipment_ids
+    FROM updated JOIN army_compositions composition ON composition.share_code=updated.representative_share_code`, [name,id]).pipe(
+      Effect.mapError(cause => cause instanceof SqlError.SqlError && cause.reason._tag === "UniqueViolation"
+        && cause.reason.constraint === "army_families_name_unique"
+        ? new Conflict({ message: "An army family already uses this name" }) : cause),
+    )
+  if (!rows[0]) return yield* new NotFound({ message: "Army family not found" })
+  yield* audit(input, "army_family.rename", "army_family", id, name === null ? "Cleared army family name" : `Renamed army family to ${name}`)
+  return familyIdentity(rows[0])
 }))
 
 interface PostRow {
@@ -1245,8 +1229,7 @@ const testPush = (input: AdminOperationInput) => Effect.gen(function* () {
 })
 
 const notificationLabTypes = [
-  { id: "legend-attack", category: "Legend League", label: "Legend attack", description: "An attack by a notification-enabled bookmarked account.", title: "Legend attack", body: "Barbarian King attacked Archer Queen: 3 stars, 100%.", data: { type: "legend_battle", target_tag: "#PLAYER", battle_id: "00000000-0000-7000-8000-000000000001" } },
-  { id: "legend-defense", category: "Legend League", label: "Legend defense", description: "A defense received by any notification-enabled account.", title: "Legend defense", body: "Archer Queen attacked Barbarian King: 2 stars, 86%.", data: { type: "legend_battle", target_tag: "#PLAYER", battle_id: "00000000-0000-7000-8000-000000000002" } },
+  { id: "legend-defense", category: "Legend League", label: "Legend defense", description: "A defense received by a notification-enabled verified account.", title: "Legend defense", body: "Archer Queen attacked Barbarian King: 2 stars, 86%.", data: { type: "legend_defense", player_tag: "#PLAYER", event_id: "0".repeat(64), battle_time: "2026-09-11T00:00:00Z" } },
   { id: "war-start", category: "War state", label: "Clan war started", description: "The tracking service found a new regular war.", title: "Clan war started", body: "A new war is available for your selected clan.", data: { type: "new_war", target_tag: "#CLAN" } },
   { id: "war-score", category: "War attacks", label: "War score updated", description: "A regular-war attack changed the score.", title: "War score updated", body: "A new attack changed the clan war score.", data: { type: "new_attacks", target_tag: "#CLAN" } },
   { id: "cwl-attack", category: "War attacks", label: "CWL score updated", description: "A CWL attack changed the score.", title: "War score updated", body: "A new attack changed the clan war score.", data: { type: "cwl_new_attacks", target_tag: "#CLAN" } },
@@ -1279,12 +1262,22 @@ const labDevices = (input: AdminOperationInput) => Effect.gen(function* () {
   return yield* database("Notification lab device lookup failed", Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     const rows = yield* sql.unsafe<Record<string, unknown> & { readonly last_seen_at: Date | string }>(`SELECT
-      md5(user_id || chr(31) || device_id || chr(31) || environment) id, user_id,
-      user_id user_label, device_id, platform, provider, environment, app_version,
-      ''::text build_number, ''::text os_version, ''::text device_model, enabled,
-      authorization_status, locale, last_seen_at, war_attacks_enabled, war_state_enabled,
-      war_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled,
-      reminder_timings FROM mobile_push_devices ORDER BY last_seen_at DESC, device_id`)
+      md5(device.user_id || chr(31) || device.device_id || chr(31) || device.environment) id, device.user_id,
+      device.user_id user_label, device.device_id, device.platform, device.provider, device.environment, device.app_version,
+      ''::text build_number, ''::text os_version, ''::text device_model, device.enabled,
+      device.authorization_status, device.locale, device.last_seen_at,
+      COALESCE(preference.war_attacks_enabled,false) war_attacks_enabled,
+      COALESCE(preference.war_state_enabled,false) war_state_enabled,
+      COALESCE(preference.war_reminders_enabled,false) war_reminders_enabled,
+      COALESCE(preference.raid_reminders_enabled,false) raid_reminders_enabled,
+      COALESCE(preference.events_enabled,false) events_enabled,
+      COALESCE(preference.announcements_enabled,false) announcements_enabled,
+      COALESCE(preference.monthly_support_enabled,false) monthly_support_enabled,
+      COALESCE(preference.legend_defenses_enabled,false) legend_defenses_enabled,
+      COALESCE(preference.reminder_timings,'{}'::integer[]) reminder_timings,
+      COALESCE(preference.raid_reminder_timings,'{}'::integer[]) raid_reminder_timings
+      FROM mobile_push_devices device LEFT JOIN mobile_notification_preferences preference USING(user_id)
+      ORDER BY device.last_seen_at DESC, device.device_id`)
     return rows.map((row) => ({ ...row, last_seen_at: iso(row.last_seen_at) }))
   }))
 })
@@ -1408,6 +1401,7 @@ const operationFor = (
     case "adminTrackingSummary": return executeTrackingRead("summary", input.query)
     case "adminTrackingTimeseries": return executeTrackingRead("timeseries", input.query)
     case "adminArmyFamilies": return listArmyFamilies(input)
+    case "adminArmyFamilyMembers": return listArmyFamilyMembers(input)
     case "adminUpdateArmyFamily": return updateArmyFamily(input)
     case "adminListDeveloperApplications": return listDeveloperApplications()
     case "adminCreateDeveloperApplication": return createDeveloperApplication(input)

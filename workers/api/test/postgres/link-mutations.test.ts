@@ -99,7 +99,7 @@ describe("link mutations against authoritative Goose migrations", () => {
     expect(yield* json(user(a), `/links/${a}`, "POST", { player_tag: "#QPQ" })).toMatchObject({ account: { is_verified: true, hidden: true } })
     yield* sql`INSERT INTO player_upgrades (player_tag, data) VALUES ('#QPQ','{"private":true}')`
     yield* sql`INSERT INTO player_upgrade_preferences (player_tag, preferences) VALUES ('#QPQ','{"private":true}')`
-    yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, source) VALUES (${a}, '#QPQ','verified')`
+    yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, enabled) VALUES (${a}, '#QPQ',true)`
     yield* sql`INSERT INTO user_bookmarks (user_id,entity_type,tag) VALUES (${b},'player','#QPQ')`
     expect(yield* json(user(b), `/links/${b}`, "POST", { player_tag: "#QPQ", api_token: "valid" })).toMatchObject({ account: { is_verified: true, hidden: false } })
     expect(yield* sql`SELECT user_id FROM player_links WHERE tag = '#QPQ'`).toEqual([{ user_id: b }])

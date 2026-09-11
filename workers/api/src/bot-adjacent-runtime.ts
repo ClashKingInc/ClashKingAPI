@@ -10,6 +10,7 @@ import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { commitServerScopedLink,readServerLinkTokenPolicy,requireServerLinkToken } from "./server-scoped-linking.js"
 import { prepareLink } from "./link-mutations.js"
+import { MAX_DASHBOARD_UPLOAD, uploadMediaFile } from "./dashboard-upload.js"
 
 class OperationConflict extends Data.TaggedError("OperationConflict")<{ readonly message: string }> {}
 type OperationFailure = ApiFailure | OperationConflict
@@ -22,6 +23,9 @@ export const botAdjacentRuntimeRoutes = [
   { method: "PUT", path: "/v2/bases/:baseId/votes/:voterId", operation: "upsertBaseVote" },
   { method: "DELETE", path: "/v2/bases/:baseId/votes/:voterId", operation: "removeBaseVote" },
   { method: "POST", path: "/v2/bases/:baseId/downloaders/:userId", operation: "recordBaseDownload" },
+  { method: "GET", path: "/v2/bases/legacy/:messageId", operation: "resolveLegacyBase" },
+  { method: "POST", path: "/v2/bases/:baseId/images/:position", operation: "stageLegacyBaseImage" },
+  { method: "POST", path: "/v2/bases/:baseId/finalize", operation: "finalizeLegacyBase" },
 ] as const
 
 type SharedRequest = typeof botEndpoints.sharedLinksLookup.body.Type
@@ -82,6 +86,9 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
   readonly upsertBaseVote: (baseId: string, voterId: string, direction: "up" | "down") => Effect.Effect<typeof botEndpoints.upsertBaseVote.response.Type, OperationFailure>
   readonly removeBaseVote: (baseId: string, voterId: string) => Effect.Effect<void, OperationFailure>
   readonly recordBaseDownload: (baseId: string, userId: string) => Effect.Effect<typeof botEndpoints.recordBaseDownload.response.Type, OperationFailure>
+  readonly resolveLegacyBase: (messageId: string) => Effect.Effect<typeof botEndpoints.resolveLegacyBase.response.Type, OperationFailure>
+  readonly stageLegacyBaseImage: (baseId: string, position: number, sourceUrl: string) => Effect.Effect<typeof botEndpoints.stageLegacyBaseImage.response.Type, OperationFailure | PayloadTooLarge>
+  readonly finalizeLegacyBase: (baseId: string, serverId: string, channelId: string, description: string) => Effect.Effect<typeof botEndpoints.finalizeLegacyBase.response.Type, OperationFailure>
 }>()("clashking/BotAdjacentStore") {
   static readonly layer = Layer.effect(BotAdjacentStore, Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
@@ -120,24 +127,91 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag
         WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
       upsertBaseVote: (baseId, voterId, direction) => Effect.gen(function* () {
-        const rows = yield* db(sql<{ baseId: string; voterId: string; direction: "up" | "down" }>`UPDATE bases
-          SET upvoter_ids = CASE WHEN ${direction} = 'up' THEN array_append(array_remove(upvoter_ids, ${voterId}), ${voterId}) ELSE array_remove(upvoter_ids, ${voterId}) END,
-              downvoter_ids = CASE WHEN ${direction} = 'down' THEN array_append(array_remove(downvoter_ids, ${voterId}), ${voterId}) ELSE array_remove(downvoter_ids, ${voterId}) END
-          WHERE id = ${baseId}::uuid RETURNING id::text AS "baseId", ${voterId}::text AS "voterId", ${direction}::text AS direction`)
+        const vote = direction === "up" ? 1 : -1
+        const rows = yield* db(sql.unsafe<{ baseId: string; voterId: string; direction: "up" | "down" }>(`WITH target AS (
+            SELECT id FROM bases WHERE id=$1::bigint
+          ), changed AS (
+            INSERT INTO base_votes(base_id,user_id,vote) SELECT id,$2,$3 FROM target
+            ON CONFLICT (base_id,user_id) DO UPDATE SET vote=excluded.vote,updated_at=now()
+            RETURNING base_id
+          ) SELECT changed.base_id::text "baseId",$2::text "voterId",$4::text direction FROM changed`,
+        [baseId, voterId, vote, direction]))
         if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         return rows[0]
       }),
       removeBaseVote: (baseId, voterId) => Effect.gen(function* () {
-        const rows = yield* db(sql<{ id: string }>`UPDATE bases SET upvoter_ids = array_remove(upvoter_ids, ${voterId}),
-          downvoter_ids = array_remove(downvoter_ids, ${voterId}) WHERE id = ${baseId}::uuid RETURNING id::text`)
+        const rows = yield* db(sql.unsafe<{ id: string }>(`WITH target AS (
+          SELECT id FROM bases WHERE id=$1::bigint
+        ), removed AS (
+          DELETE FROM base_votes vote USING target WHERE vote.base_id=target.id AND vote.user_id=$2 RETURNING vote.base_id
+        ) SELECT id::text FROM target`, [baseId, voterId]))
         if (rows.length === 0) return yield* new NotFound({ message: "Base not found" })
       }),
       recordBaseDownload: (baseId, userId) => Effect.gen(function* () {
-        const rows = yield* db(sql<{ download_count: number }>`UPDATE bases SET downloaders = CASE
-          WHEN ${userId} = ANY(downloaders) THEN downloaders ELSE array_append(downloaders, ${userId}) END
-          WHERE id = ${baseId}::uuid RETURNING cardinality(downloaders)::int AS download_count`)
+        const rows = yield* db(sql.unsafe<{ download_count: number }>(`WITH target AS (
+            SELECT id FROM bases WHERE id=$1::bigint
+          ), recorded AS (
+            INSERT INTO base_downloaders(base_id,user_id) SELECT id,$2 FROM target ON CONFLICT DO NOTHING RETURNING base_id
+          ), retained AS (
+            INSERT INTO user_saved_bases(user_id,base_id)
+            SELECT auth.user_id,target.id FROM target JOIN auth_users auth ON auth.user_id=$2
+            ON CONFLICT (user_id,base_id) DO NOTHING RETURNING base_id
+          ) SELECT (SELECT count(*)::int FROM base_downloaders downloader WHERE downloader.base_id=target.id) download_count
+          FROM target`, [baseId, userId]))
         if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         return { baseId, userId, downloadCount: rows[0].download_count }
+      }),
+      resolveLegacyBase: (messageId) => Effect.gen(function* () {
+        const rows = yield* db(sql.unsafe<{ id: string; message_id: string; server_id: string | null; channel_id: string | null; base_link: string; description: string; images: string[] }>(`SELECT base.id::text,base.message_id,base.server_id,base.channel_id,base.base_link,base.description,
+          COALESCE(array_agg(image.image_url ORDER BY image.position) FILTER (WHERE image.image_url IS NOT NULL),'{}'::text[]) images
+          FROM bases base LEFT JOIN base_images image ON image.base_id=base.id WHERE base.message_id=$1
+          GROUP BY base.id`, [messageId]))
+        const row = rows[0]
+        if (row === undefined) return yield* new NotFound({ message: "Base not found" })
+        return { id: row.id, messageId: row.message_id, serverId: row.server_id, channelId: row.channel_id,
+          baseLink: row.base_link, images: row.images, description: row.description }
+      }),
+      stageLegacyBaseImage: (baseId, position, sourceUrl) => Effect.gen(function* () {
+        if (!Number.isInteger(position) || position < 1 || position > 4) return yield* new InvalidRequest({ message: "Base image position must be from 1 to 4" })
+        let source: URL
+        try { source = new URL(sourceUrl) } catch { return yield* new InvalidRequest({ message: "Invalid Discord attachment URL" }) }
+        if (source.protocol !== "https:" || !["cdn.discordapp.com", "media.discordapp.net"].includes(source.hostname)) {
+          return yield* new InvalidRequest({ message: "Invalid Discord attachment URL" })
+        }
+        const existing = yield* db(sql.unsafe<{ image_url: string | null }>(`SELECT image.image_url FROM bases base
+          LEFT JOIN base_images image ON image.base_id=base.id AND image.position=$2 WHERE base.id=$1::bigint`, [baseId, position]))
+        if (existing[0] === undefined) return yield* new NotFound({ message: "Base not found" })
+        if (existing[0].image_url !== null) return { baseId, position, imageUrl: existing[0].image_url }
+        const response = yield* Effect.tryPromise({
+          try: () => fetch(source, { redirect: "error", signal: AbortSignal.timeout(15_000) }),
+          catch: (cause) => new UpstreamUnavailable({ cause, message: "Discord attachment copy failed" }),
+        })
+        if (!response.ok) { yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve()); return yield* new UpstreamUnavailable({ cause: response.status, message: "Discord attachment copy failed" }) }
+        const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? ""
+        const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" } as const)[contentType as "image/png"]
+        if (extension === undefined) { yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve()); return yield* new InvalidRequest({ message: "Unsupported base attachment type", status: 415 }) }
+        const length = response.headers.get("content-length")
+        if (length !== null && /^\d+$/u.test(length) && Number(length) > MAX_DASHBOARD_UPLOAD) {
+          yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve())
+          return yield* new PayloadTooLarge({ message: "Base attachment exceeds 25 MB" })
+        }
+        const blob = yield* Effect.tryPromise({ try: () => response.blob(), catch: (cause) => new UpstreamUnavailable({ cause, message: "Discord attachment copy failed" }) })
+        if (blob.size > MAX_DASHBOARD_UPLOAD) return yield* new PayloadTooLarge({ message: "Base attachment exceeds 25 MB" })
+        const filename = `base_${baseId}_${position}_${crypto.randomUUID()}.${extension}`
+        const uploaded = yield* uploadMediaFile(bindings, filename, new File([blob], filename, { type: contentType }))
+        const staged = yield* db(sql.unsafe<{ image_url: string }>(`INSERT INTO base_images(base_id,position,image_url) VALUES ($1::bigint,$2,$3)
+          ON CONFLICT (base_id,position) DO NOTHING RETURNING image_url`, [baseId, position, uploaded.url]))
+        const imageUrl = staged[0]?.image_url ?? (yield* db(sql.unsafe<{ image_url: string }>("SELECT image_url FROM base_images WHERE base_id=$1::bigint AND position=$2", [baseId, position])))[0]?.image_url
+        if (imageUrl === undefined) return yield* new NotFound({ message: "Base not found" })
+        return { baseId, position, imageUrl }
+      }),
+      finalizeLegacyBase: (baseId, serverId, channelId, description) => Effect.gen(function* () {
+        if ([...description].length > 1000) return yield* new InvalidRequest({ message: "Base description must be at most 1000 characters" })
+        const rows = yield* db(sql.unsafe<{ id: string }>(`UPDATE bases SET server_id=$2,channel_id=$3,description=$4
+          WHERE id=$1::bigint AND ((server_id IS NULL AND channel_id IS NULL) OR (server_id=$2 AND channel_id=$3)) RETURNING id::text`,
+        [baseId, serverId, channelId, description]))
+        if (rows[0] === undefined) return yield* new NotFound({ message: "Base is missing or already belongs to another Discord location" })
+        return { baseId, serverId, channelId, description }
       }),
     })
   }))
@@ -156,7 +230,7 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
     const snowflake = (key: string) => input(() => Schema.decodeUnknownSync(DecimalSnowflake)(params[key]))
     const baseId = () => input(() => {
       const value = params.baseId ?? ""
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value)) throw new Error("Invalid base ID")
+      if (!/^[1-9][0-9]*$/u.test(value) || BigInt(value) > 9_223_372_036_854_775_807n) throw new Error("Invalid base ID")
       return value
     })
     switch (match.operation) {
@@ -197,6 +271,25 @@ export const dispatchBotAdjacentRuntime = (request: Request, _bindings: WorkerBi
       case "recordBaseDownload": {
         yield* auth.requireBot(request)
         return yield* encode(botEndpoints.recordBaseDownload.response, yield* store.recordBaseDownload(yield* baseId(), yield* snowflake("userId")))
+      }
+      case "resolveLegacyBase": {
+        yield* auth.requireBot(request)
+        return yield* encode(botEndpoints.resolveLegacyBase.response, yield* store.resolveLegacyBase(yield* snowflake("messageId")))
+      }
+      case "stageLegacyBaseImage": {
+        yield* auth.requireBot(request)
+        const body = yield* decodeBody(request, botEndpoints.stageLegacyBaseImage.body)
+        const position = yield* input(() => {
+          const value = Number(params.position)
+          if (!Number.isInteger(value) || value < 1 || value > 4) throw new Error("Invalid base image position")
+          return value
+        })
+        return yield* encode(botEndpoints.stageLegacyBaseImage.response, yield* store.stageLegacyBaseImage(yield* baseId(), position, body.sourceUrl))
+      }
+      case "finalizeLegacyBase": {
+        yield* auth.requireBot(request)
+        const body = yield* decodeBody(request, botEndpoints.finalizeLegacyBase.body)
+        return yield* encode(botEndpoints.finalizeLegacyBase.response, yield* store.finalizeLegacyBase(yield* baseId(), body.serverId, body.channelId, body.description))
       }
     }
   }).pipe(Effect.catch((failure) => {

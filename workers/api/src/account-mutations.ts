@@ -15,16 +15,21 @@ const exportQueries = {
   recent_searches: "SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC",
   legacy_search_settings: "SELECT search, updated_at FROM user_settings WHERE user_id = $1",
   discord_sessions: "SELECT device_id, expires_at, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC",
-  notification_accounts: "SELECT player_tag, source, active, created_at, updated_at FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag",
-  notification_devices: "SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, reminder_timings, raid_reminder_timings, last_seen_at FROM mobile_push_devices WHERE user_id = $1",
+  notification_accounts: "SELECT player_tag, enabled, created_at, updated_at FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag",
+  notification_devices: "SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, last_seen_at FROM mobile_push_devices WHERE user_id = $1",
+  notification_preferences: "SELECT war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, legend_defenses_enabled, reminder_timings, raid_reminder_timings, updated_at FROM mobile_notification_preferences WHERE user_id = $1",
+  saved_bases: "SELECT base_id::text, saved_at FROM user_saved_bases WHERE user_id = $1 ORDER BY saved_at DESC, base_id DESC",
+  base_slots: "SELECT player_tag, slot_kind, slot_number, base_id::text, assigned_at FROM user_base_slots WHERE user_id = $1 ORDER BY player_tag, slot_kind, slot_number",
   billing_subscription: "SELECT provider, provider_subscription_id, provider_price_id, status, current_period_end, cancel_at_period_end, created_at, updated_at FROM billing_subscriptions WHERE user_id = $1",
   subscription_entitlements: "SELECT active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd, updated_at FROM subscription_entitlements WHERE user_id = $1",
 } as const
 
 const deleteQueries = {
+  user_base_slots: "DELETE FROM user_base_slots WHERE user_id = $1",
+  user_saved_bases: "DELETE FROM user_saved_bases WHERE user_id = $1",
   mobile_notification_accounts: "DELETE FROM mobile_notification_accounts WHERE user_id = $1",
   mobile_push_devices: "DELETE FROM mobile_push_devices WHERE user_id = $1",
-  mobile_notification_deliveries: "DELETE FROM mobile_notification_deliveries WHERE user_id = $1",
+  mobile_notification_preferences: "DELETE FROM mobile_notification_preferences WHERE user_id = $1",
   billing_webhook_events: "DELETE FROM billing_webhook_events events USING billing_customers customers WHERE customers.user_id = $1 AND events.payload #>> '{data,object,customer}' = customers.stripe_customer_id",
   subscription_entitlements: "DELETE FROM subscription_entitlements WHERE user_id = $1",
   billing_subscriptions: "DELETE FROM billing_subscriptions WHERE user_id = $1",
@@ -60,7 +65,9 @@ export const exportAccount = (userId: string) => Effect.gen(function* () {
       player_links: yield* section("player_links"), bookmarks: yield* section("bookmarks"),
       recent_searches: yield* section("recent_searches"), legacy_search_settings: yield* section("legacy_search_settings"),
       discord_sessions: yield* section("discord_sessions"), notification_accounts: yield* section("notification_accounts"),
-      notification_devices: yield* section("notification_devices"), billing_subscription: yield* section("billing_subscription"),
+      notification_devices: yield* section("notification_devices"), notification_preferences: yield* section("notification_preferences"),
+      saved_bases: yield* section("saved_bases"), base_slots: yield* section("base_slots"),
+      billing_subscription: yield* section("billing_subscription"),
       subscription_entitlements: yield* section("subscription_entitlements"),
     } satisfies EndpointResponse<typeof AuthExportEndpoint>
   })))

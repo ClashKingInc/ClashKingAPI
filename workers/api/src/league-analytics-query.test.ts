@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { parseArmySearchQuery, parseLeagueHitRateQuery, parseLegendAggregateWindow, parsePlayerHistoryWindow } from "./league-analytics-query.js"
+import { parseArmySearchQuery, parseLeagueHitRateQuery, parseLegendAggregateWindow, parseLegendPlayerSeriesQuery, parsePlayerHistoryWindow } from "./league-analytics-query.js"
 
 const run = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect)
 
@@ -22,6 +22,16 @@ describe("league analytics query parsing", () => {
     const parse = (time: string) => parseLegendAggregateWindow(new URLSearchParams(), new Date(`2026-09-09T${time}Z`), { defaultDays: 1, maximumDays: 30 })
     expect(parse("05:09:59.999").firstDay).toBe("2026-09-07")
     expect(parse("05:10:00").firstDay).toBe("2026-09-08")
+  })
+
+  it("defaults player Legend series to 28 days and caps it at 35", async () => {
+    await expect(run(parseLegendPlayerSeriesQuery(new URLSearchParams(), new Date("2026-09-09T05:10:00Z"))))
+      .resolves.toMatchObject({ firstDay: "2026-08-12", lastDay: "2026-09-08", calendarDays: 28 })
+    await expect(run(parseLegendPlayerSeriesQuery(new URLSearchParams(
+      "time%5Bafter%5D=2026-08-04&time%5Bbefore%5D=2026-09-08",
+    )))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    await expect(run(parseLegendPlayerSeriesQuery(new URLSearchParams("limit=28"))))
+      .rejects.toMatchObject({ _tag: "InvalidRequest" })
   })
   it("uses inclusive UTC time keys and a 30-day default", async () => {
     const now = new Date("2026-09-08T18:00:00Z")

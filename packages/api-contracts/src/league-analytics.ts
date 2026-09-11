@@ -49,6 +49,13 @@ export const RankedBattlelogResponse = Schema.Struct({
   ...BattlelogTotals,
 })
 export const LegendBattlelogResponse = Schema.Struct({ tag: Schema.String, day: Schema.String, ...BattlelogTotals })
+export const LegendPlayerDay = Schema.Struct({
+  day: Schema.String,
+  attackTrophies: Schema.Int,
+  defenseTrophies: Schema.Int,
+  trophies: Schema.Int,
+})
+export const LegendPlayerDailySeriesResponse = Schema.Struct({ tag: Schema.String, items: Schema.Array(LegendPlayerDay) })
 
 export const PlayerBattlelogHistoryItem = Schema.Struct({
   battleMode: Schema.Literals(["farming", "ranked", "legend"]),
@@ -215,6 +222,8 @@ export const RankedBattlelogEndpoint = publicGet("getRankedBattlelog", "/v2/play
   PlayerSeasonPath, NoQuery, RankedBattlelogResponse, "Get one player's Ranked tournament battles")
 export const LegendBattlelogEndpoint = publicGet("getLegendBattlelog", "/v2/player/:playerTag/legend/:day/battlelog",
   Schema.Struct({ playerTag: Schema.String, day: Schema.String }), NoQuery, LegendBattlelogResponse, "Get one player's Legend-day battles")
+export const LegendPlayerDailySeriesEndpoint = publicGet("getLegendPlayerDailySeries", "/v2/player/:playerTag/legend/series",
+  Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, LegendPlayerDailySeriesResponse, "Get one player's daily Legend trophy series")
 export const RankedGroupEndpoint = publicGet("getRankedLeagueGroup", "/v2/ranked/:seasonId/groups/:leagueGroupId",
   Schema.Struct({ seasonId: Schema.String, leagueGroupId: Schema.String }), NoQuery, RankedGroupResponse, "Get one Ranked league group")
 export const PlayerLeagueHistoryEndpoint = publicGet("getPlayerLeagueHistory", "/v2/player/:playerTag/league/history",
@@ -236,6 +245,7 @@ export const leagueAnalyticsEndpoints = {
   playerBattlelogHistory: PlayerBattlelogHistoryEndpoint,
   rankedBattlelog: RankedBattlelogEndpoint,
   legendBattlelog: LegendBattlelogEndpoint,
+  legendPlayerDailySeries: LegendPlayerDailySeriesEndpoint,
   rankedGroup: RankedGroupEndpoint,
   playerLeagueHistory: PlayerLeagueHistoryEndpoint,
   armySearch: ArmySearchEndpoint,

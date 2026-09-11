@@ -9,6 +9,8 @@ import {
   LeagueTierStatisticsEndpoint,
   LegendBattlelogResponse,
   LegendDaysEndpoint,
+  LegendPlayerDailySeriesEndpoint,
+  LegendPlayerDailySeriesResponse,
   PlayerBattlelogHistoryEndpoint,
   RankedBattlelogResponse,
   RankedGroupEndpoint,
@@ -36,14 +38,23 @@ describe("league analytics contracts", () => {
   })
 
   it("publishes the finalized GET paths", () => {
-    expect([PlayerBattlelogHistoryEndpoint, RankedGroupEndpoint, ArmySearchEndpoint, LeagueTierStatisticsEndpoint, LegendDaysEndpoint]
+    expect([PlayerBattlelogHistoryEndpoint, LegendPlayerDailySeriesEndpoint, RankedGroupEndpoint, ArmySearchEndpoint, LeagueTierStatisticsEndpoint, LegendDaysEndpoint]
       .map((endpoint) => [endpoint.method, endpoint.path])).toEqual([
       ["GET", "/v2/player/:playerTag/battlelog/history"],
+      ["GET", "/v2/player/:playerTag/legend/series"],
       ["GET", "/v2/ranked/:seasonId/groups/:leagueGroupId"],
       ["GET", "/v2/stats/armies"],
       ["GET", "/v2/stats/league/tournaments/:seasonId/tiers/:leagueTierId"],
       ["GET", "/v2/stats/legend/days"],
     ])
+  })
+
+  it("publishes a compact player Legend trophy series", () => {
+    expect(Schema.decodeUnknownSync(LegendPlayerDailySeriesResponse)({ tag: "#P0Y", items: [
+      { day: "2026-09-07", attackTrophies: 120, defenseTrophies: -80, trophies: 40 },
+    ] })).toEqual({ tag: "#P0Y", items: [
+      { day: "2026-09-07", attackTrophies: 120, defenseTrophies: -80, trophies: 40 },
+    ] })
   })
 
   it("keeps Ranked and Legend battlelog responses free of collection state", () => {

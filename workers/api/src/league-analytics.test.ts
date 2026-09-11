@@ -7,6 +7,7 @@ import {
   legendDefenseTrophies,
   queryArmySearch,
   queryHitRateHistory,
+  queryLegendPlayerDailySeries,
   queryPlayerBattlelogHistory,
   queryRankedBattlelog,
   rankedDefenseTrophies,
@@ -64,6 +65,22 @@ describe("league analytics calculations", () => {
     expect(calls[0]?.query).toContain("cohort='legend_i'")
     expect(calls[0]?.query).not.toContain("battles_ranked")
     expect(result.items[0]).toEqual({ mode: "legend", day: "2026-09-07", attacks: 10, starCounts: { zero: 1, one: 2, two: 3, three: 4 } })
+  })
+
+  it("returns a bounded daily Legend trophy series with automatic defenses from one query", async () => {
+    const calls: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
+    const result = await run(queryLegendPlayerDailySeries("#2", new URLSearchParams(
+      "time%5Bafter%5D=2026-09-08&time%5Bbefore%5D=2026-09-08",
+    ), new Date("2026-09-09T05:10:00Z")), sql([[
+      { battle_time: "2026-09-07T06:00:00Z", direction: 2, stars: 2, destruction_percentage: 98 },
+      { battle_time: "2026-09-08T06:00:00Z", direction: 1, stars: 3, destruction_percentage: 100 },
+      { battle_time: "2026-09-08T07:00:00Z", direction: 2, stars: 1, destruction_percentage: 91 },
+    ]], calls))
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.query).toContain("FROM battles_ranked")
+    expect(result).toEqual({ tag: "#2", items: [
+      { day: "2026-09-08", attackTrophies: 40, defenseTrophies: -239, trophies: -199 },
+    ] })
   })
 
   it("reads compact general history across observed attack modes", async () => {

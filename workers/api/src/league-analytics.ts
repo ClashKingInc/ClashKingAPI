@@ -4,6 +4,7 @@ import {
   ArmyTimelineResponse,
   LeagueHitRateHistoryResponse,
   LegendBattlelogResponse,
+  LegendPlayerDailySeriesResponse,
   LegendDaysResponse,
   PlayerBattlelogHistoryResponse,
   PlayerLeagueHistoryResponse,
@@ -18,6 +19,7 @@ import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable } from "
 import {
   parseLeagueHitRateQuery,
   parseLegendDaysQuery,
+  parseLegendPlayerSeriesQuery,
   parsePlayerHistoryWindow,
 } from "./league-analytics-query.js"
 import { rankedPeriodPredicate } from "./ranked-period.js"
@@ -182,6 +184,48 @@ export const queryLegendBattlelog = (rawTag: string, rawDay: string, now = new D
     trophies: attackTotal + defenseTotal, attacks, defenses }
 }))
 
+interface LegendTrophyRow {
+  battle_time: Date | string
+  direction: 1 | 2
+  stars: number
+  destruction_percentage: number | string
+}
+export const queryLegendPlayerDailySeries = (rawTag: string, query: URLSearchParams, now = new Date()) =>
+  database("Player Legend series query failed", Effect.gen(function* () {
+    const tag = yield* normalizeClashTag(rawTag)
+    const window = yield* parseLegendPlayerSeriesQuery(query, now)
+    const sql = yield* SqlClient.SqlClient
+    const dayMilliseconds = 86_400_000
+    const rows = yield* sql.unsafe<LegendTrophyRow>(`SELECT battle_time,direction,stars,destruction_percentage
+      FROM battles_ranked WHERE player_tag=$1 AND battle_mode=2
+      AND battle_time >= $2 AND battle_time < $3 ORDER BY battle_time,direction`,
+    [tag, new Date(window.start.valueOf() - 2 * dayMilliseconds), window.end])
+    const rowDay = (row: LegendTrophyRow) => new Date(new Date(row.battle_time).valueOf() - (5 * 60 + 10) * 60_000)
+      .toISOString().slice(0, 10)
+    const items = Array.from({ length: window.calendarDays }, (_, index) => {
+      const start = new Date(window.start.valueOf() + index * dayMilliseconds)
+      const end = new Date(start.valueOf() + dayMilliseconds)
+      const label = start.toISOString().slice(0, 10)
+      const selected = rows.filter((row) => rowDay(row) === label)
+      const attacks = selected.filter((row) => row.direction === 1)
+      const defenses = selected.filter((row) => row.direction === 2)
+      const attackTotal = attacks.reduce((sum, row) => sum + attackTrophies(number(row.stars), number(row.destruction_percentage)), 0)
+      let defenseTotal = defenses.reduce((sum, row) => sum + legendDefenseTrophies(number(row.stars), number(row.destruction_percentage)), 0)
+      if (now >= end && defenses.length < 8) {
+        const priorStart = start.valueOf() - 2 * dayMilliseconds
+        const previous = rows.filter((row) => row.direction === 2 && new Date(row.battle_time).valueOf() >= priorStart
+          && new Date(row.battle_time).valueOf() < start.valueOf())
+        if (previous.length > 0) {
+          const automatic = Math.floor(previous.reduce((sum, row) => sum
+            + legendDefenseTrophies(number(row.stars), number(row.destruction_percentage)), 0) / previous.length)
+          defenseTotal += automatic * (8 - defenses.length)
+        }
+      }
+      return { day: label, attackTrophies: attackTotal, defenseTrophies: defenseTotal, trophies: attackTotal + defenseTotal }
+    })
+    return { tag, items }
+  }))
+
 export const queryPlayerBattlelogHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player battle history query failed", Effect.gen(function* () {
   const tag = yield* normalizeClashTag(rawTag), window = yield* parsePlayerHistoryWindow(query, now), sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<{ battle_mode: "farming" | "ranked" | "legend"; battle_time: Date | string; stars: number; destruction_percentage: number; duration_seconds: number; looted_resources: unknown; share_code: string | null; family_id: string | null }>(`
@@ -321,6 +365,10 @@ export const dispatchLeagueAnalytics = (request: Request) => Effect.gen(function
     if (url.search !== "") return yield* new InvalidRequest({ message: "Legend battlelog does not accept query parameters" })
     const [tag = "", requestedDay = ""] = yield* decodedParts(parts, [3, 5])
     return yield* response(LegendBattlelogResponse, yield* queryLegendBattlelog(tag, requestedDay))
+  }
+  if (parts.length === 6 && parts[1] === "v2" && parts[2] === "player" && parts[4] === "legend" && parts[5] === "series") {
+    const [tag = ""] = yield* decodedParts(parts, [3])
+    return yield* response(LegendPlayerDailySeriesResponse, yield* queryLegendPlayerDailySeries(tag, url.searchParams))
   }
   if (parts.length === 6 && parts[1] === "v2" && parts[2] === "ranked" && parts[4] === "groups") {
     if (url.search !== "") return yield* new InvalidRequest({ message: "Ranked group does not accept query parameters" })

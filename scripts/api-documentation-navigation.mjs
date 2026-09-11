@@ -19,6 +19,7 @@ const additions = new Map([
   ["GET /v2/health", "Health"],
   ["GET /v2/leaderboard/{}/clan/capital-gold", "Leaderboard"],
   ["GET /v2/player/{}/legend/{}/battlelog", "Player"],
+  ["GET /v2/player/{}/legend/series", "Player"],
   ["GET /v2/player/{}/league/history", "Player"],
   ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
   ["GET /v2/ranked/{}/groups/{}", "Player"],

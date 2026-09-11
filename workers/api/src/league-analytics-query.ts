@@ -173,6 +173,14 @@ export const parseLegendDaysQuery = (query: URLSearchParams, now = new Date()) =
   catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid Legend-day query"),
 })
 
+export const parseLegendPlayerSeriesQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
+  try: () => {
+    assertKeys(query, new Set(["time[after]", "time[before]"]))
+    return parseLegendAggregateWindow(query, now, { defaultDays: 28, maximumDays: 35 })
+  },
+  catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid player Legend series query"),
+})
+
 export const parsePlayerHistoryWindow = (query: URLSearchParams, now = new Date(), maximumDays = 365) => Effect.try({
   try: () => {
     assertKeys(query, new Set(["time[after]", "time[before]"]))

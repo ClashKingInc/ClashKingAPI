@@ -2,7 +2,6 @@ import { PersonalBasesState } from "@clashking/api-contracts"
 import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it } from "vitest"
-
 import { AuthIdentity } from "../../src/auth.js"
 import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
@@ -11,10 +10,9 @@ import { dispatchMobilePersistence } from "../../src/mobile-persistence.js"
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (!databaseUrl || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Run through clashking_schemas/scripts/with-test-timescale.sh")
 const bindings = { HYPERDRIVE: { connectionString: databaseUrl } } as WorkerBindings
-const userId = "7540000000000000001", otherUserId = "7540000000000000002", playerTag = "#V0Y"
+const userId = "7540000000000000001"
 const layer = Layer.merge(databaseLayer(bindings), Layer.succeed(AuthIdentity, {
-  requireUser: () => Effect.succeed({ kind: "user" as const, userId }),
-  requireUserOrBot: () => Effect.succeed({ kind: "user" as const, userId }),
+  requireUser: () => Effect.succeed({ kind: "user" as const, userId }), requireUserOrBot: () => Effect.succeed({ kind: "user" as const, userId }),
   requireBot: () => Effect.die("Unexpected bot authentication"),
 }))
 const request = (path: string, method = "GET", body?: unknown) => new Request(`https://api.clashk.ing${path}`, {
@@ -27,33 +25,28 @@ const execute = (path: string, method = "GET", body?: unknown) => Effect.gen(fun
 })
 
 describe("personal bases against authoritative Goose migrations", () => {
-  it("saves shared rows, preserves download provenance, manages bounded verified-account slots, and cascades unsave", async () => {
+  it("saves and relabels bases, preserves download history, and removes only old saved rows", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
-      yield* sql`INSERT INTO auth_users(user_id,provider) VALUES (${userId},'discord'),(${otherUserId},'discord')`
-      yield* sql`INSERT INTO player_links(tag,user_id,source,is_verified) VALUES (${playerTag},${userId},'discord',true),('#V0L',${userId},'discord',false)`
-      const bases = yield* sql<{ id: string }>`INSERT INTO bases(base_link,message_id,server_id,channel_id,description) VALUES
-        ('https://link.clashofclans.com/en?action=OpenLayout&id=TH17','7540000000000000011','7540000000000000012','7540000000000000013','First'),
-        ('https://link.clashofclans.com/en?action=OpenLayout&id=TH18','7540000000000000014','7540000000000000012','7540000000000000013','Second') RETURNING id::text`
-      const [first, second] = bases.map((row) => row.id)
+      yield* sql`INSERT INTO auth_users(user_id,provider) VALUES (${userId},'discord')`
+      const bases = yield* sql<{ id: string }>`INSERT INTO bases(base_link,message_id,server_id,channel_id,description,downloads) VALUES
+        ('https://link.clashofclans.com/en?action=OpenLayout&id=TH17','7540000000000000011','7540000000000000012','7540000000000000013','First',${JSON.stringify({ [userId]: "2026-09-01T00:00:00.000Z" })}::jsonb),
+        ('https://link.clashofclans.com/en?action=OpenLayout&id=TH18','7540000000000000014','7540000000000000012','7540000000000000013','Second','{}'::jsonb),
+        ('https://link.clashofclans.com/en?action=OpenLayout&id=TH19','7540000000000000015','7540000000000000012','7540000000000000013','Old','{}'::jsonb) RETURNING id::text`
+      const [first, second, old] = bases.map((row) => row.id)
       yield* sql`INSERT INTO base_images(base_id,position,image_url) VALUES (${first}::bigint,1,'https://api.clashk.ing/v2/media/first.png')`
-      expect(yield* execute("/v2/bases/personal")).toEqual({ items: [], slots: [] })
-      const saved = yield* execute(`/v2/bases/personal/${first}`, "PUT")
-      expect(saved.items[0]).toMatchObject({ id: first, description: "First", saved: true, savedAt: expect.any(String), downloadedAt: null, images: ["https://api.clashk.ing/v2/media/first.png"] })
-      yield* sql`INSERT INTO base_downloaders(base_id,user_id) VALUES (${first}::bigint,${userId})`
-      expect((yield* execute("/v2/bases/personal")).items[0]?.downloadedAt).toEqual(expect.any(String))
-      const assigned = yield* execute(`/v2/bases/personal/slots/${encodeURIComponent(playerTag)}/war/1`, "PUT", { baseId: first })
-      expect(assigned.slots).toMatchObject([{ playerTag, kind: "war", number: 1, baseId: first }])
-      yield* execute(`/v2/bases/personal/${second}`, "PUT")
-      const reassigned = yield* execute(`/v2/bases/personal/slots/${encodeURIComponent(playerTag)}/war/1`, "PUT", { baseId: second })
-      expect(reassigned.slots[0]?.baseId).toBe(second)
-      expect(yield* execute(`/v2/bases/personal/slots/${encodeURIComponent(playerTag)}/war/2`, "PUT", { baseId: second }).pipe(Effect.flip)).toMatchObject({ _tag: "Conflict" })
-      expect(yield* execute(`/v2/bases/personal/slots/%23V0L/legend/1`, "PUT", { baseId: first }).pipe(Effect.flip)).toMatchObject({ _tag: "NotFound" })
-      expect((yield* execute(`/v2/bases/personal/${second}`, "DELETE")).slots).toEqual([])
-      const unsavedDownloaded = yield* execute(`/v2/bases/personal/${first}`, "DELETE")
-      expect(unsavedDownloaded.items).toMatchObject([{ id: first, saved: false, savedAt: null, downloadedAt: expect.any(String) }])
-      expect((yield* execute(`/v2/bases/personal/${first}`, "PUT")).items[0]).toMatchObject({ id: first, saved: true, downloadedAt: expect.any(String) })
-      expect((yield* execute(`/v2/bases/personal/slots/${encodeURIComponent(playerTag)}/war/1`, "DELETE")).slots).toEqual([])
+      expect(yield* execute("/v2/bases/personal")).toEqual({ items: [expect.objectContaining({ id: first, kind: null, saved: false,
+        savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z", downloadCount: 1 })] })
+      const saved = yield* execute(`/v2/bases/personal/${first}`, "PUT", { kind: "war" })
+      expect(saved.items[0]).toMatchObject({ id: first, kind: "war", saved: true, savedAt: expect.any(String), downloadedAt: "2026-09-01T00:00:00.000Z" })
+      const savedAt = saved.items[0]!.savedAt
+      expect((yield* execute(`/v2/bases/personal/${first}`, "PUT", { kind: "legend" })).items[0]).toMatchObject({ kind: "legend", savedAt })
+      expect((yield* execute(`/v2/bases/personal/${second}`, "PUT", { kind: null })).items.find((base) => base.id === second)).toMatchObject({ kind: null, saved: true })
+      yield* sql`INSERT INTO user_saved_bases(user_id,base_id,kind,saved_at) VALUES (${userId},${old}::bigint,'war',now()-interval '91 days')`
+      const cleaned = yield* execute("/v2/bases/personal/older-than-90-days", "DELETE")
+      expect(cleaned.items.some((base) => base.id === old)).toBe(false)
+      expect(cleaned.items.find((base) => base.id === first)).toMatchObject({ saved: true, kind: "legend" })
+      expect((yield* execute(`/v2/bases/personal/${first}`, "DELETE")).items.find((base) => base.id === first)).toMatchObject({ saved: false, kind: null, savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z" })
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

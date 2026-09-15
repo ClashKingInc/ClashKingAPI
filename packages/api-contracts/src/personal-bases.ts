@@ -6,7 +6,7 @@ import { ErrorResponse } from "./errors.js"
 export const PersonalBaseId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u)).annotate({
   description: "Base ID as a decimal string; never convert it to a JavaScript number.",
 })
-export const PersonalBaseSlotKind = Schema.Literals(["war", "legend"])
+export const PersonalBaseKind = Schema.Literals(["war", "legend"])
 export const PersonalBase = Schema.Struct({
   id: PersonalBaseId,
   baseLink: Schema.String,
@@ -20,20 +20,13 @@ export const PersonalBase = Schema.Struct({
   downloadCount: Schema.Int,
   upvotes: Schema.Int,
   downvotes: Schema.Int,
+  kind: Schema.NullOr(PersonalBaseKind),
   saved: Schema.Boolean,
   savedAt: Schema.NullOr(Schema.String),
   downloadedAt: Schema.NullOr(Schema.String),
 }).annotate({ parseOptions: { onExcessProperty: "error" } })
-export const PersonalBaseSlot = Schema.Struct({
-  playerTag: Schema.String,
-  kind: PersonalBaseSlotKind,
-  number: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
-  baseId: PersonalBaseId,
-  assignedAt: Schema.String,
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
 export const PersonalBasesState = Schema.Struct({
   items: Schema.Array(PersonalBase),
-  slots: Schema.Array(PersonalBaseSlot),
 }).annotate({ parseOptions: { onExcessProperty: "error" } })
 
 const PersonalErrors = [
@@ -43,37 +36,27 @@ const PersonalErrors = [
   { status: 409, body: ErrorResponse },
 ] as const
 const BasePath = Schema.Struct({ baseId: PersonalBaseId })
-const SlotPath = Schema.Struct({
-  playerTag: Schema.String,
-  kind: PersonalBaseSlotKind,
-  number: Schema.String.check(Schema.isPattern(/^[1-3]$/u)),
-})
+const SavePersonalBaseBody = Schema.Struct({ kind: Schema.NullOr(PersonalBaseKind) }).annotate({ parseOptions: { onExcessProperty: "error" } })
 
 export const PersonalBasesEndpoint = defineEndpoint({
   operationId: "getPersonalBases", method: "GET", path: "/v2/bases/personal", auth: "user",
-  summary: "List the authenticated user's saved bases and assigned slots", body: NoBody, bodyMode: "none",
+  summary: "List the authenticated user's saved and historically downloaded bases", body: NoBody, bodyMode: "none",
   pathParams: NoPathParams, query: NoQuery, response: PersonalBasesState, responseMode: "json", successStatus: 200,
   errors: PersonalErrors,
 })
 export const SavePersonalBaseEndpoint = defineEndpoint({
   operationId: "savePersonalBase", method: "PUT", path: "/v2/bases/personal/:baseId", auth: "user",
-  summary: "Save one shared base", body: NoBody, bodyMode: "none", pathParams: BasePath, query: NoQuery,
+  summary: "Save or relabel one shared base", body: SavePersonalBaseBody, bodyMode: "json", pathParams: BasePath, query: NoQuery,
   response: PersonalBasesState, responseMode: "json", successStatus: 200, errors: PersonalErrors,
 })
 export const UnsavePersonalBaseEndpoint = defineEndpoint({
   operationId: "unsavePersonalBase", method: "DELETE", path: "/v2/bases/personal/:baseId", auth: "user",
-  summary: "Unsave one shared base and clear its slots", body: NoBody, bodyMode: "none", pathParams: BasePath, query: NoQuery,
+  summary: "Unsave one shared base", body: NoBody, bodyMode: "none", pathParams: BasePath, query: NoQuery,
   response: PersonalBasesState, responseMode: "json", successStatus: 200, errors: PersonalErrors,
 })
-export const AssignPersonalBaseSlotEndpoint = defineEndpoint({
-  operationId: "assignPersonalBaseSlot", method: "PUT", path: "/v2/bases/personal/slots/:playerTag/:kind/:number", auth: "user",
-  summary: "Assign a saved base to a War or Legend slot", body: Schema.Struct({ baseId: PersonalBaseId }).annotate({ parseOptions: { onExcessProperty: "error" } }),
-  bodyMode: "json", pathParams: SlotPath, query: NoQuery, response: PersonalBasesState, responseMode: "json", successStatus: 200,
-  errors: PersonalErrors,
-})
-export const ClearPersonalBaseSlotEndpoint = defineEndpoint({
-  operationId: "clearPersonalBaseSlot", method: "DELETE", path: "/v2/bases/personal/slots/:playerTag/:kind/:number", auth: "user",
-  summary: "Clear one War or Legend base slot", body: NoBody, bodyMode: "none", pathParams: SlotPath, query: NoQuery,
+export const DeleteOldPersonalBasesEndpoint = defineEndpoint({
+  operationId: "deleteOldPersonalBases", method: "DELETE", path: "/v2/bases/personal/older-than-90-days", auth: "user",
+  summary: "Unsave bases saved more than 90 days ago", body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery,
   response: PersonalBasesState, responseMode: "json", successStatus: 200, errors: PersonalErrors,
 })
 
@@ -81,6 +64,5 @@ export const personalBaseEndpoints = {
   personalBases: PersonalBasesEndpoint,
   savePersonalBase: SavePersonalBaseEndpoint,
   unsavePersonalBase: UnsavePersonalBaseEndpoint,
-  assignPersonalBaseSlot: AssignPersonalBaseSlotEndpoint,
-  clearPersonalBaseSlot: ClearPersonalBaseSlotEndpoint,
+  deleteOldPersonalBases: DeleteOldPersonalBasesEndpoint,
 } as const

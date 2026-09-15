@@ -1,7 +1,6 @@
 import { AppConfigEndpoint } from "./app-config.js"
 import {
-  AssignPersonalBaseSlotEndpoint,
-  ClearPersonalBaseSlotEndpoint,
+  DeleteOldPersonalBasesEndpoint,
   PersonalBasesEndpoint,
   SavePersonalBaseEndpoint,
   UnsavePersonalBaseEndpoint,
@@ -155,8 +154,7 @@ export const expoEndpoints = {
   personalBases: PersonalBasesEndpoint,
   savePersonalBase: SavePersonalBaseEndpoint,
   unsavePersonalBase: UnsavePersonalBaseEndpoint,
-  assignPersonalBaseSlot: AssignPersonalBaseSlotEndpoint,
-  clearPersonalBaseSlot: ClearPersonalBaseSlotEndpoint,
+  deleteOldPersonalBases: DeleteOldPersonalBasesEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,

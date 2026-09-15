@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ClashKingInc/DevKit
-          ref: ${{ vars.API_SCHEMA_TEST_REF || '58e2bbbe2318c9d9a9e7d55f2d0c3782c2cdd891' }}
+          ref: ${{ vars.API_SCHEMA_TEST_REF || 'be76e85dd4b4ff69fa0eadeedb0b4c3ec8338dc8' }}
           path: .schema-test
           token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
 

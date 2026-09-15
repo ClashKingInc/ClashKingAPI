@@ -62,16 +62,23 @@ export async function importLegacyBases(client, parsed) {
         result.existingBases++
       } else result.insertedBases++
       if (row.downloaders.length > 0) {
-        const downloader = await client.query(`INSERT INTO base_downloaders(base_id,user_id)
-          SELECT $1::bigint,user_id FROM unnest($2::text[]) user_id ON CONFLICT (base_id,user_id) DO NOTHING RETURNING user_id`, [baseId, row.downloaders])
-        result.insertedDownloaders += downloader.rowCount
+        const downloader = await client.query(`WITH target AS (
+            SELECT id,(SELECT count(*) FROM jsonb_object_keys(downloads)) AS before FROM bases WHERE id=$1::bigint FOR UPDATE
+          ), updated AS (
+            UPDATE bases base SET downloads=base.downloads || COALESCE((
+              SELECT jsonb_object_agg(user_id,to_jsonb($3::timestamptz)) FROM unnest($2::text[]) user_id
+              WHERE NOT base.downloads ? user_id
+            ),'{}'::jsonb)
+            FROM target WHERE base.id=target.id
+            RETURNING (SELECT count(*) FROM jsonb_object_keys(base.downloads))-target.before AS inserted
+          ) SELECT inserted FROM updated`, [baseId, row.downloaders, row.createdAt])
+        result.insertedDownloaders += Number(downloader.rows[0]?.inserted ?? 0)
       }
     }
     const ids = parsed.rows.map((row) => row.messageId)
     if (ids.length > 0) {
-      const verified = await client.query(`SELECT base.message_id,count(downloader.user_id)::integer AS download_count
-        FROM bases base LEFT JOIN base_downloaders downloader ON downloader.base_id=base.id
-        WHERE base.message_id=ANY($1::text[]) GROUP BY base.id ORDER BY base.message_id`, [ids])
+      const verified = await client.query(`SELECT base.message_id,(SELECT count(*)::integer FROM jsonb_object_keys(base.downloads)) AS download_count
+        FROM bases base WHERE base.message_id=ANY($1::text[]) ORDER BY base.message_id`, [ids])
       result.verification = verified.rows.map((row) => ({ messageId: row.message_id, downloadCount: Number(row.download_count) }))
     }
     await client.query("COMMIT")

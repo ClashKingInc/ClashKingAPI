@@ -149,15 +149,17 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
       }),
       recordBaseDownload: (baseId, userId) => Effect.gen(function* () {
         const rows = yield* db(sql.unsafe<{ download_count: number }>(`WITH target AS (
-            SELECT id FROM bases WHERE id=$1::bigint
+            SELECT id,downloads FROM bases WHERE id=$1::bigint FOR UPDATE
           ), recorded AS (
-            INSERT INTO base_downloaders(base_id,user_id) SELECT id,$2 FROM target ON CONFLICT DO NOTHING RETURNING base_id
+            UPDATE bases base SET downloads=CASE WHEN base.downloads ? $2 THEN base.downloads
+              ELSE base.downloads || jsonb_build_object($2,now()) END
+            FROM target WHERE base.id=target.id RETURNING base.downloads
           ), retained AS (
             INSERT INTO user_saved_bases(user_id,base_id)
             SELECT auth.user_id,target.id FROM target JOIN auth_users auth ON auth.user_id=$2
             ON CONFLICT (user_id,base_id) DO NOTHING RETURNING base_id
-          ) SELECT (SELECT count(*)::int FROM base_downloaders downloader WHERE downloader.base_id=target.id) download_count
-          FROM target`, [baseId, userId]))
+          ) SELECT (SELECT count(*)::int FROM jsonb_object_keys(COALESCE(recorded.downloads,target.downloads))) download_count
+          FROM target LEFT JOIN recorded ON true`, [baseId, userId]))
         if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         return { baseId, userId, downloadCount: rows[0].download_count }
       }),

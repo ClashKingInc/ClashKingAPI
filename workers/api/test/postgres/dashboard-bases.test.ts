@@ -38,7 +38,7 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       expect(fetched.messageId).toBe(messageId)
       const missing = yield* execute(BaseEndpoint, {}, { serverId: "6334567890123456788", baseId: created.id }).pipe(Effect.result)
       expect(missing._tag).toBe("Failure")
-      yield* sql`INSERT INTO base_downloaders(base_id,user_id) VALUES (${created.id}::bigint,${userId})`
+      yield* sql`UPDATE bases SET downloads=jsonb_set(downloads,ARRAY[${userId}],to_jsonb(now()),true) WHERE id=${created.id}::bigint`
       yield* sql`INSERT INTO base_votes(base_id,user_id,vote) VALUES (${created.id}::bigint,${userId},1)`
       const profile = Schema.decodeUnknownSync(BaseDownloaderEndpoint.response)(yield* execute(BaseDownloaderEndpoint, {}, { ...path, userId }))
       expect(profile).toMatchObject({ userId, displayName: "Fixture user" })

@@ -91,8 +91,8 @@ const baseValue = (row: BaseRow): BaseValue => ({
 })
 const baseColumns = `base.id::text,base.server_id,base.channel_id,base.message_id,base.base_link,base.description,base.created_at,
   COALESCE((SELECT array_agg(image.image_url ORDER BY image.position) FROM base_images image WHERE image.base_id=base.id),'{}'::text[]) images,
-  COALESCE((SELECT array_agg(downloader.user_id ORDER BY downloader.downloaded_at,downloader.user_id) FROM base_downloaders downloader WHERE downloader.base_id=base.id),'{}'::text[]) downloaders,
-  COALESCE((SELECT count(*) FROM base_downloaders downloader WHERE downloader.base_id=base.id),0)::int download_count,
+  COALESCE((SELECT array_agg(download.key ORDER BY download.value::timestamptz,download.key) FROM jsonb_each_text(base.downloads) download),'{}'::text[]) downloaders,
+  (SELECT count(*)::int FROM jsonb_object_keys(base.downloads)) download_count,
   COALESCE((SELECT count(*) FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=1),0)::int upvote_count,
   COALESCE((SELECT count(*) FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=-1),0)::int downvote_count`
 const list = (serverId: string, raw: unknown) => Effect.gen(function* () {
@@ -231,8 +231,8 @@ const downloader = (serverId: string, id: string, userId: string) => Effect.gen(
   if (!positiveId(userId)) return yield* new InvalidRequest({ message: "Invalid Discord ID" })
   const sql = yield* SqlClient.SqlClient
   const rows = yield* db(sql.unsafe<{ exists: boolean }>(`SELECT EXISTS (
-    SELECT 1 FROM bases base JOIN base_downloaders downloader ON downloader.base_id=base.id
-    WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL AND downloader.user_id=$3
+    SELECT 1 FROM bases base
+    WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL AND base.downloads ? $3
   ) AS exists`, [id, serverId, userId]), "Failed to load base downloader")
   if (rows[0]?.exists !== true) return yield* new NotFound({ message: "Base downloader not found" })
   const discord = yield* DiscordApi

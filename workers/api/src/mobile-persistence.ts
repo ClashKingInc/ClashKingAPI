@@ -2,7 +2,7 @@ import {
   AchievementsCheckEndpoint, BookmarksAddEndpoint, BookmarksDeleteEndpoint, BookmarksListEndpoint,
   BookmarksOrderEndpoint, RecentSearchesEndpoint, UpgradePreferencesGetEndpoint,
   UpgradePreferencesPatchEndpoint, UpgradesGetEndpoint, UpgradesPutEndpoint,
-  AssignPersonalBaseSlotEndpoint, ClearPersonalBaseSlotEndpoint, PersonalBasesEndpoint,
+  DeleteOldPersonalBasesEndpoint, PersonalBasesEndpoint,
   SavePersonalBaseEndpoint, UnsavePersonalBaseEndpoint,
   requireEndpointSuccessStatus,
   type AnyEndpoint, type Bookmark, type BookmarkType, type EndpointRequest, type EndpointResponse,
@@ -210,50 +210,42 @@ interface PersonalBaseRow {
   readonly id: string; readonly base_link: string; readonly images: string[]; readonly description: string
   readonly created_at: Date | string; readonly server_id: string; readonly channel_id: string; readonly message_id: string
   readonly download_count: number | string; readonly upvotes: number | string; readonly downvotes: number | string
-  readonly saved: boolean; readonly saved_at: Date | string | null; readonly downloaded_at: Date | string | null
-}
-interface PersonalBaseSlotRow {
-  readonly player_tag: string; readonly slot_kind: "war" | "legend"; readonly slot_number: number
-  readonly base_id: string; readonly assigned_at: Date | string
+  readonly kind: "war" | "legend" | null; readonly saved: boolean
+  readonly saved_at: Date | string | null; readonly downloaded_at: Date | string | null
 }
 export const readPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const bases = yield* database(sql<PersonalBaseRow>`SELECT base.id::text id,base.base_link,
       ARRAY(SELECT image.image_url FROM base_images image WHERE image.base_id=base.id ORDER BY image.position) images,
       base.description,base.created_at,base.server_id,base.channel_id,base.message_id,
-      (SELECT count(*)::integer FROM base_downloaders item WHERE item.base_id=base.id) download_count,
+      (SELECT count(*)::integer FROM jsonb_object_keys(base.downloads)) download_count,
       (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=1) upvotes,
       (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=-1) downvotes,
-      saved.base_id IS NOT NULL saved,saved.saved_at,downloader.downloaded_at
+      saved.kind,saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
     FROM (SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
-      UNION SELECT base_id FROM base_downloaders WHERE user_id=${userId}) library
+      UNION SELECT id FROM bases WHERE downloads ? ${userId}) library
     JOIN bases base ON base.id=library.base_id
     LEFT JOIN user_saved_bases saved ON saved.base_id=base.id AND saved.user_id=${userId}
-    LEFT JOIN base_downloaders downloader ON downloader.base_id=base.id AND downloader.user_id=${userId}
     WHERE base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
-    ORDER BY GREATEST(COALESCE(saved.saved_at,'epoch'),COALESCE(downloader.downloaded_at,'epoch')) DESC,base.id DESC`)
-  const slots = yield* database(sql<PersonalBaseSlotRow>`SELECT player_tag,slot_kind,slot_number,base_id::text,assigned_at
-    FROM user_base_slots WHERE user_id=${userId} ORDER BY player_tag,slot_kind,slot_number`)
+    ORDER BY GREATEST(COALESCE(saved.saved_at,'epoch'),COALESCE((base.downloads->>${userId})::timestamptz,'epoch')) DESC,base.id DESC`)
   return {
     items: bases.map((row) => ({ id: row.id, baseLink: row.base_link, images: row.images, description: row.description,
       createdAt: timestamp(row.created_at), serverId: row.server_id, channelId: row.channel_id, messageId: row.message_id,
       discordMessageUrl: `https://discord.com/channels/${row.server_id}/${row.channel_id}/${row.message_id}`,
-      downloadCount: Number(row.download_count), upvotes: Number(row.upvotes), downvotes: Number(row.downvotes),
+      downloadCount: Number(row.download_count), upvotes: Number(row.upvotes), downvotes: Number(row.downvotes), kind: row.kind,
       saved: row.saved, savedAt: row.saved_at === null ? null : timestamp(row.saved_at),
       downloadedAt: row.downloaded_at === null ? null : timestamp(row.downloaded_at) })),
-    slots: slots.map((row) => ({ playerTag: row.player_tag, kind: row.slot_kind, number: Number(row.slot_number),
-      baseId: row.base_id, assignedAt: timestamp(row.assigned_at) })),
   }
 })
 
-const savePersonalBase = (userId: string, rawBaseId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+const savePersonalBase = (userId: string, rawBaseId: string, kind: "war" | "legend" | null): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const baseId = yield* positiveBaseId(rawBaseId), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
-    const rows = yield* sql`INSERT INTO user_saved_bases(user_id,base_id)
-      SELECT ${userId},id FROM bases WHERE id=${baseId}::bigint AND server_id IS NOT NULL AND channel_id IS NOT NULL
-      ON CONFLICT (user_id,base_id) DO NOTHING RETURNING base_id`
-    if (rows.length === 0 && (yield* sql`SELECT base_id FROM user_saved_bases WHERE user_id=${userId} AND base_id=${baseId}::bigint`).length === 0)
+    const rows = yield* sql`INSERT INTO user_saved_bases(user_id,base_id,kind)
+      SELECT ${userId},id,${kind} FROM bases WHERE id=${baseId}::bigint AND server_id IS NOT NULL AND channel_id IS NOT NULL
+      ON CONFLICT (user_id,base_id) DO UPDATE SET kind=EXCLUDED.kind RETURNING base_id`
+    if (rows.length === 0)
       return yield* new NotFound({ message: "Shared base not found" })
     return yield* readPersonalBases(userId)
   })))
@@ -268,30 +260,11 @@ const unsavePersonalBase = (userId: string, rawBaseId: string): Runtime<Endpoint
   })))
 })
 
-const assignPersonalBaseSlot = (userId: string, rawTag: string, kind: "war" | "legend", number: string, rawBaseId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
-  const playerTag = yield* normalizedTag(rawTag), baseId = yield* positiveBaseId(rawBaseId), slotNumber = Number(number)
+const deleteOldPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
-    if ((yield* sql`SELECT tag FROM player_links WHERE user_id=${userId} AND tag=${playerTag} AND is_verified=true FOR UPDATE`).length === 0)
-      return yield* new NotFound({ message: "Verified linked player not found" })
-    if ((yield* sql`SELECT base_id FROM user_saved_bases WHERE user_id=${userId} AND base_id=${baseId}::bigint FOR UPDATE`).length === 0)
-      return yield* new NotFound({ message: "Saved base not found" })
-    const duplicate = yield* sql`SELECT slot_number FROM user_base_slots
-      WHERE user_id=${userId} AND player_tag=${playerTag} AND slot_kind=${kind} AND base_id=${baseId}::bigint AND slot_number<>${slotNumber}`
-    if (duplicate.length > 0) return yield* new Conflict({ message: "Base is already assigned to another slot of this kind" })
-    yield* sql`INSERT INTO user_base_slots(user_id,player_tag,slot_kind,slot_number,base_id)
-      VALUES (${userId},${playerTag},${kind},${slotNumber},${baseId}::bigint)
-      ON CONFLICT (user_id,player_tag,slot_kind,slot_number) DO UPDATE SET base_id=EXCLUDED.base_id`
-    return yield* readPersonalBases(userId)
-  })))
-})
-
-const clearPersonalBaseSlot = (userId: string, rawTag: string, kind: "war" | "legend", number: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
-  const playerTag = yield* normalizedTag(rawTag), slotNumber = Number(number), sql = yield* SqlClient.SqlClient
-  return yield* database(sql.withTransaction(Effect.gen(function* () {
-    yield* lockAuthenticatedUser(userId)
-    yield* sql`DELETE FROM user_base_slots WHERE user_id=${userId} AND player_tag=${playerTag} AND slot_kind=${kind} AND slot_number=${slotNumber}`
+    yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND saved_at < now() - interval '90 days'`
     return yield* readPersonalBases(userId)
   })))
 })
@@ -315,10 +288,9 @@ const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequ
 
 const routes = [
   route(PersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? readPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
-  route(SavePersonalBaseEndpoint, ({ path }, { principal }) => principal.kind === "user" ? savePersonalBase(principal.userId, path.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(SavePersonalBaseEndpoint, ({ path, body }, { principal }) => principal.kind === "user" ? savePersonalBase(principal.userId, path.baseId, body.kind) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(DeleteOldPersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? deleteOldPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(UnsavePersonalBaseEndpoint, ({ path }, { principal }) => principal.kind === "user" ? unsavePersonalBase(principal.userId, path.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
-  route(AssignPersonalBaseSlotEndpoint, ({ path, body }, { principal }) => principal.kind === "user" ? assignPersonalBaseSlot(principal.userId, path.playerTag, path.kind, path.number, body.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
-  route(ClearPersonalBaseSlotEndpoint, ({ path }, { principal }) => principal.kind === "user" ? clearPersonalBaseSlot(principal.userId, path.playerTag, path.kind, path.number) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(AchievementsCheckEndpoint, (_, { principal, bindings }) => principal.kind === "user"
     ? checkMobileAchievements(principal.userId, bindings) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(BookmarksListEndpoint, ({ path, query }, { principal }) => subject(principal, path.userId).pipe(Effect.flatMap((id) => listMobileBookmarks(id, query.type)))),
@@ -348,9 +320,8 @@ const routes = [
 export const mobilePersistenceRuntimeRoutes = [
   { method: "GET", path: "/v2/bases/personal" },
   { method: "PUT", path: "/v2/bases/personal/:baseId" },
+  { method: "DELETE", path: "/v2/bases/personal/older-than-90-days" },
   { method: "DELETE", path: "/v2/bases/personal/:baseId" },
-  { method: "PUT", path: "/v2/bases/personal/slots/:playerTag/:kind/:number" },
-  { method: "DELETE", path: "/v2/bases/personal/slots/:playerTag/:kind/:number" },
   { method: "POST", path: "/v2/achievements/check" },
   { method: "GET", path: "/v2/links/:userId/bookmarks" },
   { method: "POST", path: "/v2/links/:userId/bookmarks" },

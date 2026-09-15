@@ -53,7 +53,6 @@ export const PrivacyExportResponse = Schema.Struct({
   notification_devices: Schema.Array(JsonData),
   notification_preferences: Schema.Array(JsonData),
   saved_bases: Schema.Array(JsonData),
-  base_slots: Schema.Array(JsonData),
   billing_subscription: Schema.Array(JsonData),
   subscription_entitlements: Schema.Array(JsonData),
 })

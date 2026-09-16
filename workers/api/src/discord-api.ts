@@ -6,6 +6,7 @@ import { WorkerEnvironment } from "./environment.js"
 import { readBoundedJson } from "./request-body.js"
 
 export interface DiscordRequestOptions {
+  readonly files?: ReadonlyArray<File>
   readonly body?: unknown
   readonly headers?: Readonly<Record<string, string>>
   readonly method?: "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
@@ -127,8 +128,14 @@ export class DiscordApi extends Context.Service<
         headers.set("authorization", options.oauthAccessToken === undefined
           ? `Bot ${bindings.DISCORD_BOT_TOKEN}`
           : `Bearer ${options.oauthAccessToken}`)
-        let body: string | undefined
-        if (options.body !== undefined) {
+        let body: string | FormData | undefined
+        if (options.files?.length) {
+          const form = new FormData()
+          form.set("payload_json", JSON.stringify(options.body ?? {}))
+          options.files.forEach((file, index) => form.set(`files[${index}]`, file, file.name))
+          headers.delete("content-type")
+          body = form
+        } else if (options.body !== undefined) {
           headers.set("content-type", "application/json")
           body = JSON.stringify(options.body)
         }

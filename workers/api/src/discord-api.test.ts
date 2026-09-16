@@ -21,6 +21,21 @@ afterEach(() => {
 })
 
 describe("Discord API service", () => {
+  it("sends file bytes as multipart with the JSON payload and a generated boundary", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      expect(request.headers.get("content-type")).toContain("multipart/form-data; boundary=")
+      const form = await request.formData()
+      expect(JSON.parse(String(form.get("payload_json")))).toEqual({ content: "Base", attachments: [{ id: 0, filename: "base.png" }] })
+      const file = form.get("files[0]") as File
+      expect(file.name).toBe("base.png")
+      expect(await file.text()).toBe("image")
+      return Response.json({ id: "123456789012345678" })
+    }))
+    await run("/channels/123456789012345678/messages", { method: "POST",
+      body: { content: "Base", attachments: [{ id: 0, filename: "base.png" }] },
+      files: [new File(["image"], "base.png", { type: "image/png" })],
+    })
+  })
   it.each([
     [400, "InvalidRequest"], [401, "Forbidden"], [403, "Forbidden"],
     [404, "NotFound"], [500, "UpstreamUnavailable"], [503, "UpstreamUnavailable"],

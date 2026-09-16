@@ -6,6 +6,8 @@ import { DiscordApi } from "./discord-api.js"
 import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { MAX_DASHBOARD_UPLOAD, uploadMediaFile, validMediaFilename } from "./dashboard-upload.js"
 import { serverMemberAvatar } from "./dashboard-server-reads.js"
+import { dispatchMedia } from "./media-runtime.js"
+import type { WorkerBindings } from "./environment.js"
 
 export const dashboardServerBaseOperationIds = ["dashboardBases", "dashboardBase", "createDashboardBase", "updateDashboardBase", "deleteDashboardBase", "uploadDashboardBaseImage", "baseDownloader"] as const
 type BaseValue = typeof Base.Type
@@ -118,29 +120,47 @@ const get = (serverId: string, id: string) => Effect.gen(function* () {
   return baseValue(rows[0])
 })
 const baseMessage = (id: string, body: EditableBase) => ({
-  embeds: [{ title: "ClashKing Base Layout", url: body.baseLink, description: body.description,
-    fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }],
-    ...(body.images[0] === undefined ? {} : { image: { url: body.images[0] } }) },
-  ...body.images.slice(1).map((url) => ({ url: body.baseLink, image: { url } }))],
+  content: body.description,
+  embeds: [],
+  allowed_mentions: { parse: [] },
+  attachments: body.images.map((url, index) => ({ id: index, filename: new URL(url).pathname.slice(10) })),
   components: [{ type: 1, components: [
-    { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${id}` },
-    { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${id}` },
-    { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${id}` },
+    { type: 2, style: 1, label: "Get Link", emoji: { name: "🔗" }, custom_id: `base:link:${id}` },
+    { type: 2, style: 2, emoji: { name: "👍" }, custom_id: `base:upvote:${id}` },
+    { type: 2, style: 2, emoji: { name: "👎" }, custom_id: `base:downvote:${id}` },
   ] }],
+})
+const baseFiles = (body: EditableBase, bindings: WorkerBindings) => Effect.gen(function* () {
+  const files: File[] = []
+  for (const url of body.images) {
+    if (!validUrl(url, true)) return yield* new InvalidRequest({ message: "Invalid stored base image URL" })
+    const response = yield* dispatchMedia(new Request(url), bindings)
+    if (!response) return yield* new NotFound({ message: "Base image not found" })
+    if (Number(response.headers.get("content-length")) > MAX_DASHBOARD_UPLOAD) {
+      yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve())
+      return yield* new PayloadTooLarge({ message: "Base image exceeds 25 MB" })
+    }
+    const file = yield* Effect.tryPromise({
+      try: async () => new File([await response.blob()], new URL(url).pathname.slice(10), { type: response.headers.get("content-type") ?? "image/png" }),
+      catch: (cause) => new UpstreamUnavailable({ cause, message: "Could not read base image" }),
+    })
+    files.push(file)
+  }
+  return files
 })
 const editableRow = (row: BaseRow): EditableBase => ({ baseLink: row.base_link, images: row.images ?? [], description: row.description })
 const sameEditable = (row: BaseRow, body: EditableBase) => row.base_link === body.baseLink && row.description === body.description
   && JSON.stringify(row.images ?? []) === JSON.stringify(body.images)
 const Message = Schema.Struct({ id: DecimalSnowflake })
-const patchBaseMessage = (discord: DiscordApi["Service"], row: BaseRow, body: EditableBase) => discord.request(
+const patchBaseMessage = (discord: DiscordApi["Service"], row: BaseRow, body: EditableBase, bindings: WorkerBindings) => baseFiles(body, bindings).pipe(Effect.flatMap((files) => discord.request(
   `/channels/${row.channel_id}/messages/${row.message_id}`,
-  { method: "PATCH", body: baseMessage(row.id, body) },
-).pipe(
+  { method: "PATCH", body: baseMessage(row.id, body), files },
+)),
   Effect.flatMap((raw) => decodeDiscord(Message, raw)),
   Effect.filterOrFail((message) => message.id === row.message_id,
     () => new UpstreamUnavailable({ cause: "message_id_mismatch", message: "Discord returned the wrong base message" })),
 )
-const update = (serverId: string, id: string, raw: unknown) => Effect.gen(function* () {
+const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBindings) => Effect.gen(function* () {
   const body = yield* validateBaseUpdate(raw)
   const sql = yield* SqlClient.SqlClient
   const current = (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
@@ -150,10 +170,10 @@ const update = (serverId: string, id: string, raw: unknown) => Effect.gen(functi
     return yield* new InvalidRequest({ message: "Base has an invalid stored Discord message location" })
   }
   const discord = yield* DiscordApi
-  const patched = yield* patchBaseMessage(discord, current, body).pipe(Effect.result)
+  const patched = yield* patchBaseMessage(discord, current, body, bindings).pipe(Effect.result)
   if (patched._tag === "Failure") {
     if (patched.failure._tag !== "UpstreamUnavailable") return yield* patched.failure
-    const restored = yield* patchBaseMessage(discord, current, editableRow(current)).pipe(Effect.result)
+    const restored = yield* patchBaseMessage(discord, current, editableRow(current), bindings).pipe(Effect.result)
     if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
       cause: { update: patched.failure, rollback: restored.failure },
       message: "Discord base message update and rollback outcomes are unknown; the database was not changed. Do not retry automatically",
@@ -179,7 +199,7 @@ const update = (serverId: string, id: string, raw: unknown) => Effect.gen(functi
     return yield* new DatabaseFailure({ cause: persisted.failure,
       message: "Base database update outcome is unknown after Discord changed. Do not retry automatically" })
   }
-  const restored = yield* patchBaseMessage(discord, current, editableRow(current)).pipe(Effect.result)
+  const restored = yield* patchBaseMessage(discord, current, editableRow(current), bindings).pipe(Effect.result)
   if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
     cause: { database: persisted, rollback: restored.failure },
     message: "Base was not updated in the database and the Discord rollback failed. Do not retry automatically",
@@ -205,7 +225,7 @@ const classifyCreate = (error: ApiFailure) => error._tag === "NotFound"
   : error._tag === "InvalidRequest" ? createFailure(502, "Discord rejected message creation")
   : createFailure(503, "Discord message creation is temporarily unavailable")
 
-const create = (serverId: string, raw: unknown) => Effect.gen(function* () {
+const create = (serverId: string, raw: unknown, bindings: WorkerBindings) => Effect.gen(function* () {
   const body = yield* validateBaseCreate(raw)
   const discord = yield* DiscordApi
   const channel = yield* discord.request(`/channels/${body.channelId}`).pipe(Effect.flatMap((raw) => decodeDiscord(Channel, raw)), Effect.result)
@@ -215,7 +235,8 @@ const create = (serverId: string, raw: unknown) => Effect.gen(function* () {
   const reserved = yield* db(sql.unsafe<{ id: string }>("SELECT nextval(pg_get_serial_sequence('bases','id'))::text id", []), "Failed to allocate base ID")
   const id = reserved[0]?.id
   if (id === undefined) return yield* new DatabaseFailure({ cause: reserved, message: "Failed to allocate base ID" })
-  const posted = yield* discord.request(`/channels/${body.channelId}/messages`, { method: "POST", body: baseMessage(id, body) }).pipe(Effect.result)
+  const files = yield* baseFiles(body, bindings)
+  const posted = yield* discord.request(`/channels/${body.channelId}/messages`, { method: "POST", body: baseMessage(id, body), files }).pipe(Effect.result)
   if (posted._tag === "Failure") {
     if (posted.failure._tag === "UpstreamUnavailable") return yield* new UpstreamUnavailable({
       cause: posted.failure, message: "Discord message creation outcome is unknown. Do not retry automatically",
@@ -300,7 +321,7 @@ export const executeDashboardServerBases = (operation: DashboardServerOperationI
   if (!positiveId(serverId)) return yield* new InvalidRequest({ message: "Invalid Discord ID" })
   switch (operation.endpoint.operationId) {
     case "dashboardBases": return yield* list(serverId, operation.query)
-    case "createDashboardBase": return yield* create(serverId, operation.body)
+    case "createDashboardBase": return yield* create(serverId, operation.body, operation.bindings)
     case "uploadDashboardBaseImage": {
       const form = yield* decodeInput(Schema.FormData, operation.body)
       const file = form.get("file")
@@ -313,7 +334,7 @@ export const executeDashboardServerBases = (operation: DashboardServerOperationI
       )
     }
     case "dashboardBase": return yield* get(serverId, yield* baseId(operation.path.baseId))
-    case "updateDashboardBase": return yield* update(serverId, yield* baseId(operation.path.baseId), operation.body)
+    case "updateDashboardBase": return yield* update(serverId, yield* baseId(operation.path.baseId), operation.body, operation.bindings)
     case "deleteDashboardBase": return yield* remove(serverId, yield* baseId(operation.path.baseId))
     case "baseDownloader": return yield* downloader(serverId, yield* baseId(operation.path.baseId), yield* decodeInput(DecimalSnowflake, operation.path.userId))
     default: return yield* new NotFound({ message: "Base operation not found" })

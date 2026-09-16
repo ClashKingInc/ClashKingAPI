@@ -19,6 +19,8 @@ const row = { id: baseId, server_id: serverId, channel_id: channelId, message_id
 type Rows = ReadonlyArray<Readonly<Record<string, unknown>>>
 const sqlFailure = { cause: { code: "23514", message: "constraint rejected" } }
 function fixture(options: {
+  missingImage?: boolean
+  privateImage?: boolean
   query?: (statement: string, values: ReadonlyArray<unknown>) => Effect.Effect<Rows, unknown>
   discord?: DiscordApi["Service"]["request"]
 } = {}) {
@@ -40,11 +42,15 @@ function fixture(options: {
   })
   const layer = Layer.mergeAll(Layer.succeed(SqlClient.SqlClient, sql), Layer.succeed(DiscordApi, { request: discord, token: () => Effect.die("Unexpected OAuth") }))
   const put = vi.fn(async () => ({ key: "test" }) as R2Object)
-  const bindings = Object.assign({} as WorkerBindings, { MEDIA: { put } })
+  const mediaGet = vi.fn(async (key: string) => options.missingImage ? null : ({
+    body: new Blob(["image"]).stream(), size: 5, httpEtag: '"test"',
+    customMetadata: { visibility: options.privateImage ? "private-ticket" : "public-media", filename: key.slice(8) },
+  }))
+  const bindings = Object.assign({} as WorkerBindings, { MEDIA: { put, get: mediaGet } })
   const run = (endpoint: AnyEndpoint, overrides: { body?: unknown; path?: Readonly<Record<string, unknown>>; query?: Readonly<Record<string, unknown>> } = {}) => Effect.runPromise(executeDashboardServerBases({
     endpoint, bindings, body, path: { serverId, baseId, userId }, query: {}, principal: { kind: "bot" }, request: new Request("https://api.clashk.ing/"), ...overrides,
   }).pipe(Effect.provide(layer)))
-  return { run, query, discord, events, put }
+  return { run, query, discord, events, put, mediaGet }
 }
 afterEach(() => vi.unstubAllGlobals())
 
@@ -111,19 +117,27 @@ describe("server base reads", () => {
 describe("managed base updates", () => {
   const editable = { baseLink: body.baseLink, images: body.images, description: "Updated base" }
 
+  it("explicitly clears old attachments and embeds when all images are removed", async () => {
+    const f = fixture()
+    await f.run(UpdateBaseEndpoint, { body: { ...editable, images: [] } })
+    expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, {
+      method: "PATCH", files: [], body: expect.objectContaining({ content: editable.description, attachments: [], embeds: [] }),
+    })
+    expect(f.mediaGet).not.toHaveBeenCalled()
+  })
+
   it("replaces the editable fields and image rows in one transaction", async () => {
     const f = fixture()
     const value = await f.run(UpdateBaseEndpoint, { body: editable })
     expect(Schema.decodeUnknownSync(UpdateBaseEndpoint.response)(value)).toMatchObject({ id: baseId, serverId })
     expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "DELETE", "INSERT", "SELECT"])
     expect(f.query.mock.calls[1]?.[1]).toEqual([body.baseLink, editable.description, baseId, serverId])
-    expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", body: {
-      embeds: [{ title: "ClashKing Base Layout", url: editable.baseLink, description: editable.description,
-        fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${editable.baseLink})` }], image: { url: editable.images[0] } }],
+    expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", files: [expect.any(File)], body: {
+      content: editable.description, embeds: [], allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: "base_test.png" }],
       components: [{ type: 1, components: [
-        { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${baseId}` },
-        { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${baseId}` },
-        { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${baseId}` },
+        { type: 2, style: 1, label: "Get Link", emoji: { name: "🔗" }, custom_id: `base:link:${baseId}` },
+        { type: 2, style: 2, emoji: { name: "👍" }, custom_id: `base:upvote:${baseId}` },
+        { type: 2, style: 2, emoji: { name: "👎" }, custom_id: `base:downvote:${baseId}` },
       ] }],
     } })
   })
@@ -142,7 +156,7 @@ describe("managed base updates", () => {
       : Effect.succeed({ id: messageId }) })
     await expect(f.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "UpstreamUnavailable" })
     expect(f.events).toEqual(["SELECT", "PATCH", "PATCH"])
-    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ embeds: [{ description: body.description }] })
+    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ content: body.description, embeds: [] })
     expect(f.query).toHaveBeenCalledOnce()
   })
 
@@ -150,7 +164,7 @@ describe("managed base updates", () => {
     const f = fixture({ query: (statement) => statement.startsWith("UPDATE") ? Effect.fail(sqlFailure) : Effect.succeed([row]) })
     await expect(f.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "DatabaseFailure", message: expect.stringContaining("restored") })
     expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "PATCH"])
-    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ embeds: [{ description: body.description }] })
+    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ content: body.description, embeds: [] })
   })
 
   it("reconciles a lost database acknowledgement when the desired edit persisted", async () => {
@@ -176,6 +190,24 @@ describe("managed base updates", () => {
 })
 
 describe("immutable base creation", () => {
+  it("attaches all four images in order without exposing the layout link in message content", async () => {
+    const f = fixture()
+    const images = [1, 2, 3, 4].map((index) => `https://api.clashk.ing/v2/media/base_${index}.png`)
+    await f.run(CreateBaseEndpoint, { body: { ...body, images } })
+    const options = f.discord.mock.calls[1]?.[1]
+    expect(options?.files?.map((file) => file.name)).toEqual([1, 2, 3, 4].map((index) => `base_${index}.png`))
+    expect(options?.body).toMatchObject({ content: body.description, embeds: [],
+      attachments: [1, 2, 3, 4].map((index) => ({ id: index - 1, filename: `base_${index}.png` })),
+    })
+    expect(JSON.stringify(options?.body)).not.toContain(body.baseLink)
+  })
+
+  it.each([{ missingImage: true }, { privateImage: true }])("does not post missing or private media (%j)", async (options) => {
+    const f = fixture(options)
+    await expect(f.run(CreateBaseEndpoint)).rejects.toMatchObject({ _tag: "NotFound" })
+    expect(f.discord).toHaveBeenCalledOnce() // Only the channel authorization lookup.
+    expect(f.query).toHaveBeenCalledOnce() // Only the ID allocation, no insertion.
+  })
   it("validates Unicode length, CDN URLs and exact IDs before any I/O", async () => {
     expect(await Effect.runPromise(validateBaseCreate({ ...body, description: "🐉".repeat(1000), channelId: ` ${channelId} ` }))).toMatchObject({ channelId })
     const f = fixture()
@@ -185,18 +217,19 @@ describe("immutable base creation", () => {
     expect(f.discord).not.toHaveBeenCalled()
     expect(f.query).not.toHaveBeenCalled()
   })
-  it("posts the Go embed and persists its returned message ID", async () => {
+  it("posts standalone text and image attachments and persists its returned message ID", async () => {
     const f = fixture()
     const value = await f.run(CreateBaseEndpoint)
     expect(Schema.decodeUnknownSync(CreateBaseEndpoint.response)(value)).toMatchObject({ messageId, serverId })
     expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "INSERT", "SELECT"])
-    expect(f.discord.mock.calls[1]).toEqual([`/channels/${channelId}/messages`, { method: "POST", body: { embeds: [{ title: "ClashKing Base Layout", url: body.baseLink, description: body.description,
-      fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }], image: { url: body.images[0] } }], components: [{ type: 1, components: [
-        { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${baseId}` },
-        { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${baseId}` },
-        { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${baseId}` },
+    expect(f.discord.mock.calls[1]).toEqual([`/channels/${channelId}/messages`, { method: "POST", files: [expect.any(File)], body: {
+      content: body.description, embeds: [], allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: "base_test.png" }], components: [{ type: 1, components: [
+        { type: 2, style: 1, label: "Get Link", emoji: { name: "🔗" }, custom_id: `base:link:${baseId}` },
+        { type: 2, style: 2, emoji: { name: "👍" }, custom_id: `base:upvote:${baseId}` },
+        { type: 2, style: 2, emoji: { name: "👎" }, custom_id: `base:downvote:${baseId}` },
       ] }] } }])
     expect(f.query.mock.calls[1]?.[1]?.slice(0, 4)).toEqual([baseId, serverId, channelId, messageId])
+    expect(await f.discord.mock.calls[1]?.[1]?.files?.[0]?.text()).toBe("image")
   })
   it.each([{ id: channelId, guild_id: "999999999999999999", type: 0 }, { id: channelId, guild_id: serverId, type: 4 }])("rejects wrong-guild/non-message channels", async (channel) => {
     const f = fixture({ discord: () => Effect.succeed(channel) })

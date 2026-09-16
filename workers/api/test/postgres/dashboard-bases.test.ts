@@ -15,7 +15,9 @@ const discord = vi.fn((path: string, options?: Parameters<DiscordApi["Service"][
   : path.includes("/members/") ? { user: { id: userId, username: "Fixture user", discriminator: "0" }, roles: [], nick: null, avatar: null }
   : undefined))
 const put = vi.fn(async () => ({ key: "test" }) as R2Object)
-const bindings = Object.assign({} as WorkerBindings, { HYPERDRIVE: { connectionString: databaseUrl }, MEDIA: { put } })
+const mediaGet = vi.fn(async (key: string) => ({ body: new Blob(["mock image"]).stream(), size: 10,
+  httpEtag: '"fixture"', customMetadata: { visibility: "public-media", filename: key.slice(8) } }))
+const bindings = Object.assign({} as WorkerBindings, { HYPERDRIVE: { connectionString: databaseUrl }, MEDIA: { put, get: mediaGet } })
 const layer = Layer.mergeAll(databaseLayer(bindings), Layer.succeed(DiscordApi, { request: discord, token: () => Effect.die("Unexpected OAuth") }))
 const execute = (endpoint: AnyEndpoint, body: unknown = {}, path: Readonly<Record<string, string>> = { serverId }) => executeDashboardServerBases({ endpoint, bindings, body, path, query: {}, principal: { kind: "bot" }, request: new Request("https://api.clashk.ing/") })
 afterEach(() => vi.unstubAllGlobals())

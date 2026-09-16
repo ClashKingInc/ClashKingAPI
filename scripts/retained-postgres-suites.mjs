@@ -2,13 +2,13 @@
 // silently executed with bot migrations or silently omitted from coverage.
 export const retainedPostgresSuites = [
   'account-mutations', 'admin', 'announcement-mutations', 'app-content-notifications',
-  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'dashboard-bases', 'dashboard-discord-cache',
+  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'bot-base-downloads', 'dashboard-bases', 'dashboard-discord-cache',
   'dashboard-roster-ai-context', 'dashboard-roster-ai-usage', 'dashboard-roster-automation-ownership',
   'dashboard-roster-bonuses', 'dashboard-roster-snapshots', 'dashboard-roster',
   'dashboard-server-activity', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
-  'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'link-mutations',
-  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'public-clan-extra',
-  'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
+  'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
+  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-bases', 'public-clan-extra',
+  'proxy-war-activity', 'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
   'stats-cwl-archive', 'stats', 'tracking-operations', 'war-exports',
 ].map(name => `${name}.test.ts`)
 

@@ -1,4 +1,4 @@
-import { BaseEndpoint, BaseDownloaderEndpoint, BasesEndpoint, CreateBaseEndpoint, DeleteBaseEndpoint, UploadBaseImageEndpoint, type AnyEndpoint } from "@clashking/api-contracts"
+import { BaseEndpoint, BaseDownloaderEndpoint, BasesEndpoint, CreateBaseEndpoint, DeleteBaseEndpoint, UpdateBaseEndpoint, UploadBaseImageEndpoint, type AnyEndpoint } from "@clashking/api-contracts"
 import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -11,10 +11,11 @@ import { DashboardServerOperations, dispatchDashboardServer } from "./dashboard-
 import { ServerAuthorization } from "./server-authorization.js"
 
 const serverId = "1234567890123456789", channelId = "2234567890123456789", messageId = "3234567890123456789", userId = "4234567890123456789"
-const baseId = "019f5400-1111-7111-8111-123456789abc"
+const baseId = "9007199254740993"
 const body = { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout&id=TH17", images: ["https://api.clashk.ing/v2/media/base_test.png"], description: "A base" }
 const row = { id: baseId, server_id: serverId, channel_id: channelId, message_id: messageId, base_link: body.baseLink,
-  images: body.images, description: body.description, downloaders: [userId], upvoter_ids: [userId], downvoter_ids: [], created_at: new Date("2026-09-01T00:00:00Z") }
+  images: body.images, description: body.description, downloaders: [userId], download_count: 1, upvote_count: 1, downvote_count: 0,
+  created_at: new Date("2026-09-01T00:00:00Z") }
 type Rows = ReadonlyArray<Readonly<Record<string, unknown>>>
 const sqlFailure = { cause: { code: "23514", message: "constraint rejected" } }
 function fixture(options: {
@@ -24,12 +25,18 @@ function fixture(options: {
   const events: string[] = []
   const query = vi.fn((statement: string, values: ReadonlyArray<unknown>) => {
     events.push(statement.trim().split(/\s/u)[0]!)
-    return options.query?.(statement, values) ?? Effect.succeed(statement.includes("count(*)") ? [{ count: 1 }] : [row])
+    if (statement.includes("nextval")) return Effect.succeed([{ id: baseId }])
+    return options.query?.(statement, values) ?? Effect.succeed(statement.includes("count(*)::int AS count") ? [{ count: 1 }] : [row])
   })
-  const sql = ((parts: TemplateStringsArray, ...values: ReadonlyArray<unknown>) => query(parts.join("?"), values)) as SqlClient.SqlClient
+  const tagged = (parts: TemplateStringsArray, ...values: ReadonlyArray<unknown>) => query(parts.join("?"), values)
+  const sql = Object.assign(tagged, {
+    unsafe: (statement: string, values: ReadonlyArray<unknown> = []) => query(statement, values),
+    withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
+  }) as unknown as SqlClient.SqlClient
   const discord = vi.fn((path: string, optionsArg?: Parameters<DiscordApi["Service"]["request"]>[1]) => {
     events.push(optionsArg?.method ?? "GET Discord")
-    return options.discord?.(path, optionsArg) ?? Effect.succeed(path.endsWith("/messages") ? { id: messageId } : { id: channelId, guild_id: serverId, type: 0 })
+    return options.discord?.(path, optionsArg) ?? Effect.succeed(optionsArg?.method === "PATCH" || path.endsWith("/messages")
+      ? { id: messageId } : { id: channelId, guild_id: serverId, type: 0 })
   })
   const layer = Layer.mergeAll(Layer.succeed(SqlClient.SqlClient, sql), Layer.succeed(DiscordApi, { request: discord, token: () => Effect.die("Unexpected OAuth") }))
   const put = vi.fn(async () => ({ key: "test" }) as R2Object)
@@ -74,9 +81,9 @@ describe("server base reads", () => {
     expect(f.query.mock.calls.every(([statement]) => statement.includes("channel_id IS NOT NULL"))).toBe(true)
     expect(f.discord).not.toHaveBeenCalled()
   })
-  it("normalizes UUIDs and defaults invalid pagination", async () => {
+  it("preserves decimal bigint IDs and defaults invalid pagination", async () => {
     const f = fixture()
-    await f.run(BaseEndpoint, { path: { serverId, baseId: baseId.replaceAll("-", "").toUpperCase() } })
+    await f.run(BaseEndpoint, { path: { serverId, baseId } })
     expect(f.query.mock.calls[0]?.[1]).toEqual([baseId, serverId])
     expect(await f.run(BasesEndpoint, { query: { limit: 0 } })).toMatchObject({ limit: 50 })
     await expect(f.run(BaseEndpoint, { path: { serverId, baseId: "bad" } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
@@ -101,6 +108,73 @@ describe("server base reads", () => {
   })
 })
 
+describe("managed base updates", () => {
+  const editable = { baseLink: body.baseLink, images: body.images, description: "Updated base" }
+
+  it("replaces the editable fields and image rows in one transaction", async () => {
+    const f = fixture()
+    const value = await f.run(UpdateBaseEndpoint, { body: editable })
+    expect(Schema.decodeUnknownSync(UpdateBaseEndpoint.response)(value)).toMatchObject({ id: baseId, serverId })
+    expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "DELETE", "INSERT", "SELECT"])
+    expect(f.query.mock.calls[1]?.[1]).toEqual([body.baseLink, editable.description, baseId, serverId])
+    expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", body: {
+      embeds: [{ title: "ClashKing Base Layout", url: editable.baseLink, description: editable.description,
+        fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${editable.baseLink})` }], image: { url: editable.images[0] } }],
+      components: [{ type: 1, components: [
+        { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${baseId}` },
+        { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${baseId}` },
+        { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${baseId}` },
+      ] }],
+    } })
+  })
+
+  it("does not change the database when Discord rejects the edit", async () => {
+    const f = fixture({ discord: () => Effect.fail(new Forbidden({ message: "no access" })) })
+    await expect(f.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "Forbidden" })
+    expect(f.events).toEqual(["SELECT", "PATCH"])
+    expect(f.query).toHaveBeenCalledOnce()
+  })
+
+  it("restores the old render after a lost Discord update acknowledgement", async () => {
+    let requests = 0
+    const f = fixture({ discord: () => requests++ === 0
+      ? Effect.fail(new UpstreamUnavailable({ cause: "connection lost", message: "unavailable" }))
+      : Effect.succeed({ id: messageId }) })
+    await expect(f.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "UpstreamUnavailable" })
+    expect(f.events).toEqual(["SELECT", "PATCH", "PATCH"])
+    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ embeds: [{ description: body.description }] })
+    expect(f.query).toHaveBeenCalledOnce()
+  })
+
+  it("restores the old Discord render after a definite database rejection", async () => {
+    const f = fixture({ query: (statement) => statement.startsWith("UPDATE") ? Effect.fail(sqlFailure) : Effect.succeed([row]) })
+    await expect(f.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "DatabaseFailure", message: expect.stringContaining("restored") })
+    expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "PATCH"])
+    expect(f.discord.mock.calls[1]?.[1]?.body).toMatchObject({ embeds: [{ description: body.description }] })
+  })
+
+  it("reconciles a lost database acknowledgement when the desired edit persisted", async () => {
+    const persisted = { ...row, description: editable.description }
+    let selects = 0
+    const f = fixture({ query: (statement) => {
+      if (statement.startsWith("UPDATE")) return Effect.fail(new Error("connection lost"))
+      if (statement.startsWith("SELECT")) return Effect.succeed([selects++ === 0 ? row : persisted])
+      return Effect.succeed([row])
+    } })
+    await expect(f.run(UpdateBaseEndpoint, { body: editable })).resolves.toMatchObject({ description: editable.description })
+    expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "SELECT"])
+    expect(f.discord).toHaveBeenCalledOnce()
+  })
+
+  it("rejects non-canonical links, duplicate images, and unknown server-owned rows", async () => {
+    const f = fixture()
+    await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, baseLink: "https://example.com/layout" } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, images: [body.images[0]!, body.images[0]!] } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    const missing = fixture({ query: (statement) => Effect.succeed(statement.startsWith("UPDATE") ? [] : [row]) })
+    await expect(missing.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "NotFound" })
+  })
+})
+
 describe("immutable base creation", () => {
   it("validates Unicode length, CDN URLs and exact IDs before any I/O", async () => {
     expect(await Effect.runPromise(validateBaseCreate({ ...body, description: "🐉".repeat(1000), channelId: ` ${channelId} ` }))).toMatchObject({ channelId })
@@ -115,10 +189,14 @@ describe("immutable base creation", () => {
     const f = fixture()
     const value = await f.run(CreateBaseEndpoint)
     expect(Schema.decodeUnknownSync(CreateBaseEndpoint.response)(value)).toMatchObject({ messageId, serverId })
-    expect(f.events).toEqual(["GET Discord", "POST", "INSERT"])
+    expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "INSERT", "SELECT"])
     expect(f.discord.mock.calls[1]).toEqual([`/channels/${channelId}/messages`, { method: "POST", body: { embeds: [{ title: "ClashKing Base Layout", url: body.baseLink, description: body.description,
-      fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }], image: { url: body.images[0] } }] } }])
-    expect(f.query.mock.calls[0]?.[1]?.slice(0, 3)).toEqual([serverId, channelId, messageId])
+      fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }], image: { url: body.images[0] } }], components: [{ type: 1, components: [
+        { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${baseId}` },
+        { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${baseId}` },
+        { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${baseId}` },
+      ] }] } }])
+    expect(f.query.mock.calls[1]?.[1]?.slice(0, 4)).toEqual([baseId, serverId, channelId, messageId])
   })
   it.each([{ id: channelId, guild_id: "999999999999999999", type: 0 }, { id: channelId, guild_id: serverId, type: 4 }])("rejects wrong-guild/non-message channels", async (channel) => {
     const f = fixture({ discord: () => Effect.succeed(channel) })
@@ -137,24 +215,24 @@ describe("immutable base creation", () => {
   it("does not save or retry a created message without a valid exact ID", async () => {
     const f = fixture({ discord: (path) => Effect.succeed(path.endsWith("messages") ? { id: 123 } : { id: channelId, guild_id: serverId, type: 0 }) })
     expect(await f.run(CreateBaseEndpoint)).toMatchObject({ status: 502, body: { discordMessageCreated: true, discordMessageCleanup: "failed", retryable: false } })
-    expect(f.query).not.toHaveBeenCalled()
+    expect(f.query).toHaveBeenCalledTimes(1)
   })
   it("does not claim no Discord message was created after a lost POST acknowledgement", async () => {
     const f = fixture({ discord: (path) => path.endsWith("messages") ? Effect.fail(new UpstreamUnavailable({ cause: "connection lost", message: "unavailable" })) : Effect.succeed({ id: channelId, guild_id: serverId, type: 0 }) })
     await expect(f.run(CreateBaseEndpoint)).rejects.toMatchObject({ _tag: "UpstreamUnavailable", message: expect.stringContaining("Do not retry automatically") })
-    expect(f.query).not.toHaveBeenCalled()
+    expect(f.query).toHaveBeenCalledTimes(1)
   })
   it("reconciles a lost INSERT acknowledgement to persisted success without deleting Discord", async () => {
     const f = fixture({ query: (statement) => statement.startsWith("INSERT") ? Effect.fail(new Error("connection lost")) : Effect.succeed([row]) })
     expect(await f.run(CreateBaseEndpoint)).toMatchObject({ id: baseId })
-    expect(f.events).toEqual(["GET Discord", "POST", "INSERT", "SELECT"])
+    expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "SELECT"])
   })
   it("retains the created message after a proven rejected statement and encodes the custom failure", async () => {
     const f = fixture({ query: (statement) => statement.startsWith("INSERT") ? Effect.fail(sqlFailure) : Effect.succeed([]) })
     const value = await f.run(CreateBaseEndpoint)
     expect(value).toBeInstanceOf(DashboardBaseFailure)
     expect(value).toMatchObject({ status: 500, body: { databaseInserted: false, discordMessageId: messageId, discordMessageCleanup: "failed", retryable: false } })
-    expect(f.events).toEqual(["GET Discord", "POST", "INSERT", "SELECT"])
+    expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "SELECT"])
     const response = await Effect.runPromise(encodeDashboardBaseFailure(value)!)
     expect(response.status).toBe(500)
     expect(response.headers.get("cache-control")).toBe("no-store")

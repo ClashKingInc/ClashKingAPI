@@ -83,6 +83,7 @@ export const dashboardServerRuntimeRoutes = [
   { method: "GET", path: "/v2/server/:serverId/bases" },
   { method: "GET", path: "/v2/server/:serverId/bases/:baseId" },
   { method: "POST", path: "/v2/server/:serverId/bases" },
+  { method: "PATCH", path: "/v2/server/:serverId/bases/:baseId" },
   { method: "DELETE", path: "/v2/server/:serverId/bases/:baseId" },
   { method: "POST", path: "/v2/server/:serverId/bases/images" },
   { method: "GET", path: "/v2/server/:serverId/bases/:baseId/downloaders/:userId" },

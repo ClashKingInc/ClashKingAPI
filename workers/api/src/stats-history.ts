@@ -43,8 +43,6 @@ export const parseStatsHistoryWindow = (
   return { start, end }
 })
 
-const n = (value: number | string | null): number => Number(value ?? 0)
-
 interface ArchiveDayRow { readonly archive_day: string; readonly stats: unknown }
 interface StarOutcome { readonly attacks?: number; readonly destructionPercent?: number; readonly durationSeconds?: number }
 interface HitRates { readonly attacks?: number; readonly zeroStars?: StarOutcome; readonly oneStars?: StarOutcome; readonly twoStars?: StarOutcome; readonly threeStars?: StarOutcome }
@@ -141,36 +139,10 @@ export const queryWarSummary = (query: URLSearchParams, now = new Date()) => fai
   })) }
 })) as Effect.Effect<unknown, DatabaseFailure | InvalidRequest, SqlClient.SqlClient>
 
-interface CwlTownHallRow {
-  readonly clan_count: number | string
-  readonly cwl_league_id: number
-  readonly group_count: number | string
-  readonly registered_player_count: number | string
-  readonly town_halls: unknown
-  readonly war_size: number
-}
-export const queryCwlTownHalls = (query: URLSearchParams) => failure("CWL Town Hall query failed", Effect.gen(function* () {
-  yield* Effect.try({ try: () => strict(query, new Set(["season", "leagueId", "warSize"])), catch: (cause) => cause as InvalidRequest })
-  const season = yield* Effect.try({ try: () => single(query, "season"), catch: (cause) => cause as InvalidRequest })
-  if (season === undefined || !/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) return yield* invalid("season must use YYYY-MM")
-  const leagueId = yield* Effect.try({ try: () => integer(query, "leagueId", 1, 2_147_483_647), catch: (cause) => cause as InvalidRequest })
-  const warSize = yield* Effect.try({ try: () => integer(query, "warSize", 1, 50), catch: (cause) => cause as InvalidRequest })
-  const values: Array<unknown> = [season], where = ["season=$1"]
-  if (leagueId !== undefined) { values.push(leagueId); where.push(`cwl_league_id=$${values.length}`) }
-  if (warSize !== undefined) { values.push(warSize); where.push(`war_size=$${values.length}`) }
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<CwlTownHallRow>(`SELECT cwl_league_id,war_size,group_count,clan_count,registered_player_count,town_halls
-    FROM cwl_season_statistics WHERE ${where.join(" AND ")} ORDER BY cwl_league_id,war_size`, values)
-  return { items: rows.map((row) => ({ leagueId: Number(row.cwl_league_id), warSize: Number(row.war_size),
-    groups: n(row.group_count), clans: n(row.clan_count), registeredPlayers: n(row.registered_player_count),
-    townHalls: (typeof row.town_halls === "string" ? JSON.parse(row.town_halls) as unknown : row.town_halls) as ReadonlyArray<{ level: number; count: number }> })) }
-})) as Effect.Effect<unknown, DatabaseFailure | InvalidRequest, SqlClient.SqlClient>
-
 export const dispatchStatsHistory = (request: Request) => Effect.gen(function* () {
   if (request.method !== "GET") return undefined
   const url = new URL(request.url)
   if (url.pathname === "/v2/stats/wars/hitrates") return Response.json(yield* queryWarHitrates(url.searchParams))
   if (url.pathname === "/v2/stats/wars/summary") return Response.json(yield* queryWarSummary(url.searchParams))
-  if (url.pathname === "/v2/stats/cwl/townhalls") return Response.json(yield* queryCwlTownHalls(url.searchParams))
   return undefined
 })

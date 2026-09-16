@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs"
 import { zstdCompressSync } from "node:zlib"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { queryPlayerCwlHistory } from "./public-cwl.js"
+
+afterEach(() => vi.unstubAllGlobals())
 
 const dictionary = readFileSync("workers/api/assets/war-json.zdict")
 const storedWar = (warTag: string, clanTag: string, order: number) => ({
@@ -68,20 +69,23 @@ describe("batched player CWL history", () => {
       return Effect.die(`Unexpected SQL: ${statement}`)
     }) as unknown as SqlClient.SqlClient
     let active = 0, peak = 0
-    const get = vi.fn(async (_key: string, options: { range: { offset: number } }) => {
+    const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       active++; peak = Math.max(peak, active)
       await new Promise((resolve) => setTimeout(resolve, 2))
       active--
-      const frame = frames.get(options.range.offset)!
-      return { body: new ReadableStream(), arrayBuffer: async () => frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) }
+      const range = new Headers(init?.headers).get("range") ?? ""
+      const offset = Number(/^bytes=(\d+)-\d+$/u.exec(range)?.[1] ?? -1)
+      const frame = frames.get(offset)!
+      return new Response(frame, { status: 206, headers: { "content-length": String(frame.byteLength),
+        "content-range": `bytes ${offset}-${offset + frame.byteLength - 1}/${offset + frame.byteLength + 1}` } })
     })
-    const layer = Layer.merge(Layer.succeed(SqlClient.SqlClient, tag),
-      Layer.succeed(WorkerEnvironment, { WAR_ARCHIVE: { get } } as unknown as WorkerBindings))
+    vi.stubGlobal("fetch", fetch)
 
-    const result = await Effect.runPromise(queryPlayerCwlHistory("#PYY", new URLSearchParams()).pipe(Effect.provide(layer)))
+    const result = await Effect.runPromise(queryPlayerCwlHistory("#PYY", new URLSearchParams()).pipe(
+      Effect.provideService(SqlClient.SqlClient, tag)))
 
     expect(counts).toEqual({ seeds: 1, groups: 1, wars: 1, locators: 1 })
-    expect(get).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(3)
     expect(peak).toBe(3)
     expect(result.items.map((item) => item.placement)).toEqual([{ clan: 1, group: 1 }, null, null])
     expect(result.items.map((item) => item.missedAttacks)).toEqual([1, 1, 1])

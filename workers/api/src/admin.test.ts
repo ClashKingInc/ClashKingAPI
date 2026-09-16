@@ -31,8 +31,8 @@ describe("admin runtime routes", () => {
   })
   it("exposes every shared admin contract exactly once", () => {
     const contracts = Object.values(adminEndpoints).map(({ method, path }) => ({ method, path }))
-    expect(adminRuntimeRoutes).toHaveLength(41)
-    expect(new Set(adminRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(41)
+    expect(adminRuntimeRoutes).toHaveLength(42)
+    expect(new Set(adminRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(42)
     expect(adminRuntimeRoutes).toEqual(contracts)
   })
 

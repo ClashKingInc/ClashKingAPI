@@ -2,6 +2,8 @@ import {
   AchievementsCheckEndpoint, BookmarksAddEndpoint, BookmarksDeleteEndpoint, BookmarksListEndpoint,
   BookmarksOrderEndpoint, RecentSearchesEndpoint, UpgradePreferencesGetEndpoint,
   UpgradePreferencesPatchEndpoint, UpgradesGetEndpoint, UpgradesPutEndpoint,
+  DeleteOldPersonalBasesEndpoint, PersonalBasesEndpoint,
+  SavePersonalBaseEndpoint, UnsavePersonalBaseEndpoint,
   requireEndpointSuccessStatus,
   type AnyEndpoint, type Bookmark, type BookmarkType, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
@@ -20,6 +22,7 @@ type JsonObject = EndpointResponse<typeof UpgradesGetEndpoint>["data"]
 type Runtime<A> = Effect.Effect<A, ApiFailure, SqlClient.SqlClient>
 const database = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.mapError((cause) =>
   cause instanceof Conflict || cause instanceof NotFound || cause instanceof InvalidRequest || cause instanceof Unauthenticated
+    || cause instanceof Forbidden
     ? cause : new DatabaseFailure({ cause, message: "Mobile persistence database operation failed" })))
 const decode = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(
   Effect.mapError(() => new InvalidRequest({ message: "Mobile request failed schema validation" })),
@@ -29,6 +32,14 @@ const normalizedTag = (raw: string) => {
   const tag = correctTag(raw)
   return tag === "#" || tag === "" ? Effect.fail(new InvalidRequest({ message: "Tag is required" })) : Effect.succeed(tag)
 }
+
+const positiveBaseId = (raw: string): Effect.Effect<string, InvalidRequest> => Effect.try({
+  try: () => {
+    if (!/^[1-9][0-9]*$/u.test(raw) || BigInt(raw) > 9223372036854775807n) throw new Error("invalid")
+    return raw
+  },
+  catch: () => new InvalidRequest({ message: "Invalid base ID" }),
+})
 
 /** Recheck under the transaction lock: account deletion must invalidate a user mutation. */
 const lockAuthenticatedUser = (userId: string) => Effect.gen(function* () {
@@ -87,7 +98,6 @@ const deleteBookmark = (principal: ApiPrincipal, userId: string, type: EntityTyp
     yield* lockBookmarkSubject(principal, userId)
     const rows = yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = ${type} AND tag = ${tag} RETURNING tag`
     if (rows.length === 0) return yield* new NotFound({ message: "Bookmark not found" })
-    if (type === "player") yield* sql`DELETE FROM mobile_notification_accounts WHERE user_id = ${userId} AND player_tag = ${tag} AND source = 'bookmarked'`
     return { message: "Bookmark deleted" }
   })))
 })
@@ -196,6 +206,69 @@ export const listMobileRecentSearches = (userId: string): Runtime<EndpointRespon
   return yield* Schema.decodeUnknownEffect(RecentSearchesEndpoint.response)({ players: values("player"), clans: values("clan") }).pipe(Effect.orDie)
 })
 
+interface PersonalBaseRow {
+  readonly id: string; readonly base_link: string; readonly images: string[]; readonly description: string
+  readonly created_at: Date | string; readonly server_id: string; readonly channel_id: string; readonly message_id: string
+  readonly download_count: number | string; readonly upvotes: number | string; readonly downvotes: number | string
+  readonly kind: "war" | "legend" | null; readonly saved: boolean
+  readonly saved_at: Date | string | null; readonly downloaded_at: Date | string | null
+}
+export const readPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const bases = yield* database(sql<PersonalBaseRow>`SELECT base.id::text id,base.base_link,
+      ARRAY(SELECT image.image_url FROM base_images image WHERE image.base_id=base.id ORDER BY image.position) images,
+      base.description,base.created_at,base.server_id,base.channel_id,base.message_id,
+      (SELECT count(*)::integer FROM jsonb_object_keys(base.downloads)) download_count,
+      (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=1) upvotes,
+      (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=-1) downvotes,
+      saved.kind,saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
+    FROM (SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
+      UNION SELECT id FROM bases WHERE downloads ? ${userId}) library
+    JOIN bases base ON base.id=library.base_id
+    LEFT JOIN user_saved_bases saved ON saved.base_id=base.id AND saved.user_id=${userId}
+    WHERE base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
+    ORDER BY GREATEST(COALESCE(saved.saved_at,'epoch'),COALESCE((base.downloads->>${userId})::timestamptz,'epoch')) DESC,base.id DESC`)
+  return {
+    items: bases.map((row) => ({ id: row.id, baseLink: row.base_link, images: row.images, description: row.description,
+      createdAt: timestamp(row.created_at), serverId: row.server_id, channelId: row.channel_id, messageId: row.message_id,
+      discordMessageUrl: `https://discord.com/channels/${row.server_id}/${row.channel_id}/${row.message_id}`,
+      downloadCount: Number(row.download_count), upvotes: Number(row.upvotes), downvotes: Number(row.downvotes), kind: row.kind,
+      saved: row.saved, savedAt: row.saved_at === null ? null : timestamp(row.saved_at),
+      downloadedAt: row.downloaded_at === null ? null : timestamp(row.downloaded_at) })),
+  }
+})
+
+const savePersonalBase = (userId: string, rawBaseId: string, kind: "war" | "legend" | null): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+  const baseId = yield* positiveBaseId(rawBaseId), sql = yield* SqlClient.SqlClient
+  return yield* database(sql.withTransaction(Effect.gen(function* () {
+    yield* lockAuthenticatedUser(userId)
+    const rows = yield* sql`INSERT INTO user_saved_bases(user_id,base_id,kind)
+      SELECT ${userId},id,${kind} FROM bases WHERE id=${baseId}::bigint AND server_id IS NOT NULL AND channel_id IS NOT NULL
+      ON CONFLICT (user_id,base_id) DO UPDATE SET kind=EXCLUDED.kind RETURNING base_id`
+    if (rows.length === 0)
+      return yield* new NotFound({ message: "Shared base not found" })
+    return yield* readPersonalBases(userId)
+  })))
+})
+
+const unsavePersonalBase = (userId: string, rawBaseId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+  const baseId = yield* positiveBaseId(rawBaseId), sql = yield* SqlClient.SqlClient
+  return yield* database(sql.withTransaction(Effect.gen(function* () {
+    yield* lockAuthenticatedUser(userId)
+    yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND base_id=${baseId}::bigint`
+    return yield* readPersonalBases(userId)
+  })))
+})
+
+const deleteOldPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  return yield* database(sql.withTransaction(Effect.gen(function* () {
+    yield* lockAuthenticatedUser(userId)
+    yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND saved_at < now() - interval '90 days'`
+    return yield* readPersonalBases(userId)
+  })))
+})
+
 interface RouteContext { readonly principal: ApiPrincipal; readonly bindings: WorkerBindings }
 const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequest<E>, context: RouteContext) => Runtime<EndpointResponse<E>>) => ({
   endpoint,
@@ -214,6 +287,10 @@ const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequ
 })
 
 const routes = [
+  route(PersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? readPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(SavePersonalBaseEndpoint, ({ path, body }, { principal }) => principal.kind === "user" ? savePersonalBase(principal.userId, path.baseId, body.kind) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(DeleteOldPersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? deleteOldPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(UnsavePersonalBaseEndpoint, ({ path }, { principal }) => principal.kind === "user" ? unsavePersonalBase(principal.userId, path.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(AchievementsCheckEndpoint, (_, { principal, bindings }) => principal.kind === "user"
     ? checkMobileAchievements(principal.userId, bindings) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(BookmarksListEndpoint, ({ path, query }, { principal }) => subject(principal, path.userId).pipe(Effect.flatMap((id) => listMobileBookmarks(id, query.type)))),
@@ -241,6 +318,10 @@ const routes = [
 
 // Literal inventory is consumed by the repository's static parity analyzer.
 export const mobilePersistenceRuntimeRoutes = [
+  { method: "GET", path: "/v2/bases/personal" },
+  { method: "PUT", path: "/v2/bases/personal/:baseId" },
+  { method: "DELETE", path: "/v2/bases/personal/older-than-90-days" },
+  { method: "DELETE", path: "/v2/bases/personal/:baseId" },
   { method: "POST", path: "/v2/achievements/check" },
   { method: "GET", path: "/v2/links/:userId/bookmarks" },
   { method: "POST", path: "/v2/links/:userId/bookmarks" },

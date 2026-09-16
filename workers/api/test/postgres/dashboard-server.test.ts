@@ -221,8 +221,8 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       expect(withoutButton?.components).toEqual([])
       expect(withoutButton?.button_settings).toEqual({})
       yield* execute(dashboardEndpoints.deleteTicketPanel, {}, panelPath)
-      expect(yield* sql`SELECT name FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName} AND archived_at IS NULL`).toEqual([])
-      // Archiving frees the active (server_id, name) identity for recreation.
+      expect(yield* sql`SELECT name FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName}`).toEqual([])
+      // Deletion frees the (server_id, name) identity for recreation.
       yield* execute(dashboardEndpoints.createTicketPanel, { name: panelName })
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
@@ -232,9 +232,8 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
       const sql = yield* SqlClient.SqlClient
       const panelName = "Legacy applications", customId = "legacy_apply"
       yield* sql`INSERT INTO servers (id, name) VALUES (${serverId}, 'Integration server') ON CONFLICT (id) DO NOTHING`
-      yield* sql`INSERT INTO ticket_panels (id, server_id, name, components, data)
+      yield* sql`INSERT INTO ticket_panels (server_id, name, components, data)
         VALUES (
-          '00000000-0000-4000-8000-000000000201'::uuid,
           ${serverId},
           ${panelName},
           jsonb_build_array(

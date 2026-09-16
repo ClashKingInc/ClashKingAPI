@@ -283,7 +283,6 @@
     ["GET","/v2/static/{category}/{item_id_or_name}/max-level",[]],
     ["GET","/v2/stats/armies",["Stats"]],
     ["GET","/v2/stats/cwl",["Stats"]],
-    ["GET","/v2/stats/cwl/townhalls",["Stats"]],
     ["GET","/v2/stats/ranked",["Stats"]],
     ["GET","/v2/stats/war",["Stats"]],
     ["GET","/v2/stats/wars/hitrates",["Stats"]],

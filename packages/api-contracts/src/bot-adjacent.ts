@@ -5,7 +5,8 @@ import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endp
 
 const ServerPath = Schema.Struct({ serverId: DecimalSnowflake })
 const LinkMutation = Schema.Struct({ message: Schema.String, player_tag: Schema.String, user_id: DecimalSnowflake })
-const BaseVoterPath = Schema.Struct({ baseId: Schema.String, voterId: DecimalSnowflake })
+export const BaseId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u))
+const BaseVoterPath = Schema.Struct({ baseId: BaseId, voterId: DecimalSnowflake })
 
 export const SharedLinksLookupEndpoint = defineEndpoint({
   auth: "developer", body: Schema.Struct({
@@ -38,7 +39,7 @@ export const UpsertBaseVoteEndpoint = defineEndpoint({
   auth: "bot", body: Schema.Struct({ direction: Schema.Literals(["up", "down"]) }), bodyMode: "json",
   method: "PUT", operationId: "upsertBaseVote", path: "/v2/bases/:baseId/votes/:voterId",
   pathParams: BaseVoterPath, query: NoQuery,
-  response: Schema.Struct({ baseId: Schema.String, voterId: DecimalSnowflake, direction: Schema.Literals(["up", "down"]) }),
+  response: Schema.Struct({ baseId: BaseId, voterId: DecimalSnowflake, direction: Schema.Literals(["up", "down"]) }),
   responseMode: "json", successStatus: 200, summary: "Atomically record or change a trusted Bot base vote",
 })
 
@@ -50,9 +51,37 @@ export const RemoveBaseVoteEndpoint = defineEndpoint({
 
 export const RecordBaseDownloadEndpoint = defineEndpoint({
   auth: "bot", body: NoBody, bodyMode: "none", method: "POST", operationId: "recordBaseDownload",
-  path: "/v2/bases/:baseId/downloaders/:userId", pathParams: Schema.Struct({ baseId: Schema.String, userId: DecimalSnowflake }),
-  query: NoQuery, response: Schema.Struct({ baseId: Schema.String, userId: DecimalSnowflake, downloadCount: Schema.Number }),
+  path: "/v2/bases/:baseId/downloaders/:userId", pathParams: Schema.Struct({ baseId: BaseId, userId: DecimalSnowflake }),
+  query: NoQuery, response: Schema.Struct({ baseId: BaseId, userId: DecimalSnowflake, downloadCount: Schema.Number }),
   responseMode: "json", successStatus: 200, summary: "Record one unique trusted Bot base downloader",
+})
+
+export const LegacyBase = Schema.Struct({
+  id: BaseId,
+  messageId: DecimalSnowflake,
+  serverId: Schema.NullOr(DecimalSnowflake),
+  channelId: Schema.NullOr(DecimalSnowflake),
+  baseLink: Schema.String,
+  images: Schema.Array(Schema.String),
+  description: Schema.String,
+})
+export const ResolveLegacyBaseEndpoint = defineEndpoint({
+  auth: "bot", body: NoBody, bodyMode: "none", method: "GET", operationId: "resolveLegacyBase",
+  path: "/v2/bases/legacy/:messageId", pathParams: Schema.Struct({ messageId: DecimalSnowflake }), query: NoQuery,
+  response: LegacyBase, responseMode: "json", successStatus: 200, summary: "Resolve a legacy base by Discord message ID",
+})
+export const StageLegacyBaseImageEndpoint = defineEndpoint({
+  auth: "bot", body: Schema.Struct({ sourceUrl: Schema.String }), bodyMode: "json", method: "POST", operationId: "stageLegacyBaseImage",
+  path: "/v2/bases/:baseId/images/:position", pathParams: Schema.Struct({ baseId: BaseId, position: Schema.Int }), query: NoQuery,
+  response: Schema.Struct({ baseId: BaseId, position: Schema.Int, imageUrl: Schema.String }), responseMode: "json", successStatus: 200,
+  summary: "Copy and idempotently stage one Discord base attachment",
+})
+export const FinalizeLegacyBaseEndpoint = defineEndpoint({
+  auth: "bot", body: Schema.Struct({ serverId: DecimalSnowflake, channelId: DecimalSnowflake,
+    description: Schema.String.check(Schema.isMaxLength(1000)) }).annotate({ parseOptions: { onExcessProperty: "error" } }), bodyMode: "json", method: "POST",
+  operationId: "finalizeLegacyBase", path: "/v2/bases/:baseId/finalize", pathParams: Schema.Struct({ baseId: BaseId }), query: NoQuery,
+  response: Schema.Struct({ baseId: BaseId, serverId: DecimalSnowflake, channelId: DecimalSnowflake, description: Schema.String }), responseMode: "json", successStatus: 200,
+  summary: "Finalize a converted legacy base after the Discord edit succeeds",
 })
 
 export const botAdjacentEndpoints = {
@@ -62,4 +91,7 @@ export const botAdjacentEndpoints = {
   upsertBaseVote: UpsertBaseVoteEndpoint,
   removeBaseVote: RemoveBaseVoteEndpoint,
   recordBaseDownload: RecordBaseDownloadEndpoint,
+  resolveLegacyBase: ResolveLegacyBaseEndpoint,
+  stageLegacyBaseImage: StageLegacyBaseImageEndpoint,
+  finalizeLegacyBase: FinalizeLegacyBaseEndpoint,
 } as const

@@ -40,14 +40,14 @@ const predicates = {
 }
 predicates.war_archive_pending = `war_id IN (SELECT war_id FROM wars WHERE ${predicates.wars})`
 predicates.war_archive_packs = `pack_id IN (SELECT archive_pack_id FROM wars WHERE ${predicates.wars} UNION SELECT pack_id FROM war_archive_pending WHERE ${predicates.war_archive_pending})`
-const excluded = new Set(['auth_discord_tokens','auth_refresh_tokens','auth_email_verifications','auth_password_reset_tokens','mobile_push_devices','mobile_notification_deliveries','billing_webhook_events'])
+const excluded = new Set(['auth_discord_tokens','auth_refresh_tokens','auth_email_verifications','auth_password_reset_tokens','mobile_push_devices','billing_webhook_events'])
 // Explicit non-credential business-data scope. Never export provider secrets,
 // login sessions/password hashes, billing records, or executable delivery jobs.
 const allowed = new Set(`servers basic_clan basic_player player_links player_links_settings
 user_settings user_bookmarks user_recent_searches player_upgrade_preferences player_upgrades
 player_profile_details player_timers player_war_history player_change_history player_online_events
 player_rankings_current player_stat_changes battlelogs join_leave_history legend_history
-legend_rankings_current ranked_league_group_members achievement_player_awards
+legend_rankings_current legend_rankings_history ranked_league_group_members achievement_player_awards
 clan_change_history clan_rankings_current clan_records cwl_bonus_recipients cwl_group_clans
 cwl_group_members cwl_groups cwl_league_history cwl_standings
 leaderboard_history_clan_builder_base leaderboard_history_clan_capital leaderboard_history_clan_home

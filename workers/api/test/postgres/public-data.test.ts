@@ -8,6 +8,7 @@ import { WorkerEnvironment, type WorkerBindings } from "../../src/environment.js
 import { queryClanCwlSeasons, queryPlayerCwlHistory } from "../../src/public-cwl.js"
 import { queryClanRecords } from "../../src/public-changes.js"
 import { queryLeaderboardHistory, queryClanLeaderboardHistory } from "../../src/public-history.js"
+import { queryPlayerLeaderboard } from "../../src/public-leaderboards.js"
 import { selectClanWarIds } from "../../src/public-war.js"
 import { readArchiveWar } from "../../src/war-archive.js"
 import producer from "../fixtures/war-producer.json"
@@ -79,6 +80,26 @@ describe("public data against canonical Goose migrations", () => {
       expect(response.items[0]).toMatchObject({ name: 'History clan', tag, rank: 100, clanPoints: 12345 })
       const summary = yield* queryClanLeaderboardHistory(tag, new URLSearchParams('type=clan_home_points'), true)
       expect(summary).toMatchObject({ seasons: [{ daysInTop200: 1, bestRank: 10, peakPoints: 12345 }] })
+    }).pipe(Effect.provide(layer), Effect.scoped))
+  })
+  it("orders Town Hall players by current ranked tier before trophies and excludes both unranked representations", async () => {
+    await Effect.runPromise(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO basic_player(tag,name,league_id,townhall_level,trophies) VALUES
+        ('#THA','Higher tier',105000034,18,5000),
+        ('#THB','Lower tier high trophies',105000033,18,7000),
+        ('#THC','Lower tier low trophies',105000033,18,6000),
+        ('#THD','Unranked id',105000000,18,9000),
+        ('#THE','Unranked null',NULL,18,10000)`
+      const townHall = yield* queryPlayerLeaderboard(bindings, "townhall", "18", new URLSearchParams("limit=10"))
+      const fixtureItems = townHall.items.filter((item) => item.tag.startsWith("#TH"))
+      const fixtureRanks = fixtureItems.map((item) => item.rank)
+      expect(fixtureItems.map((item) => item.tag)).toEqual(["#THA", "#THB", "#THC"])
+      expect(fixtureRanks).toEqual(Array.from(fixtureRanks).sort((a, b) => a - b))
+      expect(townHall.items.map((item) => item.tag)).not.toContain("#THD")
+      expect(townHall.items.map((item) => item.tag)).not.toContain("#THE")
+      const exactTier = yield* queryPlayerLeaderboard(bindings, "league", "105000033", new URLSearchParams("limit=10"))
+      expect(exactTier.items.map((item) => item.tag)).toEqual(["#THB", "#THC"])
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

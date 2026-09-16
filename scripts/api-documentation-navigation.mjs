@@ -19,6 +19,7 @@ const additions = new Map([
   ["GET /v2/health", "Health"],
   ["GET /v2/leaderboard/{}/clan/capital-gold", "Leaderboard"],
   ["GET /v2/player/{}/legend/{}/battlelog", "Player"],
+  ["GET /v2/player/{}/legend/series", "Player"],
   ["GET /v2/player/{}/league/history", "Player"],
   ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
   ["GET /v2/ranked/{}/groups/{}", "Player"],
@@ -41,6 +42,9 @@ const additions = new Map([
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
   ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
+  ?? (path.startsWith("/v2/bases/") ? "Bases" : undefined)
+  ?? (path.startsWith("/v2/server/") && path.includes("/bases") ? "Bases" : undefined)
+  ?? (path.startsWith("/v2/legends/") ? "Leaderboard" : undefined)
   ?? (path.startsWith("/proxy/v1/") ? "Clash API Proxy" : undefined)
   // Two original generic static-data operations had no tag at all.
   ?? (path.startsWith("/v2/static/") ? "Static Data" : undefined)

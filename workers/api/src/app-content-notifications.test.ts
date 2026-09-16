@@ -121,34 +121,35 @@ describe("public app content handlers", () => {
 })
 
 const preferenceBody = {
-  deviceId: "device-one", environment: "sandbox", notificationsEnabled: true,
   warAttacksEnabled: true, warStateEnabled: false, warRemindersEnabled: true,
   raidRemindersEnabled: true, eventsEnabled: false, announcementsEnabled: true,
-  monthlySupportEnabled: false, reminderTimings: [60, 60, 180], raidReminderTimings: [15, 30, 4320],
+  monthlySupportEnabled: false, legendDefensesEnabled: true,
+  reminderTimings: [60, 60, 180], raidReminderTimings: [15, 30, 4320],
 }
 
 describe("notification SQL and authorization", () => {
-  it("reads all supported device preferences with verified account choices", async () => {
-    const test = harness(({ query }) => query.includes("FROM mobile_push_devices") ? [{
-      enabled: true, war_attacks_enabled: true, war_state_enabled: false, war_reminders_enabled: true,
+  it("reads user-level preferences with every currently verified account", async () => {
+    const test = harness(({ query }) => query.includes("FROM mobile_notification_preferences") ? [{
+      war_attacks_enabled: true, war_state_enabled: false, war_reminders_enabled: true,
       raid_reminders_enabled: true, events_enabled: false, announcements_enabled: true,
-      monthly_support_enabled: false, reminder_timings: [60], raid_reminder_timings: [15, 4320],
-    }] : [{ player_tag: "#P0Y", source: "verified", active: true }])
-    const response = await test.run(request("/v2/notifications/preferences?device_id=device-one&environment=sandbox"))
+      monthly_support_enabled: false, legend_defenses_enabled: true,
+      reminder_timings: [60], raid_reminder_timings: [15, 4320],
+    }] : [{ tag: "#P0Y", enabled: true }])
+    const response = await test.run(request("/v2/notifications/preferences"))
     const body = await response?.json()
     expect(body).toMatchObject({
-      deviceId: "device-one", environment: "sandbox", raidRemindersEnabled: true,
-      raidReminderTimings: [15, 4320], accounts: [{ playerTag: "#P0Y", source: "verified", active: true }],
+      raidRemindersEnabled: true, legendDefensesEnabled: true,
+      raidReminderTimings: [15, 4320], accounts: [{ tag: "#P0Y", enabled: true }],
     })
     expect(body).not.toHaveProperty("legendAttacksEnabled")
-    expect(body).not.toHaveProperty("legendDefensesEnabled")
-    expect(test.statements[0]?.parameters).toEqual([userId, "device-one", "sandbox"])
+    expect(body).not.toHaveProperty("notificationsEnabled")
+    expect(test.statements[0]?.parameters).toEqual([userId])
   })
 
-  it("returns a missing registered device as typed NotFound", async () => {
+  it("returns disabled defaults before preferences are saved", async () => {
     const test = harness()
-    await expect(test.run(request("/v2/notifications/preferences?device_id=device-one&environment=sandbox")))
-      .rejects.toMatchObject({ _tag: "NotFound" })
+    const response = await test.run(request("/v2/notifications/preferences"))
+    expect(await response?.json()).toMatchObject({ warAttacksEnabled: false, legendDefensesEnabled: false, accounts: [] })
   })
 
   it("encrypts registration tokens and atomically transfers duplicate ownership", async () => {
@@ -158,7 +159,8 @@ describe("notification SQL and authorization", () => {
       authorization_status: "authorized", enabled: true, last_seen_at: now,
     }] : [])
     const response = await test.run(request("/v2/notifications/devices", "POST", {
-      token, device_id: "device-one", platform: "ios", environment: "sandbox", authorization_status: "authorized",
+      token, device_id: "device-one", platform: "ios", environment: "sandbox",
+      authorization_status: "authorized", enabled: false,
     }))
     expect(response?.status).toBe(200)
     expect(test.transactions()).toBe(1)
@@ -167,6 +169,7 @@ describe("notification SQL and authorization", () => {
     expect(insert?.parameters[5]).not.toBe(token)
     expect(await Effect.runPromise(decryptPushToken(String(insert?.parameters[5]), "local-test-key"))).toBe(token)
     expect(insert?.parameters[6]).toBe(await Effect.runPromise(hashPushToken(token)))
+    expect(insert?.parameters[10]).toBe(false)
     expect(test.statements[0]?.query).toContain("token_hash=$1")
     expect(JSON.stringify(await response?.json())).not.toContain(token)
   })
@@ -187,29 +190,19 @@ describe("notification SQL and authorization", () => {
   })
 
   it("persists raid preferences and normalizes war timings without replacing account choices", async () => {
-    const test = harness(({ query }) => query.startsWith("UPDATE mobile_push_devices")
-      ? [{ device_id: "device-one" }]
-      : [{ player_tag: "#P0Y", source: "verified", active: true }])
+    const test = harness(({ query }) => query.includes("FROM player_links") ? [{ tag: "#P0Y", enabled: true }] : [])
     const response = await test.run(request("/v2/notifications/preferences", "PUT", preferenceBody))
     expect(await response?.json()).toMatchObject({
       raidRemindersEnabled: true, raidReminderTimings: [15, 30, 4320], reminderTimings: [60, 180],
-      accounts: [{ playerTag: "#P0Y", source: "verified", active: true }],
+      legendDefensesEnabled: true, accounts: [{ tag: "#P0Y", enabled: true }],
     })
     const update = test.statements[0]
-    expect(update?.query).toContain("raid_reminders_enabled=$8")
-    expect(update?.query).toContain("raid_reminder_timings=$13")
-    expect(update?.parameters.slice(0, 3)).toEqual([userId, "device-one", "sandbox"])
-    expect(update?.parameters[7]).toBe(true)
-    expect(update?.parameters[12]).toEqual([15, 30, 4320])
-    expect(test.statements.some(({ query }) => /DELETE|INSERT/u.test(query))).toBe(false)
+    expect(update?.query).toContain("INSERT INTO mobile_notification_preferences")
+    expect(update?.query).toContain("legend_defenses_enabled")
+    expect(update?.parameters[0]).toBe(userId)
+    expect(update?.parameters[8]).toBe(true)
+    expect(update?.parameters[10]).toEqual([15, 30, 4320])
     expect(test.events).toEqual(["committed"])
-  })
-
-  it("does not publish when the preference transaction fails", async () => {
-    const test = harness()
-    await expect(test.run(request("/v2/notifications/preferences", "PUT", preferenceBody)))
-      .rejects.toMatchObject({ _tag: "NotFound" })
-    expect(test.events).toEqual([])
   })
 
   it("rejects out-of-granularity raid timings before writing", async () => {
@@ -225,6 +218,14 @@ describe("notification SQL and authorization", () => {
       .rejects.toMatchObject({ _tag: "Forbidden" })
     expect(test.statements[0]?.parameters).toEqual([userId, "#P0Y"])
     expect(test.statements.some(({ query }) => query.startsWith("INSERT"))).toBe(false)
+  })
+
+  it("persists an explicit disabled state for a verified linked account", async () => {
+    const test = harness(({ query }) => query.includes("SELECT EXISTS") ? [{ exists: true }] : [])
+    const response = await test.run(request("/v2/notifications/accounts/%23P0Y", "PUT", { enabled: false }))
+    expect(await response?.json()).toEqual({ tag: "#P0Y", enabled: false })
+    expect(test.statements[1]?.query).toContain("enabled=excluded.enabled")
+    expect(test.statements[1]?.parameters).toEqual([userId, "#P0Y", false])
   })
 })
 

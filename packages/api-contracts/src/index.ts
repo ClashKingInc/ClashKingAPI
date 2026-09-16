@@ -16,6 +16,8 @@ export * from "./app-announcements.js"
 export * from "./stats.js"
 export * from "./stats-history.js"
 export * from "./league-analytics.js"
+export * from "./legends.js"
+export * from "./personal-bases.js"
 export * from "./billing-webhook.js"
 export * from "./media.js"
 export * from "./legacy-public.js"
@@ -36,6 +38,8 @@ import {
   StatsWarEndpoint,
 } from "./stats.js"
 import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { legendEndpoints } from "./legends.js"
+import { personalBaseEndpoints } from "./personal-bases.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
@@ -47,6 +51,8 @@ export const endpoints = {
   ...publicMetadataEndpoints,
   ...publicPlayerExtraEndpoints,
   ...leagueAnalyticsEndpoints,
+  ...legendEndpoints,
+  ...personalBaseEndpoints,
   ...statsHistoryEndpoints,
   initialization: InitializationEndpoint,
   appAnnouncements: AppAnnouncementsEndpoint,

@@ -16,8 +16,7 @@ if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== 
 const clanTag = "#PYY8822", groupId = "ClanExtra001"
 const archive = { ...producerWar, warTag: "#CLANWAR", clan: { ...producerWar.clan, tag: clanTag, badgeToken: "fixture-badge" } }
 const packedBytes = zstdCompressSync(Buffer.from(JSON.stringify(archive)), { dictionary: readFileSync(new URL("../../assets/war-json.zdict", import.meta.url)) })
-const get = vi.fn(async (_key: string, _options: unknown) => ({ body: new ReadableStream(), arrayBuffer: async () => new Uint8Array(packedBytes).buffer }))
-const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, WAR_ARCHIVE: { get }, ASSETS: { get: async (key: string) => ({ json: async () => ({ items: key.includes("capital_leagues")
+const bindings = { HYPERDRIVE: { connectionString: databaseUrl }, ASSETS: { get: async (key: string) => ({ json: async () => ({ items: key.includes("capital_leagues")
   ? [{ _id: 85_000_001, name: "Bronze League III" }] : [{ _id: 48_000_000, name: "Unranked" }] }) }) } } as unknown as WorkerBindings
 const runtime = ManagedRuntime.make(Layer.merge(databaseLayer(bindings), Layer.succeed(WorkerEnvironment, bindings)))
 const run = (path: string) => Effect.gen(function* () {
@@ -128,10 +127,19 @@ describe("public clan extra reads against authoritative Goose migrations", () =>
         yield* sql`UPDATE wars SET archive_pack_id = ${packId}::bigint, archive_offset = 25, archive_compressed_bytes = ${packedBytes.byteLength} WHERE war_id = ${warId}`
         yield* sql`DELETE FROM war_archive_pending WHERE war_id = ${warId}`
       }))
+      const fetchArchive = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        expect(String(input)).toBe(`https://wars.clashk.ing/packs/${packId.padStart(6, "0")}.pack`)
+        expect(new Headers(init?.headers).get("range")).toBe(`bytes=25-${24 + packedBytes.byteLength}`)
+        return new Response(packedBytes, { status: 206, headers: {
+          "content-length": String(packedBytes.byteLength),
+          "content-range": `bytes 25-${24 + packedBytes.byteLength}/${25 + packedBytes.byteLength}`,
+        } })
+      })
+      vi.stubGlobal("fetch", fetchArchive)
       const packed = Schema.decodeUnknownSync(BotCwlGroupEndpoint.response)(yield* run(`/cwl/${encodeURIComponent(clanTag)}/group?season=2026-09`))
       expect(packed).toEqual(pending)
-      expect(get).toHaveBeenCalledTimes(1)
-      expect(get).toHaveBeenCalledWith(`packs/${packId.padStart(6, "0")}.pack`, { range: { offset: 25, length: packedBytes.byteLength } })
+      expect(fetchArchive).toHaveBeenCalledTimes(1)
+      vi.unstubAllGlobals()
     }))
   })
 })

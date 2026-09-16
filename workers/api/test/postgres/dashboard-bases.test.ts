@@ -1,4 +1,4 @@
-import { BaseEndpoint, BaseDownloaderEndpoint, BasesEndpoint, CreateBaseEndpoint, DeleteBaseEndpoint, UploadBaseImageEndpoint, type AnyEndpoint } from "@clashking/api-contracts"
+import { BaseEndpoint, BaseDownloaderEndpoint, BasesEndpoint, CreateBaseEndpoint, DeleteBaseEndpoint, UpdateBaseEndpoint, UploadBaseImageEndpoint, type AnyEndpoint } from "@clashking/api-contracts"
 import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -10,8 +10,8 @@ import type { WorkerBindings } from "../../src/environment.js"
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1" || !["localhost", "127.0.0.1", "[::1]"].includes(new URL(databaseUrl).hostname)) throw new Error("Run against local disposable Timescale using the schema repository harness")
 const serverId = "6334567890123456789", channelId = "7334567890123456789", messageId = "8334567890123456789", userId = "5334567890123456789"
-const discord = vi.fn((path: string) => Effect.succeed(path === `/channels/${channelId}` ? { id: channelId, guild_id: serverId, type: 0 }
-  : path.endsWith("/messages") ? { id: messageId }
+const discord = vi.fn((path: string, options?: Parameters<DiscordApi["Service"]["request"]>[1]) => Effect.succeed(path === `/channels/${channelId}` ? { id: channelId, guild_id: serverId, type: 0 }
+  : path.endsWith("/messages") || options?.method === "PATCH" ? { id: messageId }
   : path.includes("/members/") ? { user: { id: userId, username: "Fixture user", discriminator: "0" }, roles: [], nick: null, avatar: null }
   : undefined))
 const put = vi.fn(async () => ({ key: "test" }) as R2Object)
@@ -29,26 +29,31 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       const form = new FormData(); form.set("file", new File(["mock image"], "layout.png"))
       const uploaded = Schema.decodeUnknownSync(UploadBaseImageEndpoint.response)(yield* execute(UploadBaseImageEndpoint, form))
       expect(uploaded.url).toMatch(/^https:\/\/api\.clashk\.ing\/v2\/media\/base_.*\.png$/u)
-      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout", images: [uploaded.url], description: "Fixture base" }))
+      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout&id=TH17", images: [uploaded.url], description: "Fixture base" }))
       expect(created).toMatchObject({ serverId, channelId, messageId, downloadCount: 0, images: [uploaded.url] })
       const path = { serverId, baseId: created.id }
       const listed = Schema.decodeUnknownSync(BasesEndpoint.response)(yield* execute(BasesEndpoint))
       expect(listed.items.map((base) => base.id)).toContain(created.id)
       const fetched = Schema.decodeUnknownSync(BaseEndpoint.response)(yield* execute(BaseEndpoint, {}, path))
       expect(fetched.messageId).toBe(messageId)
+      const edited = Schema.decodeUnknownSync(UpdateBaseEndpoint.response)(yield* execute(UpdateBaseEndpoint,
+        { baseLink: created.baseLink, images: created.images, description: "Updated fixture base" }, path))
+      expect(edited.description).toBe("Updated fixture base")
       const missing = yield* execute(BaseEndpoint, {}, { serverId: "6334567890123456788", baseId: created.id }).pipe(Effect.result)
       expect(missing._tag).toBe("Failure")
-      yield* sql`UPDATE bases SET downloaders = ${[userId]}::text[], upvoter_ids = ${[userId]}::text[] WHERE id = ${created.id}::uuid`
+      yield* sql`UPDATE bases SET downloads=jsonb_set(downloads,ARRAY[${userId}],to_jsonb(now()),true) WHERE id=${created.id}::bigint`
+      yield* sql`INSERT INTO base_votes(base_id,user_id,vote) VALUES (${created.id}::bigint,${userId},1)`
       const profile = Schema.decodeUnknownSync(BaseDownloaderEndpoint.response)(yield* execute(BaseDownloaderEndpoint, {}, { ...path, userId }))
       expect(profile).toMatchObject({ userId, displayName: "Fixture user" })
       const updated = Schema.decodeUnknownSync(BaseEndpoint.response)(yield* execute(BaseEndpoint, {}, path))
       expect(updated).toMatchObject({ downloadCount: 1, upvotes: 1, downloaders: [userId] })
       const deleted = Schema.decodeUnknownSync(DeleteBaseEndpoint.response)(yield* execute(DeleteBaseEndpoint, {}, path))
       expect(deleted).toEqual({ baseId: created.id, databaseDeleted: true, discordMessageCleanup: "deleted" })
-      const rows = yield* sql`SELECT id FROM bases WHERE id = ${created.id}::uuid`
+      const rows = yield* sql`SELECT id FROM bases WHERE id = ${created.id}::bigint`
       expect(rows).toHaveLength(0)
     }).pipe(Effect.provide(layer), Effect.scoped))
     expect(put).toHaveBeenCalledOnce()
+    expect(discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, expect.objectContaining({ method: "PATCH" }))
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

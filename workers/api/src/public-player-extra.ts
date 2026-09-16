@@ -9,7 +9,7 @@ import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type Ap
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { publicTag } from "./public-war.js"
 import { publicHistoryOptions, isoTimestamp } from "./public-player.js"
-import { leaderboardHistoryItem, historicalHomeLeagues } from "./public-history.js"
+import { leaderboardHistoryItem } from "./public-history.js"
 import { leaderboardLimit } from "./public-leaderboards.js"
 import { correctedJoinLeaveEvents, type JoinLeaveRow } from "./public-join-leave.js"
 import { forEachNewestPlayerWar } from "./war-archive.js"
@@ -144,10 +144,8 @@ export const queryPlayerTypedLeaderboardHistory = (rawTag: string, type: string)
   const sql = yield* SqlClient.SqlClient
   const table = type === "player_home_trophies" ? "leaderboard_history_player_home" : "leaderboard_history_player_builder_base"
   const rows = yield* sql<Parameters<typeof leaderboardHistoryItem>[0]>`SELECT * FROM ${sql(table)} WHERE player_tag = ${tag} ORDER BY date DESC, location_id, rank`.pipe(Effect.mapError(failure))
-  const leagues = type === "player_home_trophies" && rows.some((row) => row.league_id != null && row.league_id >= 29_000_000 && row.league_id < 30_000_000)
-    ? yield* historicalHomeLeagues(yield* WorkerEnvironment) : undefined
   return { type, playerTag: tag, items: rows.map((row) => ({ date: isoTimestamp(row.date).slice(0, 10), locationId: row.location_id,
-    name: row.player_name, rank: row.rank, details: leaderboardHistoryItem(row, type, leagues) })) }
+    name: row.player_name, rank: row.rank, details: leaderboardHistoryItem(row, type) })) }
 })
 
 export const queryPlayerStatHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => Effect.gen(function* () {

@@ -15,7 +15,7 @@ const document = paths => ({ openapi: "3.1.1", info: { title: "fixture" }, paths
 test("compact navigation retains every pinned original feature tag with normalized parameters", () => {
   assert.equal(source.sourceCommit, "cf7371e4a32b4a37afd7c80ff83c72ef29b425e4")
   assert.equal(source.sourcePath, "internal/swaggerdocs/openapi.json")
-  assert.equal(source.operations.length, 289)
+  assert.equal(source.operations.length, 288)
   const paths = {}
   for (const [method, path] of source.operations) {
     paths[currentPath(path)] ??= {}

@@ -56,6 +56,7 @@ import {
   parseStatsWarQuery,
 } from "./stats.js"
 import { dispatchLeagueAnalytics } from "./league-analytics.js"
+import { dispatchLegends } from "./legends.js"
 import { dispatchStatsHistory } from "./stats-history.js"
 import { dispatchLegacyPublic } from "./legacy-public.js"
 
@@ -235,6 +236,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     }
     const analyticsResponse = yield* dispatchLeagueAnalytics(request)
     if (analyticsResponse !== undefined) return analyticsResponse
+    const legendResponse = yield* dispatchLegends(request)
+    if (legendResponse !== undefined) return legendResponse
     const statsHistoryResponse = yield* dispatchStatsHistory(request)
     if (statsHistoryResponse !== undefined) return statsHistoryResponse
     if (request.method === "GET" && url.pathname === "/v2/counts") {

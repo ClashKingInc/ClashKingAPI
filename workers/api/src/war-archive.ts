@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
-import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import { MAX_ARCHIVE_FRAME_BYTES, MAX_ARCHIVE_JSON_BYTES } from "./war-archive-codec.js"
 import { decodeArchiveFrame } from "./war-archive-decoder.js"
@@ -26,10 +25,11 @@ export const readArchiveWar = (warId: string, endTime?: Date | string) => Effect
     WHERE w.war_id = ${warId}::integer ${endTime === undefined ? sql`` : sql`AND w.end_time = ${endTime}`}
   `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "War archive lookup failed" })))
   const row = rows[0]
-  return row === undefined ? undefined : yield* decodeArchiveRef(row, yield* WorkerEnvironment)
+  return row === undefined ? undefined : yield* decodeArchiveRef(row)
 }).pipe(Effect.withSpan("WarArchive.read"))
 
-const readArchiveFrame = async (row: ArchiveRef, bindings: WorkerBindings): Promise<Uint8Array> => {
+const archiveOrigin = "https://wars.clashk.ing"
+const readArchiveFrame = async (row: ArchiveRef): Promise<Uint8Array> => {
   const offset = Number(row.archive_offset)
   const length = row.archive_compressed_bytes
   if (row.archive_pack_id == null || row.archive_offset == null || length == null ||
@@ -38,14 +38,24 @@ const readArchiveFrame = async (row: ArchiveRef, bindings: WorkerBindings): Prom
     throw new Error("Missing or invalid war archive locator")
   }
   const key = `packs/${String(row.archive_pack_id).padStart(6, "0")}.pack`
-  const object = await bindings.WAR_ARCHIVE.get(key, { range: { offset, length } })
-  if (!object || !("body" in object)) throw new Error("War archive pack is missing")
-  const bytes = new Uint8Array(await object.arrayBuffer())
+  const end = offset + length - 1
+  if (!Number.isSafeInteger(end)) throw new Error("Invalid war archive byte range")
+  const response = await fetch(`${archiveOrigin}/${key}`, { headers: { range: `bytes=${offset}-${end}` } })
+  if (response.status !== 206) throw new Error(`War archive range returned ${response.status}`)
+  const range = /^bytes (\d+)-(\d+)\/(\d+)$/u.exec(response.headers.get("content-range") ?? "")
+  if (range === null || Number(range[1]) !== offset || Number(range[2]) !== end || Number(range[3]) <= end) {
+    throw new Error("War archive response range does not match its locator")
+  }
+  const encoding = response.headers.get("content-encoding")?.trim().toLowerCase()
+  if (encoding !== undefined && encoding !== "identity") throw new Error("War archive range must not use HTTP content encoding")
+  const declaredLength = response.headers.get("content-length")
+  if (declaredLength !== null && Number(declaredLength) !== length) throw new Error("War archive response length does not match its locator")
+  const bytes = new Uint8Array(await response.arrayBuffer())
   if (bytes.byteLength !== length) throw new Error("Incomplete war archive range")
   return bytes
 }
 
-const decodeArchiveRef = (row: ArchiveRef, bindings: WorkerBindings, prefetched?: Uint8Array) => Effect.gen(function* () {
+const decodeArchiveRef = (row: ArchiveRef, prefetched?: Uint8Array) => Effect.gen(function* () {
     const payload = yield* Effect.tryPromise({ try: async () => {
       if (row.payload != null) {
         const raw = typeof row.payload === "string" ? row.payload : JSON.stringify(row.payload)
@@ -53,7 +63,7 @@ const decodeArchiveRef = (row: ArchiveRef, bindings: WorkerBindings, prefetched?
         if (bytes > MAX_ARCHIVE_JSON_BYTES) throw new Error("Pending war archive exceeds decoded size limit")
         return { value: typeof row.payload === "string" ? JSON.parse(row.payload) as unknown : row.payload, bytes }
       }
-      const bytes = prefetched ?? await readArchiveFrame(row, bindings)
+      const bytes = prefetched ?? await readArchiveFrame(row)
       const decoded = decodeArchiveFrame(bytes)
       return { value: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(decoded)) as unknown, bytes: decoded.byteLength }
     }, catch: archiveFailure })
@@ -70,8 +80,8 @@ const archiveRefs = (ids: readonly string[]) => Effect.gen(function* () {
     w.archive_pack_id IS NULL AS pending FROM wars w WHERE w.war_id = ANY(${[...ids]}::integer[])`
     .pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "War archive lookup failed" })))
 })
-const readRef = (ref: ArchiveRef, bindings: WorkerBindings) => ref.pending === true
-  ? readArchiveWar(ref.war_id, ref.end_time) : decodeArchiveRef(ref, bindings)
+const readRef = (ref: ArchiveRef) => ref.pending === true
+  ? readArchiveWar(ref.war_id, ref.end_time) : decodeArchiveRef(ref)
 export const archiveReadConcurrency = 2
 export const historyArchiveReadConcurrency = 4
 
@@ -80,7 +90,6 @@ export const historyArchiveReadConcurrency = 4
 export const MAX_ARCHIVE_PAGE_BYTES = 8 * 1024 * 1024
 export const loadArchiveWars = (warIds: readonly string[]) => Effect.gen(function* () {
   const wars = new Map<string, ArchivedWar>()
-  const bindings = yield* WorkerEnvironment
   let bytes = 0
   const ids = [...new Set(warIds)]
   for (let offset = 0; offset < ids.length; offset += 128) {
@@ -91,7 +100,7 @@ export const loadArchiveWars = (warIds: readonly string[]) => Effect.gen(functio
       // a time so faster R2 I/O does not multiply the decoded object footprint.
       const packed = batch.filter((ref) => ref.pending !== true)
       const frames = new Map(yield* Effect.forEach(packed, (ref) => Effect.tryPromise({
-        try: async () => [ref.war_id, await readArchiveFrame(ref, bindings)] as const,
+        try: async () => [ref.war_id, await readArchiveFrame(ref)] as const,
         catch: archiveFailure,
       }), { concurrency: historyArchiveReadConcurrency }))
       const retain = (ref: ArchiveRef, entry: { bytes: number; war: ArchivedWar } | undefined) => Effect.gen(function* () {
@@ -101,12 +110,12 @@ export const loadArchiveWars = (warIds: readonly string[]) => Effect.gen(functio
         wars.set(ref.war_id, entry.war)
       })
       for (const ref of packed) {
-        yield* retain(ref, yield* decodeArchiveRef(ref, bindings, frames.get(ref.war_id)))
+        yield* retain(ref, yield* decodeArchiveRef(ref, frames.get(ref.war_id)))
         frames.delete(ref.war_id)
       }
       // Pending JSON keeps its existing two-reader bound.
       yield* Effect.forEach(batch.filter((ref) => ref.pending === true), (ref) => Effect.gen(function* () {
-        yield* retain(ref, yield* readRef(ref, bindings))
+        yield* retain(ref, yield* readRef(ref))
       }), { concurrency: archiveReadConcurrency, discard: true })
     }
   }
@@ -122,7 +131,6 @@ export const forEachArchiveWar = <E, R>(
   consume: (warId: string, war: ArchivedWar) => Effect.Effect<void, E, R>,
   options: { readonly unordered?: boolean } = {},
 ) => Effect.gen(function* () {
-  const bindings = yield* WorkerEnvironment
   const ids = [...new Set(warIds)]
   for (let pageOffset = 0; pageOffset < ids.length; pageOffset += 64) {
     const page = ids.slice(pageOffset, pageOffset + 64)
@@ -133,7 +141,7 @@ export const forEachArchiveWar = <E, R>(
       yield* Effect.forEach(page, (id) => Effect.gen(function* () {
         const ref = refs.get(id)
         if (!ref) return
-        const entry = yield* readRef(ref, bindings)
+        const entry = yield* readRef(ref)
         if (entry) yield* consume(id, entry.war)
       }), { concurrency: historyArchiveReadConcurrency, discard: true })
       continue
@@ -142,7 +150,7 @@ export const forEachArchiveWar = <E, R>(
       const batch = page.slice(offset, offset + historyArchiveReadConcurrency)
       const entries = yield* Effect.forEach(batch, (id) => {
         const ref = refs.get(id)
-        return ref === undefined ? Effect.succeed(undefined) : readRef(ref, bindings)
+        return ref === undefined ? Effect.succeed(undefined) : readRef(ref)
       }, { concurrency: historyArchiveReadConcurrency })
       for (const [index, id] of batch.entries()) {
         const entry = entries[index]
@@ -165,7 +173,6 @@ export const forEachNewestPlayerWar = <E, R>(
 ) => Effect.gen(function* () {
   if (!playerTags.length) return
   const sql = yield* SqlClient.SqlClient
-  const bindings = yield* WorkerEnvironment
   const size = Math.max(1, Math.min(64, Math.trunc(pageSize)))
   let cursorEnd: Date | string | undefined
   let cursorId: number | undefined
@@ -196,7 +203,7 @@ export const forEachNewestPlayerWar = <E, R>(
       const batch = rows.slice(offset, offset + historyArchiveReadConcurrency)
       const entries = yield* Effect.forEach(batch, (row) => {
         const ref = refs.get(String(row.war_id))
-        return ref === undefined ? Effect.succeed(undefined) : readRef(ref, bindings)
+        return ref === undefined ? Effect.succeed(undefined) : readRef(ref)
       }, { concurrency: historyArchiveReadConcurrency })
       for (const [index, row] of batch.entries()) {
         const timestamp = new Date(row.end_time).getTime()
@@ -217,7 +224,6 @@ export const forEachNewestPlayerWar = <E, R>(
 export const forEachPlayerWar = <E, R>(playerTags: readonly string[], start: Date, end: Date, consume: (warId: string, war: ArchivedWar) => Effect.Effect<void, E, R>) => Effect.gen(function* () {
   if (!playerTags.length) return
   const sql = yield* SqlClient.SqlClient
-  const bindings = yield* WorkerEnvironment
   let lastId = 0
   for (;;) {
     const rows = yield* sql<{ readonly war_id: number; readonly end_time: Date | string }>`
@@ -235,7 +241,7 @@ export const forEachPlayerWar = <E, R>(playerTags: readonly string[], start: Dat
       const batch = rows.slice(offset, offset + archiveReadConcurrency)
       const entries = yield* Effect.forEach(batch, (row) => {
         const ref = refs.get(String(row.war_id))
-        return ref === undefined ? Effect.succeed(undefined) : readRef(ref, bindings)
+        return ref === undefined ? Effect.succeed(undefined) : readRef(ref)
       }, { concurrency: archiveReadConcurrency })
       // Keep consumer ordering deterministic; only I/O is concurrent.
       for (const [index, row] of batch.entries()) {

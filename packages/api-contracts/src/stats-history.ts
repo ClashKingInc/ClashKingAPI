@@ -56,29 +56,7 @@ export const WarSummaryEndpoint = defineEndpoint({
   responseMode: "json", successStatus: 200, errors: PublicErrors,
 })
 
-export const CwlTownHallsQuery = Schema.Struct({
-  season: Schema.String,
-  leagueId: Schema.optionalKey(Schema.Int),
-  warSize: Schema.optionalKey(Schema.Int),
-})
-export const CwlTownHallsItem = Schema.Struct({
-  leagueId: Schema.Int,
-  warSize: Schema.Int,
-  groups: Schema.Int,
-  clans: Schema.Int,
-  registeredPlayers: Schema.Int,
-  townHalls: Schema.Array(Schema.Struct({ level: Schema.Int, count: Schema.Int })),
-})
-export const CwlTownHallsResponse = Schema.Struct({ items: Schema.Array(CwlTownHallsItem) })
-export const CwlTownHallsEndpoint = defineEndpoint({
-  operationId: "getCwlTownHalls", method: "GET", path: "/v2/stats/cwl/townhalls", auth: "public",
-  summary: "Get CWL registration Town Hall composition", body: NoBody, bodyMode: "none",
-  pathParams: NoPathParams, query: CwlTownHallsQuery, response: CwlTownHallsResponse,
-  responseMode: "json", successStatus: 200, errors: PublicErrors,
-})
-
 export const statsHistoryEndpoints = {
   warHitrates: WarHitratesEndpoint,
   warSummary: WarSummaryEndpoint,
-  cwlTownHalls: CwlTownHallsEndpoint,
 } as const

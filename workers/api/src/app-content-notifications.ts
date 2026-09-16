@@ -22,8 +22,6 @@ type Announcement = typeof AppAnnouncement.Type
 type DeviceRequest = typeof NotificationDeviceRequest.Type
 type PreferencesRequest = typeof NotificationPreferencesRequest.Type
 type PreferencesResponse = typeof NotificationPreferencesResponse.Type
-type PushEnvironment = "sandbox" | "production"
-
 export const appContentNotificationRuntimeRoutes = [
   { method: "GET", path: "/v2/app/posts" },
   { method: "GET", path: "/v2/app/announcements/active" },
@@ -32,7 +30,7 @@ export const appContentNotificationRuntimeRoutes = [
   { method: "DELETE", path: "/v2/notifications/devices" },
   { method: "GET", path: "/v2/notifications/preferences" },
   { method: "PUT", path: "/v2/notifications/preferences" },
-  { method: "PUT", path: "/v2/notifications/accounts/:playerTag" },
+  { method: "PUT", path: "/v2/notifications/accounts/:tag" },
 ] as const
 
 const descriptors: ReadonlyArray<AnyEndpoint> = [
@@ -176,7 +174,6 @@ interface DeviceRow {
 }
 
 interface PreferencesRow {
-  readonly enabled: boolean
   readonly war_attacks_enabled: boolean
   readonly war_state_enabled: boolean
   readonly war_reminders_enabled: boolean
@@ -184,32 +181,29 @@ interface PreferencesRow {
   readonly events_enabled: boolean
   readonly announcements_enabled: boolean
   readonly monthly_support_enabled: boolean
+  readonly legend_defenses_enabled: boolean
   readonly reminder_timings: ReadonlyArray<number>
   readonly raid_reminder_timings: ReadonlyArray<number>
 }
 
 interface AccountRow {
-  readonly player_tag: string
-  readonly source: "verified"
-  readonly active: boolean
+  readonly tag: string
+  readonly enabled: boolean
 }
 
 const accountRows = (userId: string) => sqlEffect("Notification accounts lookup failed", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<AccountRow>(`SELECT player_tag, source, active FROM mobile_notification_accounts
-    WHERE user_id=$1 AND source='verified' ORDER BY player_tag`, [userId])
-  return rows.map((row) => ({ playerTag: row.player_tag, source: row.source, active: row.active }))
+  const rows = yield* sql.unsafe<AccountRow>(`SELECT link.tag,COALESCE(account.enabled,false) enabled
+    FROM player_links link LEFT JOIN mobile_notification_accounts account
+      ON account.user_id=link.user_id AND account.player_tag=link.tag
+    WHERE link.user_id=$1 AND link.is_verified=true ORDER BY link.tag`, [userId])
+  return rows.map((row) => ({ tag: row.tag, enabled: row.enabled }))
 }))
 
 const mapPreferences = (
   row: PreferencesRow,
-  deviceId: string,
-  environment: PushEnvironment,
   accounts: PreferencesResponse["accounts"],
 ): PreferencesResponse => ({
-  deviceId,
-  environment,
-  notificationsEnabled: row.enabled,
   warAttacksEnabled: row.war_attacks_enabled,
   warStateEnabled: row.war_state_enabled,
   warRemindersEnabled: row.war_reminders_enabled,
@@ -217,6 +211,7 @@ const mapPreferences = (
   eventsEnabled: row.events_enabled,
   announcementsEnabled: row.announcements_enabled,
   monthlySupportEnabled: row.monthly_support_enabled,
+  legendDefensesEnabled: row.legend_defenses_enabled,
   reminderTimings: [...row.reminder_timings],
   raidReminderTimings: [...row.raid_reminder_timings],
   accounts,
@@ -240,14 +235,14 @@ const registerDevice = (principal: UserPrincipal, body: DeviceRequest, bindings:
       const row = (yield* sql.unsafe<DeviceRow>(`INSERT INTO mobile_push_devices
         (user_id,device_id,platform,provider,environment,token_ciphertext,token_hash,app_version,
           locale,authorization_status,enabled,last_seen_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,now())
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
         ON CONFLICT (user_id,device_id,provider,environment) DO UPDATE SET platform=excluded.platform,
           token_ciphertext=excluded.token_ciphertext,token_hash=excluded.token_hash,
           app_version=excluded.app_version,locale=excluded.locale,
-          authorization_status=excluded.authorization_status,enabled=true,last_seen_at=now()
+          authorization_status=excluded.authorization_status,enabled=excluded.enabled,last_seen_at=now()
         RETURNING device_id,provider,platform,environment,authorization_status,enabled,last_seen_at`,
       [principal.userId, deviceId, body.platform, provider, environment, ciphertext, hash,
-        body.app_version ?? "", body.locale ?? "", body.authorization_status ?? "not_determined"]))[0]
+        body.app_version ?? "", body.locale ?? "", body.authorization_status ?? "not_determined", body.enabled]))[0]
       if (row === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Notification registration returned no device" })
       return { ...row, last_seen_at: iso(row.last_seen_at) }
     }))
@@ -262,40 +257,46 @@ const deleteDevice = (principal: UserPrincipal, query: Readonly<Record<string, u
     return { message: "Notification device unregistered" }
   }))
 
-const getPreferences = (principal: UserPrincipal, query: Readonly<Record<string, unknown>>) =>
+const emptyPreferences = (): PreferencesRow => ({
+  war_attacks_enabled: false, war_state_enabled: false, war_reminders_enabled: false,
+  raid_reminders_enabled: false, events_enabled: false, announcements_enabled: false,
+  monthly_support_enabled: false, legend_defenses_enabled: false,
+  reminder_timings: [], raid_reminder_timings: [],
+})
+
+const getPreferences = (principal: UserPrincipal) =>
   sqlEffect("Notification preferences lookup failed", Effect.gen(function* () {
-    const deviceId = yield* resolveDeviceId(principal, query.device_id)
-    const environment = query.environment as PushEnvironment
     const sql = yield* SqlClient.SqlClient
-    const row = (yield* sql.unsafe<PreferencesRow>(`SELECT enabled,war_attacks_enabled,war_state_enabled,
+    const row = (yield* sql.unsafe<PreferencesRow>(`SELECT war_attacks_enabled,war_state_enabled,
       war_reminders_enabled,raid_reminders_enabled,events_enabled,announcements_enabled,
-      monthly_support_enabled,reminder_timings,raid_reminder_timings FROM mobile_push_devices
-      WHERE user_id=$1 AND device_id=$2 AND environment=$3 AND provider='fcm'`,
-    [principal.userId, deviceId, environment]))[0]
-    if (row === undefined) return yield* new NotFound({ message: "Notification device is not registered" })
-    return mapPreferences(row, deviceId, environment, yield* accountRows(principal.userId))
+      monthly_support_enabled,legend_defenses_enabled,reminder_timings,raid_reminder_timings
+      FROM mobile_notification_preferences WHERE user_id=$1`, [principal.userId]))[0] ?? emptyPreferences()
+    return mapPreferences(row, yield* accountRows(principal.userId))
   }))
 
 const putPreferences = (principal: UserPrincipal, body: PreferencesRequest) =>
   sqlEffect("Notification preferences update failed", Effect.gen(function* () {
-    const deviceId = yield* resolveDeviceId(principal, body.deviceId)
-    const environment = body.environment ?? "production"
     const reminders = yield* normalizeTimings(body.reminderTimings, 2820, 1)
     const raidReminders = yield* normalizeTimings(body.raidReminderTimings, 4320, 15)
     const sql = yield* SqlClient.SqlClient
     const preferences = yield* sql.withTransaction(Effect.gen(function* () {
-      const rows = yield* sql.unsafe<{ readonly device_id: string }>(`UPDATE mobile_push_devices SET
-        enabled=$4,war_attacks_enabled=$5,war_state_enabled=$6,war_reminders_enabled=$7,
-        raid_reminders_enabled=$8,events_enabled=$9,announcements_enabled=$10,
-        monthly_support_enabled=$11,reminder_timings=$12,raid_reminder_timings=$13
-        WHERE user_id=$1 AND device_id=$2 AND environment=$3 AND provider='fcm' RETURNING device_id`,
-      [principal.userId, deviceId, environment, body.notificationsEnabled, body.warAttacksEnabled,
-        body.warStateEnabled, body.warRemindersEnabled, body.raidRemindersEnabled, body.eventsEnabled,
-        body.announcementsEnabled, body.monthlySupportEnabled, reminders, raidReminders])
-      if (rows.length === 0) return yield* new NotFound({ message: "Notification device is not registered" })
+      yield* sql.unsafe(`INSERT INTO mobile_notification_preferences
+        (user_id,war_attacks_enabled,war_state_enabled,war_reminders_enabled,raid_reminders_enabled,
+          events_enabled,announcements_enabled,monthly_support_enabled,legend_defenses_enabled,
+          reminder_timings,raid_reminder_timings,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
+        ON CONFLICT (user_id) DO UPDATE SET war_attacks_enabled=excluded.war_attacks_enabled,
+          war_state_enabled=excluded.war_state_enabled,war_reminders_enabled=excluded.war_reminders_enabled,
+          raid_reminders_enabled=excluded.raid_reminders_enabled,events_enabled=excluded.events_enabled,
+          announcements_enabled=excluded.announcements_enabled,monthly_support_enabled=excluded.monthly_support_enabled,
+          legend_defenses_enabled=excluded.legend_defenses_enabled,reminder_timings=excluded.reminder_timings,
+          raid_reminder_timings=excluded.raid_reminder_timings,updated_at=now()`,
+      [principal.userId, body.warAttacksEnabled, body.warStateEnabled, body.warRemindersEnabled,
+        body.raidRemindersEnabled, body.eventsEnabled, body.announcementsEnabled,
+        body.monthlySupportEnabled, body.legendDefensesEnabled, reminders, raidReminders])
       yield* notifyTracking(sql, { kind: "mobile_reminder_config", userId: principal.userId })
       return {
-        ...body, deviceId, environment, reminderTimings: reminders, raidReminderTimings: raidReminders,
+        ...body, reminderTimings: reminders, raidReminderTimings: raidReminders,
         accounts: yield* accountRows(principal.userId),
       }
     }))
@@ -313,19 +314,15 @@ const putAccount = (principal: UserPrincipal, playerTag: string, enabled: boolea
     if (!/^#[0289PYLQGRJCUV]+$/u.test(tag)) return yield* new InvalidRequest({ message: "Invalid player tag" })
     const sql = yield* SqlClient.SqlClient
     return yield* sql.withTransaction(Effect.gen(function* () {
-      if (!enabled) {
-        yield* sql.unsafe("DELETE FROM mobile_notification_accounts WHERE user_id=$1 AND player_tag=$2", [principal.userId, tag])
-        return { playerTag: tag, source: "verified" as const, active: false }
-      }
       const verified = (yield* sql.unsafe<{ readonly exists: boolean }>(`SELECT EXISTS (
         SELECT 1 FROM player_links WHERE user_id=$1 AND tag=$2 AND is_verified=true) AS exists`,
       [principal.userId, tag]))[0]?.exists === true
       if (!verified) return yield* new Forbidden({ message: "Player must be a verified account owned by the authenticated user" })
       yield* sql.unsafe(`INSERT INTO mobile_notification_accounts
-        (user_id,player_tag,source,active,created_at,updated_at) VALUES ($1,$2,'verified',true,now(),now())
-        ON CONFLICT (user_id,player_tag) DO UPDATE SET source='verified',active=true,updated_at=now()`,
-      [principal.userId, tag])
-      return { playerTag: tag, source: "verified" as const, active: true }
+        (user_id,player_tag,enabled,created_at,updated_at) VALUES ($1,$2,$3,now(),now())
+        ON CONFLICT (user_id,player_tag) DO UPDATE SET enabled=excluded.enabled,updated_at=now()`,
+      [principal.userId, tag, enabled])
+      return { tag, enabled }
     }))
   }))
 
@@ -400,9 +397,9 @@ export const dispatchAppContentNotifications = (
       switch (match.endpoint.operationId) {
         case "registerExpoNotificationDevice": value = yield* registerDevice(principal, body as DeviceRequest, bindings); break
         case "deleteExpoNotificationDevice": value = yield* deleteDevice(principal, query); break
-        case "getExpoNotificationPreferences": value = yield* getPreferences(principal, query); break
+        case "getExpoNotificationPreferences": value = yield* getPreferences(principal); break
         case "putExpoNotificationPreferences": value = yield* putPreferences(principal, body as PreferencesRequest); break
-        case "putExpoNotificationAccount": value = yield* putAccount(principal, String(path.playerTag), asRecord(body).enabled === true); break
+        case "putExpoNotificationAccount": value = yield* putAccount(principal, String(path.tag), asRecord(body).enabled === true); break
         default: return yield* new NotFound({ message: "Unknown notification operation" })
       }
     }

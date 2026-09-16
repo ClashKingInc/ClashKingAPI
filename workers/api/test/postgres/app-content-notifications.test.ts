@@ -59,20 +59,21 @@ describe("App content and notifications against authoritative Goose migrations",
         dispatchAppContentNotifications(request(path, method, body), bindings).pipe(Effect.provideService(AuthIdentity, auth))
       for (const environment of ["sandbox", "production"]) {
         yield* run("/v2/notifications/devices", "POST", { device_id: deviceId, platform: "ios", provider: "fcm",
-          environment, token: `integration-token-${environment}-${deviceId}`, authorization_status: "authorized" })
+          environment, token: `integration-token-${environment}-${deviceId}`, authorization_status: "authorized", enabled: true })
       }
       const tokens = yield* sql<{ token_ciphertext: string }>`SELECT token_ciphertext FROM mobile_push_devices
         WHERE user_id=${userId} AND environment='sandbox'`
       expect(yield* decryptPushToken(tokens[0]!.token_ciphertext, bindings.DATA_ENCRYPTION_KEY))
         .toBe(`integration-token-sandbox-${deviceId}`)
-      const preferences = { deviceId, environment: "sandbox", notificationsEnabled: true,
-        warAttacksEnabled: true, warStateEnabled: false, warRemindersEnabled: true,
+      const preferences = { warAttacksEnabled: true, warStateEnabled: false, warRemindersEnabled: true,
         raidRemindersEnabled: true, eventsEnabled: false, announcementsEnabled: true,
-        monthlySupportEnabled: false, reminderTimings: [60, 60, 180], raidReminderTimings: [15, 4320] }
+        monthlySupportEnabled: false, legendDefensesEnabled: true,
+        reminderTimings: [60, 60, 180], raidReminderTimings: [15, 4320] }
       yield* run("/v2/notifications/preferences", "PUT", preferences)
-      const response = yield* run(`/v2/notifications/preferences?device_id=${deviceId}&environment=sandbox`)
+      const response = yield* run("/v2/notifications/preferences")
       expect(yield* Effect.promise(() => response!.json())).toMatchObject({
-        raidRemindersEnabled: true, raidReminderTimings: [15, 4320], reminderTimings: [60, 180], accounts: [],
+        raidRemindersEnabled: true, legendDefensesEnabled: true,
+        raidReminderTimings: [15, 4320], reminderTimings: [60, 180], accounts: [],
       })
       yield* run(`/v2/notifications/devices?device_id=${deviceId}&environment=sandbox`, "DELETE")
       const remaining = yield* sql`SELECT environment FROM mobile_push_devices WHERE user_id=${userId}`

@@ -1,4 +1,10 @@
 import { AppConfigEndpoint } from "./app-config.js"
+import {
+  DeleteOldPersonalBasesEndpoint,
+  PersonalBasesEndpoint,
+  SavePersonalBaseEndpoint,
+  UnsavePersonalBaseEndpoint,
+} from "./personal-bases.js"
 import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
 export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
@@ -118,6 +124,7 @@ import {
   StatsWarEndpoint,
 } from "./stats.js"
 import { leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { legendEndpoints } from "./legends.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 
 export * from "./expo-auth.js"
@@ -131,6 +138,7 @@ export * from "./expo-rankings.js"
 export * from "./expo-stats.js"
 export * from "./expo-war.js"
 export * from "./league-analytics.js"
+export * from "./legends.js"
 export * from "./stats-history.js"
 export * from "./proxy.js"
 export { AppConfigEndpoint, AppConfigResponse } from "./app-config.js"
@@ -141,7 +149,12 @@ export { StatsCwlEndpoint, StatsCwlQuery,
 
 export const expoEndpoints = {
   ...leagueAnalyticsEndpoints,
+  ...legendEndpoints,
   ...statsHistoryEndpoints,
+  personalBases: PersonalBasesEndpoint,
+  savePersonalBase: SavePersonalBaseEndpoint,
+  unsavePersonalBase: UnsavePersonalBaseEndpoint,
+  deleteOldPersonalBases: DeleteOldPersonalBasesEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,

@@ -13,7 +13,6 @@ describe("package exports", () => {
     expect(entry).toHaveProperty("ArmyTimelineEndpoint")
     expect(entry).toHaveProperty("WarHitratesEndpoint")
     expect(entry).toHaveProperty("WarSummaryEndpoint")
-    expect(entry).toHaveProperty("CwlTownHallsEndpoint")
     expect(entry).not.toHaveProperty("StatsItemsQuery")
     expect(entry).toHaveProperty("AppConfigResponse")
     expect(entry).not.toHaveProperty("adminEndpoints")

@@ -149,6 +149,7 @@ export const dashboardEndpoints = {
   dashboardBases: Server.BasesEndpoint,
   dashboardBase: Server.BaseEndpoint,
   createDashboardBase: Server.CreateBaseEndpoint,
+  updateDashboardBase: Server.UpdateBaseEndpoint,
   deleteDashboardBase: Server.DeleteBaseEndpoint,
   uploadDashboardBaseImage: Server.UploadBaseImageEndpoint,
   baseDownloader: Server.BaseDownloaderEndpoint,

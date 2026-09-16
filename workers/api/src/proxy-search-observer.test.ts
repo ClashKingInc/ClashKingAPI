@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { observeProxySearch } from "./proxy-search-observer.js"
 
-const { record } = vi.hoisted(() => ({ record: vi.fn() }))
+const { record, seed } = vi.hoisted(() => ({ record: vi.fn(), seed: vi.fn() }))
 vi.mock("./mobile-persistence.js", () => ({ recordSuccessfulProxySearch: record }))
+vi.mock("./proxy-clan-profile.js", () => ({ seedObservedClanProfile: seed }))
 
 const principal = { kind: "user" as const, userId: "verified-jwt-user" }
 const request = (path = "/proxy/v1/players/%23P0Y") => new Request(`https://api.test${path}`, { headers: { "x-ck-user-id": "spoofed-user" } })
@@ -17,11 +18,20 @@ afterEach(() => { vi.resetAllMocks() })
 describe("background proxy search observer", () => {
   it("records using the verified principal without consuming the outgoing response", async () => {
     record.mockReturnValue(Effect.void)
+    seed.mockReturnValue(Effect.void)
     const response = Response.json({ tag: "#P0Y", name: "Player" })
     const program = observeProxySearch(principal, request(), response)
     expect(await response.json()).toEqual({ tag: "#P0Y", name: "Player" })
     await Effect.runPromise(program.pipe(Effect.provideService(SqlClient.SqlClient, {} as unknown as SqlClient.SqlClient)))
     expect(record).toHaveBeenCalledWith(principal, "/v1/players/%23P0Y", 200, { tag: "#P0Y", name: "Player" })
+  })
+  it("offers a successful full clan profile to both recent-search and profile-seeding persistence", async () => {
+    record.mockReturnValue(Effect.void)
+    seed.mockReturnValue(Effect.void)
+    const body = { tag: "#P0Y", name: "Clan" }
+    await run(Response.json(body), request("/proxy/v1/clans/%23P0Y"))
+    expect(record).toHaveBeenCalledWith(principal, "/v1/clans/%23P0Y", 200, body)
+    expect(seed).toHaveBeenCalledWith(principal, "/proxy/v1/clans/%23P0Y", body)
   })
   it("does not clone or persist unsuccessful or non-profile requests", async () => {
     for (const [path, status] of [["/proxy/v1/clans/%23P0Y/members", 200], ["/proxy/v1/players/%23P0Y", 404]] as const) {

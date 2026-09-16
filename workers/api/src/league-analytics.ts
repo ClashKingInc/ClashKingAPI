@@ -82,7 +82,7 @@ interface BattleRow {
   opponent_town_hall: number
   stars: number
   destruction_percentage: number | string
-  duration_seconds: number | null
+  duration_seconds: number
   looted_resources: unknown
   share_code: string | null
   family_id: string | null

@@ -21,6 +21,7 @@ import { dashboardServerReadOperationIds, executeDashboardServerReads } from "./
 import { ServerAuthorization, discordGuildManager, gatewayHeartbeatFreshnessSeconds, resolveListedGuildAccess } from "./server-authorization.js"
 import { notifyTracking } from "./tracking-wake.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited, Unauthenticated, UnprocessableEntity, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { ClashClanProfile, normalizeClashClanProfile } from "./clash-clan-profile.js"
 
 export const dashboardServerCoreOperationIds = [
   "dashboardCapabilities", "dashboardAccess", "updateDashboardAccess", "dashboardGuilds", "dashboardGuild",
@@ -508,15 +509,6 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   return { message: "Clan settings updated successfully", server_id: serverId, clan_tag: tag, updated_fields: Object.keys(body).length, category }
 }))
 
-const ClashClan = Schema.Struct({
-  tag: Schema.String, name: Schema.String, description: Schema.String, clanLevel: Schema.Number,
-  location: Schema.optionalKey(Schema.Struct({ id: Schema.Number })), warLeague: Schema.optionalKey(Schema.Struct({ id: Schema.Number })),
-  capitalLeague: Schema.optionalKey(Schema.Struct({ id: Schema.Number })), isWarLogPublic: Schema.Boolean,
-  warWins: Schema.Number, warWinStreak: Schema.Number, clanPoints: Schema.Number, members: Schema.Number,
-  badgeUrls: Schema.Struct({ large: Schema.optionalKey(Schema.String), medium: Schema.optionalKey(Schema.String), small: Schema.optionalKey(Schema.String) }),
-  memberList: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.String, donations: Schema.Number, donationsReceived: Schema.Number })),
-})
-
 const addClanOperation = (input: DashboardServerOperationInput) => database("Clan could not be added", Effect.gen(function* () {
   const tag = normalizeTag(record(input.body).tag), serverId = serverIdFor(input)
   if (!/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid. Check the tag and try again." })
@@ -529,16 +521,13 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
     return yield* response.status === 404 ? new NotFound({ message: "Clan not found. The tag is invalid, or the clan was deleted." }) : new UpstreamUnavailable({ cause: response.status, message: "Clash of Clans API is unavailable" })
   }
   const raw = yield* Effect.tryPromise({ try: () => response.json() as Promise<unknown>, catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash returned invalid JSON" }) })
-  const clan = yield* Schema.decodeUnknownEffect(ClashClan)(raw).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash clan response failed schema validation" })))
-  if (clan.members === 0) return yield* new InvalidRequest({ message: "The clan is empty and cannot be added." })
-  const members = clan.memberList.filter((member) => member.tag !== "").map(({ tag, name }) => ({ tag, name })).sort((a, b) => a.tag.localeCompare(b.tag))
-  const donated = clan.memberList.reduce((sum, member) => sum + member.donations, 0)
-  const received = clan.memberList.reduce((sum, member) => sum + member.donationsReceived, 0)
-  const badge = (clan.badgeUrls.large ?? clan.badgeUrls.medium ?? clan.badgeUrls.small ?? "").split("/").at(-1)?.replace(/\.png$/u, "") ?? ""
+  const decoded = yield* Schema.decodeUnknownEffect(ClashClanProfile)(raw).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash clan response failed schema validation" })))
+  if (decoded.members === 0) return yield* new InvalidRequest({ message: "The clan is empty and cannot be added." })
+  const clan = normalizeClashClanProfile(decoded)
   const sql = yield* SqlClient.SqlClient
   yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`INSERT INTO basic_clan (tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id, public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token, troops_donated, troops_received, members, last_active)
-      VALUES (${clan.tag}, ${clan.name}, ${clan.description}, ${clan.clanLevel}, ${clan.location?.id ?? null}, ${clan.warLeague?.id || 48000000}, ${clan.capitalLeague?.id ?? null}, ${clan.isWarLogPublic}, ${clan.warWins}, ${clan.warWinStreak}, ${clan.clanPoints}, ${clan.members}, ${badge}, ${donated}, ${received}, ${JSON.stringify(members)}::jsonb, now())
+      VALUES (${clan.tag}, ${clan.name}, ${clan.description}, ${clan.clanLevel}, ${clan.locationId}, ${clan.warLeagueId}, ${clan.capitalLeagueId}, ${clan.publicWarLog}, ${clan.warWins}, ${clan.warWinStreak}, ${clan.clanPoints}, ${clan.memberCount}, ${clan.badgeToken}, ${clan.donated}, ${clan.received}, ${JSON.stringify(clan.members)}::jsonb, now())
       ON CONFLICT (tag) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, clan_level = EXCLUDED.clan_level, location_id = EXCLUDED.location_id, cwl_league_id = EXCLUDED.cwl_league_id, capital_league_id = EXCLUDED.capital_league_id, public_war_log = EXCLUDED.public_war_log, war_wins = EXCLUDED.war_wins, war_win_streak = EXCLUDED.war_win_streak, clan_points = EXCLUDED.clan_points, member_count = EXCLUDED.member_count, badge_token = EXCLUDED.badge_token, troops_donated = EXCLUDED.troops_donated, troops_received = EXCLUDED.troops_received, members = EXCLUDED.members, last_active = now()`
     yield* sql`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO UPDATE SET updated_at = now()`
   }))

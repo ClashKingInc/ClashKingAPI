@@ -64,11 +64,12 @@ describe("eleven extra public reads on canonical Goose SQL", () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       yield* sql`INSERT INTO basic_player(tag,name,townhall_level) VALUES ('#P0Y','Player',18) ON CONFLICT (tag) DO UPDATE SET name=EXCLUDED.name`
-      yield* sql`INSERT INTO leaderboard_history_player_home(day,tag,trophies,global_rank)
-        VALUES ('2026-08-01','#P0Y',6000,4)`
+      yield* sql`INSERT INTO leaderboard_history_player_home
+        (location_id,date,player_tag,player_name,exp_level,trophies,attack_wins,defense_wins,rank,league_id)
+        VALUES ('global','2026-08-01','#P0Y','Official player',200,6000,12,3,4,105000034)`
       yield* sql`INSERT INTO leaderboard_history_player_builder_base(location_id,date,player_tag,player_name,exp_level,builder_base_trophies,rank)
         VALUES ('32000006','2026-08-02','#P0Y','Player',200,5000,2)`
-      expect(yield* get('player/%23P0Y/leaderboard-history/player_home_trophies')).toMatchObject({ type:'player_home_trophies',playerTag:'#P0Y',items:[{date:'2026-08-01',locationId:'global',details:{trophies:6000,rank:4}}] })
+      expect(yield* get('player/%23P0Y/leaderboard-history/player_home_trophies')).toMatchObject({ type:'player_home_trophies',playerTag:'#P0Y',items:[{date:'2026-08-01',locationId:'global',name:'Official player',details:{trophies:6000,attackWins:12,defenseWins:3,rank:4}}] })
       expect(leagueFetch).not.toHaveBeenCalled()
       expect(yield* get('player/%23P0Y/leaderboard-history/player_builder_base_trophies')).toMatchObject({ items:[{details:{builderBaseTrophies:5000}}] })
       yield* sql`INSERT INTO player_stat_changes(event_time,player_tag,clan_tag,stat_type,previous_value,current_value,delta)

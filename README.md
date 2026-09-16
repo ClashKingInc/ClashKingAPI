@@ -138,7 +138,7 @@ unchanged mixed-mode behavior. Legend daily statistics have no tier/TH grouping.
 
 Deployment requires DevKit migrations 014 and 015, with the separately approved
 bounded defense-loot cleanup between them and old writers paused through the
-cutover. This API reads the new `*_daily_stats_v2` generation, preserving the old
-aggregates separately. Do not merge into the auto-deployed branch before the
+cutover. This API reads the final `army_family_daily_stats` and
+`legend_daily_stats` tables, preserving the old aggregates separately. Do not merge into the auto-deployed branch before the
 coordinated production schema gate is satisfied. Local tests and candidate
 package archives do not imply production readiness or publication.

@@ -67,9 +67,14 @@ const currentRanks = (raw: unknown) => Effect.gen(function* () {
   if (tags.length === 0) return { items: [] }
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<RankRow>(`SELECT ranking.tag,ranking.name,ranking.trophies,ranking.global_rank,
-    clan.tag clan_tag,clan.name clan_name,player.location_id
+    clan.tag clan_tag,clan.name clan_name,location.location_id
     FROM legend_rankings_current ranking
-    LEFT JOIN basic_player player ON player.tag=ranking.tag
+    LEFT JOIN LATERAL (
+      SELECT source.location_id::integer location_id FROM player_rankings_current source
+      WHERE source.player_tag=ranking.tag AND source.location_id <> 'global'
+        AND source.ranking_type IN ('home','builder_base')
+      ORDER BY CASE source.ranking_type WHEN 'home' THEN 0 ELSE 1 END LIMIT 1
+    ) location ON true
     LEFT JOIN basic_clan clan ON clan.tag=ranking.clan_tag
     WHERE ranking.tag=ANY($1::text[]) ORDER BY array_position($1::text[],ranking.tag)`, [tags]).pipe(Effect.mapError(failure))
   return { items: rows.map(rankValue) }
@@ -82,9 +87,15 @@ const historicalRanks = (raw: unknown) => Effect.gen(function* () {
   if (tags.length === 0) return { items: [] }
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql.unsafe<RankRow>(`SELECT history.tag,player.name,history.trophies,history.global_rank,
-    clan.tag clan_tag,clan.name clan_name,player.location_id
-    FROM leaderboard_history_player_home history
+    clan.tag clan_tag,clan.name clan_name,location.location_id
+    FROM legend_rankings_history history
     JOIN basic_player player ON player.tag=history.tag
+    LEFT JOIN LATERAL (
+      SELECT source.location_id::integer location_id FROM player_rankings_current source
+      WHERE source.player_tag=history.tag AND source.location_id <> 'global'
+        AND source.ranking_type IN ('home','builder_base')
+      ORDER BY CASE source.ranking_type WHEN 'home' THEN 0 ELSE 1 END LIMIT 1
+    ) location ON true
     LEFT JOIN basic_clan clan ON clan.tag=player.clan_tag
     WHERE history.day=$1::date AND history.tag=ANY($2::text[])
     ORDER BY array_position($2::text[],history.tag)`, [day, tags]).pipe(Effect.mapError(failure))
@@ -133,7 +144,7 @@ const buckets = (historyDay?: string) => Effect.gen(function* () {
     ? yield* sql.unsafe<BucketRow>(`SELECT floor(trophies/100.0)::integer*100 minimum_trophies,count(*)::integer player_count
       FROM legend_rankings_current GROUP BY 1 ORDER BY 1`, []).pipe(Effect.mapError(failure))
     : yield* sql.unsafe<BucketRow>(`SELECT floor(trophies/100.0)::integer*100 minimum_trophies,count(*)::integer player_count
-      FROM leaderboard_history_player_home WHERE day=$1::date GROUP BY 1 ORDER BY 1`, [yield* date(historyDay)]).pipe(Effect.mapError(failure))
+      FROM legend_rankings_history WHERE day=$1::date GROUP BY 1 ORDER BY 1`, [yield* date(historyDay)]).pipe(Effect.mapError(failure))
   return { items: rows.map((row) => ({ minimumTrophies: Number(row.minimum_trophies), maximumTrophies: Number(row.minimum_trophies) + 99, playerCount: Number(row.player_count) })) }
 })
 

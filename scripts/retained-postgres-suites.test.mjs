@@ -6,7 +6,7 @@ import { retainedPostgresSuites, deferredPostgresSuites, validatePostgresInvento
 test('every archived SQL suite is classified and retained suites exclude deferred orchestration', () => {
   const files = readdirSync(new URL('../workers/api/test/postgres/', import.meta.url), {recursive:true}).filter(file => file.endsWith('.test.ts'))
   assert.deepEqual(validatePostgresInventory(files), retainedPostgresSuites)
-  assert.equal(retainedPostgresSuites.length, 41)
+  assert.equal(retainedPostgresSuites.length, 42)
   assert.equal(deferredPostgresSuites.length, 30)
   assert.ok(retainedPostgresSuites.includes('dashboard-server-link-policy.test.ts'))
   assert.ok(retainedPostgresSuites.includes('tracking-operations.test.ts'))
@@ -14,6 +14,7 @@ test('every archived SQL suite is classified and retained suites exclude deferre
   assert.ok(retainedPostgresSuites.includes('legacy-base-import.test.ts'))
   assert.ok(retainedPostgresSuites.includes('personal-bases.test.ts'))
   assert.ok(retainedPostgresSuites.includes('bot-base-downloads.test.ts'))
+  assert.ok(retainedPostgresSuites.includes('proxy-war-activity.test.ts'))
   assert.ok(retainedPostgresSuites.includes('stats-history.test.ts'))
   assert.ok(deferredPostgresSuites.includes('ticket-runtime.test.ts'))
   assert.ok(deferredPostgresSuites.includes('dashboard-roster-configuration.test.ts'))

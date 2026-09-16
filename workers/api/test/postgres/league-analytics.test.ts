@@ -5,7 +5,7 @@ import { databaseLayer } from "../../src/database.js"
 import type { WorkerBindings } from "../../src/environment.js"
 import { queryArmyDetail, queryArmySearch, queryArmyTimeline, queryLegendBattlelog, queryPlayerBattlelogHistory, queryRankedBattlelog, queryLegendDays } from "../../src/league-analytics.js"
 import { queryAdminFamilies, queryAdminFamilyMembers } from "../../src/army-family-analytics.js"
-import { legendDaySummaries } from "../../src/legends.js"
+import { dispatchLegends, legendDaySummaries } from "../../src/legends.js"
 import { queryRankedStats } from "../../src/stats.js"
 
 const url = process.env.TEST_DATABASE_URL
@@ -95,6 +95,32 @@ describe.sequential("code families against authoritative migration 017", () => {
         { tag: "#2", attackTrophies: 69, defenseTrophies: 0, netTrophies: 69, attacks: 2, defenses: 1 },
         { tag: "#Q", attackTrophies: 10, defenseTrophies: 0, netTrophies: 10, attacks: 1, defenses: 0 },
       ] })
+  })
+  it("reads current and historical global ranks with null-rank regional locations and safely omits missing clan profiles", async () => {
+    await run(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO basic_player(tag,name,townhall_level,trophies,clan_tag)
+        VALUES ('#P0Y8','Historical player',18,6420,'#Q0Y8')`
+      yield* sql`INSERT INTO legend_rankings_current(tag,name,trophies,global_rank,clan_tag,clan_name)
+        VALUES ('#P0Y9','Current player',6500,12,'#Q0Y9','Uncached clan')`
+      yield* sql`INSERT INTO legend_rankings_history(day,tag,global_rank,trophies)
+        VALUES ('2026-09-10','#P0Y8',15,6420)`
+      yield* sql`INSERT INTO player_rankings_current(player_tag,ranking_type,location_id,rank,points)
+        VALUES ('#P0Y9','home','32000006',NULL,NULL),('#P0Y8','builder_base','32000006',NULL,NULL)`
+      const request = (path: string, body: unknown) => new Request(`https://api.clashk.ing${path}`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+      })
+      const current = yield* dispatchLegends(request("/v2/legends/ranks", { tags: ["#P0Y9"] }))
+      expect(yield* Effect.promise(() => current!.json())).toEqual({ items: [{
+        tag: "#P0Y9", name: "Current player", trophies: 6500, globalRank: 12,
+        location: { id: 32000006, name: "International", isCountry: false },
+      }] })
+      const history = yield* dispatchLegends(request("/v2/legends/ranks/history", { day: "2026-09-10", tags: ["#P0Y8"] }))
+      expect(yield* Effect.promise(() => history!.json())).toEqual({ items: [{
+        tag: "#P0Y8", name: "Historical player", trophies: 6420, globalRank: 15,
+        location: { id: 32000006, name: "International", isCountry: false },
+      }] })
+    }))
   })
   it("uses cohort aggregates without inferring cross-day distinct players", async () => {
     expect((await run(queryArmySearch(range()))).items[0]?.players).toBeNull()

@@ -83,6 +83,11 @@ interface BaseRow {
   readonly downloaders: ReadonlyArray<string> | null; readonly download_count: number; readonly upvote_count: number; readonly downvote_count: number
   readonly created_at: Date | string
 }
+interface EditableBase {
+  readonly baseLink: string
+  readonly images: ReadonlyArray<string>
+  readonly description: string
+}
 const baseValue = (row: BaseRow): BaseValue => ({
   id: row.id, serverId: row.server_id, channelId: row.channel_id, messageId: row.message_id, baseLink: row.base_link,
   images: row.images ?? [], description: row.description, downloadCount: Number(row.download_count),
@@ -112,10 +117,50 @@ const get = (serverId: string, id: string) => Effect.gen(function* () {
   if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
   return baseValue(rows[0])
 })
+const baseMessage = (id: string, body: EditableBase) => ({
+  embeds: [{ title: "ClashKing Base Layout", url: body.baseLink, description: body.description,
+    fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }],
+    ...(body.images[0] === undefined ? {} : { image: { url: body.images[0] } }) },
+  ...body.images.slice(1).map((url) => ({ url: body.baseLink, image: { url } }))],
+  components: [{ type: 1, components: [
+    { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${id}` },
+    { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${id}` },
+    { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${id}` },
+  ] }],
+})
+const editableRow = (row: BaseRow): EditableBase => ({ baseLink: row.base_link, images: row.images ?? [], description: row.description })
+const sameEditable = (row: BaseRow, body: EditableBase) => row.base_link === body.baseLink && row.description === body.description
+  && JSON.stringify(row.images ?? []) === JSON.stringify(body.images)
+const Message = Schema.Struct({ id: DecimalSnowflake })
+const patchBaseMessage = (discord: DiscordApi["Service"], row: BaseRow, body: EditableBase) => discord.request(
+  `/channels/${row.channel_id}/messages/${row.message_id}`,
+  { method: "PATCH", body: baseMessage(row.id, body) },
+).pipe(
+  Effect.flatMap((raw) => decodeDiscord(Message, raw)),
+  Effect.filterOrFail((message) => message.id === row.message_id,
+    () => new UpstreamUnavailable({ cause: "message_id_mismatch", message: "Discord returned the wrong base message" })),
+)
 const update = (serverId: string, id: string, raw: unknown) => Effect.gen(function* () {
   const body = yield* validateBaseUpdate(raw)
   const sql = yield* SqlClient.SqlClient
-  const row = yield* db(sql.withTransaction(Effect.gen(function* () {
+  const current = (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
+    WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]), "Failed to load base"))[0]
+  if (current === undefined) return yield* new NotFound({ message: "Base not found" })
+  if (![current.server_id, current.channel_id, current.message_id].every(positiveId)) {
+    return yield* new InvalidRequest({ message: "Base has an invalid stored Discord message location" })
+  }
+  const discord = yield* DiscordApi
+  const patched = yield* patchBaseMessage(discord, current, body).pipe(Effect.result)
+  if (patched._tag === "Failure") {
+    if (patched.failure._tag !== "UpstreamUnavailable") return yield* patched.failure
+    const restored = yield* patchBaseMessage(discord, current, editableRow(current)).pipe(Effect.result)
+    if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
+      cause: { update: patched.failure, rollback: restored.failure },
+      message: "Discord base message update and rollback outcomes are unknown; the database was not changed. Do not retry automatically",
+    })
+    return yield* patched.failure
+  }
+  const persisted = yield* sql.withTransaction(Effect.gen(function* () {
     const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET base_link=$1,description=$2
       WHERE id=$3::bigint AND server_id=$4 AND channel_id IS NOT NULL RETURNING id::text`, [body.baseLink, body.description, id, serverId])
     if (updated[0] === undefined) return undefined
@@ -123,12 +168,26 @@ const update = (serverId: string, id: string, raw: unknown) => Effect.gen(functi
     if (body.images.length > 0) yield* sql.unsafe(`INSERT INTO base_images(base_id,position,image_url)
       SELECT $1::bigint,image.position::smallint,image.url FROM unnest($2::text[]) WITH ORDINALITY image(url,position)`, [id, body.images])
     return (yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base WHERE base.id=$1::bigint`, [id]))[0]
-  })), "Failed to update base")
-  if (row === undefined) return yield* new NotFound({ message: "Base not found" })
-  return baseValue(row)
+  })).pipe(Effect.result)
+  if (persisted._tag === "Success" && persisted.success !== undefined) return baseValue(persisted.success)
+  if (persisted._tag === "Failure" && !rejectedStatement(persisted.failure)) {
+    const reconciled = yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
+      WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]).pipe(Effect.result)
+    if (reconciled._tag === "Success" && reconciled.success[0] !== undefined && sameEditable(reconciled.success[0], body)) {
+      return baseValue(reconciled.success[0])
+    }
+    return yield* new DatabaseFailure({ cause: persisted.failure,
+      message: "Base database update outcome is unknown after Discord changed. Do not retry automatically" })
+  }
+  const restored = yield* patchBaseMessage(discord, current, editableRow(current)).pipe(Effect.result)
+  if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
+    cause: { database: persisted, rollback: restored.failure },
+    message: "Base was not updated in the database and the Discord rollback failed. Do not retry automatically",
+  })
+  if (persisted._tag === "Success") return yield* new NotFound({ message: "Base not found" })
+  return yield* new DatabaseFailure({ cause: persisted.failure, message: "Failed to update base; the Discord message was restored" })
 })
 const Channel = Schema.Struct({ id: DecimalSnowflake, guild_id: Schema.optionalKey(DecimalSnowflake), type: Schema.Number })
-const Message = Schema.Struct({ id: DecimalSnowflake })
 // Only an explicit PostgreSQL data/constraint/syntax rejection proves the statement
 // did not commit. Transport errors and missing RETURNING data prove nothing.
 const rejectedStatement = (error: unknown): boolean => {
@@ -156,16 +215,7 @@ const create = (serverId: string, raw: unknown) => Effect.gen(function* () {
   const reserved = yield* db(sql.unsafe<{ id: string }>("SELECT nextval(pg_get_serial_sequence('bases','id'))::text id", []), "Failed to allocate base ID")
   const id = reserved[0]?.id
   if (id === undefined) return yield* new DatabaseFailure({ cause: reserved, message: "Failed to allocate base ID" })
-  const embeds = [{ title: "ClashKing Base Layout", url: body.baseLink, description: body.description,
-    fields: [{ name: "Layout Link", value: `[Open in Clash of Clans](${body.baseLink})` }],
-    ...(body.images[0] === undefined ? {} : { image: { url: body.images[0] } }) },
-    ...body.images.slice(1).map((url) => ({ url: body.baseLink, image: { url } }))]
-  const components = [{ type: 1, components: [
-    { type: 2, style: 1, label: "Open Layout", custom_id: `base:link:${id}` },
-    { type: 2, style: 2, label: "Upvote", custom_id: `base:upvote:${id}` },
-    { type: 2, style: 2, label: "Downvote", custom_id: `base:downvote:${id}` },
-  ] }]
-  const posted = yield* discord.request(`/channels/${body.channelId}/messages`, { method: "POST", body: { embeds, components } }).pipe(Effect.result)
+  const posted = yield* discord.request(`/channels/${body.channelId}/messages`, { method: "POST", body: baseMessage(id, body) }).pipe(Effect.result)
   if (posted._tag === "Failure") {
     if (posted.failure._tag === "UpstreamUnavailable") return yield* new UpstreamUnavailable({
       cause: posted.failure, message: "Discord message creation outcome is unknown. Do not retry automatically",

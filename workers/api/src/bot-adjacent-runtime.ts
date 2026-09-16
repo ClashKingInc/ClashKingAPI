@@ -185,7 +185,8 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         if (existing[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         if (existing[0].image_url !== null) return { baseId, position, imageUrl: existing[0].image_url }
         const response = yield* Effect.tryPromise({
-          try: () => fetch(source, { redirect: "error", signal: AbortSignal.timeout(15_000) }),
+          // Workers supports manual, not error; the non-OK check below rejects redirects.
+          try: () => fetch(source, { redirect: "manual", signal: AbortSignal.timeout(15_000) }),
           catch: (cause) => new UpstreamUnavailable({ cause, message: "Discord attachment copy failed" }),
         })
         if (!response.ok) { yield* Effect.promise(() => response.body?.cancel() ?? Promise.resolve()); return yield* new UpstreamUnavailable({ cause: response.status, message: "Discord attachment copy failed" }) }

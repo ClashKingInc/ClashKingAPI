@@ -44,7 +44,7 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       const missing = yield* execute(BaseEndpoint, {}, { serverId: "6334567890123456788", baseId: created.id }).pipe(Effect.result)
       expect(missing._tag).toBe("Failure")
       yield* sql`UPDATE bases SET downloads=jsonb_set(downloads,ARRAY[${userId}],to_jsonb(now()),true) WHERE id=${created.id}::bigint`
-      yield* sql`INSERT INTO base_votes(base_id,user_id,vote) VALUES (${created.id}::bigint,${userId},1)`
+      yield* sql`UPDATE bases SET votes=jsonb_build_object(${userId}::text,jsonb_build_object('vote',1,'updatedAt',now())) WHERE id=${created.id}::bigint`
       const profile = Schema.decodeUnknownSync(BaseDownloaderEndpoint.response)(yield* execute(BaseDownloaderEndpoint, {}, { ...path, userId }))
       expect(profile).toMatchObject({ userId, displayName: "Fixture user" })
       const updated = Schema.decodeUnknownSync(BaseEndpoint.response)(yield* execute(BaseEndpoint, {}, path))

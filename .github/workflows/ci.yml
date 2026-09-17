@@ -50,13 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Migration 020 supplies the player leaderboard materialized snapshots.
+      # Migrations 020/021 supply player snapshots and inline base storage.
       # Pin the reviewed contract so CI cannot silently test an older schema.
       - name: Checkout authoritative schema and fixture harness
         uses: actions/checkout@v6
         with:
           repository: ClashKingInc/DevKit
-          ref: ce6ccbd9d6c5e4d18932559b8bb5f3e2d0b759e7
+          ref: 899b62f64b365a5a861e34178e34ed50c5c52d13
           path: .schema-test
           token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
 

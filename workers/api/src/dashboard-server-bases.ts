@@ -97,11 +97,11 @@ const baseValue = (row: BaseRow): BaseValue => ({
   createdAt: new Date(row.created_at).toISOString(), discordMessageUrl: `https://discord.com/channels/${row.server_id}/${row.channel_id}/${row.message_id}`,
 })
 const baseColumns = `base.id::text,base.server_id,base.channel_id,base.message_id,base.base_link,base.description,base.created_at,
-  COALESCE((SELECT array_agg(image.image_url ORDER BY image.position) FROM base_images image WHERE image.base_id=base.id),'{}'::text[]) images,
+  array_remove(base.images,NULL) images,
   COALESCE((SELECT array_agg(download.key ORDER BY download.value::timestamptz,download.key) FROM jsonb_each_text(base.downloads) download),'{}'::text[]) downloaders,
   (SELECT count(*)::int FROM jsonb_object_keys(base.downloads)) download_count,
-  COALESCE((SELECT count(*) FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=1),0)::int upvote_count,
-  COALESCE((SELECT count(*) FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=-1),0)::int downvote_count`
+  (SELECT count(*) FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='1')::int upvote_count,
+  (SELECT count(*) FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='-1')::int downvote_count`
 const list = (serverId: string, raw: unknown) => Effect.gen(function* () {
   const query = yield* decodeInput(BasesEndpoint.query, raw)
   const limit = query.limit === undefined || !Number.isSafeInteger(query.limit) || query.limit <= 0 ? 50 : Math.min(query.limit, 100)
@@ -181,12 +181,9 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
     return yield* patched.failure
   }
   const persisted = yield* sql.withTransaction(Effect.gen(function* () {
-    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET base_link=$1,description=$2
-      WHERE id=$3::bigint AND server_id=$4 AND channel_id IS NOT NULL RETURNING id::text`, [body.baseLink, body.description, id, serverId])
+    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET base_link=$1,description=$2,images=$5::text[]
+      WHERE id=$3::bigint AND server_id=$4 AND channel_id IS NOT NULL RETURNING id::text`, [body.baseLink, body.description, id, serverId, body.images])
     if (updated[0] === undefined) return undefined
-    yield* sql.unsafe("DELETE FROM base_images WHERE base_id=$1::bigint", [id])
-    if (body.images.length > 0) yield* sql.unsafe(`INSERT INTO base_images(base_id,position,image_url)
-      SELECT $1::bigint,image.position::smallint,image.url FROM unnest($2::text[]) WITH ORDINALITY image(url,position)`, [id, body.images])
     return (yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base WHERE base.id=$1::bigint`, [id]))[0]
   })).pipe(Effect.result)
   if (persisted._tag === "Success" && persisted.success !== undefined) return baseValue(persisted.success)
@@ -247,10 +244,8 @@ const create = (serverId: string, raw: unknown, bindings: WorkerBindings) => Eff
   if (message._tag === "Failure" || !positiveId(message.success.id)) return createFailure(502, "Discord created the base message but did not return a valid ID", { discordMessageCreated: true, discordMessageCleanup: "failed" })
   const messageId = message.success.id
   const inserted = yield* sql.withTransaction(Effect.gen(function* () {
-    yield* sql.unsafe(`INSERT INTO bases(id,server_id,channel_id,message_id,base_link,description)
-      OVERRIDING SYSTEM VALUE VALUES ($1::bigint,$2,$3,$4,$5,$6)`, [id, serverId, body.channelId, messageId, body.baseLink, body.description])
-    if (body.images.length > 0) yield* sql.unsafe(`INSERT INTO base_images(base_id,position,image_url)
-      SELECT $1::bigint,image.position::smallint,image.url FROM unnest($2::text[]) WITH ORDINALITY image(url,position)`, [id, body.images])
+    yield* sql.unsafe(`INSERT INTO bases(id,server_id,channel_id,message_id,base_link,description,images)
+      OVERRIDING SYSTEM VALUE VALUES ($1::bigint,$2,$3,$4,$5,$6,$7::text[])`, [id, serverId, body.channelId, messageId, body.baseLink, body.description, body.images])
     return (yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base WHERE base.id=$1::bigint`, [id]))[0]
   })).pipe(Effect.result)
   if (inserted._tag === "Success" && inserted.success !== undefined) return baseValue(inserted.success)

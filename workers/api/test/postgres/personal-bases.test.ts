@@ -34,7 +34,7 @@ describe("personal bases against authoritative Goose migrations", () => {
         ('https://link.clashofclans.com/en?action=OpenLayout&id=TH18','7540000000000000014','7540000000000000012','7540000000000000013','Second','{}'::jsonb),
         ('https://link.clashofclans.com/en?action=OpenLayout&id=TH19','7540000000000000015','7540000000000000012','7540000000000000013','Old','{}'::jsonb) RETURNING id::text`
       const [first, second, old] = bases.map((row) => row.id)
-      yield* sql`INSERT INTO base_images(base_id,position,image_url) VALUES (${first}::bigint,1,'https://api.clashk.ing/v2/media/first.png')`
+      yield* sql`UPDATE bases SET images=ARRAY['https://api.clashk.ing/v2/media/first.png'] WHERE id=${first}::bigint`
       expect(yield* execute("/v2/bases/personal")).toEqual({ items: [expect.objectContaining({ id: first, kind: null, saved: false,
         savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z", downloadCount: 1 })] })
       const saved = yield* execute(`/v2/bases/personal/${first}`, "PUT", { kind: "war" })

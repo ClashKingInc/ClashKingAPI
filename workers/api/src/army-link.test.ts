@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest"
 import { normalizeArmyLink, parseArmyLinkQuery } from "./army-link.js"
 
 describe("army link normalization", () => {
+  it("preserves Warden mode in share codes", () => {
+    expect(normalizeArmyLink("u2x0h2m1p16e41_5")).toBe("h2m1p16e5_41u2x0")
+    expect(normalizeArmyLink("h2m0")).toBe("h2m0")
+    expect(() => normalizeArmyLink("h2m")).toThrow()
+    expect(() => normalizeArmyLink("h2m1m0")).toThrow()
+  })
   it("matches the canonical code vector after reordering a link", async () => {
     const normalized = normalizeArmyLink("https://link.clashofclans.com/en?action=CopyArmy&army=u2x1-10x0s4x35d1x70i3x53h1p9e39-0p4e14_8")
     expect(normalized).toBe("h0p4e8_14-1p9e39i3x53d1x70u10x0-2x1s4x35")

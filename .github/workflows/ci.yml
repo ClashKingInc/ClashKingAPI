@@ -50,14 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # This immutable revision is the final schema contract from DevKit PR #25.
-      # API_SCHEMA_TEST_REF remains an explicit transition override once that
-      # contract is present on DevKit main.
+      # Migration 020 supplies the player leaderboard materialized snapshots.
+      # Pin the reviewed contract so CI cannot silently test an older schema.
       - name: Checkout authoritative schema and fixture harness
         uses: actions/checkout@v6
         with:
           repository: ClashKingInc/DevKit
-          ref: ${{ vars.API_SCHEMA_TEST_REF || '7a2709adb648774564c239c495dac07e2b085461' }}
+          ref: 7a769896eecba147c6c357bc5e1284e17902e1f1
           path: .schema-test
           token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
 

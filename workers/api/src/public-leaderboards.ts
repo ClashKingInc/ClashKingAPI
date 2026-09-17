@@ -45,12 +45,12 @@ export const queryPlayerLeaderboard = (_bindings: unknown, family: "townhall" | 
   const id = Number(rawId)
   if (!/^\d+$/u.test(rawId) || !Number.isSafeInteger(id) || id < 1) return yield* new InvalidRequest({ message: "Invalid leaderboard identifier" })
   const sql = yield* SqlClient.SqlClient
-  const order = family === "townhall" ? "p.league_id DESC,p.trophies DESC,p.tag" : "p.trophies DESC,p.tag"
-  const rows = yield* sql.unsafe<PlayerLeaderboardRow>(`SELECT row_number() OVER (ORDER BY ${order})::integer AS rank,
+  const table = family === "townhall" ? "player_townhall_leaderboards" : "player_league_leaderboards"
+  const rows = yield* sql.unsafe<PlayerLeaderboardRow>(`SELECT p.rank,
     p.tag,p.name,p.townhall_level,p.trophies,p.league_group_tag,p.league_id,p.clan_tag,c.name AS clan_name,c.badge_token AS clan_badge_token
-    FROM basic_player p LEFT JOIN basic_clan c ON c.tag=p.clan_tag
-    WHERE ${family === "townhall" ? "p.townhall_level=$1 AND p.league_id IS NOT NULL AND p.league_id<>105000000" : "p.league_id=$1"}
-    ORDER BY ${order} LIMIT $2`, [id, leaderboardLimit(query)]).pipe(
+    FROM ${table} p LEFT JOIN basic_clan c ON c.tag=p.clan_tag
+    WHERE ${family === "townhall" ? "p.townhall_level=$1" : "p.league_id=$1"}
+    ORDER BY p.rank LIMIT $2`, [id, leaderboardLimit(query)]).pipe(
     Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Player leaderboard query failed" })),
   )
   const items = rows.map((row) => {

@@ -14,7 +14,7 @@ export const normalizeArmyLink = (input: string): string => {
       || url.searchParams.get("action") !== "CopyArmy" || url.searchParams.getAll("army").length !== 1) throw invalid()
     payload = url.searchParams.get("army") ?? ""
   }
-  if (!payload || !/^[hidus0-9xpe_-]+$/u.test(payload)) throw invalid()
+  if (!payload || !/^[hidus0-9xpem_-]+$/u.test(payload)) throw invalid()
   const sections = [...payload.matchAll(/([hidus])([^hidus]*)/gu)]
   if (sections.map((part) => part[0]).join("") !== payload) throw invalid()
   const integer = (value: string) => {
@@ -22,16 +22,17 @@ export const normalizeArmyLink = (input: string): string => {
     if (!Number.isSafeInteger(n) || n < 0 || n > 2_147_483_647) throw invalid()
     return n
   }
-  const heroes: Array<{ id: number; pet: number; equipment: number[] }> = []
+  const heroes: Array<{ id: number; mode?: number; pet: number; equipment: number[] }> = []
   const items = new Map<string, Map<number, number>>()
   for (const [, marker, body] of sections) {
     if (!body) throw invalid()
     for (const part of body.split("-")) {
       if (marker === "h") {
-        const match = /^(\d+)(?:p(\d+))?(?:e(\d+(?:_\d+)*))?$/u.exec(part)
+        const match = /^(\d+)(?:m(\d+))?(?:p(\d+))?(?:e(\d+(?:_\d+)*))?$/u.exec(part)
         if (!match) throw invalid()
-        heroes.push({ id: integer(match[1]!), pet: match[2] === undefined ? -1 : integer(match[2]),
-          equipment: match[3]?.split("_").map(integer).sort((a, b) => a - b) ?? [] })
+        heroes.push({ id: integer(match[1]!), ...(match[2] === undefined ? {} : { mode: integer(match[2]) }),
+          pet: match[3] === undefined ? -1 : integer(match[3]),
+          equipment: match[4]?.split("_").map(integer).sort((a, b) => a - b) ?? [] })
       } else {
         const match = /^(\d+)x(\d+)$/u.exec(part)
         if (!match) throw invalid()
@@ -46,7 +47,7 @@ export const normalizeArmyLink = (input: string): string => {
   }
   heroes.sort((a, b) => a.id - b.id || a.pet - b.pet
     || (a.equipment.join("_") < b.equipment.join("_") ? -1 : a.equipment.join("_") > b.equipment.join("_") ? 1 : 0))
-  const parts = heroes.length ? ["h" + heroes.map((hero) => `${hero.id}${hero.pet >= 0 ? `p${hero.pet}` : ""}${hero.equipment.length ? `e${hero.equipment.join("_")}` : ""}`).join("-")] : []
+  const parts = heroes.length ? ["h" + heroes.map((hero) => `${hero.id}${hero.mode === undefined ? "" : `m${hero.mode}`}${hero.pet >= 0 ? `p${hero.pet}` : ""}${hero.equipment.length ? `e${hero.equipment.join("_")}` : ""}`).join("-")] : []
   for (const marker of ["i", "d", "u", "s"]) {
     const section = items.get(marker)
     if (section?.size) parts.push(marker + [...section].sort(([a], [b]) => a - b).map(([id, count]) => `${count}x${id}`).join("-"))

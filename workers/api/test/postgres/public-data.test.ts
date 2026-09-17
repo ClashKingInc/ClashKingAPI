@@ -91,6 +91,8 @@ describe("public data against canonical Goose migrations", () => {
         ('#THC','Lower tier low trophies',105000033,18,6000),
         ('#THD','Unranked id',105000000,18,9000),
         ('#THE','Unranked null',NULL,18,10000)`
+      yield* sql`REFRESH MATERIALIZED VIEW player_townhall_leaderboards`
+      yield* sql`REFRESH MATERIALIZED VIEW player_league_leaderboards`
       const townHall = yield* queryPlayerLeaderboard(bindings, "townhall", "18", new URLSearchParams("limit=10"))
       const fixtureItems = townHall.items.filter((item) => item.tag.startsWith("#TH"))
       const fixtureRanks = fixtureItems.map((item) => item.rank)
@@ -100,6 +102,12 @@ describe("public data against canonical Goose migrations", () => {
       expect(townHall.items.map((item) => item.tag)).not.toContain("#THE")
       const exactTier = yield* queryPlayerLeaderboard(bindings, "league", "105000033", new URLSearchParams("limit=10"))
       expect(exactTier.items.map((item) => item.tag)).toEqual(["#THB", "#THC"])
+      yield* sql`UPDATE basic_player SET trophies=1 WHERE tag='#THB'`
+      const snapshot = yield* queryPlayerLeaderboard(bindings, "league", "105000033", new URLSearchParams("limit=10"))
+      expect(snapshot.items.map((item) => item.tag)).toEqual(["#THB", "#THC"])
+      yield* sql`REFRESH MATERIALIZED VIEW CONCURRENTLY player_league_leaderboards`
+      const refreshed = yield* queryPlayerLeaderboard(bindings, "league", "105000033", new URLSearchParams("limit=10"))
+      expect(refreshed.items.map((item) => item.tag)).toEqual(["#THC", "#THB"])
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

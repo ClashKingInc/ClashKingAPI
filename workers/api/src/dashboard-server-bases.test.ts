@@ -126,12 +126,12 @@ describe("managed base updates", () => {
     expect(f.mediaGet).not.toHaveBeenCalled()
   })
 
-  it("replaces the editable fields and image rows in one transaction", async () => {
+  it("replaces editable fields and inline images in one transaction", async () => {
     const f = fixture()
     const value = await f.run(UpdateBaseEndpoint, { body: editable })
     expect(Schema.decodeUnknownSync(UpdateBaseEndpoint.response)(value)).toMatchObject({ id: baseId, serverId })
-    expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "DELETE", "INSERT", "SELECT"])
-    expect(f.query.mock.calls[1]?.[1]).toEqual([body.baseLink, editable.description, baseId, serverId])
+    expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "SELECT"])
+    expect(f.query.mock.calls[1]?.[1]).toEqual([body.baseLink, editable.description, baseId, serverId, editable.images])
     expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", files: [expect.any(File)], body: {
       content: editable.description, embeds: [], allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: "base_test.png" }],
       components: [{ type: 1, components: [
@@ -221,7 +221,7 @@ describe("immutable base creation", () => {
     const f = fixture()
     const value = await f.run(CreateBaseEndpoint)
     expect(Schema.decodeUnknownSync(CreateBaseEndpoint.response)(value)).toMatchObject({ messageId, serverId })
-    expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "INSERT", "SELECT"])
+    expect(f.events).toEqual(["GET Discord", "SELECT", "POST", "INSERT", "SELECT"])
     expect(f.discord.mock.calls[1]).toEqual([`/channels/${channelId}/messages`, { method: "POST", files: [expect.any(File)], body: {
       content: body.description, embeds: [], allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: "base_test.png" }], components: [{ type: 1, components: [
         { type: 2, style: 1, label: "Get Link", emoji: { name: "🔗" }, custom_id: `base:link:${baseId}` },

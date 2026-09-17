@@ -216,11 +216,11 @@ interface PersonalBaseRow {
 export const readPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const bases = yield* database(sql<PersonalBaseRow>`SELECT base.id::text id,base.base_link,
-      ARRAY(SELECT image.image_url FROM base_images image WHERE image.base_id=base.id ORDER BY image.position) images,
+      array_remove(base.images,NULL) images,
       base.description,base.created_at,base.server_id,base.channel_id,base.message_id,
       (SELECT count(*)::integer FROM jsonb_object_keys(base.downloads)) download_count,
-      (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=1) upvotes,
-      (SELECT count(*)::integer FROM base_votes vote WHERE vote.base_id=base.id AND vote.vote=-1) downvotes,
+      (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='1') upvotes,
+      (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='-1') downvotes,
       saved.kind,saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
     FROM (SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
       UNION SELECT id FROM bases WHERE downloads ? ${userId}) library

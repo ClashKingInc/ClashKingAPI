@@ -128,23 +128,16 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
       upsertBaseVote: (baseId, voterId, direction) => Effect.gen(function* () {
         const vote = direction === "up" ? 1 : -1
-        const rows = yield* db(sql.unsafe<{ baseId: string; voterId: string; direction: "up" | "down" }>(`WITH target AS (
-            SELECT id FROM bases WHERE id=$1::bigint
-          ), changed AS (
-            INSERT INTO base_votes(base_id,user_id,vote) SELECT id,$2,$3 FROM target
-            ON CONFLICT (base_id,user_id) DO UPDATE SET vote=excluded.vote,updated_at=now()
-            RETURNING base_id
-          ) SELECT changed.base_id::text "baseId",$2::text "voterId",$4::text direction FROM changed`,
+        const rows = yield* db(sql.unsafe<{ baseId: string; voterId: string; direction: "up" | "down" }>(`UPDATE bases
+          SET votes=jsonb_set(votes,ARRAY[$2::text],jsonb_build_object('vote',$3::integer,'updatedAt',now()))
+          WHERE id=$1::bigint RETURNING id::text "baseId",$2::text "voterId",$4::text direction`,
         [baseId, voterId, vote, direction]))
         if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         return rows[0]
       }),
       removeBaseVote: (baseId, voterId) => Effect.gen(function* () {
-        const rows = yield* db(sql.unsafe<{ id: string }>(`WITH target AS (
-          SELECT id FROM bases WHERE id=$1::bigint
-        ), removed AS (
-          DELETE FROM base_votes vote USING target WHERE vote.base_id=target.id AND vote.user_id=$2 RETURNING vote.base_id
-        ) SELECT id::text FROM target`, [baseId, voterId]))
+        const rows = yield* db(sql.unsafe<{ id: string }>(`UPDATE bases SET votes=votes-$2::text
+          WHERE id=$1::bigint RETURNING id::text`, [baseId, voterId]))
         if (rows.length === 0) return yield* new NotFound({ message: "Base not found" })
       }),
       recordBaseDownload: (baseId, userId) => Effect.gen(function* () {
@@ -165,9 +158,8 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
       }),
       resolveLegacyBase: (messageId) => Effect.gen(function* () {
         const rows = yield* db(sql.unsafe<{ id: string; message_id: string; server_id: string | null; channel_id: string | null; base_link: string; description: string; images: string[] }>(`SELECT base.id::text,base.message_id,base.server_id,base.channel_id,base.base_link,base.description,
-          COALESCE(array_agg(image.image_url ORDER BY image.position) FILTER (WHERE image.image_url IS NOT NULL),'{}'::text[]) images
-          FROM bases base LEFT JOIN base_images image ON image.base_id=base.id WHERE base.message_id=$1
-          GROUP BY base.id`, [messageId]))
+          array_remove(base.images,NULL) images
+          FROM bases base WHERE base.message_id=$1`, [messageId]))
         const row = rows[0]
         if (row === undefined) return yield* new NotFound({ message: "Base not found" })
         return { id: row.id, messageId: row.message_id, serverId: row.server_id, channelId: row.channel_id,
@@ -180,8 +172,7 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         if (source.protocol !== "https:" || !["cdn.discordapp.com", "media.discordapp.net"].includes(source.hostname)) {
           return yield* new InvalidRequest({ message: "Invalid Discord attachment URL" })
         }
-        const existing = yield* db(sql.unsafe<{ image_url: string | null }>(`SELECT image.image_url FROM bases base
-          LEFT JOIN base_images image ON image.base_id=base.id AND image.position=$2 WHERE base.id=$1::bigint`, [baseId, position]))
+        const existing = yield* db(sql.unsafe<{ image_url: string | null }>(`SELECT images[$2::integer] image_url FROM bases WHERE id=$1::bigint`, [baseId, position]))
         if (existing[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         if (existing[0].image_url !== null) return { baseId, position, imageUrl: existing[0].image_url }
         const response = yield* Effect.tryPromise({
@@ -202,9 +193,11 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         if (blob.size > MAX_DASHBOARD_UPLOAD) return yield* new PayloadTooLarge({ message: "Base attachment exceeds 25 MB" })
         const filename = `base_${baseId}_${position}_${crypto.randomUUID()}.${extension}`
         const uploaded = yield* uploadMediaFile(bindings, filename, new File([blob], filename, { type: contentType }))
-        const staged = yield* db(sql.unsafe<{ image_url: string }>(`INSERT INTO base_images(base_id,position,image_url) VALUES ($1::bigint,$2,$3)
-          ON CONFLICT (base_id,position) DO NOTHING RETURNING image_url`, [baseId, position, uploaded.url]))
-        const imageUrl = staged[0]?.image_url ?? (yield* db(sql.unsafe<{ image_url: string }>("SELECT image_url FROM base_images WHERE base_id=$1::bigint AND position=$2", [baseId, position])))[0]?.image_url
+        const staged = yield* db(sql.unsafe<{ image_url: string }>(`UPDATE bases SET images=ARRAY(
+          SELECT CASE WHEN slot=$2::integer THEN $3::text ELSE images[slot] END
+          FROM generate_series(1,GREATEST(cardinality(images),$2::integer)) slot)
+          WHERE id=$1::bigint AND images[$2::integer] IS NULL RETURNING images[$2::integer] image_url`, [baseId, position, uploaded.url]))
+        const imageUrl = staged[0]?.image_url ?? (yield* db(sql.unsafe<{ image_url: string }>("SELECT images[$2::integer] image_url FROM bases WHERE id=$1::bigint", [baseId, position])))[0]?.image_url
         if (imageUrl === undefined) return yield* new NotFound({ message: "Base not found" })
         return { baseId, position, imageUrl }
       }),

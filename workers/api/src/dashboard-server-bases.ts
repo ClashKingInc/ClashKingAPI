@@ -8,6 +8,7 @@ import { MAX_DASHBOARD_UPLOAD, uploadMediaFile, validMediaFilename } from "./das
 import { serverMemberAvatar } from "./dashboard-server-reads.js"
 import { dispatchMedia } from "./media-runtime.js"
 import type { WorkerBindings } from "./environment.js"
+import { normalizeBaseLink } from "./base-link.js"
 
 export const dashboardServerBaseOperationIds = ["dashboardBases", "dashboardBase", "createDashboardBase", "updateDashboardBase", "deleteDashboardBase", "uploadDashboardBaseImage", "baseDownloader"] as const
 type BaseValue = typeof Base.Type
@@ -52,27 +53,18 @@ const validUrl = (raw: string, cdn = false) => {
 }
 export const validateBaseCreate = (raw: unknown) => Effect.gen(function* () {
   const decoded = yield* decodeInput(CreateBaseRequest, raw)
-  const body = { ...decoded, channelId: decoded.channelId.trim(), baseLink: decoded.baseLink.trim(), images: decoded.images.map((image) => image.trim()) }
+  const baseLink = yield* Effect.try({ try: () => normalizeBaseLink(decoded.baseLink), catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid baseLink" }) })
+  const body = { ...decoded, channelId: decoded.channelId.trim(), baseLink, images: decoded.images.map((image) => image.trim()) }
   if (!positiveId(body.channelId)) return yield* new InvalidRequest({ message: "channelId must be a valid Discord channel ID" })
-  if (!validBaseLink(body.baseLink)) return yield* new InvalidRequest({ message: "baseLink must be a canonical Clash layout link" })
   if ([...body.description].length > 1000) return yield* new InvalidRequest({ message: "description must be at most 1000 characters" })
   if (body.images.length > 4) return yield* new InvalidRequest({ message: "images must contain at most four URLs" })
   if (body.images.some((image) => !validUrl(image, true))) return yield* new InvalidRequest({ message: "images must use the ClashKing CDN" })
   return body
 })
-const validBaseLink = (raw: string) => {
-  try {
-    const url = new URL(raw)
-    return url.origin === "https://link.clashofclans.com" && url.pathname === "/en" && url.hash === ""
-      && [...url.searchParams.keys()].every((key) => key === "action" || key === "id")
-      && url.searchParams.getAll("action").length === 1 && url.searchParams.get("action") === "OpenLayout"
-      && url.searchParams.getAll("id").length === 1 && (url.searchParams.get("id")?.trim().length ?? 0) > 0
-  } catch { return false }
-}
 export const validateBaseUpdate = (raw: unknown) => Effect.gen(function* () {
   const decoded = yield* decodeInput(UpdateBaseRequest, raw)
-  const body = { ...decoded, baseLink: decoded.baseLink.trim(), images: decoded.images.map((image) => image.trim()) }
-  if (!validBaseLink(body.baseLink)) return yield* new InvalidRequest({ message: "baseLink must be a canonical Clash layout link" })
+  const baseLink = yield* Effect.try({ try: () => normalizeBaseLink(decoded.baseLink), catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid baseLink" }) })
+  const body = { ...decoded, baseLink, images: decoded.images.map((image) => image.trim()) }
   if ([...body.description].length > 1000) return yield* new InvalidRequest({ message: "description must be at most 1000 characters" })
   if (body.images.length > 4) return yield* new InvalidRequest({ message: "images must contain at most four URLs" })
   if (new Set(body.images).size !== body.images.length) return yield* new InvalidRequest({ message: "images must not contain duplicates" })

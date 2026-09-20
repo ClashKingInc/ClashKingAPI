@@ -47,6 +47,10 @@ if (!image?.includes("@sha256:") || migrations.join(",") !== [
   "016_remove_cwl_season_statistics.sql",
   "017_final_operational_contract.sql",
   "018_personal_base_library.sql",
+  "019_unlimited_personal_bases.sql",
+  "020_player_leaderboard_snapshots.sql",
+  "021_inline_base_images_votes.sql",
+  "022_personal_army_library.sql",
 ].join(",")) throw new Error("Unexpected authoritative retained API profile")
 
 function inspect() {
@@ -157,16 +161,18 @@ async function runApi() {
   if (await exists(importName)) throw new Error("An unfinished local import exists; inspect it before starting the API")
   const secrets = loadLocalApiSecrets()
   const discord = loadLocalDiscordCredentials()
-  const infrastructureSecretsPath = process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env")
-  const infrastructure = parseEnv(readFileSync(infrastructureSecretsPath, "utf8"))
+  const archiveBridge = process.env.CLASHKING_LOCAL_ARCHIVE_BRIDGE !== "0"
+  const infrastructure = archiveBridge
+    ? parseEnv(readFileSync(process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env"), "utf8")) : {}
   const r2AccessKeyId = infrastructure.R2_ACCESS_KEY_ID ?? ""
   const r2SecretAccessKey = infrastructure.R2_SECRET_ACCESS_KEY ?? ""
-  if (r2AccessKeyId.length < 8 || r2SecretAccessKey.length < 16) throw new Error("Shared local R2 bridge credentials are missing")
+  if (archiveBridge && (r2AccessKeyId.length < 8 || r2SecretAccessKey.length < 16)) throw new Error("Shared local R2 bridge credentials are missing")
   const environment = { ...process.env, CLASHKING_PERSISTENT_LOCAL_API: "1", CLASHKING_LOCAL_DATABASE_URL: connection(),
     R2_ACCESS_KEY_ID: r2AccessKeyId, R2_SECRET_ACCESS_KEY: r2SecretAccessKey,
     CLASHKING_LOCAL_DISCORD_CLIENT_ID: discord.clientId,
     CLASHKING_LOCAL_DISCORD_CLIENT_SECRET: discord.clientSecret,
     CLASHKING_LOCAL_DISCORD_BOT_TOKEN: discord.botToken,
+    CLASHKING_LOCAL_ARCHIVE_BRIDGE: archiveBridge ? "1" : "0",
     ...Object.fromEntries(Object.entries(secrets).map(([key, value]) => [`CLASHKING_LOCAL_${key}`, value])) }
   delete environment.CLASHKING_DISPOSABLE_TIMESCALE
   delete environment.TEST_DATABASE_URL

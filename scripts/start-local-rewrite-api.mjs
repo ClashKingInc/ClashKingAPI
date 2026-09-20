@@ -37,6 +37,8 @@ const localAdmin = persistent && process.env.CLASHKING_LOCAL_ADMIN_IDENTITY === 
 const clashProxyOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_CLASH_PROXY_ORIGIN ?? "", { publicOrigin: "https://proxy.clashk.ing" })
 const schemaRoot = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? ""
 const archiveImportRoot = process.env.CLASHKING_LOCAL_ARCHIVE_IMPORT_ROOT ?? resolve('.local/imported-archives/packs')
+const staticAssetsRoot = process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT ?? ""
+const archiveBridgeEnabled = process.env.CLASHKING_LOCAL_ARCHIVE_BRIDGE !== "0"
 if (!/^\d+$/u.test(discordClientId) || discordClientSecret.length === 0) {
   throw new Error("Set the local Discord client ID and client secret")
 }
@@ -168,6 +170,23 @@ process.once("SIGTERM", stop)
 try {
   await runtime.ready
   if (localAdmin) console.log(JSON.stringify({event:'local_admin_identity_ready',origin:await localAdmin.listen(),identity:'local-developer'}))
+  if (staticAssetsRoot !== "") {
+    if (!isAbsolute(staticAssetsRoot)) throw new Error("CLASHKING_LOCAL_STATIC_ASSETS_ROOT must be an absolute path")
+    if (!existsSync(staticAssetsRoot)) throw new Error("Configured local static-assets directory is missing")
+    const staticBucket = await runtime.getR2Bucket('ASSETS')
+    let files = 0
+    let bytes = 0
+    for (const file of readdirSync(staticAssetsRoot).sort()) {
+      if (!file.endsWith('.json')) continue
+      const data = readFileSync(resolve(staticAssetsRoot, file))
+      JSON.parse(data.toString('utf8'))
+      await staticBucket.put(`static_data/${file}`, data, {httpMetadata: {contentType: 'application/json'}})
+      files++
+      bytes += data.byteLength
+    }
+    if (files === 0) throw new Error("Configured local static-assets directory contains no JSON files")
+    console.log(JSON.stringify({event:'local_static_assets_seeded',source:staticAssetsRoot,files,bytes}))
+  }
   const bucket = await runtime.getR2Bucket('WAR_ARCHIVE')
   let seeded = 0
   let archiveFiles = 0
@@ -186,7 +205,7 @@ try {
     }
     console.log(JSON.stringify({event:'local_war_archives_seeded',source:archiveImportRoot,files:archiveFiles,bytes:archiveBytes,seeded}))
   }
-  if (persistent) {
+  if (persistent && archiveBridgeEnabled) {
     if (!isAbsolute(schemaRoot)) throw new Error("Set CLASHKING_LOCAL_SCHEMA_ROOT to the absolute canonical schema checkout")
     const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? ""
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY ?? ""
@@ -205,4 +224,4 @@ try {
 }
 console.log(JSON.stringify({ event: "isolated_api_ready", pid: process.pid, url: `http://localhost:${port}`, lanUrl: origin,
   database: `127.0.0.1:${database.port}${database.pathname}`, providers: { discord: true, clashProxy: clashProxyOrigin === "" ? "remote-vpc" : "explicit-origin" },
-  storage: persistent ? "persistent local SQL/KV/R2 with loopback archive bridge" : "test-only ephemeral SQL/KV/R2" }))
+  storage: persistent ? `persistent local SQL/KV/R2${archiveBridgeEnabled ? " with loopback archive bridge" : ""}` : "test-only ephemeral SQL/KV/R2" }))

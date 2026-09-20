@@ -9,10 +9,9 @@ const bindings = {
   JWT_ACCESS_SECRET: "fixture-access-secret", JWT_REFRESH_SECRET: "fixture-refresh-secret",
   NATIVE_TOKEN_AUDIENCE: "fixture-native", WEB_TOKEN_AUDIENCE: "fixture-web",
 } as WorkerBindings
-const runWith = <A, E>(program: Effect.Effect<A, E, AuthCrypto>, environment: WorkerBindings) => Effect.runPromise(program.pipe(
-  Effect.provide(AuthCrypto.layer), Effect.provideService(WorkerEnvironment, environment),
+const run = <A, E>(program: Effect.Effect<A, E, AuthCrypto>) => Effect.runPromise(program.pipe(
+  Effect.provide(AuthCrypto.layer), Effect.provideService(WorkerEnvironment, bindings),
 ))
-const run = <A, E>(program: Effect.Effect<A, E, AuthCrypto>) => runWith(program, bindings)
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe("auth crypto parity with the existing Go implementation", () => {
@@ -77,18 +76,6 @@ describe("auth crypto parity with the existing Go implementation", () => {
     for (const token of tokens) {
       await expect(run(AuthCrypto.use((crypto) => crypto.verifyRefresh(token, "native")))).rejects.toBeInstanceOf(Unauthenticated)
     }
-  })
-
-  it("restricts isolated session issuance and refresh to the configured user", async () => {
-    const isolated = { ...bindings, LOCAL_ALLOWED_USER_ID: "706149153431879760" }
-    const allowed = await runWith(AuthCrypto.use((auth) => auth.issue("706149153431879760", "device", "web")), isolated)
-    await expect(runWith(AuthCrypto.use((auth) => auth.issue("999999999999999999", "device", "web")), isolated))
-      .rejects.toBeInstanceOf(Unauthenticated)
-    await expect(runWith(AuthCrypto.use((auth) => auth.verifyRefresh(allowed.refresh_token, "web")), isolated))
-      .resolves.toMatchObject({ userId: "706149153431879760" })
-    const unrestricted = await run(AuthCrypto.use((auth) => auth.issue("999999999999999999", "device", "web")))
-    await expect(runWith(AuthCrypto.use((auth) => auth.verifyRefresh(unrestricted.refresh_token, "web")), isolated))
-      .rejects.toBeInstanceOf(Unauthenticated)
   })
 
   it("generates six-digit codes with cryptographic rejection sampling", async () => {

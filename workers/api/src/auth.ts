@@ -81,10 +81,6 @@ export class AuthIdentity extends Context.Service<
         if (typeof sub !== "string" || sub.length === 0 || typeof exp !== "number" || typeof iat !== "number") {
           return yield* new Unauthenticated({ message: "Access token claims are incomplete" })
         }
-        const allowedUserId = env.LOCAL_ALLOWED_USER_ID?.trim() ?? ""
-        if (allowedUserId !== "" && sub !== allowedUserId) {
-          return yield* new Unauthenticated({ message: "User is not allowed in this isolated environment" })
-        }
         const sql = yield* SqlClient.SqlClient
         const rows = yield* sql<{ exists: boolean }>`
           SELECT EXISTS(SELECT 1 FROM auth_users WHERE user_id = ${sub}) AS exists

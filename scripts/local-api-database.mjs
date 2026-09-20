@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto"
 import { pipeline } from "node:stream/promises"
 import { parseEnv } from "node:util"
 import pg from "pg"
-import { loadLocalApiSecrets, loadLocalDiscordCredentials } from "./local-api-keychain.mjs"
+import { loadLocalApiSecrets, loadLocalBetaDiscordCredentials } from "./local-api-keychain.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
@@ -160,7 +160,7 @@ async function runApi() {
   if (!(await exists())) throw new Error("Local API database does not exist; run the explicit migrate or copy-from action first")
   if (await exists(importName)) throw new Error("An unfinished local import exists; inspect it before starting the API")
   const secrets = loadLocalApiSecrets()
-  const discord = loadLocalDiscordCredentials()
+  const discord = loadLocalBetaDiscordCredentials()
   const archiveBridge = process.env.CLASHKING_LOCAL_ARCHIVE_BRIDGE !== "0"
   const infrastructure = archiveBridge
     ? parseEnv(readFileSync(process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env"), "utf8")) : {}

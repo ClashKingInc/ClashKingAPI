@@ -7,7 +7,7 @@ export const retainedPostgresSuites = [
   'dashboard-roster-bonuses', 'dashboard-roster-snapshots', 'dashboard-roster',
   'dashboard-server-activity', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
   'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
-  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-bases', 'public-clan-extra',
+  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-armies', 'personal-bases', 'public-clan-extra',
   'proxy-war-activity', 'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
   'stats-cwl-archive', 'stats', 'tracking-operations', 'war-exports',
 ].map(name => `${name}.test.ts`)

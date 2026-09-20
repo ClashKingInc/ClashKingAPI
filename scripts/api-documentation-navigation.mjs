@@ -42,6 +42,7 @@ const additions = new Map([
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
   ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
+  ?? (path.startsWith("/v2/armies/") ? "Mobile App" : undefined)
   ?? (path.startsWith("/v2/bases/") ? "Bases" : undefined)
   ?? (path.startsWith("/v2/server/") && path.includes("/bases") ? "Bases" : undefined)
   ?? (path.startsWith("/v2/legends/") ? "Leaderboard" : undefined)

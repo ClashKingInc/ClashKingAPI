@@ -4,6 +4,7 @@ import {
   UpgradePreferencesPatchEndpoint, UpgradesGetEndpoint, UpgradesPutEndpoint,
   DeleteOldPersonalBasesEndpoint, PersonalBasesEndpoint,
   SavePersonalBaseEndpoint, UnsavePersonalBaseEndpoint,
+  DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint,
   requireEndpointSuccessStatus,
   type AnyEndpoint, type Bookmark, type BookmarkType, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
@@ -11,6 +12,7 @@ import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { AuthIdentity, type ApiPrincipal, type UserPrincipal } from "./auth.js"
+import { normalizeArmyLink } from "./army-link.js"
 import type { WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, type ApiFailure } from "./errors.js"
 import { correctTag } from "./home.js"
@@ -210,7 +212,7 @@ interface PersonalBaseRow {
   readonly id: string; readonly base_link: string; readonly images: string[]; readonly description: string
   readonly created_at: Date | string; readonly server_id: string; readonly channel_id: string; readonly message_id: string
   readonly download_count: number | string; readonly upvotes: number | string; readonly downvotes: number | string
-  readonly kind: "war" | "legend" | null; readonly saved: boolean
+  readonly saved: boolean
   readonly saved_at: Date | string | null; readonly downloaded_at: Date | string | null
 }
 export const readPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
@@ -221,7 +223,7 @@ export const readPersonalBases = (userId: string): Runtime<EndpointResponse<type
       (SELECT count(*)::integer FROM jsonb_object_keys(base.downloads)) download_count,
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='1') upvotes,
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='-1') downvotes,
-      saved.kind,saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
+      saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
     FROM (SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
       UNION SELECT id FROM bases WHERE downloads ? ${userId}) library
     JOIN bases base ON base.id=library.base_id
@@ -232,22 +234,83 @@ export const readPersonalBases = (userId: string): Runtime<EndpointResponse<type
     items: bases.map((row) => ({ id: row.id, baseLink: row.base_link, images: row.images, description: row.description,
       createdAt: timestamp(row.created_at), serverId: row.server_id, channelId: row.channel_id, messageId: row.message_id,
       discordMessageUrl: `https://discord.com/channels/${row.server_id}/${row.channel_id}/${row.message_id}`,
-      downloadCount: Number(row.download_count), upvotes: Number(row.upvotes), downvotes: Number(row.downvotes), kind: row.kind,
+      downloadCount: Number(row.download_count), upvotes: Number(row.upvotes), downvotes: Number(row.downvotes),
       saved: row.saved, savedAt: row.saved_at === null ? null : timestamp(row.saved_at),
       downloadedAt: row.downloaded_at === null ? null : timestamp(row.downloaded_at) })),
   }
 })
 
-const savePersonalBase = (userId: string, rawBaseId: string, kind: "war" | "legend" | null): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
+const savePersonalBase = (userId: string, rawBaseId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const baseId = yield* positiveBaseId(rawBaseId), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
-    const rows = yield* sql`INSERT INTO user_saved_bases(user_id,base_id,kind)
-      SELECT ${userId},id,${kind} FROM bases WHERE id=${baseId}::bigint AND server_id IS NOT NULL AND channel_id IS NOT NULL
-      ON CONFLICT (user_id,base_id) DO UPDATE SET kind=EXCLUDED.kind RETURNING base_id`
+    const rows = yield* sql`WITH target AS (
+        SELECT id FROM bases WHERE id=${baseId}::bigint AND server_id IS NOT NULL AND channel_id IS NOT NULL
+      ), inserted AS (
+        INSERT INTO user_saved_bases(user_id,base_id) SELECT ${userId},id FROM target
+        ON CONFLICT (user_id,base_id) DO NOTHING RETURNING base_id
+      ) SELECT id FROM target`
     if (rows.length === 0)
       return yield* new NotFound({ message: "Shared base not found" })
     return yield* readPersonalBases(userId)
+  })))
+})
+
+type ArmyUnitRow = { readonly id: number; readonly quantity: number }
+type ArmySpellRow = ArmyUnitRow & { readonly clanCastle: boolean }
+type ArmyEquipmentRow = { readonly equipmentId: number; readonly heroId: number }
+type ArmyPetRow = { readonly petId: number; readonly heroId: number }
+interface PersonalArmyRow {
+  readonly share_code: string
+  readonly main_troops: ReadonlyArray<ArmyUnitRow>
+  readonly clan_castle_troops: ReadonlyArray<ArmyUnitRow>
+  readonly spells: ReadonlyArray<ArmySpellRow>
+  readonly heroes: ReadonlyArray<number>
+  readonly equipment: ReadonlyArray<ArmyEquipmentRow>
+  readonly pet_assignments: ReadonlyArray<ArmyPetRow>
+  readonly siege_machine_id: number | null
+  readonly saved_at: Date | string
+}
+const armyShareCode = (raw: string): Effect.Effect<string, InvalidRequest> => Effect.try({
+  try: () => normalizeArmyLink(raw),
+  catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid army share code" }),
+})
+const armyLink = (shareCode: string) => {
+  const url = new URL("https://link.clashofclans.com/en")
+  url.searchParams.set("action", "CopyArmy")
+  url.searchParams.set("army", shareCode)
+  return url.toString()
+}
+export const readPersonalArmies = (userId: string): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const armies = yield* database(sql<PersonalArmyRow>`SELECT composition.share_code,composition.main_troops,
+      composition.clan_castle_troops,composition.spells,composition.heroes,composition.equipment,
+      composition.pet_assignments,composition.siege_machine_id,saved.saved_at
+    FROM user_saved_armies saved JOIN army_compositions composition ON composition.share_code=saved.share_code
+    WHERE saved.user_id=${userId} ORDER BY saved.saved_at DESC,saved.share_code`)
+  return { items: armies.map((row) => ({ shareCode: row.share_code, armyLink: armyLink(row.share_code),
+    mainTroops: [...row.main_troops], clanCastleTroops: [...row.clan_castle_troops], spells: [...row.spells],
+    heroes: [...row.heroes], equipment: [...row.equipment], petAssignments: [...row.pet_assignments],
+    siegeMachineId: row.siege_machine_id, savedAt: timestamp(row.saved_at) })) }
+})
+const savePersonalArmy = (userId: string, rawShareCode: string): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
+  const shareCode = yield* armyShareCode(rawShareCode), sql = yield* SqlClient.SqlClient
+  return yield* database(sql.withTransaction(Effect.gen(function* () {
+    yield* lockAuthenticatedUser(userId)
+    const rows = yield* sql`WITH target AS (SELECT share_code FROM army_compositions WHERE share_code=${shareCode}), inserted AS (
+        INSERT INTO user_saved_armies(user_id,share_code) SELECT ${userId},share_code FROM target
+        ON CONFLICT (user_id,share_code) DO NOTHING RETURNING share_code
+      ) SELECT share_code FROM target`
+    if (rows.length === 0) return yield* new NotFound({ message: "Army composition not found" })
+    return yield* readPersonalArmies(userId)
+  })))
+})
+const deletePersonalArmy = (userId: string, rawShareCode: string): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
+  const shareCode = yield* armyShareCode(rawShareCode), sql = yield* SqlClient.SqlClient
+  return yield* database(sql.withTransaction(Effect.gen(function* () {
+    yield* lockAuthenticatedUser(userId)
+    yield* sql`DELETE FROM user_saved_armies WHERE user_id=${userId} AND share_code=${shareCode}`
+    return yield* readPersonalArmies(userId)
   })))
 })
 
@@ -288,9 +351,12 @@ const route = <E extends AnyEndpoint>(endpoint: E, execute: (input: EndpointRequ
 
 const routes = [
   route(PersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? readPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
-  route(SavePersonalBaseEndpoint, ({ path, body }, { principal }) => principal.kind === "user" ? savePersonalBase(principal.userId, path.baseId, body.kind) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(SavePersonalBaseEndpoint, ({ path }, { principal }) => principal.kind === "user" ? savePersonalBase(principal.userId, path.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(DeleteOldPersonalBasesEndpoint, (_, { principal }) => principal.kind === "user" ? deleteOldPersonalBases(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(UnsavePersonalBaseEndpoint, ({ path }, { principal }) => principal.kind === "user" ? unsavePersonalBase(principal.userId, path.baseId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(PersonalArmiesEndpoint, (_, { principal }) => principal.kind === "user" ? readPersonalArmies(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(SavePersonalArmyEndpoint, ({ path }, { principal }) => principal.kind === "user" ? savePersonalArmy(principal.userId, path.shareCode) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(DeletePersonalArmyEndpoint, ({ path }, { principal }) => principal.kind === "user" ? deletePersonalArmy(principal.userId, path.shareCode) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(AchievementsCheckEndpoint, (_, { principal, bindings }) => principal.kind === "user"
     ? checkMobileAchievements(principal.userId, bindings) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(BookmarksListEndpoint, ({ path, query }, { principal }) => subject(principal, path.userId).pipe(Effect.flatMap((id) => listMobileBookmarks(id, query.type)))),
@@ -322,6 +388,9 @@ export const mobilePersistenceRuntimeRoutes = [
   { method: "PUT", path: "/v2/bases/personal/:baseId" },
   { method: "DELETE", path: "/v2/bases/personal/older-than-90-days" },
   { method: "DELETE", path: "/v2/bases/personal/:baseId" },
+  { method: "GET", path: "/v2/armies/personal" },
+  { method: "PUT", path: "/v2/armies/personal/:shareCode" },
+  { method: "DELETE", path: "/v2/armies/personal/:shareCode" },
   { method: "POST", path: "/v2/achievements/check" },
   { method: "GET", path: "/v2/links/:userId/bookmarks" },
   { method: "POST", path: "/v2/links/:userId/bookmarks" },

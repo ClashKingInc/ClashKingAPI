@@ -6,7 +6,6 @@ import { ErrorResponse } from "./errors.js"
 export const PersonalBaseId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u)).annotate({
   description: "Base ID as a decimal string; never convert it to a JavaScript number.",
 })
-export const PersonalBaseKind = Schema.Literals(["war", "legend"])
 export const PersonalBase = Schema.Struct({
   id: PersonalBaseId,
   baseLink: Schema.String,
@@ -20,7 +19,6 @@ export const PersonalBase = Schema.Struct({
   downloadCount: Schema.Int,
   upvotes: Schema.Int,
   downvotes: Schema.Int,
-  kind: Schema.NullOr(PersonalBaseKind),
   saved: Schema.Boolean,
   savedAt: Schema.NullOr(Schema.String),
   downloadedAt: Schema.NullOr(Schema.String),
@@ -36,7 +34,6 @@ const PersonalErrors = [
   { status: 409, body: ErrorResponse },
 ] as const
 const BasePath = Schema.Struct({ baseId: PersonalBaseId })
-const SavePersonalBaseBody = Schema.Struct({ kind: Schema.NullOr(PersonalBaseKind) }).annotate({ parseOptions: { onExcessProperty: "error" } })
 
 export const PersonalBasesEndpoint = defineEndpoint({
   operationId: "getPersonalBases", method: "GET", path: "/v2/bases/personal", auth: "user",
@@ -46,7 +43,7 @@ export const PersonalBasesEndpoint = defineEndpoint({
 })
 export const SavePersonalBaseEndpoint = defineEndpoint({
   operationId: "savePersonalBase", method: "PUT", path: "/v2/bases/personal/:baseId", auth: "user",
-  summary: "Save or relabel one shared base", body: SavePersonalBaseBody, bodyMode: "json", pathParams: BasePath, query: NoQuery,
+  summary: "Save one shared base", body: NoBody, bodyMode: "none", pathParams: BasePath, query: NoQuery,
   response: PersonalBasesState, responseMode: "json", successStatus: 200, errors: PersonalErrors,
 })
 export const UnsavePersonalBaseEndpoint = defineEndpoint({

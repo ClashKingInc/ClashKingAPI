@@ -5,6 +5,7 @@ import {
   SavePersonalBaseEndpoint,
   UnsavePersonalBaseEndpoint,
 } from "./personal-bases.js"
+import { DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint } from "./personal-armies.js"
 import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
 export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
@@ -137,6 +138,7 @@ export * from "./expo-player.js"
 export * from "./expo-rankings.js"
 export * from "./expo-stats.js"
 export * from "./expo-war.js"
+export * from "./personal-armies.js"
 export * from "./league-analytics.js"
 export * from "./legends.js"
 export * from "./stats-history.js"
@@ -155,6 +157,9 @@ export const expoEndpoints = {
   savePersonalBase: SavePersonalBaseEndpoint,
   unsavePersonalBase: UnsavePersonalBaseEndpoint,
   deleteOldPersonalBases: DeleteOldPersonalBasesEndpoint,
+  personalArmies: PersonalArmiesEndpoint,
+  savePersonalArmy: SavePersonalArmyEndpoint,
+  deletePersonalArmy: DeletePersonalArmyEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,

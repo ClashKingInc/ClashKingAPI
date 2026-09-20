@@ -12,6 +12,7 @@ interface WorkerSecrets {
   readonly ELASTICSEARCH_API_KEY: string
   readonly JWT_ACCESS_SECRET: string
   readonly JWT_REFRESH_SECRET: string
+  readonly LOCAL_ALLOWED_USER_ID?: string
   readonly MOBILE_PUSH_FCM_PROJECT_ID?: string
   readonly MOBILE_PUSH_FCM_SERVICE_ACCOUNT_JSON?: string
   readonly SENTRY_DSN_MOBILE?: string

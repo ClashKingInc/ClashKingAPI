@@ -16,7 +16,7 @@ export interface RefreshClaims {
   readonly deviceId: string
   readonly expiresAt: Date
 }
-type CryptoFailure = InvalidRequest | UpstreamUnavailable
+type CryptoFailure = InvalidRequest | Unauthenticated | UpstreamUnavailable
 const encoder = new TextEncoder()
 const hex = (value: ArrayBuffer) => Array.from(new Uint8Array(value), (byte) => byte.toString(16).padStart(2, "0")).join("")
 
@@ -41,6 +41,9 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
       native: env.NATIVE_TOKEN_AUDIENCE.trim() || "clashking-native",
       web: env.WEB_TOKEN_AUDIENCE.trim() || "clashking-web",
     }
+    const allowedUserId = env.LOCAL_ALLOWED_USER_ID?.trim() ?? ""
+    const requireAllowedUser = (userId: string) => allowedUserId === "" || userId === allowedUserId
+      ? Effect.void : Effect.fail(new Unauthenticated({ message: "User is not allowed in this isolated environment" }))
     const digest = (value: string) => cryptographic(() => crypto.subtle.digest("SHA-256", encoder.encode(value)).then(hex))
     return AuthCrypto.of({
       // These formats match existing stored authentication rows.
@@ -70,6 +73,7 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
       passwordMatches: (password, encoded) => cryptographic(() => compare(password, encoded)),
       issue: (userId, deviceId, kind) => Effect.gen(function* () {
         if (userId.length === 0) return yield* new InvalidRequest({ message: "User identity is required" })
+        yield* requireAllowedUser(userId)
         const now = Math.floor(Date.now() / 1000)
         const expiration = now + 30 * 86400
         const makeToken = () => new SignJWT(deviceId.length === 0 ? {} : { device: deviceId })
@@ -89,6 +93,7 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
           if (typeof payload.sub !== "string" || payload.sub.length === 0 || typeof payload.exp !== "number"
             || typeof payload.iat !== "number" || typeof payload.jti !== "string" || payload.jti.length === 0
             || (payload.device !== undefined && typeof payload.device !== "string")) throw new Error("Incomplete refresh claims")
+          if (allowedUserId !== "" && payload.sub !== allowedUserId) throw new Error("User is not allowed")
           return { userId: payload.sub, deviceId: typeof payload.device === "string" ? payload.device : "", expiresAt: new Date(payload.exp * 1000) }
         },
         catch: () => new Unauthenticated({ message: "Invalid or expired refresh token" }),

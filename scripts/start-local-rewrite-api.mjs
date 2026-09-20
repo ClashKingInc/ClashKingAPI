@@ -29,6 +29,18 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Inv
 const lan = process.env.CLASHKING_LOCAL_LAN_IP ?? "192.168.5.62"
 if (!/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(lan)) throw new Error("Local LAN IPv4 address required")
 const origin = `http://${lan}:${port}`
+const dashboardOrigin = process.env.CLASHKING_LOCAL_DASHBOARD_ORIGIN ?? "http://localhost:3002"
+const publicOrigin = process.env.CLASHKING_LOCAL_PUBLIC_ORIGIN ?? origin
+const exactOrigin = (value, allowed, name) => {
+  let parsed
+  try { parsed = new URL(value) } catch { throw new Error(`${name} must be an absolute origin`) }
+  if (parsed.origin !== value || parsed.username !== "" || parsed.password !== "" || !allowed.includes(value)) {
+    throw new Error(`${name} is not an approved isolated-local origin`)
+  }
+  return value
+}
+exactOrigin(dashboardOrigin, ["http://localhost:3002", "https://local-dash.clashk.ing"], "CLASHKING_LOCAL_DASHBOARD_ORIGIN")
+exactOrigin(publicOrigin, [origin, "https://local-api.clashk.ing"], "CLASHKING_LOCAL_PUBLIC_ORIGIN")
 const discordClientId = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_ID ?? ""
 const discordClientSecret = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_SECRET ?? ""
 const discordBotToken = process.env.CLASHKING_LOCAL_DISCORD_BOT_TOKEN ?? ""
@@ -140,17 +152,18 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   },
   bindings: {
     ...config.vars, ENVIRONMENT: "isolated-local",
-    WEB_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].flatMap(host => [3002, 8081].map(value => `http://${host}:${value}`)).join(","),
+    WEB_ALLOWED_ORIGINS: [...["localhost", "127.0.0.1", lan].flatMap(host => [3002, 8081].map(value => `http://${host}:${value}`)), dashboardOrigin].join(","),
     ADMIN_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].map(host => `http://${host}:3000`).join(","),
     DISCORD_API_ORIGIN: "https://discord.com/api/v10",
-    DISCORD_REDIRECT_URI: "http://localhost:3002/auth/callback",
+    DISCORD_REDIRECT_URI: `${dashboardOrigin}/auth/callback`,
     DISCORD_CLIENT_ID: discordClientId, DISCORD_CLIENT_SECRET: discordClientSecret, DISCORD_BOT_TOKEN: discordBotToken,
     SMTP_HOST: "127.0.0.1", SMTP_PORT: "9", SMTP_USERNAME: "", SMTP_PASSWORD: "",
     STRIPE_RESTRICTED_KEY: "", STRIPE_WEBHOOK_SECRET: localSecret("STRIPE_WEBHOOK_SECRET"),
     ELASTICSEARCH_API_KEY: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUDIENCE: "",
     ...localAdmin?.bindings,
-    POSTS_PUBLIC_ORIGIN: origin, APP_UPDATES_PUBLIC_ORIGIN: origin,
+    POSTS_PUBLIC_ORIGIN: publicOrigin, APP_UPDATES_PUBLIC_ORIGIN: publicOrigin,
     JWT_ACCESS_SECRET: localSecret("JWT_ACCESS_SECRET"), JWT_REFRESH_SECRET: localSecret("JWT_REFRESH_SECRET"), API_BOT_TOKEN: localSecret("API_BOT_TOKEN"),
+    LOCAL_ALLOWED_USER_ID: "706149153431879760",
     AI_USAGE_SECRET: localSecret("AI_USAGE_SECRET"), DATA_ENCRYPTION_KEY: localSecret("DATA_ENCRYPTION_KEY"),
   },
 }))
@@ -223,5 +236,6 @@ try {
   throw error
 }
 console.log(JSON.stringify({ event: "isolated_api_ready", pid: process.pid, url: `http://localhost:${port}`, lanUrl: origin,
+  publicOrigin, dashboardOrigin, discordRedirectUri: `${dashboardOrigin}/auth/callback`,
   database: `127.0.0.1:${database.port}${database.pathname}`, providers: { discord: true, clashProxy: clashProxyOrigin === "" ? "remote-vpc" : "explicit-origin" },
   storage: persistent ? `persistent local SQL/KV/R2${archiveBridgeEnabled ? " with loopback archive bridge" : ""}` : "test-only ephemeral SQL/KV/R2" }))

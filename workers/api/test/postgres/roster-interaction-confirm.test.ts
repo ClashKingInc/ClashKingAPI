@@ -32,7 +32,7 @@ it("confirms signed own-entry removal exactly once and atomically journals role 
   await Effect.runPromise(Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     yield* sql`INSERT INTO servers (id, name) VALUES (${guild}, 'Signed confirmation')`
-    const roster = (yield* sql<{ id: string }>`INSERT INTO rosters (server_id, alias, min_townhall, capacity, roster_role_id)
+    const roster = (yield* sql<{ id: string }>`INSERT INTO rosters (server_id, alias, min_townhall, max_signups, roster_role_id)
       VALUES (${guild}, 'Overfull and ineligible', 19, 1, '4834567890123456941') RETURNING id::text`)[0]!.id
     yield* sql`INSERT INTO player_links (tag, user_id, source, is_verified) VALUES ('#9RC', ${actor}, 'bot', false)`
     yield* sql`INSERT INTO roster_members (roster_id, tag, name, townhall) VALUES
@@ -68,13 +68,13 @@ it("confirms signed own-entry removal exactly once and atomically journals role 
 
 interface AdmissionCase {
   id: number; name: string; action: 'signup' | 'sub'; expected: 'accepted' | 'Conflict' | 'Forbidden'
-  capacity?: number; perUser?: number; badSecondTownHall?: boolean; wrongClan?: boolean
+  capacity?: number; perUser?: number; requireVerified?: boolean; badSecondTownHall?: boolean; wrongClan?: boolean
   duringLookup?: 'transfer' | 'archive' | 'configuration' | 'missingGuild'
 }
 const admissionCases: AdmissionCase[] = [
   { id: 1, name: 'signup with selected group', action: 'signup', expected: 'accepted' },
   { id: 2, name: 'substitute in main group', action: 'sub', expected: 'accepted' },
-  { id: 3, name: 'total capacity rollback', action: 'signup', expected: 'Conflict', capacity: 1 },
+  { id: 3, name: 'maximum signups rollback', action: 'signup', expected: 'Conflict', capacity: 1 },
   { id: 4, name: 'per-user cap rollback', action: 'signup', expected: 'Conflict', perUser: 1 },
   { id: 5, name: 'second account TH rollback', action: 'signup', expected: 'Forbidden', badSecondTownHall: true },
   { id: 6, name: 'live clan mismatch', action: 'signup', expected: 'Forbidden', wrongClan: true },
@@ -82,6 +82,7 @@ const admissionCases: AdmissionCase[] = [
   { id: 8, name: 'verified transfer during lookup', action: 'signup', expected: 'Forbidden', duringLookup: 'transfer' },
   { id: 9, name: 'board archived during lookup', action: 'signup', expected: 'Conflict', duringLookup: 'archive' },
   { id: 10, name: 'rules changed during lookup', action: 'signup', expected: 'Conflict', duringLookup: 'configuration' },
+  { id: 11, name: 'verified account required', action: 'signup', expected: 'Forbidden', requireVerified: true },
 ]
 it.each(admissionCases)("confirms signed admission atomically: $name", async scenario => {
   const { action } = scenario
@@ -103,8 +104,8 @@ it.each(admissionCases)("confirms signed admission atomically: $name", async sce
     const sql = yield* SqlClient.SqlClient
     yield* sql`INSERT INTO servers (id, name) VALUES (${guildId}, 'Signed admission')`
     const roster = (yield* sql<{ id: string }>`INSERT INTO rosters (server_id, alias, clan_tag, min_townhall, max_townhall,
-      capacity, max_accounts_per_user, roster_role_id) VALUES (${guildId}, 'Admission', '#9SC', 16, 18,
-        ${scenario.capacity ?? 2}, ${scenario.perUser ?? 2}, '4834567890123456951') RETURNING id::text`)[0]!.id
+      max_signups, max_accounts_per_user, roster_role_id, require_verified) VALUES (${guildId}, 'Admission', '#9SC', 16, 18,
+        ${scenario.capacity ?? 2}, ${scenario.perUser ?? 2}, '4834567890123456951', ${scenario.requireVerified ?? false}) RETURNING id::text`)[0]!.id
     const groupId = (yield* sql<{ id: string }>`INSERT INTO roster_member_groups (server_id, name) VALUES (${guildId}, 'War team') RETURNING id::text`)[0]!.id
     yield* sql`INSERT INTO roster_member_group_settings (roster_id, server_id, member_group_id, role_id)
       VALUES (${roster}::uuid, ${guildId}, ${groupId}::uuid, '4834567890123456952')`

@@ -433,7 +433,7 @@ export class DashboardRosterOperations extends Context.Service<
             if (locked.length !== 1) return yield* new NotFound({ message: "Server not found" })
           }
           const response = yield* effect
-          if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup"].includes(operation)) {
+          if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup", "manageMembers", "updateMember", "removeMember", "refreshMember"].includes(operation)) {
             yield* database("Unable to mark roster publication pending", sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${input.params.rosterId ?? ""}::uuid`)
           }
           return response
@@ -444,8 +444,16 @@ export class DashboardRosterOperations extends Context.Service<
             ? cause
             : new DatabaseFailure({ cause, message: "Roster transaction failed" }),
         ))
-        if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup"].includes(operation)) {
+        if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup", "manageMembers", "updateMember", "removeMember", "refreshMember"].includes(operation)) {
           yield* syncRosterPublication(sql, input, input.params.rosterId ?? "").pipe(Effect.provideService(DiscordApi, discord))
+        }
+        if (operation === "refreshRosters") {
+          const serverId = yield* requireServerId(input)
+          const pending = yield* database("Unable to find refreshed publications", sql<{ readonly roster_id: string }>`
+            SELECT publication.roster_id::text FROM roster_discord_publications publication
+            JOIN rosters roster ON roster.id = publication.roster_id
+            WHERE roster.server_id = ${serverId} AND publication.needs_sync ORDER BY publication.roster_id`)
+          for (const row of pending) yield* syncRosterPublication(sql, input, row.roster_id).pipe(Effect.provideService(DiscordApi, discord))
         }
         return response
       })
@@ -922,6 +930,7 @@ const refreshRosters = (sql: SqlClient.SqlClient, input: DashboardRosterOperatio
       yield* persistMember(sql, row.id, hydrated, position)
     }
     yield* database("Unable to revise refreshed roster", sql`UPDATE rosters SET revision = revision + 1, updated_at = now() WHERE id = ${row.id}::uuid`)
+    yield* database("Unable to mark refreshed publication pending", sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${row.id}::uuid`)
     rosters.push(yield* loadRosterJson(sql, row.id, serverId))
   }
   return json({ message: `Refreshed ${rosters.length} roster(s)`, refreshed_rosters: rosters })

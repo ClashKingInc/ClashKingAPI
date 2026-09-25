@@ -37,6 +37,33 @@ it('atomically admits multiple owned accounts only without questions and within 
   }).pipe(Effect.provide(layer), Effect.scoped))
 })
 
+it('serializes concurrent signups at the final maximum-signups boundary', async () => {
+  const guild = '6834567890123456877', users = ['7834567890123456877', '7834567890123456878'] as const
+  const tags = ['#8R7', '#8R8'] as const
+  const discord = Layer.succeed(DiscordApi, { request: (path: string) => Effect.succeed({ user: { id: path.split('/').at(-1), username: 'Concurrent member', avatar: null } }),
+    token: () => Effect.die('Unexpected OAuth') })
+  const layer = Layer.merge(db, DashboardRosterOperations.layer.pipe(Layer.provide(Layer.merge(db, discord))))
+  await Effect.runPromise(Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient, operations = yield* DashboardRosterOperations
+    yield* sql`INSERT INTO servers (id, name) VALUES (${guild}, 'Concurrent admission fixture')`
+    for (const [index, user] of users.entries()) {
+      yield* sql`INSERT INTO auth_users (user_id, provider) VALUES (${user}, 'discord')`
+      yield* sql`INSERT INTO player_links (tag, user_id, source) VALUES (${tags[index]!}, ${user}, 'bot')`
+    }
+    const rosterId = (yield* sql<{ id: string }>`INSERT INTO rosters (server_id, alias, signup_scope, max_signups)
+      VALUES (${guild}, 'One seat', 'anyone', 1) RETURNING id::text`)[0]!.id
+    const url = new URL(`https://api.clashk.ing/v2/server/${guild}/rosters/${rosterId}/submissions`)
+    const results = yield* Effect.all(users.map((user, index) => operations.execute('submitSignup', {
+      bindings, principal: { kind: 'user' as const, userId: user }, params: { serverId: guild, rosterId }, url,
+      request: new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerTag: tags[index], answers: {} }) }),
+    }).pipe(Effect.map(() => 'accepted'), Effect.catch(error => Effect.succeed(error._tag)))), { concurrency: 2 })
+    expect([...results].sort()).toEqual(['Conflict', 'accepted'])
+    expect(yield* sql<{ count: number }>`SELECT count(*)::integer AS count FROM roster_members WHERE roster_id = ${rosterId}::uuid`)
+      .toEqual([{ count: 1 }])
+  }).pipe(Effect.provide(layer), Effect.scoped))
+})
+
 it('limits account discovery and withdrawal to the signed owner without requiring verification', async () => {
   const guild = '6834567890123456899', actor = '7834567890123456899', other = '7834567890123456898'
   const discord = Layer.succeed(DiscordApi, { request: () => Effect.die('Withdrawal must not call Discord'), token: () => Effect.die('Unexpected OAuth') })

@@ -14,7 +14,8 @@ import { ServerAuthorization } from "../../src/server-authorization.js"
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use the schema-owned disposable Timescale harness")
 const serverId = "6934567890123456789", otherServerId = "8934567890123456789"
-const bindings = { HYPERDRIVE: { connectionString: databaseUrl } } as unknown as WorkerBindings
+const bindings = { HYPERDRIVE: { connectionString: databaseUrl },
+  ASSETS: { get: async () => ({ json: async () => ({ items: [] }) }) } } as unknown as WorkerBindings
 const db = databaseLayer(bindings)
 const access = { principal: { kind: "bot" as const }, manager: true, sections: {} }
 const discord = Layer.succeed(DiscordApi, { request: () => Effect.die("Unexpected Discord request"), token: () => Effect.die("Unexpected OAuth request") })

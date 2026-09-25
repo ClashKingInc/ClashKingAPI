@@ -50,13 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Migrations through 041 supply roster, CWL, and army analytics storage.
+      # Migrations through 042 supply roster, CWL, and army analytics storage.
       # Pin the reviewed contract so CI cannot silently test an older schema.
       - name: Checkout authoritative schema and fixture harness
         uses: actions/checkout@v6
         with:
           repository: ClashKingInc/DevKit
-          ref: a07172d6550404242728c5b5a20164892a536e36
+          ref: 465ef44ad087a611018991b0ed7a1a202f3efec4
           path: .schema-test
           token: ${{ secrets.SCHEMA_REPO_TOKEN || github.token }}
 

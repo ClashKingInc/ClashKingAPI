@@ -7,6 +7,7 @@ import {
   DashboardRosterOperations,
   dashboardRosterRuntimeRoutes,
   dispatchDashboardRoster,
+  rosterMemberAvatar,
 } from "./dashboard-roster-runtime.js"
 import type { WorkerBindings } from "./environment.js"
 import { Forbidden } from "./errors.js"
@@ -22,6 +23,20 @@ vi.mock("./static-metadata.js", () => ({ prepareStaticMetadata: () => Effect.voi
 const serverId = "1234567890123456789"
 const rosterId = "019fbb92-95e2-7781-9f22-e057c54de9ac"
 const bindings = {} as WorkerBindings
+
+describe("roster member avatars", () => {
+  const userId = "2534567890123456789"
+  it("prefers the guild avatar, including animated hashes", () => {
+    expect(rosterMemberAvatar(serverId, userId, { avatar: "a_guild", user: { avatar: "global" } }))
+      .toBe(`https://cdn.discordapp.com/guilds/${serverId}/users/${userId}/avatars/a_guild.gif`)
+  })
+  it("falls back to global and default avatars", () => {
+    expect(rosterMemberAvatar(serverId, userId, { avatar: null, user: { avatar: "global" } }))
+      .toBe(`https://cdn.discordapp.com/avatars/${userId}/global.png`)
+    expect(rosterMemberAvatar(serverId, userId, { avatar: null, user: { avatar: null } }))
+      .toBe(`https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`)
+  })
+})
 
 const roster = {
   id: rosterId, server_id: serverId, alias: "CWL", roster_type: "clan", signup_scope: "clan-only",
@@ -134,12 +149,12 @@ describe("Dashboard roster dispatcher", () => {
   it("does not authenticate a public roster and strips private fields using its response schema", async () => {
     const require = vi.fn(() => Effect.die("Public roster must not authorize"))
     const execute = () => Effect.succeed(Response.json({
-      id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [],
+      id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [], requireVerified: true,
       webhook_id: serverId, discord_user_id: serverId,
     }))
     const response = await run(new Request("https://api.clashk.ing/v2/public/rosters/public-id"), { require, execute })
     expect(require).not.toHaveBeenCalled()
-    expect(await response?.json()).toEqual({ id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [] })
+    expect(await response?.json()).toEqual({ id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [], requireVerified: true })
   })
 
   it("uses user-or-bot authentication without manager permission for the signup form", async () => {

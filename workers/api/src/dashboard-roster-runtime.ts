@@ -207,8 +207,9 @@ interface RosterRow {
 }
 
 interface RosterMemberRow {
-  readonly cached_discord?: { user?: { username?: string; global_name?: string; avatar?: string }; nick?: string; avatar?: string } | null
+  readonly cached_discord?: { user?: { username?: string; global_name?: string; avatar?: string | null }; nick?: string; avatar?: string | null } | null
   readonly discord_cache_ready?: boolean
+  readonly discord_guild_id: string
   readonly discord_avatar_url: string | null
   readonly discord_user_id: string | null
   readonly discord_username: string | null
@@ -233,6 +234,14 @@ const optional = <K extends string>(key: K, value: unknown) => value === null ||
   ? {}
   : { [key]: value } as Record<K, unknown>
 
+export const rosterMemberAvatar = (guildId: string, userId: string, cached: NonNullable<RosterMemberRow["cached_discord"]>): string => {
+  const guildHash = cached.avatar
+  const userHash = cached.user?.avatar
+  if (guildHash) return `https://cdn.discordapp.com/guilds/${guildId}/users/${userId}/avatars/${guildHash}.${guildHash.startsWith("a_") ? "gif" : "png"}`
+  if (userHash) return `https://cdn.discordapp.com/avatars/${userId}/${userHash}.${userHash.startsWith("a_") ? "gif" : "png"}`
+  return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`
+}
+
 const memberJson = (row: RosterMemberRow) => ({
   tag: row.tag,
   name: row.name,
@@ -249,9 +258,8 @@ const memberJson = (row: RosterMemberRow) => ({
   ...optional("war_pref", row.war_preference),
   ...optional("discord", row.discord_user_id),
   ...optional("discord_username", row.cached_discord?.nick ?? row.cached_discord?.user?.global_name ?? row.cached_discord?.user?.username),
-  ...optional("discord_avatar_url", row.discord_user_id && row.cached_discord ? row.cached_discord.user?.avatar
-    ? `https://cdn.discordapp.com/avatars/${row.discord_user_id}/${row.cached_discord.user.avatar}.png`
-    : `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(row.discord_user_id) >> 22n) % 6n)}.png` : null),
+  ...optional("discord_avatar_url", row.discord_user_id && row.cached_discord
+    ? rosterMemberAvatar(row.discord_guild_id, row.discord_user_id, row.cached_discord) : null),
   ...optional("discord_cache_ready", row.discord_cache_ready),
   ...optional("last_online", row.last_online === null ? null : iso(row.last_online)),
   ...optional("refreshed_at", row.refreshed_at === null ? null : iso(row.refreshed_at)),
@@ -283,7 +291,7 @@ const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
     SELECT member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
            member.league_id, member.league_name, member.hero_level_sum, member.max_percent, member.war_preference,
            link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url, member.last_online,
-           member.refreshed_at, member.signup_answers, cached.data AS cached_discord,
+           member.refreshed_at, member.signup_answers, roster.server_id AS discord_guild_id, cached.data AS cached_discord,
            shard.application_id IS NOT NULL AS discord_cache_ready
     FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
     LEFT JOIN player_links link ON link.tag = member.tag
@@ -1788,9 +1796,11 @@ const publicRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
     readonly description: string | null; readonly clan_name: string | null;
     readonly min_townhall: number | null; readonly max_townhall: number | null;
     readonly clan_tag: string | null; readonly badge_token: string | null; readonly updated_at: Date | string;
+    readonly require_verified: boolean;
   }>`
     SELECT roster.id::text, roster.public_share_id, roster.alias, NULLIF(roster.description, '') AS description,
-      clan.name AS clan_name, roster.clan_tag, clan.badge_token, roster.updated_at, roster.min_townhall, roster.max_townhall
+      clan.name AS clan_name, roster.clan_tag, clan.badge_token, roster.updated_at, roster.min_townhall, roster.max_townhall,
+      roster.require_verified
     FROM rosters roster LEFT JOIN basic_clan clan ON clan.tag = roster.clan_tag
     WHERE roster.public_share_id = ${input.params.publicShareId ?? ""} AND roster.public_enabled
   `)
@@ -1803,7 +1813,7 @@ const publicRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   }))
   return Response.json({
     id: row.public_share_id, name: row.alias, updatedAt: iso(row.updated_at), members,
-    minTownhall: row.min_townhall, maxTownhall: row.max_townhall,
+    minTownhall: row.min_townhall, maxTownhall: row.max_townhall, requireVerified: row.require_verified,
     ...optional("description", row.description), ...optional("clanName", row.clan_name),
     ...optional("clanTag", row.clan_tag),
     ...optional("clanBadgeUrl", row.badge_token === null ? null : `https://badges.clashk.ing/512/${row.badge_token.replace(/\.png$/u, "")}.png`),

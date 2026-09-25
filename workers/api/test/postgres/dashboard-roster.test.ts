@@ -209,9 +209,9 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
         serverId, rosterIds: [rosterId, destinationId], changes: [{ action: "move", playerTag, fromRosterId: rosterId, toRosterId: destinationId }],
       }))
       yield* run("/roster/membership-changes", "POST", { serverId, changes: proposal.changes, expectedRevisions: proposal.expectedRevisions })
-      yield* sql`UPDATE rosters SET public_enabled = true, public_share_id = 'RosterFixtureShare2026' WHERE id = ${destinationId}::uuid`
+      yield* sql`UPDATE rosters SET public_enabled = true, public_share_id = 'RosterFixtureShare2026', require_verified = true WHERE id = ${destinationId}::uuid`
       const shareId = (yield* sql<{ public_share_id: string }>`SELECT public_share_id FROM rosters WHERE id = ${destinationId}::uuid`)[0]!.public_share_id
-      expect(yield* run(`/public/rosters/${shareId}`)).toMatchObject({ members: [{ playerTag, name: "Fresh player" }] })
+      expect(yield* run(`/public/rosters/${shareId}`)).toMatchObject({ requireVerified: true, members: [{ playerTag, name: "Fresh player" }] })
       expect(yield* run(`/server/${serverId}/rosters/${destinationId}/withdraw`, "POST", { playerTag })).toEqual({ removed: true })
       yield* run(`/roster/${destinationId}/members/${encodeURIComponent(playerTag)}${query}`, "DELETE")
       yield* run(`/roster/views/${view.id}${query}`, "DELETE")

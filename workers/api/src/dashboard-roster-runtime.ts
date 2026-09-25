@@ -1915,7 +1915,7 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
   if (rows.some((row) => Number(row.revision) !== expected[row.id])) {
     return json({ code: "conflict", message: "Roster data has changed since this proposal was created" }, 409)
   }
-  return yield* sql.withTransaction(Effect.gen(function* () {
+  const response = yield* sql.withTransaction(Effect.gen(function* () {
     const admissions = changes.filter((change) => change.action !== "remove")
     const owners = yield* lockRosterAdmissionOwners(sql, admissions.map((change) => change.playerTag))
     const locked = yield* lockRosterMembership(sql, serverId, rosterIds)
@@ -1960,6 +1960,9 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
       UPDATE rosters SET revision = revision + 1, updated_at = now()
       WHERE id = ANY(${rosterIds}::uuid[]) RETURNING id::text, revision
     `
+    yield* database("Unable to mark changed roster publications pending", sql`
+      UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ANY(${rosterIds}::uuid[])
+    `)
     return json({ applied: true, changeCount: changes.length, revisions: Object.fromEntries(revised.map((row) => [row.id, Number(row.revision)])) })
   })).pipe(
     Effect.catchTag("RosterConflict", (conflict) => Effect.succeed(json({ code: "conflict", message: conflict.message }, 409))),
@@ -1967,6 +1970,10 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
     Effect.mapError((cause) => cause instanceof NotFound || cause instanceof InvalidRequest || cause instanceof DatabaseFailure
       ? cause : new DatabaseFailure({ cause, message: "Unable to apply roster membership changes" })),
   )
+  if (response.ok) {
+    for (const id of rosterIds) yield* syncRosterPublication(sql, input, id, serverId)
+  }
+  return response
 })
 
 
@@ -2067,9 +2074,9 @@ interface RosterPublicationTarget {
   webhook_id: string | null; channel_id: string; message_id: string; mode: string; dashboard_url: string;
   join_label: string; remove_label: string; view_label: string;
 }
-const syncRosterPublication = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, id: string) => {
+const syncRosterPublication = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, id: string, serverIdOverride?: string) => {
   const sync = Effect.gen(function* () {
-    const serverId = yield* requireServerId(input)
+    const serverId = serverIdOverride ?? (yield* requireServerId(input))
     // Serialize only publication delivery, never a membership/roster row across Discord I/O.
     const targets = yield* database("Unable to load roster publication", sql<RosterPublicationTarget>`
       SELECT publication.* FROM roster_discord_publications publication JOIN rosters roster ON roster.id = publication.roster_id

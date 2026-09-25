@@ -20,6 +20,7 @@ vi.mock("../../src/war-archive-decoder.js", () => ({ decodeArchiveFrame: () => {
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Run through clashking_schemas/scripts/with-test-timescale.sh")
 const serverId = "1534567890123456789", userId = "2534567890123456789", channelId = "3534567890123456789"
+const destinationMessageId = "2534567890123456790"
 const clanTag = "#P0Y", playerTag = "#P0YJ"
 const player = { tag: playerTag, name: "Fresh player", townHallLevel: 17, trophies: 5200,
   clan: { tag: clanTag, name: "Fixture clan" }, leagueTier: { id: 29000022, name: "Legend League" },
@@ -41,8 +42,10 @@ const bindings = {
 const db = databaseLayer(bindings)
 const webhook = { id: "4534567890123456789", type: 1, application_id: bindings.DISCORD_CLIENT_ID, guild_id: serverId, channel_id: channelId, name: "ClashKing Rosters", token: "fixture-token" }
 let publicationPosts = 0
+let publicationPatches = 0
 const discord = Layer.succeed(DiscordApi, { request: (path, options) => {
   if (path.startsWith(`/webhooks/${webhook.id}/fixture-token?`) && options?.method === "POST") publicationPosts++
+  if (path.startsWith(`/webhooks/${webhook.id}/fixture-token/messages/`) && options?.method === "PATCH") publicationPatches++
   return Effect.succeed(path === `/channels/${channelId}`
   ? { id: channelId, guild_id: serverId, type: 0 }
   : path === "/users/@me" ? { id: bindings.DISCORD_CLIENT_ID, username: "ClashKing Beta", avatar: null }
@@ -205,10 +208,20 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       const destinationId = cloned.new_roster_id
       expect(yield* sql`SELECT webhook_id, message_id FROM rosters WHERE id = ${destinationId}::uuid`).toEqual([{ webhook_id: null, message_id: null }])
       expect(yield* sql`SELECT webhook_id, message_id FROM rosters WHERE id = ${rosterId}::uuid`).toEqual([{ webhook_id: webhook.id, message_id: userId }])
+      yield* sql`INSERT INTO roster_discord_publications
+        (roster_id, channel_id, message_id, mode, dashboard_url, join_label, remove_label, view_label, needs_sync, webhook_id)
+        SELECT ${destinationId}::uuid, channel_id, ${destinationMessageId}, mode, dashboard_url, join_label, remove_label, view_label, false, webhook_id
+        FROM roster_discord_publications WHERE roster_id = ${rosterId}::uuid`
       const proposal = Schema.decodeUnknownSync(DashboardRosterMembershipValidateEndpoint.response)(yield* run("/roster/membership-changes/validate", "POST", {
         serverId, rosterIds: [rosterId, destinationId], changes: [{ action: "move", playerTag, fromRosterId: rosterId, toRosterId: destinationId }],
       }))
+      const patchesBeforeMove = publicationPatches
       yield* run("/roster/membership-changes", "POST", { serverId, changes: proposal.changes, expectedRevisions: proposal.expectedRevisions })
+      expect(publicationPatches).toBe(patchesBeforeMove + 2)
+      expect(yield* sql`SELECT roster_id::text, needs_sync FROM roster_discord_publications WHERE roster_id = ANY(${[rosterId, destinationId]}::uuid[]) ORDER BY roster_id`)
+        .toEqual(expect.arrayContaining([
+          { roster_id: rosterId, needs_sync: false }, { roster_id: destinationId, needs_sync: false },
+        ]))
       yield* sql`UPDATE rosters SET public_enabled = true, public_share_id = 'RosterFixtureShare2026', require_verified = true WHERE id = ${destinationId}::uuid`
       const shareId = (yield* sql<{ public_share_id: string }>`SELECT public_share_id FROM rosters WHERE id = ${destinationId}::uuid`)[0]!.public_share_id
       expect(yield* run(`/public/rosters/${shareId}`)).toMatchObject({ requireVerified: true, members: [{ playerTag, name: "Fresh player" }] })

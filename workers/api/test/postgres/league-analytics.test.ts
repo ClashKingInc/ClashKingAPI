@@ -150,6 +150,17 @@ describe.sequential("code families against authoritative migration 017", () => {
       {cohort:"legend_i",days:2,attacks:4,triples:2,playerAttacks:3,playerTriples:2},
       {cohort:"top_200",days:1,attacks:2,triples:1,playerAttacks:2,playerTriples:1},
     ] })
+    await run(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO army_family_members(share_code,family_id)
+        SELECT 'u3x0',family_id FROM army_families WHERE representative_share_code='u3x0'`
+      yield* sql`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,battle_mode,direction,player_town_hall,opponent_town_hall,
+        stars,destruction_percentage,duration_seconds,looted_resources,share_code)
+        SELECT '#2','#P','2026-09-09T05:10:00Z'::timestamptz + interval '1 minute' * value,2,1,18,18,3,100,100,'{}','u3x0'
+        FROM generate_series(0,4) AS value`
+    }))
+    expect((await run(queryLegendPlayerComparisons("#2", new Date("2026-09-09T06:00:00Z")))).army)
+      .toEqual(comparisons.army)
     expect(await run(queryLegendPlayerComparisons("#P", new Date("2026-09-09T06:00:00Z")))).not.toHaveProperty("army")
     const history = await run(queryPlayerLeagueHistory("#2", new URLSearchParams(), new Date("2026-09-09T06:00:00Z")))
     expect(history.items.filter(item => item.mode === "legend")).toHaveLength(2)

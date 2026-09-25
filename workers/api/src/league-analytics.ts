@@ -236,6 +236,8 @@ export const queryLegendPlayerComparisons = (rawTag: string, now = new Date()) =
       JOIN army_family_members member ON member.share_code=battle.share_code
       WHERE battle.player_tag=$1 AND battle.battle_mode=2 AND battle.direction=1
         AND battle.battle_time >= $2::timestamptz AND battle.battle_time < $3::timestamptz
+        AND (battle.battle_time AT TIME ZONE 'UTC' - INTERVAL '5 hours 10 minutes')::date
+          < (($3::timestamptz AT TIME ZONE 'UTC') - INTERVAL '5 hours 10 minutes')::date
       GROUP BY member.family_id ORDER BY attack_count DESC,member.family_id LIMIT 1
     ), covered AS (
       SELECT stats.day,stats.cohort,stats.family_id,stats.attack_count,stats.three_star_count

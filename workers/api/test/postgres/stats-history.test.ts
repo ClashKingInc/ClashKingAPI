@@ -39,6 +39,9 @@ describe("public statistics history against authoritative migrations", () => {
       { period: "2026-07-01", wars: 1, accounts: 30, townHalls: [{level:16,count:20},{level:15,count:10}], draws: 0, missedAttacks: 2 },
       { period: "2026-08-01", wars: 3, accounts: 100, townHalls: [{level:16,count:80},{level:15,count:20}], draws: 2, missedAttacks: 1 },
     ])
+    const allRetained = { ...time, "time[after]": "2012-01-01" }
+    expect(await run(queryWarHitrates(new URLSearchParams({ ...allRetained, townHall: "16" })))).toEqual(hitrates)
+    expect(await run(queryWarSummary(new URLSearchParams(allRetained)))).toEqual(summary)
     const grouped = await run(queryWarSummary(new URLSearchParams({ ...time, groupBy: "warSize", warSize: "15" }))) as { items: Array<Record<string, unknown>> }
     expect(grouped.items).toEqual([
       { period: "2026-07-01", warSize: 15, wars: 1, accounts: 30, townHalls: [{level:16,count:20},{level:15,count:10}], draws: 0 },

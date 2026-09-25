@@ -20,7 +20,7 @@ it.each([200, 302, 403])("stages images without following redirects (HTTP %s)", 
     return response
   })
   vi.stubGlobal("fetch", fetchMock)
-  const query = vi.fn().mockImplementationOnce(() => Effect.succeed([{ image_url: null }]))
+  const query = vi.fn().mockImplementationOnce(() => Effect.succeed([{ image_url: null, server_id: null, channel_id: null }]))
     .mockImplementation(() => Effect.succeed([{ image_url: imageUrl }]))
   const put = vi.fn(async () => ({ key: "test" }))
   const bindings = Object.assign({} as WorkerBindings, { MEDIA: { put } })
@@ -43,4 +43,19 @@ it.each([200, 302, 403])("stages images without following redirects (HTTP %s)", 
     expect(query).toHaveBeenCalledOnce()
   }
   expect(fetchMock).toHaveBeenCalledExactlyOnceWith(new URL(source), { redirect: "manual", signal: expect.any(AbortSignal) })
+})
+
+it("does not use legacy staging to add images to a converted base", async () => {
+  const fetchMock = vi.fn()
+  vi.stubGlobal("fetch", fetchMock)
+  const query = vi.fn(() => Effect.succeed([{ image_url: null, server_id: "123", channel_id: "456" }]))
+  const layer = BotAdjacentStore.layer.pipe(Layer.provide(Layer.mergeAll(
+    Layer.succeed(SqlClient.SqlClient, Object.assign({} as SqlClient.SqlClient, { unsafe: query })),
+    Layer.mock(DiscordApi, {}), WorkerEnvironment.layer({} as WorkerBindings),
+  )))
+  await expect(Effect.runPromise(Effect.gen(function* () {
+    return yield* (yield* BotAdjacentStore).stageLegacyBaseImage("157912", 2, "https://cdn.discordapp.com/attachments/123/456/image.jpg")
+  }).pipe(Effect.provide(layer)))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+  expect(fetchMock).not.toHaveBeenCalled()
+  expect(query).toHaveBeenCalledOnce()
 })

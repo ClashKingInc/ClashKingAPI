@@ -158,6 +158,17 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
   const current = (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
     WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]), "Failed to load base"))[0]
   if (current === undefined) return yield* new NotFound({ message: "Base not found" })
+  if (body.baseLink !== normalizeBaseLink(current.base_link)) {
+    return yield* new InvalidRequest({ message: "A base layout link cannot be changed" })
+  }
+  const currentImages = current.images ?? []
+  if (body.images.length === 0 && currentImages.length > 0) {
+    return yield* new InvalidRequest({ message: "At least one base image must remain" })
+  }
+  const retainedImages = currentImages.filter((image) => body.images.includes(image))
+  if (JSON.stringify(retainedImages) !== JSON.stringify(body.images)) {
+    return yield* new InvalidRequest({ message: "Base images cannot be added, replaced, or reordered; only extra images may be removed" })
+  }
   if (![current.server_id, current.channel_id, current.message_id].every(positiveId)) {
     return yield* new InvalidRequest({ message: "Base has an invalid stored Discord message location" })
   }
@@ -173,8 +184,10 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
     return yield* patched.failure
   }
   const persisted = yield* sql.withTransaction(Effect.gen(function* () {
-    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET base_link=$1,description=$2,images=$5::text[]
-      WHERE id=$3::bigint AND server_id=$4 AND channel_id IS NOT NULL RETURNING id::text`, [body.baseLink, body.description, id, serverId, body.images])
+    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET description=$1,images=$4::text[]
+      WHERE id=$2::bigint AND server_id=$3 AND channel_id IS NOT NULL
+      AND COALESCE(array_remove(images,NULL),'{}'::text[]) @> $4::text[]
+      RETURNING id::text`, [body.description, id, serverId, body.images])
     if (updated[0] === undefined) return undefined
     return (yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base WHERE base.id=$1::bigint`, [id]))[0]
   })).pipe(Effect.result)
@@ -188,12 +201,18 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
     return yield* new DatabaseFailure({ cause: persisted.failure,
       message: "Base database update outcome is unknown after Discord changed. Do not retry automatically" })
   }
-  const restored = yield* patchBaseMessage(discord, current, editableRow(current), bindings).pipe(Effect.result)
+  // A concurrent removal must not be undone by restoring our stale snapshot.
+  const restoreTarget = persisted._tag === "Success"
+    ? (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
+      WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]), "Failed to reload base after concurrent update"))[0]
+    : current
+  if (restoreTarget === undefined) return yield* new NotFound({ message: "Base not found" })
+  const restored = yield* patchBaseMessage(discord, restoreTarget, editableRow(restoreTarget), bindings).pipe(Effect.result)
   if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
     cause: { database: persisted, rollback: restored.failure },
     message: "Base was not updated in the database and the Discord rollback failed. Do not retry automatically",
   })
-  if (persisted._tag === "Success") return yield* new NotFound({ message: "Base not found" })
+  if (persisted._tag === "Success") return yield* new InvalidRequest({ message: "Base images changed while saving; reload the base before editing" })
   return yield* new DatabaseFailure({ cause: persisted.failure, message: "Failed to update base; the Discord message was restored" })
 })
 const Channel = Schema.Struct({ id: DecimalSnowflake, guild_id: Schema.optionalKey(DecimalSnowflake), type: Schema.Number })

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { SqlClient } from "effect/unstable/sql"
 import { describe, expect, it } from "vitest"
-import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership } from "./dashboard-roster-membership.js"
+import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership, requireRosterServerClans } from "./dashboard-roster-membership.js"
 
 const rosterId = "019fbb92-95e2-7781-9f22-e057c54de9ac"
 const serverId = "1234567890123456789"
@@ -17,6 +17,23 @@ const makeSql = (rows: (statement: string, values: readonly unknown[]) => readon
 }
 
 describe("retained Dashboard roster membership guards", () => {
+  it("rejects creation on a server without linked clans", async () => {
+    const { sql } = makeSql()
+    await expect(Effect.runPromise(requireRosterServerClans(sql, serverId))).rejects.toMatchObject({ _tag: "InvalidRequest", message: "Add a clan to this server before creating a roster" })
+  })
+
+  it("rejects a clan belonging to a different server", async () => {
+    const { sql } = makeSql(() => [{ tag: "#P0Y" }])
+    await expect(Effect.runPromise(requireRosterServerClans(sql, serverId, "#P2Y"))).rejects.toMatchObject({ _tag: "InvalidRequest" })
+  })
+
+  it("accepts a linked clan and locks the destination server's clan rows", async () => {
+    const { sql, calls } = makeSql(() => [{ tag: "#P0Y" }])
+    await Effect.runPromise(requireRosterServerClans(sql, serverId, "#P0Y"))
+    expect(calls[0]?.values).toEqual([serverId])
+    expect(calls[0]?.statement).toContain("FOR SHARE")
+  })
+
   it("locks canonical rows without requiring deferred capacity columns", async () => {
     const { sql, calls } = makeSql(() => [{ id: rosterId, revision: "1", max_accounts_per_user: null }])
     await Effect.runPromise(lockRosterMembership(sql, serverId, [rosterId, rosterId]))
@@ -45,10 +62,10 @@ describe("retained Dashboard roster membership guards", () => {
   it("checks affected canonical owners without inventing a global roster size", async () => {
     const { sql, calls } = makeSql()
     await Effect.runPromise(assertRosterMembershipLimits(sql, [rosterId], ["10"]))
-    expect(calls).toHaveLength(2)
-    expect(calls[1]?.statement).toContain("JOIN player_links link ON link.tag = member.tag")
-    expect(calls[1]?.statement).toContain("HAVING count(*) > roster.max_accounts_per_user")
-    expect(calls[1]?.values).toEqual([[rosterId], false, ["10"]])
+    expect(calls).toHaveLength(3)
+    expect(calls[2]?.statement).toContain("JOIN player_links link ON link.tag = member.tag")
+    expect(calls[2]?.statement).toContain("HAVING count(*) > roster.max_accounts_per_user")
+    expect(calls[2]?.values).toEqual([[rosterId], false, ["10"]])
   })
 
   it("rejects an exceeded per-user cap", async () => {

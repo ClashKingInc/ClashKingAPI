@@ -28,11 +28,13 @@ describe("Bot descriptors sharing an existing Dashboard operation", () => {
     expect(bot.successStatus).toBe(canonical.successStatus)
   })
 
-  it("accepts the canonical linked-account omissions and optional token", () => {
+  it("accepts canonical linked-account omissions and requires token for new links", () => {
     const payload = { items: [{ user_id: "123456789012345678", player_tag: "#P0Y", order_index: 0,
       is_verified: false, hidden: false, added_at: "2026-09-04T00:00:00Z" }] }
     expect(Schema.decodeUnknownSync(botServer.BotAccountsEndpoint.response)(payload)).toEqual(payload)
-    expect(Schema.encodeUnknownSync(botServer.BotLinkAccountEndpoint.body)({ player_tag: "#P0Y" })).toEqual({ player_tag: "#P0Y" })
+    expect(Schema.encodeUnknownSync(botServer.BotLinkAccountEndpoint.body)({ player_tag: "#P0Y", api_token: "valid" }))
+      .toEqual({ player_tag: "#P0Y", api_token: "valid" })
+    expect(() => Schema.decodeUnknownSync(botServer.BotLinkAccountEndpoint.body)({ player_tag: "#P0Y" })).toThrow()
   })
 
   it("retains the canonical bans actor query", () => {

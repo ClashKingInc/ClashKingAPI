@@ -1,11 +1,16 @@
 import {
   AppConfigResponse,
   GroupedCountsResponse,
+  ClanMemberBinsResponse,
   GlobalCounts,
   HomeActivityRequest,
   HomeActivityResponse,
   HealthResponse,
   StatsPerformanceResponse,
+  CwlParticipationResponse,
+  ArmySetupResponse,
+  ArmySetupTimelineResponse,
+  ArmySetupRankHistoryResponse,
   endpoints as apiEndpoints,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
@@ -46,18 +51,19 @@ import { proxyRequest } from "./proxy.js"
 import { queryHomeActivity } from "./home.js"
 import { readBoundedJson } from "./request-body.js"
 import {
-  queryCwlStats,
   queryGroupedCounts,
+  queryClanMemberBins,
   queryGlobalCounts,
   queryRankedStats,
   queryWarStats,
-  parseStatsCwlQuery,
   parseStatsRankedQuery,
   parseStatsWarQuery,
 } from "./stats.js"
 import { dispatchLeagueAnalytics } from "./league-analytics.js"
 import { dispatchLegends } from "./legends.js"
 import { dispatchStatsHistory } from "./stats-history.js"
+import { queryCwlParticipation } from "./cwl-participation.js"
+import { queryArmySetupList, queryArmySetupTimeline, queryArmySetupRankHistory } from "./army-setups.js"
 import { dispatchLegacyPublic } from "./legacy-public.js"
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" }
@@ -92,8 +98,9 @@ export const failureResponse = (failure: ApiFailure, requestId: string): Respons
       return json({ code: "payload_too_large", message: failure.message, request_id: requestId }, 413)
     case "UnprocessableEntity":
       return json({ code: "unprocessable_entity", message: failure.message, request_id: requestId }, 422)
-    case "DatabaseFailure":
     case "UpstreamUnavailable":
+      return json({ code: "upstream_unavailable", message: failure.message, request_id: requestId }, 503)
+    case "DatabaseFailure":
       return json({ code: "upstream_unavailable", message: failure.message, request_id: requestId }, 503)
   }
 }
@@ -231,9 +238,14 @@ export const route = (request: Request, bindings: WorkerBindings,
       return yield* encodeJson(StatsPerformanceResponse, yield* queryWarStats(query))
     }
     if (request.method === "GET" && url.pathname === "/v2/stats/cwl") {
-      const query = yield* parseStatsQuery(() => parseStatsCwlQuery(url.searchParams))
-      return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(query))
+      return yield* encodeJson(CwlParticipationResponse, yield* queryCwlParticipation(url.searchParams))
     }
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups")
+      return yield* encodeJson(ArmySetupResponse, yield* queryArmySetupList(url.searchParams))
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups/timeline")
+      return yield* encodeJson(ArmySetupTimelineResponse, yield* queryArmySetupTimeline(url.searchParams))
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups/rank-history")
+      return yield* encodeJson(ArmySetupRankHistoryResponse, yield* queryArmySetupRankHistory(url.searchParams))
     const analyticsResponse = yield* dispatchLeagueAnalytics(request)
     if (analyticsResponse !== undefined) return analyticsResponse
     const legendResponse = yield* dispatchLegends(request)
@@ -260,6 +272,9 @@ export const route = (request: Request, bindings: WorkerBindings,
     }
     if (request.method === "GET" && url.pathname === "/v2/counts/clans/capital-leagues") {
       return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("capital_league_id"))
+    }
+    if (request.method === "GET" && url.pathname === "/v2/counts/clans/member-bins") {
+      return yield* encodeJson(ClanMemberBinsResponse, yield* queryClanMemberBins)
     }
     if (url.pathname.startsWith("/proxy/v1/")) {
       const auth = yield* AuthIdentity

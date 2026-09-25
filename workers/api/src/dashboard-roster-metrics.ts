@@ -66,6 +66,7 @@ const townhallBenchmarks = (sql: SqlClient.SqlClient, start: Date, end: Date) =>
  * missing observation is null rather than zero. No persistent metric cache exists. */
 export const queryDynamicRosterMetric = (
   rosterId: string, metricId: string, parameters: Readonly<Record<string, JsonValue>> = {}, now = new Date(),
+  attackCounts?: Map<string, number>,
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const normalized = normalizeRosterMetricParameters(metricId, parameters)
@@ -105,6 +106,7 @@ export const queryDynamicRosterMetric = (
   const values = new Map<string, number | null>()
   for (const { tag } of members) {
     const player = players.get(tag)
+    attackCounts?.set(tag, player?.attacks ?? 0)
     if (player === undefined) { values.set(tag, null); continue }
     if (cwl) { values.set(tag, player.stars); continue }
     const rate = 100 * player.triples / player.attacks

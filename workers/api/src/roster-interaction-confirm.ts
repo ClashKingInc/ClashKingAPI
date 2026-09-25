@@ -107,7 +107,7 @@ export const confirmRosterOperation = (operationId: string, proof: typeof Runtim
       return yield* new Conflict({ message: "Selected roster membership changed; start a new form" })
     }
     const roster = (yield* sql<{ roster_role_id: string | null; min_townhall: number | null; max_townhall: number | null;
-      signup_scope: "clan-only" | "family-wide"; clan_tag: string | null; server_id: string }>`
+      signup_scope: "clan-only" | "family-only" | "anyone"; clan_tag: string | null; server_id: string }>`
       SELECT roster_role_id, min_townhall, max_townhall, signup_scope, clan_tag, server_id FROM rosters WHERE id = ${row.roster_id}::uuid`)[0]!
     let groupRoleId: string | null = null
     const groupId = action === "signup" && cursor.draft.selectedGroup !== "main" ? cursor.draft.selectedGroup : null

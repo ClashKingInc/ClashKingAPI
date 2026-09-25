@@ -379,11 +379,10 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
   return { message: operation === "createServerRole" ? "Server role created." : "Server role updated.", role: roleValue(yield* requireRow(rows, "Server or role not found")) }
 }))
 
-const settingsFields: Readonly<Record<string, string>> = { require_api_token_when_linking: "require_api_token_when_linking", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
+const settingsFields: Readonly<Record<string, string>> = { embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
 const loadSettings = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, auto_eval_nickname, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
-    require_api_token_when_linking,
     jsonb_build_object('clan', link_parse_clan, 'army', link_parse_army, 'player', link_parse_player, 'base', link_parse_base, 'show', link_parse_show) AS link_parse FROM servers WHERE id = ${serverId}`
   const row = yield* requireRow(rows, "Server not found")
   const triggers = yield* sql<{ trigger: string }>`SELECT trigger FROM server_autoeval_triggers WHERE server_id = ${serverId} ORDER BY position, trigger`
@@ -396,9 +395,6 @@ const loadSettings = (serverId: string) => Effect.gen(function* () {
 const updateSettings = (serverId: string, body: JsonRecord) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
-  if (body.require_api_token_when_linking !== undefined && typeof body.require_api_token_when_linking !== "boolean") {
-    return yield* new InvalidRequest({ message: "require_api_token_when_linking must be a boolean" })
-  }
   for (const field of ["autoeval_log", "full_whitelist_role"]) if (body[field] !== undefined && body[field] !== null) yield* discordDestinationId(body[field], field)
   yield* sql.withTransaction(Effect.gen(function* () {
     const existing = yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`

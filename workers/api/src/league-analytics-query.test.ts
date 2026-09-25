@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { parseArmySearchQuery, parseLeagueHitRateQuery, parseLegendAggregateWindow, parseLegendPlayerSeriesQuery, parsePlayerHistoryWindow } from "./league-analytics-query.js"
+import { parseArmySearchQuery, parseLeagueHitRateQuery, parseLegendAggregateWindow, parseLegendDaysQuery, parseLegendPlayerSeriesQuery, parsePlayerHistoryWindow } from "./league-analytics-query.js"
 
 const run = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect)
 
@@ -46,6 +46,11 @@ describe("league analytics query parsing", () => {
       .resolves.toMatchObject({ limit: 250, window: { calendarDays: 1 } })
     await expect(run(parseArmySearchQuery(new URLSearchParams("time%5Bafter%5D=2026-09-07&time%5Bbefore%5D=2026-09-08&limit=11"))))
       .rejects.toMatchObject({ _tag: "InvalidRequest" })
+  })
+
+  it("accepts the additive top-100 Legend cohort", async () => {
+    await expect(run(parseLegendDaysQuery(new URLSearchParams("cohort=top_100"), new Date("2026-09-09T05:10:00Z"))))
+      .resolves.toMatchObject({ cohort: "top_100" })
   })
 
   it("parses stable smart filters without Town Hall or mode", async () => {

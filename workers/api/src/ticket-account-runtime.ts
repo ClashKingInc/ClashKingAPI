@@ -4,7 +4,6 @@ import { SqlClient } from "effect/unstable/sql"
 
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
-import { loadServerLinkTokenPolicy } from "./server-scoped-linking.js"
 import { loadTicketPanelSource } from "./ticket-panel-source.js"
 import { requireTicketStaff } from "./ticket-staff-authorization.js"
 
@@ -85,12 +84,11 @@ const linkForm = (preparationId: string, interaction: VerifiedRuntimeInteraction
   if (source.updated_at !== prepared.source_updated_at) {
     return yield* new Forbidden({ message: "Ticket linking source has changed", reason: "wrong_message" })
   }
-  const requireApiToken = yield* loadServerLinkTokenPolicy(prepared.server_id)
   return { outcome: "form" as const, preparationId: prepared.id, expiresAt: new Date(prepared.expires_at).toISOString(),
     form: { kind: "modal" as const, customId: `ck:ticket:link-submit:${prepared.id}`, title: "Link an account",
       fields: [
         { customId: "player_tag", label: "Player tag", required: true, style: "short" as const, maxLength: 12 },
-        { customId: "api_token", label: "API token", required: requireApiToken, style: "short" as const, maxLength: 12 },
+        { customId: "api_token", label: "API token", required: true, style: "short" as const, maxLength: 12 },
       ] },
   }
 })

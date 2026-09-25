@@ -10,6 +10,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare"
 import { getPlatformProxy } from "wrangler"
 import { localProviderOrigin } from "./local-provider-origin.mjs"
 import { createLocalAdminIdentity } from "./local-admin-identity.mjs"
+import { workspaceOrigin, allowedProductionRead } from "./local-workspace-policy.mjs"
 
 // Interactive development uses local-api-database.mjs and a persistent volume.
 // The disposable schema harness remains a separate, explicit test-only path.
@@ -39,8 +40,13 @@ const exactOrigin = (value, allowed, name) => {
   }
   return value
 }
-exactOrigin(dashboardOrigin, ["http://localhost:3002", "https://local-dash.clashk.ing"], "CLASHKING_LOCAL_DASHBOARD_ORIGIN")
-exactOrigin(publicOrigin, [origin, "https://local-api.clashk.ing"], "CLASHKING_LOCAL_PUBLIC_ORIGIN")
+if (process.env.CLASHKING_LOCAL_CUSTOM_ORIGINS === "1") {
+  workspaceOrigin(dashboardOrigin)
+  workspaceOrigin(publicOrigin)
+} else {
+  exactOrigin(dashboardOrigin, ["http://localhost:3002", "https://local-dash.clashk.ing"], "CLASHKING_LOCAL_DASHBOARD_ORIGIN")
+  exactOrigin(publicOrigin, [origin, "https://local-api.clashk.ing"], "CLASHKING_LOCAL_PUBLIC_ORIGIN")
+}
 const discordClientId = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_ID ?? ""
 const discordClientSecret = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_SECRET ?? ""
 const discordBotToken = process.env.CLASHKING_LOCAL_DISCORD_BOT_TOKEN ?? ""
@@ -103,6 +109,14 @@ const discordOnly = async request => {
   const certificates = localAdmin?.certificates(request)
   if (certificates !== undefined) return certificates
   const url = new URL(request.url)
+  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1" && allowedProductionRead(request)) {
+    const headers = new Headers()
+    for (const name of ["range", "accept", "if-none-match", "if-modified-since"]) {
+      const value = request.headers.get(name)
+      if (value !== null) headers.set(name, value)
+    }
+    return fetch(url, { method: request.method, headers, redirect: "error" })
+  }
   if (url.protocol !== "https:" || url.hostname !== "discord.com") return unavailable()
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
   return fetch(url, { method: request.method, headers: request.headers, body })
@@ -129,7 +143,7 @@ const result = await build({
 })
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: "0.0.0.0", port,
-  ...(persistent ? { resourcePersistencePath: resolve('.local/worker-storage') } : {}),
+  ...(persistent ? { resourcePersistencePath: resolve(process.env.CLASHKING_LOCAL_STORAGE_ROOT ?? '.local/worker-storage') } : {}),
   modulesRoot: "/local-api",
   modules: [
     { type: "ESModule", path: "/local-api/index.js", contents: result.outputFiles[0].text },
@@ -181,6 +195,20 @@ process.once("SIGINT", stop)
 process.once("SIGTERM", stop)
 try {
   await runtime.ready
+  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1") {
+    const source = readFileSync("workers/api/src/static-metadata.ts", "utf8")
+    const categories = JSON.parse(source.match(/const categories = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
+    const locales = JSON.parse(source.match(/const locales = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
+    const staticBucket = await runtime.getR2Bucket("ASSETS")
+    for (const key of [...categories.map(name => `static_data/${name}.json`), ...locales.map(name => `translations/${name}.json`)]) {
+      const response = await fetch(`https://assets.clashk.ing/${key}`, { redirect: "error", signal: AbortSignal.timeout(15000) })
+      if (!response.ok) throw new Error(`Production static asset ${key} returned ${response.status}`)
+      const body = await response.text()
+      JSON.parse(body)
+      await staticBucket.put(key, body, { httpMetadata: { contentType: "application/json" } })
+    }
+    console.log(JSON.stringify({ event: "production_static_assets_cached", files: categories.length + locales.length }))
+  }
   if (localAdmin) console.log(JSON.stringify({event:'local_admin_identity_ready',origin:await localAdmin.listen(),identity:'local-developer'}))
   if (staticAssetsRoot !== "") {
     if (!isAbsolute(staticAssetsRoot)) throw new Error("CLASHKING_LOCAL_STATIC_ASSETS_ROOT must be an absolute path")

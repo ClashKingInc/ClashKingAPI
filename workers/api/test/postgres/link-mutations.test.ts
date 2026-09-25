@@ -1,4 +1,4 @@
-import { AccountConflictErrorResponse, LinksAddEndpoint, LinksVisibilityEndpoint } from "@clashking/api-contracts"
+import { LinksAddEndpoint, LinksVisibilityEndpoint } from "@clashking/api-contracts"
 import { PgClient } from "@effect/sql-pg"
 import { Effect, Layer, Redacted, Schema } from "effect"
 import { SqlClient } from "effect/unstable/sql"
@@ -60,7 +60,7 @@ describe("link mutations against authoritative Goose migrations", () => {
     expect(yield* execute(request("/links/930000000000000001/last-login", "PATCH", {}))).toBeUndefined()
     expect(yield* execute(request("/auth/me", "GET"))).toBeUndefined()
     for (const [response, expected] of [[new Response(null, { status: 404 }), "NotFound"], [new Response(null, { status: 503 }), "UpstreamUnavailable"], [Response.json({ tag: "#WRONG", name: "Wrong", townHallLevel: 18 }), "UpstreamUnavailable"]] as const) {
-      const result = yield* dispatchLinkMutations(request("/links/930000000000000001", "POST", { player_tag: "#QPL" }), { CLASH_PROXY: { fetch: async () => response } }).pipe(Effect.provide(identity(principal)), Effect.flip)
+      const result = yield* dispatchLinkMutations(request("/links/930000000000000001", "POST", { player_tag: "#QPL", api_token: "valid" }), { CLASH_PROXY: { fetch: async () => response } }).pipe(Effect.provide(identity(principal)), Effect.flip)
       expect(result).toMatchObject({ _tag: expected })
     }
   })))
@@ -68,25 +68,23 @@ describe("link mutations against authoritative Goose migrations", () => {
   it("enforces subject ownership, JSON schemas, normalized tags and verification before writes", () => run(Effect.gen(function* () {
     const principal = user("931000000000000001")
     proxy.fetch.mockClear()
-    expect(yield* json(principal, "/links/other", "POST", { player_tag: "#QPL" }).pipe(Effect.flip)).toMatchObject({ _tag: "Forbidden" })
+    expect(yield* json(principal, "/links/other", "POST", { player_tag: "#QPL", api_token: "valid" }).pipe(Effect.flip)).toMatchObject({ _tag: "Forbidden" })
     expect(proxy.fetch).not.toHaveBeenCalled()
     for (const ordered_tags of [[], ["qpl", "#QPL"]]) {
       expect(yield* json(principal, "/links/931000000000000001/order", "PUT", { ordered_tags }).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
     }
     expect(yield* json(principal, "/links/931000000000000001/%23QPL", "PATCH", {}).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
-    expect(yield* json(principal, "/links/931000000000000001", "POST", { player_tag: "##" }).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
+    expect(yield* json(principal, "/links/931000000000000001", "POST", { player_tag: "##", api_token: "valid" }).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
+    expect(yield* json(principal, "/links/931000000000000001", "POST", { player_tag: "#QPL" }).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
     expect(yield* json(principal, "/links/931000000000000001", "POST", { player_tag: "#QPL", api_token: "wrong" }).pipe(Effect.flip)).toMatchObject({ _tag: "Forbidden" })
   })))
 
-  it("claims an absent player once under concurrent bot claims and emits the canonical conflict snapshot", () => run(Effect.gen(function* () {
+  it("verifies both concurrent bot claims before allowing an ownership transfer", () => run(Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
-    const responses = yield* Effect.all(["932000000000000001", "932000000000000002"].map((id) => dispatch({ kind: "bot" }, `/links/${id}`, "POST", { player_tag: "qpy" })), { concurrency: 2 })
-    expect(responses.map((response) => response?.status).sort()).toEqual([200, 409])
-    const conflict = responses.find((response) => response?.status === 409)!
-    const body = Schema.decodeUnknownSync(AccountConflictErrorResponse)(yield* Effect.promise(() => conflict.json()))
-    expect(body.account).toEqual({ tag: "#QPY", name: "Player", townHallLevel: 18, hidden: false, is_verified: false })
-    expect(conflict.headers.get("cache-control")).toBe("no-store")
+    const responses = yield* Effect.all(["932000000000000001", "932000000000000002"].map((id) => dispatch({ kind: "bot" }, `/links/${id}`, "POST", { player_tag: "qpy", api_token: "valid" })), { concurrency: 2 })
+    expect(responses.map((response) => response?.status)).toEqual([200, 200])
     expect(yield* sql`SELECT tag FROM player_links WHERE tag = '#QPY'`).toHaveLength(1)
+    expect(yield* sql`SELECT is_verified FROM player_links WHERE tag = '#QPY'`).toEqual([{ is_verified: true }])
     expect(yield* sql`SELECT user_id FROM auth_users WHERE user_id IN ('932000000000000001','932000000000000002')`).toEqual([])
   })))
 
@@ -96,7 +94,7 @@ describe("link mutations against authoritative Goose migrations", () => {
     const added = Schema.decodeUnknownSync(LinksAddEndpoint.response)(yield* json(user(a), `/links/${a}`, "POST", { player_tag: "#QPQ", api_token: "valid" }))
     expect(added.account.is_verified).toBe(true)
     yield* json(user(a), `/links/${a}/%23QPQ`, "PATCH", { hidden: true })
-    expect(yield* json(user(a), `/links/${a}`, "POST", { player_tag: "#QPQ" })).toMatchObject({ account: { is_verified: true, hidden: true } })
+    expect(yield* json(user(a), `/links/${a}`, "POST", { player_tag: "#QPQ", api_token: "valid" })).toMatchObject({ account: { is_verified: true, hidden: true } })
     yield* sql`INSERT INTO player_upgrades (player_tag, data) VALUES ('#QPQ','{"private":true}')`
     yield* sql`INSERT INTO player_upgrade_preferences (player_tag, preferences) VALUES ('#QPQ','{"private":true}')`
     yield* sql`INSERT INTO mobile_notification_accounts (user_id, player_tag, enabled) VALUES (${a}, '#QPQ',true)`
@@ -109,16 +107,14 @@ describe("link mutations against authoritative Goose migrations", () => {
     expect(yield* sql`SELECT tag FROM user_bookmarks WHERE user_id = ${b}`).toEqual([])
   })))
 
-  it("serializes additions, checks verified hiding/final verified removal and compacts order", () => run(Effect.gen(function* () {
+  it("serializes verified additions, permits hiding, and compacts order", () => run(Effect.gen(function* () {
     const id = "934000000000000001", principal = user(id), sql = yield* SqlClient.SqlClient
     yield* setupUser(id)
-    yield* Effect.all(["#QPR", "#QPC", "#QPG"].map((player_tag) => json(principal, `/links/${id}`, "POST", { player_tag })), { concurrency: 3 })
+    yield* Effect.all(["#QPR", "#QPC", "#QPG"].map((player_tag) => json(principal, `/links/${id}`, "POST", { player_tag, api_token: "valid" })), { concurrency: 3 })
     expect((yield* sql<{ order_index: number }>`SELECT order_index FROM player_links WHERE user_id = ${id} ORDER BY order_index`).map((row) => row.order_index)).toEqual([0, 1, 2])
-    expect(yield* json(principal, `/links/${id}/%23QPR`, "PATCH", { hidden: true }).pipe(Effect.flip)).toMatchObject({ _tag: "Forbidden" })
     yield* json(principal, `/links/${id}`, "POST", { player_tag: "#QPR", api_token: "valid" })
     const hidden = Schema.decodeUnknownSync(LinksVisibilityEndpoint.response)(yield* json(principal, `/links/${id}/%23QPR`, "PATCH", { hidden: true }))
     expect(hidden).toMatchObject({ player_tag: "#QPR", hidden: true, verified_at: expect.any(String), last_login: null })
-    expect(yield* json(principal, `/links/${id}/%23QPR`, "DELETE").pipe(Effect.flip)).toMatchObject({ _tag: "Conflict" })
     expect(yield* json(principal, `/links/${id}/order`, "PUT", { ordered_tags: ["#FOREIGN"] }).pipe(Effect.flip)).toMatchObject({ _tag: "InvalidRequest" })
     yield* json(principal, `/links/${id}/order`, "PUT", { ordered_tags: ["#QPC", "#QPG", "#QPR"] })
     yield* json(principal, `/links/${id}/%23QPC`, "DELETE")
@@ -148,13 +144,14 @@ describe("link mutations against authoritative Goose migrations", () => {
     const id = "938000000000000001", sql = yield* SqlClient.SqlClient
     yield* setupUser(id)
     const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
-    const delayed = { CLASH_PROXY: { fetch: async () => {
+    const delayed = { CLASH_PROXY: { fetch: async (input: RequestInfo | URL) => {
+      if (new URL(new Request(input).url).pathname.endsWith("/verifytoken")) return Response.json({ status: "ok" })
       started.resolve()
       await release.promise
       return Response.json({ tag: "#QPX", name: "Delayed", townHallLevel: 18 })
     } } }
     const results = yield* Effect.all([
-      dispatchLinkMutations(request(`/links/${id}`, "POST", { player_tag: "#QPX" }), delayed).pipe(Effect.provide(identity(user(id))), Effect.flip),
+      dispatchLinkMutations(request(`/links/${id}`, "POST", { player_tag: "#QPX", api_token: "valid" }), delayed).pipe(Effect.provide(identity(user(id))), Effect.flip),
       Effect.promise(() => started.promise).pipe(Effect.flatMap(() => deleteAccount(id)), Effect.ensuring(Effect.sync(() => release.resolve()))),
     ], { concurrency: 2 })
     expect(results[0]).toMatchObject({ _tag: "Unauthenticated" })

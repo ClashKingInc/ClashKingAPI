@@ -13,8 +13,9 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
 const name = process.env.CLASHKING_LOCAL_DB_CONTAINER ?? "clashking-rewrite-api-dev"
 const port = Number(process.env.CLASHKING_LOCAL_DB_PORT ?? "54329")
-if (!/^clashking-rewrite-api-[a-z0-9-]+$/u.test(name) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local database name/port")
-const volume = `${name}-data`
+if (!(name === 'clashking-timescale' || /^clashking-rewrite-api-[a-z0-9-]+$/u.test(name)) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local database name/port")
+const volume = process.env.CLASHKING_LOCAL_DB_VOLUME ?? `${name}-data`
+if (!/^clashking-[a-z0-9-]+-data$/u.test(volume)) throw new Error('Invalid local database volume')
 const label = "io.clashking.local=retained-api-persistent-v1"
 const databaseName = "clashking_dev"
 const importName = "clashking_import_pending"
@@ -51,6 +52,19 @@ if (!image?.includes("@sha256:") || migrations.join(",") !== [
   "020_player_leaderboard_snapshots.sql",
   "021_inline_base_images_votes.sql",
   "022_personal_army_library.sql",
+  "023_roster_signup_scope.sql",
+  "024_roster_admission_settings.sql",
+  "025_roster_discord_publications.sql",
+  "026_roster_publication_webhooks.sql",
+  "027_roster_embed_color.sql",
+  "028_roster_automation_event_offsets.sql",
+  "029_roster_default_capacity.sql",
+  "030_legend_daily_metadata.sql",
+  "031_legend_daily_pet_combos.sql",
+  "032_remove_server_link_token_policy.sql",
+  "033_cwl_participation.sql",
+  "034_daily_army_setups.sql",
+  "035_remove_army_analysis_timestamp.sql",
 ].join(",")) throw new Error("Unexpected authoritative retained API profile")
 
 function inspect() {

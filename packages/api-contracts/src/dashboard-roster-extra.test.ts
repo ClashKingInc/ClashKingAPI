@@ -12,10 +12,10 @@ import {
 } from "./dashboard-roster-extra.js"
 
 describe("canonical roster assistant and signup descriptors", () => {
-  it("registers eleven unique method/path pairs without fallback descriptors", () => {
+  it("registers sixteen unique method/path pairs without fallback descriptors", () => {
     const endpoints = Object.values(dashboardRosterExtraEndpoints)
-    expect(endpoints).toHaveLength(11)
-    expect(new Set(endpoints.map((endpoint) => `${endpoint.method} ${endpoint.path}`)).size).toBe(11)
+    expect(endpoints).toHaveLength(16)
+    expect(new Set(endpoints.map((endpoint) => `${endpoint.method} ${endpoint.path}`)).size).toBe(16)
   })
   it("distinguishes user context from dedicated metering-secret settlement", () => {
     expect(DashboardRosterAIContextEndpoint.auth).toBe("user")

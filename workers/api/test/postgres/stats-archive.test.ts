@@ -41,11 +41,22 @@ describe("canonical archive regular statistics", () => {
       expect(equal.metrics.averageStars).toBe(1.5)
       expect(equal.metrics.averageDestruction).toBe(70)
       expect(equal.metrics.threeStarRate).toBe(0.25)
+      expect(equal.breakdowns).toMatchObject([
+        { key: "TH18", metrics: { sampleSize: 4, threeStarRate: 0.25 } },
+      ])
       const before = yield* queryWarStats({ dates, equal_townhalls: false })
       expect(before.metrics.sampleSize).toBe(5)
       expect(before.metrics.averageStars).toBeCloseTo(1.8)
       expect(before.metrics.averageDestruction).toBeCloseTo(76)
       expect(before.metrics.daily).toHaveLength(2)
+      expect(before.breakdowns).toMatchObject([
+        { key: "TH18", metrics: { sampleSize: 5, threeStarRate: 0.4 } },
+      ])
+      const allRetained = yield* queryWarStats({
+        dates: { start_date: "2012-01-01", end_date: "2026-08-02" }, equal_townhalls: false,
+      })
+      expect(allRetained.metrics).toEqual(before.metrics)
+      expect(allRetained.dateRange).toMatchObject({ start: "2012-01-01T00:00:00.000Z" })
       const selected = yield* queryWarStats({ dates, townhall_level: 18, opponent_townhall_level: 17, equal_townhalls: false })
       expect(selected.metrics.sampleSize).toBe(1)
       expect(selected.metrics.threeStarRate).toBe(1)

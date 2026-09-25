@@ -117,13 +117,31 @@ describe("server base reads", () => {
 describe("managed base updates", () => {
   const editable = { baseLink: body.baseLink, images: body.images, description: "Updated base" }
 
-  it("explicitly clears old attachments and embeds when all images are removed", async () => {
+  it("rejects removing the final image before touching Discord", async () => {
     const f = fixture()
-    await f.run(UpdateBaseEndpoint, { body: { ...editable, images: [] } })
-    expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, {
-      method: "PATCH", files: [], body: expect.objectContaining({ content: editable.description, attachments: [], embeds: [] }),
-    })
+    await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, images: [] } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    expect(f.discord).not.toHaveBeenCalled()
     expect(f.mediaGet).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { ...editable, baseLink: "https://link.clashofclans.com/en?action=OpenLayout&id=OTHER" },
+    { ...editable, images: ["https://api.clashk.ing/v2/media/base_replacement.png"] },
+    { ...editable, images: [...body.images, "https://api.clashk.ing/v2/media/base_new.png"] },
+  ])("rejects replacement links and images before side effects (%j)", async (input) => {
+    const f = fixture()
+    await expect(f.run(UpdateBaseEndpoint, { body: input })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    expect(f.discord).not.toHaveBeenCalled()
+    expect(f.events).toEqual(["SELECT"])
+  })
+
+  it("allows removing an extra image but not reordering images", async () => {
+    const images = [...body.images, "https://api.clashk.ing/v2/media/base_second.png"]
+    const f = fixture({ query: () => Effect.succeed([{ ...row, images }]) })
+    await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, images: [...images].reverse() } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
+    expect(f.discord).not.toHaveBeenCalled()
+    await expect(f.run(UpdateBaseEndpoint, { body: editable })).resolves.toMatchObject({ id: baseId })
+    expect(f.discord).toHaveBeenCalledOnce()
   })
 
   it("replaces editable fields and inline images in one transaction", async () => {
@@ -131,7 +149,8 @@ describe("managed base updates", () => {
     const value = await f.run(UpdateBaseEndpoint, { body: editable })
     expect(Schema.decodeUnknownSync(UpdateBaseEndpoint.response)(value)).toMatchObject({ id: baseId, serverId })
     expect(f.events).toEqual(["SELECT", "PATCH", "UPDATE", "SELECT"])
-    expect(f.query.mock.calls[1]?.[1]).toEqual([body.baseLink, editable.description, baseId, serverId, editable.images])
+    expect(f.query.mock.calls[1]?.[1]).toEqual([editable.description, baseId, serverId, editable.images])
+    expect(f.query.mock.calls[1]?.[0]).not.toContain("SET base_link")
     expect(f.discord).toHaveBeenCalledWith(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", files: [expect.any(File)], body: {
       content: editable.description, embeds: [], allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: "base_test.png" }],
       components: [{ type: 1, components: [
@@ -185,7 +204,7 @@ describe("managed base updates", () => {
     await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, baseLink: "https://example.com/layout" } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
     await expect(f.run(UpdateBaseEndpoint, { body: { ...editable, images: [body.images[0]!, body.images[0]!] } })).rejects.toMatchObject({ _tag: "InvalidRequest" })
     const missing = fixture({ query: (statement) => Effect.succeed(statement.startsWith("UPDATE") ? [] : [row]) })
-    await expect(missing.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "NotFound" })
+    await expect(missing.run(UpdateBaseEndpoint, { body: editable })).rejects.toMatchObject({ _tag: "InvalidRequest", message: expect.stringContaining("reload") })
   })
 })
 

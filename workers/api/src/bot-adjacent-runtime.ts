@@ -8,7 +8,7 @@ import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
-import { commitServerScopedLink,readServerLinkTokenPolicy,requireServerLinkToken } from "./server-scoped-linking.js"
+import { commitServerScopedLink } from "./server-scoped-linking.js"
 import { prepareLink } from "./link-mutations.js"
 import { MAX_DASHBOARD_UPLOAD, uploadMediaFile } from "./dashboard-upload.js"
 
@@ -40,21 +40,18 @@ const reorderServerLinkOwner = (userId: string) => Effect.gen(function* () {
 })
 
 /** Caller must authorize server links write access before entering this store operation. */
-export const createDashboardServerLink = (bindings: LinkBindings, serverId: string, tag: string, userId: string, apiToken?: string) => Effect.gen(function* () {
+export const createDashboardServerLink = (bindings: LinkBindings, serverId: string, tag: string, userId: string, apiToken: string) => Effect.gen(function* () {
   const discord = yield* DiscordApi
-  const required = yield* readServerLinkTokenPolicy(serverId)
-  yield* requireServerLinkToken(required, apiToken)
   const member = yield* discord.request(`/guilds/${serverId}/members/${userId}`).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ user: Schema.Struct({ id: DecimalSnowflake }) }))),
     Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Unable to verify the server member" })),
   )
   if (member.user.id !== userId) return yield* new NotFound({ message: "Discord member not found" })
-  const proof=yield* prepareLink({kind:"bot"},userId,{player_tag:tag,...(apiToken === undefined ? {} : {api_token:apiToken})},bindings)
+  const proof=yield* prepareLink({kind:"bot"},userId,{player_tag:tag,api_token:apiToken},bindings)
   const {response:linked}=yield* commitServerScopedLink(serverId,proof)
   return { message: linked.message, player_tag: linked.account.tag, user_id: userId }
 }).pipe(
   Effect.catchTag("LinkOwnershipConflict", () => Effect.fail(new OperationConflict({ message: "This account belongs to another user; a valid player token is required" }))),
-  Effect.catchTag("SqlError", (cause) => Effect.fail(new DatabaseFailure({ cause, message: "Server account linking failed" }))),
 )
 
 /** A confirmed missing player may be removed, never a live player or a failed lookup. */
@@ -80,7 +77,7 @@ export const deleteDashboardServerLink = (bindings: LinkBindings, tag: string) =
 
 export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
   readonly sharedLinksLookup: (token: string, body: SharedRequest) => Effect.Effect<typeof botEndpoints.sharedLinksLookup.response.Type, OperationFailure>
-  readonly createServerLink: (serverId: string, tag: string, userId: string, apiToken?: string) => Effect.Effect<LinkMutation, OperationFailure>
+  readonly createServerLink: (serverId: string, tag: string, userId: string, apiToken: string) => Effect.Effect<LinkMutation, OperationFailure>
   readonly deleteServerLink: (serverId: string, tag: string) => Effect.Effect<LinkMutation, OperationFailure>
   readonly serverClans: (serverId: string) => Effect.Effect<typeof botEndpoints.serverClans.response.Type, OperationFailure>
   readonly upsertBaseVote: (baseId: string, voterId: string, direction: "up" | "down") => Effect.Effect<typeof botEndpoints.upsertBaseVote.response.Type, OperationFailure>
@@ -172,9 +169,12 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         if (source.protocol !== "https:" || !["cdn.discordapp.com", "media.discordapp.net"].includes(source.hostname)) {
           return yield* new InvalidRequest({ message: "Invalid Discord attachment URL" })
         }
-        const existing = yield* db(sql.unsafe<{ image_url: string | null }>(`SELECT images[$2::integer] image_url FROM bases WHERE id=$1::bigint`, [baseId, position]))
+        const existing = yield* db(sql.unsafe<{ image_url: string | null; server_id: string | null; channel_id: string | null }>(`SELECT images[$2::integer] image_url,server_id,channel_id FROM bases WHERE id=$1::bigint`, [baseId, position]))
         if (existing[0] === undefined) return yield* new NotFound({ message: "Base not found" })
         if (existing[0].image_url !== null) return { baseId, position, imageUrl: existing[0].image_url }
+        if (existing[0].server_id !== null || existing[0].channel_id !== null) {
+          return yield* new InvalidRequest({ message: "Images cannot be added to a converted base" })
+        }
         const response = yield* Effect.tryPromise({
           // Workers supports manual, not error; the non-OK check below rejects redirects.
           try: () => fetch(source, { redirect: "manual", signal: AbortSignal.timeout(15_000) }),
@@ -196,9 +196,9 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         const staged = yield* db(sql.unsafe<{ image_url: string }>(`UPDATE bases SET images=ARRAY(
           SELECT CASE WHEN slot=$2::integer THEN $3::text ELSE images[slot] END
           FROM generate_series(1,GREATEST(cardinality(images),$2::integer)) slot)
-          WHERE id=$1::bigint AND images[$2::integer] IS NULL RETURNING images[$2::integer] image_url`, [baseId, position, uploaded.url]))
+          WHERE id=$1::bigint AND images[$2::integer] IS NULL AND server_id IS NULL AND channel_id IS NULL RETURNING images[$2::integer] image_url`, [baseId, position, uploaded.url]))
         const imageUrl = staged[0]?.image_url ?? (yield* db(sql.unsafe<{ image_url: string }>("SELECT images[$2::integer] image_url FROM bases WHERE id=$1::bigint", [baseId, position])))[0]?.image_url
-        if (imageUrl === undefined) return yield* new NotFound({ message: "Base not found" })
+        if (imageUrl == null) return yield* new InvalidRequest({ message: "Base is missing or has already been converted" })
         return { baseId, position, imageUrl }
       }),
       finalizeLegacyBase: (baseId, serverId, channelId, description) => Effect.gen(function* () {

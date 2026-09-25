@@ -8,6 +8,8 @@ import type { WorkerBindings } from "./environment.js"
 import { Forbidden } from "./errors.js"
 import { ServerAuthorization, serverAccessAllows } from "./server-authorization.js"
 
+vi.mock("./static-metadata.js", () => ({ prepareStaticMetadata: () => Effect.void, rosterHeroNames: () => [], maxLevelAtTownHall: () => 0 }))
+
 const serverId = "6934567890123456789", userId = "7934567890123456789"
 const rosterId = "8a97a570-4ab0-4593-bcae-17a958460bba"
 const now = "2026-09-03T00:00:00Z"

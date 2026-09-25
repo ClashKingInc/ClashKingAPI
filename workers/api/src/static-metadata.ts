@@ -131,7 +131,7 @@ export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<s
   if (/^\/v2\/player\/[^/]+\/history\/changes$/u.test(pathname)) return ["troops", "heroes", "spells", "pets", "equipment"]
   if (pathname === "/v2/player/search" || /^\/v2\/player\/[^/]+\/(?:legend-history|ranked\/\d+\/|league\/history|leaderboard-history\/)/u.test(pathname)) return ["league_tiers"]
   if (/^\/v2\/(?:ranked\/|leaderboard\/|stats\/league\/)/u.test(pathname)) return ["league_tiers"]
-  if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment"]
+  if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment", "troops", "spells"]
   if (/^\/v2\/(?:clan\/search|clan\/[^/]+\/(?:cached|rankings|cwl)|player\/[^/]+\/cwl)/u.test(pathname)) return ["war_leagues", "capital_leagues"]
   return []
 }

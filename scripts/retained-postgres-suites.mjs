@@ -9,17 +9,19 @@ export const retainedPostgresSuites = [
   'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
   'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-armies', 'personal-bases', 'public-clan-extra',
   'proxy-war-activity', 'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
-  'stats-cwl-archive', 'stats', 'tracking-operations', 'war-exports',
+  'cwl-participation', 'stats', 'tracking-operations', 'war-exports',
 ].map(name => `${name}.test.ts`)
 
 export const deferredPostgresSuites = [
+  // Opt-in read-only proof uses an existing local replay, not disposable fixtures.
+  'army-setups-local',
   'dashboard-roster-configuration', 'giveaway-publications', 'giveaway-runtime',
   'roster-board-delivery', 'roster-interaction-board', 'roster-interaction-confirm',
   'roster-interaction-delivery', 'roster-interaction-effects', 'roster-interaction-forms',
   'roster-interaction-prepare', 'roster-membership-lock', 'roster-operation-status',
   'roster-role-audit', 'roster-role-late-write', 'roster-signup-admission',
   'roster-signup-eligibility', 'roster-stale-role-delivery', 'runtime-recovery',
-  'server-scoped-linking', 'ticket-account-link-form', 'ticket-account-runtime',
+  'ticket-account-link-form', 'ticket-account-runtime',
   'ticket-approval-resolver', 'ticket-approval', 'ticket-category-retry',
   'ticket-effect-guild-scope', 'ticket-effects', 'ticket-notifications',
   'ticket-panel-publications', 'ticket-runtime', 'ticket-staff',

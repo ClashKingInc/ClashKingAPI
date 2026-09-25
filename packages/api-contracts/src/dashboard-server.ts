@@ -100,7 +100,6 @@ export const LinkParseSettings = Schema.Struct({
   show: OptionalBoolean,
 })
 export const ServerSettingsUpdate = Schema.Struct({
-  require_api_token_when_linking: Schema.optionalKey(Schema.Boolean),
   embed_color: OptionalNumber,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,
@@ -779,8 +778,8 @@ export const CreateBaseRequest = Schema.Struct({
   description: Schema.String,
 })
 export const UpdateBaseRequest = Schema.Struct({
-  baseLink: Schema.String,
-  images: Schema.Array(Schema.String),
+  baseLink: Schema.String.annotate({ description: "Existing layout link; cannot be changed." }),
+  images: Schema.Array(Schema.String).annotate({ description: "Existing images in their original order. Only removal is allowed, and at least one image must remain if the base has images." }),
   description: Schema.String,
 }).annotate({ parseOptions: { onExcessProperty: "error" } })
 export const BaseDownloader = Schema.Struct({
@@ -863,7 +862,6 @@ export const ServerSettings = Schema.Struct({
   server_id: Schema.String,
   server: Schema.String,
   name: Schema.String,
-  require_api_token_when_linking: Schema.Boolean,
   embed_color: OptionalString,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,

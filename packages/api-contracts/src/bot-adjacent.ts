@@ -21,7 +21,7 @@ export const SharedLinksLookupEndpoint = defineEndpoint({
 
 export const CreateServerLinkEndpoint = defineEndpoint({
   auth: "server-write", body: Schema.Struct({ playerTag: Schema.String, userID: DecimalSnowflake,
-    api_token: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(128))) }),
+    api_token: Schema.String.check(Schema.isMaxLength(128)) }),
   bodyMode: "json", method: "POST", operationId: "createServerLink",
   path: "/v2/links/server/:serverId", pathParams: ServerPath, query: NoQuery,
   response: LinkMutation, responseMode: "json", successStatus: 200,

@@ -139,6 +139,7 @@ describe("notification SQL and authorization", () => {
     const body = await response?.json()
     expect(body).toMatchObject({
       raidRemindersEnabled: true, legendDefensesEnabled: true,
+      eventsEnabled: false, monthlySupportEnabled: false,
       raidReminderTimings: [15, 4320], accounts: [{ tag: "#P0Y", enabled: true }],
     })
     expect(body).not.toHaveProperty("legendAttacksEnabled")
@@ -146,10 +147,17 @@ describe("notification SQL and authorization", () => {
     expect(test.statements[0]?.parameters).toEqual([userId])
   })
 
-  it("returns disabled defaults before preferences are saved", async () => {
+  it("enables supported non-reminder categories only for a new user's missing preference row", async () => {
     const test = harness()
     const response = await test.run(request("/v2/notifications/preferences"))
-    expect(await response?.json()).toMatchObject({ warAttacksEnabled: false, legendDefensesEnabled: false, accounts: [] })
+    expect(await response?.json()).toEqual({
+      warAttacksEnabled: false, warStateEnabled: false,
+      warRemindersEnabled: false, raidRemindersEnabled: false,
+      eventsEnabled: true, announcementsEnabled: true,
+      monthlySupportEnabled: true, legendDefensesEnabled: true,
+      reminderTimings: [], raidReminderTimings: [], accounts: [],
+    })
+    expect(test.statements.some(({ query }) => query.includes("INSERT INTO mobile_notification_preferences"))).toBe(false)
   })
 
   it("encrypts registration tokens and atomically transfers duplicate ownership", async () => {
@@ -171,6 +179,9 @@ describe("notification SQL and authorization", () => {
     expect(insert?.parameters[6]).toBe(await Effect.runPromise(hashPushToken(token)))
     expect(insert?.parameters[10]).toBe(false)
     expect(test.statements[0]?.query).toContain("token_hash=$1")
+    const defaults = test.statements.find(({ query }) => query.includes("INSERT INTO mobile_notification_preferences"))
+    expect(defaults?.query).toContain("VALUES ($1,true,true,true,true) ON CONFLICT (user_id) DO NOTHING")
+    expect(defaults?.parameters).toEqual([userId])
     expect(JSON.stringify(await response?.json())).not.toContain(token)
   })
 

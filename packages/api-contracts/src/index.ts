@@ -14,8 +14,10 @@ export * from "./current-war-summary.js"
 export * from "./initialization.js"
 export * from "./app-announcements.js"
 export * from "./stats.js"
+export * from "./cwl-participation.js"
 export * from "./stats-history.js"
 export * from "./league-analytics.js"
+export * from "./army-setups.js"
 export * from "./legends.js"
 export * from "./personal-bases.js"
 export * from "./personal-armies.js"
@@ -39,6 +41,7 @@ import {
   StatsWarEndpoint,
 } from "./stats.js"
 import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { armySetupEndpoints } from "./army-setups.js"
 import { legendEndpoints } from "./legends.js"
 import { personalBaseEndpoints } from "./personal-bases.js"
 import { personalArmyEndpoints } from "./personal-armies.js"
@@ -53,6 +56,7 @@ export const endpoints = {
   ...publicMetadataEndpoints,
   ...publicPlayerExtraEndpoints,
   ...leagueAnalyticsEndpoints,
+  ...armySetupEndpoints,
   ...legendEndpoints,
   ...personalBaseEndpoints,
   ...personalArmyEndpoints,

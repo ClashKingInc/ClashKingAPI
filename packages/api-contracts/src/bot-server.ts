@@ -99,6 +99,7 @@ const RosterQuestionnaire = Schema.Struct({
 })
 const RosterViewSort = Schema.Struct({ columnId: Schema.String, direction: Schema.Literals(["asc", "desc"]) })
 const RosterSummary = Schema.Struct({
+  requireVerified: Schema.optionalKey(Schema.Boolean),
   minTownhall: Schema.NullOr(Schema.Number),
   maxTownhall: Schema.NullOr(Schema.Number),
   databaseId: OptionalString,

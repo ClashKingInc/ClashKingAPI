@@ -61,11 +61,11 @@ describe("Bot-adjacent runtime", () => {
     }))
     const require = vi.fn(() => Effect.succeed({ manager: true, principal: { kind: "bot" as const }, sections: {} }))
     const request = new Request(`https://api.clashk.ing/v2/links/server/${serverId}`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ playerTag: "poy", userID: userId }),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ playerTag: "poy", userID: userId, api_token: "valid" }),
     })
     const response = await Effect.runPromise(dispatchBotAdjacentRuntime(request, bindings).pipe(Effect.provide(testLayer({ createServerLink }, require))))
     expect(require).toHaveBeenCalledWith(request, serverId, { section: "links", write: true })
-    expect(createServerLink).toHaveBeenCalledWith(serverId, "#P0Y", userId, undefined)
+    expect(createServerLink).toHaveBeenCalledWith(serverId, "#P0Y", userId, "valid")
     await expect(response?.json()).resolves.toMatchObject({ user_id: userId })
   })
 

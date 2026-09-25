@@ -3,6 +3,10 @@ import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 
 export const GlobalCounts = Schema.Struct({ players_in_war: Schema.Number, clans_in_war: Schema.Number, total_join_leaves: Schema.Number, players_in_legends: Schema.Number, player_count: Schema.Number, clan_count: Schema.Number, wars_stored: Schema.Number })
 export const GroupedCountsResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ cwl_league_id: Schema.optionalKey(Schema.Number), location_id: Schema.optionalKey(Schema.Number), townhall_level: Schema.optionalKey(Schema.Number), capital_league_id: Schema.optionalKey(Schema.Number), league_tier_id: Schema.optionalKey(Schema.Number), count: Schema.Number })), count: Schema.Number })
+export const ClanMemberBinsResponse = Schema.Struct({
+  totalClans: Schema.Int,
+  items: Schema.Array(Schema.Struct({ minMembers: Schema.Int, maxMembers: Schema.Int, count: Schema.Int })),
+})
 
 export const GlobalCountsEndpoint = defineEndpoint({ operationId: "getExpoGlobalCounts", method: "GET", path: "/v2/counts", auth: "public", summary: "Get global ClashKing counts", body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery, response: GlobalCounts, responseMode: "json", successStatus: 200 })
 const groupedCounts = (operationId: string, path: `/v2/counts/${string}`) => defineEndpoint({ operationId, method: "GET", path, auth: "public", summary: operationId, body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery, response: GroupedCountsResponse, responseMode: "json", successStatus: 200 })
@@ -24,3 +28,9 @@ export const PlayerLeagueTierCountsEndpoint = groupedCounts("getExpoPlayerLeague
 export const ClanLocationCountsEndpoint = groupedCounts("getExpoClanLocationCounts", "/v2/counts/clans/locations")
 export const CwlLeagueCountsEndpoint = groupedCounts("getExpoCwlLeagueCounts", "/v2/counts/clans/cwl-leagues")
 export const ClanCapitalLeagueCountsEndpoint = groupedCounts("getExpoClanCapitalLeagueCounts", "/v2/counts/clans/capital-leagues")
+export const ClanMemberBinsEndpoint = defineEndpoint({
+  operationId: "getExpoClanMemberBins", method: "GET", path: "/v2/counts/clans/member-bins",
+  auth: "public", summary: "Get clan counts by member-count range",
+  body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery,
+  response: ClanMemberBinsResponse, responseMode: "json", successStatus: 200,
+})

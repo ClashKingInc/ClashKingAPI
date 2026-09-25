@@ -7,6 +7,7 @@ import { queryArmyDetail, queryArmySearch, queryArmyTimeline, queryLegendBattlel
 import { queryAdminFamilies, queryAdminFamilyMembers } from "../../src/army-family-analytics.js"
 import { dispatchLegends, legendDaySummaries } from "../../src/legends.js"
 import { queryRankedStats } from "../../src/stats.js"
+import { queryLegendPlayerSeason, queryLegendPlayerComparisons, queryPlayerLeagueHistory } from "../../src/league-analytics.js"
 
 const url = process.env.TEST_DATABASE_URL
 if (!url || process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1") throw new Error("Use schema-owned disposable Timescale")
@@ -46,9 +47,11 @@ describe.sequential("code families against authoritative migration 017", () => {
       yield* sql`INSERT INTO battles_farming(player_tag,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code)
         VALUES ('#2','2026-09-07T11:00:00Z',2,90,120,'{"gold":30}','u1x0')`
       yield* sql`INSERT INTO army_family_daily_stats(family_id,day,cohort,attack_count,distinct_player_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum)
-        VALUES (${id}::bigint,'2026-09-07','legend_i',3,2,0,1,1,1,240,160),(${id}::bigint,'2026-09-08','legend_i',1,1,0,0,0,1,100,120)`
+        VALUES (${id}::bigint,'2026-09-07','legend_i',3,2,0,1,1,1,240,160),(${id}::bigint,'2026-09-08','legend_i',1,1,0,0,0,1,100,120),
+        (${id}::bigint,'2026-09-07','top_200',2,1,0,0,1,1,190,100)`
       yield* sql`INSERT INTO legend_daily_stats(day,cohort,attack_count,distinct_player_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum)
-        VALUES ('2026-09-07','legend_i',3,2,0,1,1,1,240,160),('2026-09-08','legend_i',2,1,0,0,0,2,200,120),('2026-09-09','legend_i',0,0,0,0,0,0,0,0)`
+        VALUES ('2026-09-07','legend_i',3,2,0,1,1,1,240,160),('2026-09-08','legend_i',2,1,0,0,0,2,200,120),('2026-09-09','legend_i',0,0,0,0,0,0,0,0),
+        ('2026-09-07','top_200',2,1,0,0,1,1,190,100)`
       return id
     }))
   })
@@ -127,5 +130,30 @@ describe.sequential("code families against authoritative migration 017", () => {
     const filtered=range();filtered.set("minimumPlayers","1")
     await expect(run(queryArmySearch(filtered))).rejects.toMatchObject({_tag:"InvalidRequest"})
     expect((await run(queryArmyTimeline(new URLSearchParams({...Object.fromEntries(range()),armyLink:"u1x0"})))).items[0]?.players).toBe(2)
+  })
+  it("reads official season IDs and compares only matching finalized days", async () => {
+    await run(Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`INSERT INTO legend_history(season,player_tag,rank,trophies,player_name,exp_level,attack_wins,defense_wins)
+        VALUES ('v2-2026-08-03T05:00:00Z','#2',100,5500,'Player',200,100,1),
+        ('2025-11-03','#2',200,5300,'Player',200,100,1)`
+    }))
+    const season = await run(queryLegendPlayerSeason("#2", new Date("2026-09-09T06:00:00Z")))
+    expect(season.seasonStart).toBe("2026-08-31T05:00:00.000Z")
+    expect(season.stats.attacks).toBe(5)
+    const comparisons = await run(queryLegendPlayerComparisons("#2", new Date("2026-09-09T06:00:00Z")))
+    expect(comparisons.items).toEqual([
+      {cohort:"legend_i",days:2,attacks:5,triples:3,playerAttacks:4,playerTriples:3},
+      {cohort:"top_200",days:1,attacks:2,triples:1,playerAttacks:2,playerTriples:1},
+    ])
+    expect(comparisons.army).toEqual({ familyId, name:null, shareCode:"u1x0", items: [
+      {cohort:"legend_i",days:2,attacks:4,triples:2,playerAttacks:3,playerTriples:2},
+      {cohort:"top_200",days:1,attacks:2,triples:1,playerAttacks:2,playerTriples:1},
+    ] })
+    expect(await run(queryLegendPlayerComparisons("#P", new Date("2026-09-09T06:00:00Z")))).not.toHaveProperty("army")
+    const history = await run(queryPlayerLeagueHistory("#2", new URLSearchParams(), new Date("2026-09-09T06:00:00Z")))
+    expect(history.items.filter(item => item.mode === "legend")).toHaveLength(2)
+    expect(history.items.find(item => item.mode === "legend" && item.season.startsWith("v2-"))).toMatchObject({ rank:100, population:100 })
+    expect(history.items.find(item => item.mode === "legend" && !item.season.startsWith("v2-"))).toMatchObject({ rank:200, population:200 })
   })
 })

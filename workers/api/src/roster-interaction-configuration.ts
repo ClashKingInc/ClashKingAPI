@@ -24,7 +24,7 @@ export const readRosterPreparationConfiguration = (sql: SqlClient.SqlClient, ser
   const questions = yield* Schema.decodeUnknownEffect(Schema.Array(DashboardRosterSignupQuestion))(roster.signup_questions).pipe(
     Effect.mapError(() => new Conflict({ message: "The roster signup questions are invalid" })),
   )
-  const clans = roster.signup_scope === "family-wide" ? yield* sql<{ tag: string }>`
+  const clans = roster.signup_scope === "family-only" ? yield* sql<{ tag: string }>`
     SELECT tag FROM server_clans WHERE server_id = ${serverId} ORDER BY tag` : []
   const fingerprint = yield* Effect.promise(async () => {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ roster, settings, clans })))

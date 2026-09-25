@@ -92,6 +92,7 @@ import {
 import {
   ClanCapitalLeagueCountsEndpoint,
   ClanLocationCountsEndpoint,
+  ClanMemberBinsEndpoint,
   CwlLeagueCountsEndpoint,
   GlobalCountsEndpoint,
   PlayerBuilderhallCountsEndpoint,
@@ -125,6 +126,7 @@ import {
   StatsWarEndpoint,
 } from "./stats.js"
 import { leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { armySetupEndpoints } from "./army-setups.js"
 import { legendEndpoints } from "./legends.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 
@@ -151,6 +153,7 @@ export { StatsCwlEndpoint, StatsCwlQuery,
 
 export const expoEndpoints = {
   ...leagueAnalyticsEndpoints,
+  ...armySetupEndpoints,
   ...legendEndpoints,
   ...statsHistoryEndpoints,
   personalBases: PersonalBasesEndpoint,
@@ -237,6 +240,7 @@ export const expoEndpoints = {
   playerBuilderhallCounts: PlayerBuilderhallCountsEndpoint,
   playerLeagueTierCounts: PlayerLeagueTierCountsEndpoint,
   clanLocationCounts: ClanLocationCountsEndpoint,
+  clanMemberBins: ClanMemberBinsEndpoint,
   cwlLeagueCounts: CwlLeagueCountsEndpoint,
   clanCapitalLeagueCounts: ClanCapitalLeagueCountsEndpoint,
   statsRanked: StatsRankedEndpoint,
@@ -261,3 +265,5 @@ export const expoEndpoints = {
   proxyBuilderClanRankings: ProxyBuilderClanRankingsEndpoint,
   proxyCapitalRankings: ProxyCapitalRankingsEndpoint,
 } as const
+export * from "./army-setups.js"
+export * from "./cwl-participation.js"

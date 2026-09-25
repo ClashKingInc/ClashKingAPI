@@ -65,7 +65,8 @@ const parseIntervalWindow = (query: URLSearchParams, allowed: ReadonlySet<string
   yield* Effect.try({ try: () => strict(query, allowed), catch: (cause) => cause as InvalidRequest })
   const interval = yield* Effect.try({ try: () => single(query, "interval") ?? "month", catch: (cause) => cause as InvalidRequest })
   if (interval !== "day" && interval !== "week" && interval !== "month") return yield* invalid("Invalid interval")
-  return { ...(yield* parseStatsHistoryWindow(query, now)), interval: interval as Interval }
+  // Used only by war archive summaries/hitrates, not ranked or troop battle queries.
+  return { ...(yield* parseStatsHistoryWindow(query, now, 20000)), interval: interval as Interval }
 })
 const loadArchiveDays = (start: Date, end: Date) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient

@@ -15,17 +15,22 @@ export interface ArchiveDailyMetric {
   readonly three_star_rate: number
 }
 
+interface ArchiveAggregateMetric extends Omit<ArchiveDailyMetric, "date"> {
+  readonly date: string | null
+  readonly town_hall: number | null
+}
+
 /** One statement sees uploaded packs and pending wars in the same MVCC snapshot.
  * Current PackStats stores random-war outcomes by day and attacker:defender TH;
  * three-star destruction is exactly100 and intentionally not stored separately.
  */
-export const queryRegularArchiveDaily = (
+export const queryRegularArchiveStats = (
   start: Date,
   endExclusive: Date,
   request: StatsWarRequest,
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  return yield* sql<ArchiveDailyMetric>`
+  const rows = yield* sql<ArchiveAggregateMetric>`
     WITH pack_matchups AS (
       SELECT day.key AS day,
         split_part(matchup.key, ':', 1)::integer AS attacker_th,
@@ -70,7 +75,9 @@ export const queryRegularArchiveDaily = (
         (stars = 0)::integer, (stars = 1)::integer, (stars = 2)::integer, (stars = 3)::integer, destruction
       FROM pending_attacks
     )
-    SELECT day AS date, sum(attacks)::float8 AS sample_size,
+    SELECT CASE WHEN GROUPING(day) = 0 THEN day ELSE NULL END AS date,
+      CASE WHEN GROUPING(attacker_th) = 0 THEN attacker_th ELSE NULL END AS town_hall,
+      sum(attacks)::float8 AS sample_size,
       sum(one_stars + 2 * two_stars + 3 * three_stars)::float8 / NULLIF(sum(attacks), 0) AS average_stars,
       sum(destruction)::float8 / NULLIF(sum(attacks), 0) AS average_destruction,
       sum(zero_stars)::float8 / NULLIF(sum(attacks), 0) AS zero_star_rate,
@@ -81,6 +88,11 @@ export const queryRegularArchiveDaily = (
     WHERE (${request.townhall_level ?? null}::integer IS NULL OR attacker_th = ${request.townhall_level ?? null})
       AND (${request.opponent_townhall_level ?? null}::integer IS NULL OR defender_th = ${request.opponent_townhall_level ?? null})
       AND (NOT ${request.equal_townhalls ?? true}::boolean OR attacker_th = defender_th)
-    GROUP BY day HAVING sum(attacks) > 0 ORDER BY day
+    GROUP BY GROUPING SETS ((day), (attacker_th))
+    HAVING sum(attacks) > 0 ORDER BY date NULLS LAST, town_hall
   `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Regular war statistics query failed" })))
+  return {
+    daily: rows.filter((row): row is ArchiveAggregateMetric & { date: string } => row.date !== null),
+    townHalls: rows.filter((row): row is ArchiveAggregateMetric & { town_hall: number } => row.town_hall !== null),
+  }
 })

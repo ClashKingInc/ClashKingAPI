@@ -8,6 +8,7 @@ import { readBoundedJson } from "./request-body.js"
 const Unit = Schema.Struct({ name: Schema.String, level: Schema.Number, village: Schema.optionalKey(Schema.String) })
 export const RosterClashPlayer = Schema.Struct({
   tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number, trophies: Schema.Number,
+  warPreference: Schema.optionalKey(Schema.Literals(["in", "out"])),
   clan: Schema.optionalKey(Schema.Struct({ tag: Schema.String, name: Schema.String })),
   leagueTier: Schema.optionalKey(Schema.Struct({ id: Schema.Number, name: Schema.String })),
   troops: Schema.Array(Unit), spells: Schema.Array(Unit), heroes: Schema.Array(Unit),
@@ -40,6 +41,7 @@ export const loadRosterClashPlayer = (bindings: Pick<WorkerBindings, "CLASH_PROX
 export const rosterPlayerSnapshot = (player: typeof RosterClashPlayer.Type) => ({
   tag: player.tag, name: player.name, townhall: player.townHallLevel, trophies: player.trophies,
   hero_level_sum: rosterHeroLevelSum(player.heroes), max_percent: calculateRosterMaxPercent(player),
+  ...(player.warPreference === undefined ? {} : { war_pref: player.warPreference === "in" }),
   refreshed_at: new Date().toISOString(), current_clan: player.clan?.name ?? "", current_clan_tag: player.clan?.tag ?? "",
   ...(player.leagueTier === undefined ? {} : { league_id: player.leagueTier.id, league_name: player.leagueTier.name }),
 })

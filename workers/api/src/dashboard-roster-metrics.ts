@@ -5,6 +5,7 @@ import { DashboardRosterViewSpec, DashboardRosterViewResultRow } from "@clashkin
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { forEachPlayerWar } from "./war-archive.js"
 import { archiveAttackFacts } from "./war-archive-model.js"
+import { validRosterQuestionId } from "./roster-questionnaire.js"
 
 type Spec = typeof DashboardRosterViewSpec.Type
 type Row = typeof DashboardRosterViewResultRow.Type
@@ -66,6 +67,7 @@ const townhallBenchmarks = (sql: SqlClient.SqlClient, start: Date, end: Date) =>
  * missing observation is null rather than zero. No persistent metric cache exists. */
 export const queryDynamicRosterMetric = (
   rosterId: string, metricId: string, parameters: Readonly<Record<string, JsonValue>> = {}, now = new Date(),
+  attackCounts?: Map<string, number>,
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const normalized = normalizeRosterMetricParameters(metricId, parameters)
@@ -105,6 +107,7 @@ export const queryDynamicRosterMetric = (
   const values = new Map<string, number | null>()
   for (const { tag } of members) {
     const player = players.get(tag)
+    attackCounts?.set(tag, player?.attacks ?? 0)
     if (player === undefined) { values.set(tag, null); continue }
     if (cwl) { values.set(tag, player.stars); continue }
     const rate = 100 * player.triples / player.attacks
@@ -124,7 +127,7 @@ export const validateRosterViewSpec = (spec: Spec, knownMetrics: ReadonlySet<str
   for (const column of spec.columns) {
     if (!validId(column.id) || !column.label.trim()) return yield* new InvalidRequest({ message: "Roster columns require stable IDs and labels" })
     if (!knownMetrics.has(column.metricId)) return yield* new InvalidRequest({ message: `Unknown roster metric: ${column.metricId}` })
-    if (column.metricId === "signup.answer" && (typeof column.parameters?.questionId !== "string" || !validId(column.parameters.questionId))) return yield* new InvalidRequest({ message: "signup.answer columns require a valid questionId parameter" })
+    if (column.metricId === "signup.answer" && (typeof column.parameters?.questionId !== "string" || !validRosterQuestionId(column.parameters.questionId))) return yield* new InvalidRequest({ message: "signup.answer columns require a valid questionId parameter" })
   }
   if ((spec.sort ?? []).some((item) => !ids.has(item.columnId))) return yield* new InvalidRequest({ message: "Invalid roster view sort" })
   if ((spec.filters ?? []).some((item) => !ids.has(item.columnId))) return yield* new InvalidRequest({ message: "Invalid roster view filter" })

@@ -80,21 +80,14 @@ describe("Dashboard server SQL against authoritative Goose schema", () => {
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 
-  it("defaults the linking token policy off and preserves it when omitted from partial settings updates", async () => {
+  it("keeps unrelated settings updates independent of account linking", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       const policyServerId="1334567890123456790",path={serverId:policyServerId}
-      yield* sql`INSERT INTO servers (id,name) VALUES (${policyServerId},'Default-off linking policy')`
+      yield* sql`INSERT INTO servers (id,name) VALUES (${policyServerId},'Settings without link policy')`
       const read=()=>execute(dashboardEndpoints.serverSettings,{},path).pipe(Effect.map(Schema.decodeUnknownSync(dashboardEndpoints.serverSettings.response)))
-      expect((yield* read()).require_api_token_when_linking).toBe(false)
-      yield* execute(dashboardEndpoints.updateServerSettings,{require_api_token_when_linking:true},path)
-      expect((yield* read()).require_api_token_when_linking).toBe(true)
       yield* execute(dashboardEndpoints.updateServerSettings,{family_label:"Unrelated update"},path)
-      expect((yield* read()).require_api_token_when_linking).toBe(true)
-      expect(yield* execute(dashboardEndpoints.updateServerSettings,{require_api_token_when_linking:null},path).pipe(Effect.flip)).toMatchObject({_tag:"InvalidRequest"})
-      expect((yield* read()).require_api_token_when_linking).toBe(true)
-      yield* execute(dashboardEndpoints.updateServerSettings,{require_api_token_when_linking:false},path)
-      expect((yield* read()).require_api_token_when_linking).toBe(false)
+      expect((yield* read()).family_label).toBe("Unrelated update")
     }).pipe(Effect.provide(layer),Effect.scoped))
   })
   it("repairs retained server logs without violating the nullable-scope unique key", async () => {

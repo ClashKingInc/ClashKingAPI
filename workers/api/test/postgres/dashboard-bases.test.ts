@@ -31,8 +31,9 @@ describe("base SQL against disposable authoritative Goose schema", () => {
       const form = new FormData(); form.set("file", new File(["mock image"], "layout.png"))
       const uploaded = Schema.decodeUnknownSync(UploadBaseImageEndpoint.response)(yield* execute(UploadBaseImageEndpoint, form))
       expect(uploaded.url).toMatch(/^https:\/\/api\.clashk\.ing\/v2\/media\/base_.*\.png$/u)
-      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: "https://link.clashofclans.com/en?action=OpenLayout&id=TH17", images: [uploaded.url], description: "Fixture base" }))
+      const created = Schema.decodeUnknownSync(CreateBaseEndpoint.response)(yield* execute(CreateBaseEndpoint, { channelId, baseLink: " https://link.clashofclans.com/es?id=TH17&action=OpenLayout&utm_source=dashboard ", images: [uploaded.url], description: "Fixture base" }))
       expect(created).toMatchObject({ serverId, channelId, messageId, downloadCount: 0, images: [uploaded.url] })
+      expect(created.baseLink).toBe("https://link.clashofclans.com/en?action=OpenLayout&id=TH17")
       const path = { serverId, baseId: created.id }
       const listed = Schema.decodeUnknownSync(BasesEndpoint.response)(yield* execute(BasesEndpoint))
       expect(listed.items.map((base) => base.id)).toContain(created.id)

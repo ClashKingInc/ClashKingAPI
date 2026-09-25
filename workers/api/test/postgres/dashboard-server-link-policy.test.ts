@@ -14,10 +14,10 @@ const database = PgClient.layer({ url: Redacted.make(process.env.TEST_DATABASE_U
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
   Effect.runPromise(effect.pipe(Effect.provide(database), Effect.scoped))
 const Token = Schema.Struct({ token: Schema.String })
-const fixture = (suffix: number, tag: string, enabled = true) => Effect.gen(function* () {
+const fixture = (suffix: number, tag: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const serverId = String(955000000000000000n + BigInt(suffix)), userId = String(956000000000000000n + BigInt(suffix))
-  yield* sql`INSERT INTO servers (id,name,require_api_token_when_linking) VALUES (${serverId},'Dashboard link policy',${enabled})`
+  yield* sql`INSERT INTO servers (id,name) VALUES (${serverId},'Dashboard link proof')`
   const requests: Array<{ method: string; path: string; token?: string }> = []
   const discordRequests: string[] = []
   let playerStatus = 200
@@ -43,7 +43,7 @@ const fixture = (suffix: number, tag: string, enabled = true) => Effect.gen(func
     } })
   const dispatch = (method: "POST" | "DELETE", token?: string) => Effect.gen(function* () {
     const body = yield* (method === "POST"
-      ? createDashboardServerLink({ CLASH_PROXY: proxy }, serverId, tag, userId, token)
+      ? createDashboardServerLink({ CLASH_PROXY: proxy }, serverId, tag, userId, token ?? "")
       : deleteDashboardServerLink({ CLASH_PROXY: proxy }, tag))
     return { status: 200, body }
   }).pipe(Effect.catchTag("OperationConflict", (error) => Effect.succeed({ status: 409, body: { message: error.message } })), Effect.provide(services))
@@ -59,7 +59,7 @@ const fixture = (suffix: number, tag: string, enabled = true) => Effect.gen(func
   }
 })
 
-describe("Dashboard server-link policy through the real store and canonical linker", () => {
+describe("Dashboard server links through the real store and canonical linker", () => {
   it.each([undefined, "", " \n\t"])("denies required missing proof %j before Clash lookup or mutation", (token) => run(Effect.gen(function* () {
     const index = [undefined, "", " \n\t"].indexOf(token), current = yield* fixture(index + 1, ["#QQP", "#QQY", "#QQG"][index]!)
     const before = yield* current.snapshot()
@@ -95,17 +95,6 @@ describe("Dashboard server-link policy through the real store and canonical link
     expect(yield* current.sql`SELECT data FROM player_upgrades WHERE player_tag=${current.tag}`).toEqual([{ data: { private: "keep" } }])
   })))
 
-  it("allows tokenless new linking when disabled but does not permit staff to take another owner's link", () => run(Effect.gen(function* () {
-    const current = yield* fixture(6, "#QQC", false)
-    expect(yield* current.dispatch("POST")).toMatchObject({ status: 200 })
-    expect(yield* current.sql`SELECT user_id,is_verified FROM player_links WHERE tag=${current.tag}`)
-      .toEqual([{ user_id: current.userId, is_verified: false }])
-    yield* current.sql`UPDATE player_links SET user_id='957000000000000006' WHERE tag=${current.tag}`
-    const before = yield* current.snapshot()
-    expect(yield* current.dispatch("POST")).toMatchObject({ status: 409 })
-    expect(yield* current.snapshot()).toEqual(before)
-  })))
-
   it("allows a proven ownership transfer through canonical privacy cleanup", () => run(Effect.gen(function* () {
     const current = yield* fixture(7, "#QQV"), previous = "957000000000000007"
     yield* current.sql`INSERT INTO player_links (tag,user_id,source,is_verified) VALUES (${current.tag},${previous},'clashking',true)`
@@ -117,7 +106,7 @@ describe("Dashboard server-link policy through the real store and canonical link
   })))
 
   it("deletes only after an authoritative Clash404 and locks the current link row", () => run(Effect.gen(function* () {
-    const current = yield* fixture(8, "#QQQ", false)
+    const current = yield* fixture(8, "#QQQ")
     yield* current.sql`INSERT INTO player_links (tag,user_id,source) VALUES (${current.tag},${current.userId},'clashking')`
     const before = yield* current.snapshot()
     expect(yield* current.dispatch("DELETE")).toMatchObject({ status: 409 })
@@ -130,7 +119,7 @@ describe("Dashboard server-link policy through the real store and canonical link
   })))
 
   it("does not delete a new owner's link when canonical transfer completes during the Clash404 lookup", () => run(Effect.gen(function* () {
-    const current = yield* fixture(9, "#QQL", false), nextOwner = "957000000000000009"
+    const current = yield* fixture(9, "#QQL"), nextOwner = "957000000000000009"
     yield* current.sql`INSERT INTO player_links (tag,user_id,source) VALUES (${current.tag},${current.userId},'clashking')`
     const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
     current.setPlayerStatus(404)

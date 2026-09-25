@@ -17,15 +17,21 @@ const additions = new Map([
   ["GET /v2/auth/export", "App Authentication"],
   ["DELETE /v2/auth/me", "App Authentication"],
   ["GET /v2/health", "Health"],
+  ["GET /v2/counts/clans/member-bins", "Counts"],
   ["GET /v2/leaderboard/{}/clan/capital-gold", "Leaderboard"],
   ["GET /v2/player/{}/legend/{}/battlelog", "Player"],
   ["GET /v2/player/{}/legend/series", "Player"],
+  ["GET /v2/player/{}/legend/season", "Player"],
+  ["GET /v2/player/{}/legend/comparisons", "Player"],
   ["GET /v2/player/{}/league/history", "Player"],
   ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
   ["GET /v2/ranked/{}/groups/{}", "Player"],
   ["GET /v2/stats/armies", "Stats"],
   ["GET /v2/stats/armies/detail", "Stats"],
   ["GET /v2/stats/armies/timeline", "Stats"],
+  ["GET /v2/stats/army-setups", "Stats"],
+  ["GET /v2/stats/army-setups/timeline", "Stats"],
+  ["GET /v2/stats/army-setups/rank-history", "Stats"],
   ["GET /v2/stats/league/hit-rates", "Stats"],
   ["GET /v2/stats/league/tournaments/{}/tiers/{}", "Stats"],
   ["GET /v2/stats/legend/days", "Stats"],
@@ -37,11 +43,18 @@ const additions = new Map([
   ["POST /v2/roster/refresh-batch", "Roster Builder"],
   ["POST /v2/roster/views/preview", "Roster Builder"],
   ["POST /v2/server/{}/rosters/{}/discord-identity/refresh", "Roster Builder"],
+  ["GET /v2/server/{}/rosters/{}/accounts", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/image", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/post", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/refresh-publication", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/submissions/batch", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/withdraw", "Roster Builder"],
   ["GET /v2/ticket-transcripts/{}", "Ticket Transcripts"],
   ["GET /v2/ticket-transcripts/{}/attachments/{}", "Ticket Transcripts"],
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
   ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
+  ?? (path.startsWith("/v2/armies/") ? "Mobile App" : undefined)
   ?? (path.startsWith("/v2/bases/") ? "Bases" : undefined)
   ?? (path.startsWith("/v2/server/") && path.includes("/bases") ? "Bases" : undefined)
   ?? (path.startsWith("/v2/legends/") ? "Leaderboard" : undefined)

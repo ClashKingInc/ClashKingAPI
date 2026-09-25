@@ -18,13 +18,15 @@ const exportQueries = {
   notification_accounts: "SELECT player_tag, enabled, created_at, updated_at FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag",
   notification_devices: "SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, last_seen_at FROM mobile_push_devices WHERE user_id = $1",
   notification_preferences: "SELECT war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, legend_defenses_enabled, reminder_timings, raid_reminder_timings, updated_at FROM mobile_notification_preferences WHERE user_id = $1",
-  saved_bases: "SELECT base_id::text, kind, saved_at FROM user_saved_bases WHERE user_id = $1 ORDER BY saved_at DESC, base_id DESC",
+  saved_bases: "SELECT base_id::text, saved_at FROM user_saved_bases WHERE user_id = $1 ORDER BY saved_at DESC, base_id DESC",
+  saved_armies: "SELECT share_code, saved_at FROM user_saved_armies WHERE user_id = $1 ORDER BY saved_at DESC, share_code",
   billing_subscription: "SELECT provider, provider_subscription_id, provider_price_id, status, current_period_end, cancel_at_period_end, created_at, updated_at FROM billing_subscriptions WHERE user_id = $1",
   subscription_entitlements: "SELECT active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd, updated_at FROM subscription_entitlements WHERE user_id = $1",
 } as const
 
 const deleteQueries = {
   user_saved_bases: "DELETE FROM user_saved_bases WHERE user_id = $1",
+  user_saved_armies: "DELETE FROM user_saved_armies WHERE user_id = $1",
   mobile_notification_accounts: "DELETE FROM mobile_notification_accounts WHERE user_id = $1",
   mobile_push_devices: "DELETE FROM mobile_push_devices WHERE user_id = $1",
   mobile_notification_preferences: "DELETE FROM mobile_notification_preferences WHERE user_id = $1",
@@ -64,7 +66,7 @@ export const exportAccount = (userId: string) => Effect.gen(function* () {
       recent_searches: yield* section("recent_searches"), legacy_search_settings: yield* section("legacy_search_settings"),
       discord_sessions: yield* section("discord_sessions"), notification_accounts: yield* section("notification_accounts"),
       notification_devices: yield* section("notification_devices"), notification_preferences: yield* section("notification_preferences"),
-      saved_bases: yield* section("saved_bases"),
+      saved_bases: yield* section("saved_bases"), saved_armies: yield* section("saved_armies"),
       billing_subscription: yield* section("billing_subscription"),
       subscription_entitlements: yield* section("subscription_entitlements"),
     } satisfies EndpointResponse<typeof AuthExportEndpoint>

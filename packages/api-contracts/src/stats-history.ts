@@ -29,7 +29,7 @@ export const WarHitrateItem = Schema.Struct({
 export const WarHitratesResponse = Schema.Struct({ items: Schema.Array(WarHitrateItem) })
 export const WarHitratesEndpoint = defineEndpoint({
   operationId: "getWarHitrates", method: "GET", path: "/v2/stats/wars/hitrates", auth: "public",
-  summary: "Get uploaded regular-war same-Town-Hall hit rates", body: NoBody, bodyMode: "none",
+  summary: "Get uploaded regular-war same-Town-Hall hit rates over up to 20,000 days", body: NoBody, bodyMode: "none",
   pathParams: NoPathParams, query: WarHitratesQuery, response: WarHitratesResponse,
   responseMode: "json", successStatus: 200, errors: PublicErrors,
 })
@@ -51,7 +51,7 @@ export const WarSummaryItem = Schema.Struct({
 export const WarSummaryResponse = Schema.Struct({ items: Schema.Array(WarSummaryItem) })
 export const WarSummaryEndpoint = defineEndpoint({
   operationId: "getWarSummary", method: "GET", path: "/v2/stats/wars/summary", auth: "public",
-  summary: "Get uploaded regular-war participation summaries", body: NoBody, bodyMode: "none",
+  summary: "Get uploaded regular-war participation summaries over up to 20,000 days", body: NoBody, bodyMode: "none",
   pathParams: NoPathParams, query: WarSummaryQuery, response: WarSummaryResponse,
   responseMode: "json", successStatus: 200, errors: PublicErrors,
 })

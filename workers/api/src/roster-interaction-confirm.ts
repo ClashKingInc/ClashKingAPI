@@ -107,8 +107,8 @@ export const confirmRosterOperation = (operationId: string, proof: typeof Runtim
       return yield* new Conflict({ message: "Selected roster membership changed; start a new form" })
     }
     const roster = (yield* sql<{ roster_role_id: string | null; min_townhall: number | null; max_townhall: number | null;
-      signup_scope: "clan-only" | "family-wide"; clan_tag: string | null; server_id: string }>`
-      SELECT roster_role_id, min_townhall, max_townhall, signup_scope, clan_tag, server_id FROM rosters WHERE id = ${row.roster_id}::uuid`)[0]!
+      signup_scope: "clan-only" | "family-only" | "anyone"; clan_tag: string | null; server_id: string; require_verified: boolean }>`
+      SELECT roster_role_id, min_townhall, max_townhall, signup_scope, clan_tag, server_id, require_verified FROM rosters WHERE id = ${row.roster_id}::uuid`)[0]!
     let groupRoleId: string | null = null
     const groupId = action === "signup" && cursor.draft.selectedGroup !== "main" ? cursor.draft.selectedGroup : null
     if (action === "signup" && (cursor.draft.selectedGroup === null
@@ -124,6 +124,10 @@ export const confirmRosterOperation = (operationId: string, proof: typeof Runtim
     if (action === "remove") yield* sql`DELETE FROM roster_members WHERE roster_id = ${row.roster_id}::uuid AND tag = ANY(${tags}::text[])`
     else {
       for (const player of players) {
+        if (roster.require_verified) {
+          const verified = yield* sql`SELECT tag FROM player_links WHERE tag = ${player.tag} AND user_id = ${interaction.actorId} AND is_verified`
+          if (verified.length === 0) return yield* new Forbidden({ message: "This roster requires a verified account" })
+        }
         yield* assertSignupEligibility(sql, roster, player)
         yield* sql`INSERT INTO roster_members (roster_id, tag, name, townhall, trophies, current_clan_tag, current_clan_name,
           signup_answers, discord_user_id, discord_username, discord_avatar_url, refreshed_at, hero_level_sum, max_percent,

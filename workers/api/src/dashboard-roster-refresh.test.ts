@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
-import { loadRosterClashPlayer } from "./dashboard-roster-refresh.js"
+import { loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
 import type { WorkerBindings } from "./environment.js"
 
 const run = (response: Response) => {
@@ -12,6 +12,10 @@ const run = (response: Response) => {
 }
 
 describe("roster Clash lookup response lifetime", () => {
+  it.each(["in", "out"] as const)("preserves war preference %s", async (warPreference) => {
+    const player = { tag: "#P0Y", name: "Fixture", townHallLevel: 16, trophies: 5000, troops: [], spells: [], heroes: [], warPreference }
+    expect(rosterPlayerSnapshot(await run(Response.json(player)).result).war_pref).toBe(warPreference === "in")
+  })
   it.each([[404, "NotFound"], [429, "UpstreamUnavailable"], [500, "UpstreamUnavailable"], [503, "UpstreamUnavailable"]] as const)(
     "releases an unread HTTP %s body and preserves %s", async (status, tag) => {
       const cancel = vi.fn()

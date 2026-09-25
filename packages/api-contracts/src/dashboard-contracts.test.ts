@@ -288,15 +288,11 @@ describe("Dashboard response contracts", () => {
     expect(() => decode(DiscordChannel, { id: "1", name: "general", type: 0 })).toThrow()
   })
 
-  it("requires an explicit boolean in settings responses and accepts only optional boolean updates", () => {
+  it("omits the retired per-server linking token policy", () => {
     const settings = {server_id:"123",server:"123",name:"ClashKing",countdowns:{},server_roles:[]}
-    for (const value of [false,true]) {
-      expect(decode(ServerSettings,{...settings,require_api_token_when_linking:value}).require_api_token_when_linking).toBe(value)
-      expect(decode(ServerSettingsUpdate,{require_api_token_when_linking:value})).toEqual({require_api_token_when_linking:value})
-    }
+    expect(decode(ServerSettings,settings)).toEqual(settings)
     expect(decode(ServerSettingsUpdate,{})).toEqual({})
-    for (const value of [null,"false",0]) expect(()=>decode(ServerSettingsUpdate,{require_api_token_when_linking:value})).toThrow()
-    expect(()=>decode(ServerSettings,settings)).toThrow()
+    expect(decode(ServerSettingsUpdate,{require_api_token_when_linking:false})).toEqual({})
   })
 
   it("rejects a numeric embed color in normalized server settings", () => {

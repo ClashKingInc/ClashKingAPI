@@ -25,7 +25,7 @@ const execute = (path: string, method = "GET", body?: unknown) => Effect.gen(fun
 })
 
 describe("personal bases against authoritative Goose migrations", () => {
-  it("saves and relabels bases, preserves download history, and removes only old saved rows", async () => {
+  it("saves bases without labels, preserves download history, and removes only old saved rows", async () => {
     await Effect.runPromise(Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       yield* sql`INSERT INTO auth_users(user_id,provider) VALUES (${userId},'discord')`
@@ -35,18 +35,18 @@ describe("personal bases against authoritative Goose migrations", () => {
         ('https://link.clashofclans.com/en?action=OpenLayout&id=TH19','7540000000000000015','7540000000000000012','7540000000000000013','Old','{}'::jsonb) RETURNING id::text`
       const [first, second, old] = bases.map((row) => row.id)
       yield* sql`UPDATE bases SET images=ARRAY['https://api.clashk.ing/v2/media/first.png'] WHERE id=${first}::bigint`
-      expect(yield* execute("/v2/bases/personal")).toEqual({ items: [expect.objectContaining({ id: first, kind: null, saved: false,
+      expect(yield* execute("/v2/bases/personal")).toEqual({ items: [expect.objectContaining({ id: first, saved: false,
         savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z", downloadCount: 1 })] })
-      const saved = yield* execute(`/v2/bases/personal/${first}`, "PUT", { kind: "war" })
-      expect(saved.items[0]).toMatchObject({ id: first, kind: "war", saved: true, savedAt: expect.any(String), downloadedAt: "2026-09-01T00:00:00.000Z" })
+      const saved = yield* execute(`/v2/bases/personal/${first}`, "PUT")
+      expect(saved.items[0]).toMatchObject({ id: first, saved: true, savedAt: expect.any(String), downloadedAt: "2026-09-01T00:00:00.000Z" })
       const savedAt = saved.items[0]!.savedAt
-      expect((yield* execute(`/v2/bases/personal/${first}`, "PUT", { kind: "legend" })).items[0]).toMatchObject({ kind: "legend", savedAt })
-      expect((yield* execute(`/v2/bases/personal/${second}`, "PUT", { kind: null })).items.find((base) => base.id === second)).toMatchObject({ kind: null, saved: true })
-      yield* sql`INSERT INTO user_saved_bases(user_id,base_id,kind,saved_at) VALUES (${userId},${old}::bigint,'war',now()-interval '91 days')`
+      expect((yield* execute(`/v2/bases/personal/${first}`, "PUT")).items[0]).toMatchObject({ savedAt })
+      expect((yield* execute(`/v2/bases/personal/${second}`, "PUT")).items.find((base) => base.id === second)).toMatchObject({ saved: true })
+      yield* sql`INSERT INTO user_saved_bases(user_id,base_id,saved_at) VALUES (${userId},${old}::bigint,now()-interval '91 days')`
       const cleaned = yield* execute("/v2/bases/personal/older-than-90-days", "DELETE")
       expect(cleaned.items.some((base) => base.id === old)).toBe(false)
-      expect(cleaned.items.find((base) => base.id === first)).toMatchObject({ saved: true, kind: "legend" })
-      expect((yield* execute(`/v2/bases/personal/${first}`, "DELETE")).items.find((base) => base.id === first)).toMatchObject({ saved: false, kind: null, savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z" })
+      expect(cleaned.items.find((base) => base.id === first)).toMatchObject({ saved: true })
+      expect((yield* execute(`/v2/bases/personal/${first}`, "DELETE")).items.find((base) => base.id === first)).toMatchObject({ saved: false, savedAt: null, downloadedAt: "2026-09-01T00:00:00.000Z" })
     }).pipe(Effect.provide(layer), Effect.scoped))
   })
 })

@@ -88,7 +88,7 @@ export const queryArmySearch = (query: URLSearchParams, now = new Date()) => Eff
 })
 const aggregateSelection = (query: URLSearchParams, now: Date, maximumDays: number) => Effect.gen(function* () {
   const cohort = query.get("cohort") ?? "legend_i"
-  if (query.getAll("cohort").length > 1 || !["legend_i", "top_1000", "top_200"].includes(cohort)) {
+  if (query.getAll("cohort").length > 1 || !["legend_i", "top_1000", "top_200", "top_100"].includes(cohort)) {
     return yield* new InvalidRequest({ message: "Invalid cohort" })
   }
   const time = new URLSearchParams(query)

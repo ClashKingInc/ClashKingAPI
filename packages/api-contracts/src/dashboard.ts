@@ -78,6 +78,7 @@ export const dashboardEndpoints = {
   dashboardPreviewRosterView: Roster.DashboardPreviewRosterViewEndpoint,
   dashboardApplyRosterMembershipChanges: Roster.DashboardApplyRosterMembershipChangesEndpoint,
   dashboardRefreshRosterDiscordIdentity: Roster.DashboardRefreshRosterDiscordIdentityEndpoint,
+  dashboardPostRoster: Roster.DashboardPostRosterEndpoint,
   dashboardPublicRoster: Roster.DashboardPublicRosterEndpoint,
   dashboardCapabilities: Server.DashboardCapabilitiesEndpoint,
   dashboardAccess: Server.DashboardAccessEndpoint,

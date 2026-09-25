@@ -1,70 +1,27 @@
-import { Effect, Layer } from "effect"
-import { SqlClient, Statement } from "effect/unstable/sql"
-import { Reactivity } from "effect/unstable/reactivity"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { Effect } from "effect"
+import { describe, expect, it, vi } from "vitest"
 
-import { Forbidden } from "./errors.js"
-import { addLink } from "./link-mutations.js"
-import { addServerScopedLink, requireServerLinkToken } from "./server-scoped-linking.js"
+import { prepareLink } from "./link-mutations.js"
 
-vi.mock("./link-mutations.js", () => ({ addLink: vi.fn() }))
-
-const canonicalLinker = vi.mocked(addLink)
-const principal = { kind: "bot" as const }
-const userId = "943000000000000001"
-const bindings = { CLASH_PROXY: { fetch: vi.fn() } }
-const result = { message: "Linked", account: { tag: "#PYL", name: "Player", townHallLevel: 18, is_verified: true, hidden: false } }
-// The real linker requires SQL; these tests substitute it to verify only the
-// scoped precondition/delegation, and fail if the wrapper itself accesses SQL.
-const noSql = Layer.effect(SqlClient.SqlClient, SqlClient.make({
-  acquirer: Effect.die("The scoped guard must not access the database"),
-  compiler: Statement.makeCompilerSqlite(), spanAttributes: [],
-})).pipe(Layer.provide(Reactivity.layer))
-const run = <A, E>(operation: Effect.Effect<A, E, SqlClient.SqlClient>) => Effect.runPromise(operation.pipe(
-  Effect.provide(noSql),
-))
-
-beforeEach(() => { canonicalLinker.mockReset(); bindings.CLASH_PROXY.fetch.mockReset() })
-
-describe("server-scoped API token requirement", () => {
-  it.each([undefined, "", " ", "\n\t"])("denies an enabled attempt with missing token %j before the canonical linker", async (api_token) => {
-    await expect(run(addServerScopedLink({ requireApiTokenWhenLinking: true, principal, userId,
-      input: { player_tag: "#PYL", ...(api_token === undefined ? {} : { api_token }) }, bindings })))
+describe("required ownership proof for new links", () => {
+  it.each([undefined, "", "  "]) ("rejects missing token %j before provider I/O", async (api_token) => {
+    const fetch = vi.fn()
+    await expect(Effect.runPromise(prepareLink({ kind: "bot" }, "943000000000000001",
+      { player_tag: "#PYL", api_token: api_token ?? "" }, { CLASH_PROXY: { fetch } })))
       .rejects.toMatchObject({ _tag: "Forbidden" })
-    expect(canonicalLinker).not.toHaveBeenCalled()
-    expect(bindings.CLASH_PROXY.fetch).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("has no verified-owner exemption on a new enabled attempt", async () => {
-    canonicalLinker.mockReturnValue(Effect.succeed(result))
-    await expect(run(addServerScopedLink({ requireApiTokenWhenLinking: true, principal, userId,
-      input: { player_tag: "#PYL" }, bindings }))).rejects.toMatchObject({ _tag: "Forbidden" })
-    expect(canonicalLinker).not.toHaveBeenCalled()
-  })
-
-  it("passes supplied proof to the canonical verifier without asserting ownership itself", async () => {
-    canonicalLinker.mockReturnValue(Effect.succeed(result))
-    const input = { player_tag: "#PYL", api_token: " supplied-token " }
-    await expect(run(addServerScopedLink({ requireApiTokenWhenLinking: true, principal, userId, input, bindings }))).resolves.toEqual(result)
-    expect(canonicalLinker).toHaveBeenCalledExactlyOnceWith(principal, userId, input, bindings)
-  })
-
-  it("propagates invalid proof rejection instead of converting it into success", async () => {
-    canonicalLinker.mockReturnValue(Effect.fail(new Forbidden({ message: "Invalid player token" })))
-    await expect(run(addServerScopedLink({ requireApiTokenWhenLinking: true, principal, userId,
-      input: { player_tag: "#PYL", api_token: "invalid" }, bindings }))).rejects.toMatchObject({ _tag: "Forbidden" })
-    expect(canonicalLinker).toHaveBeenCalledTimes(1)
-  })
-
-  it("leaves setting-off linking and transfer protection to the unchanged canonical linker", async () => {
-    canonicalLinker.mockReturnValue(Effect.succeed(result))
-    const input = { player_tag: "#PYL" }
-    await expect(run(addServerScopedLink({ requireApiTokenWhenLinking: false, principal, userId, input, bindings }))).resolves.toEqual(result)
-    expect(canonicalLinker).toHaveBeenCalledExactlyOnceWith(principal, userId, input, bindings)
-  })
-
-  it("requires an explicit policy but does not choose a migration default", async () => {
-    await expect(Effect.runPromise(requireServerLinkToken(false, undefined))).resolves.toBeUndefined()
-    await expect(Effect.runPromise(requireServerLinkToken(true, undefined))).rejects.toMatchObject({ _tag: "Forbidden" })
+  it("verifies a supplied token for an existing player", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const request = new Request(input)
+      return new URL(request.url).pathname.endsWith("/verifytoken")
+        ? Response.json({ status: "ok" })
+        : Response.json({ tag: "#PYL", name: "Player", townHallLevel: 18 })
+    })
+    const proof = await Effect.runPromise(prepareLink({ kind: "bot" }, "943000000000000001",
+      { player_tag: "#PYL", api_token: " valid " }, { CLASH_PROXY: { fetch } }))
+    expect(proof.verifiedOwnership).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 })

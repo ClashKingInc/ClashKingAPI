@@ -4,9 +4,8 @@ import { Effect } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
-import { queryRegularArchiveDaily } from "./stats-archive.js"
-import { queryCwlArchiveDaily } from "./stats-cwl-archive.js"
-import type { StatsCwlRequest, StatsRankedRequest, StatsWarRequest } from "./stats-internal.js"
+import { queryRegularArchiveStats } from "./stats-archive.js"
+import type { StatsRankedRequest, StatsWarRequest } from "./stats-internal.js"
 
 interface DateWindow {
   readonly end: Date
@@ -75,11 +74,6 @@ export const parseStatsWarQuery = (query: URLSearchParams): StatsWarRequest => {
     ...(opponentTownHallLevel === undefined ? {} : { opponent_townhall_level: opponentTownHallLevel }),
     ...(equalTownHalls === undefined ? {} : { equal_townhalls: equalTownHalls }) }
 }
-export const parseStatsCwlQuery = (query: URLSearchParams): StatsCwlRequest => {
-  known(query, new Set([...warQueryNames, "cwlLeagueId", "seasons"]))
-  const base = parseStatsWarQuery(new URLSearchParams([...query].filter(([key]) => warQueryNames.has(key))))
-  return { ...base, ...(integer(query, "cwlLeagueId") === undefined ? {} : { cwl_league_id: integer(query, "cwlLeagueId")! }), seasons: query.getAll("seasons") }
-}
 
 const parseDay = (name: string, value: string): Effect.Effect<Date, InvalidRequest> => {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
@@ -94,6 +88,7 @@ const parseDay = (name: string, value: string): Effect.Effect<Date, InvalidReque
 export const statsDateWindow = (
   dates: { readonly end_date?: string; readonly start_date?: string },
   now = new Date(),
+  maximumDays = 90,
 ): Effect.Effect<DateWindow, InvalidRequest> => Effect.gen(function* () {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const end = dates.end_date === undefined ? today : yield* parseDay("end_date", dates.end_date)
@@ -105,8 +100,8 @@ export const statsDateWindow = (
   if (start >= endExclusive) {
     return yield* new InvalidRequest({ message: "start_date must be on or before end_date" })
   }
-  if (endExclusive.valueOf() - start.valueOf() > 90 * 24 * 60 * 60 * 1000) {
-    return yield* new InvalidRequest({ message: "date range cannot exceed 90 days" })
+  if (endExclusive.valueOf() - start.valueOf() > maximumDays * 24 * 60 * 60 * 1000) {
+    return yield* new InvalidRequest({ message: `date range cannot exceed ${maximumDays} days` })
   }
   return { start, end, endExclusive }
 })
@@ -208,22 +203,12 @@ export const queryRankedStats = (
 export const queryWarStats = (request: StatsWarRequest) => Effect.gen(function* () {
   yield* positive("townhall_level", request.townhall_level)
   yield* positive("opponent_townhall_level", request.opponent_townhall_level)
-  const window = yield* statsDateWindow(request.dates)
-  const daily = yield* queryRegularArchiveDaily(window.start, window.endExclusive, request)
+  // Archive aggregates support the full game lifetime; raw ranked queries retain their 90-day cap.
+  const window = yield* statsDateWindow(request.dates, new Date(), 20000)
+  const { daily, townHalls } = yield* queryRegularArchiveStats(window.start, window.endExclusive, request)
   const metrics = metricFromDaily(daily)
-  return { dateRange: dateRange(window), metrics: metric(metrics, daily) }
-})
-export const queryCwlStats = (request: StatsCwlRequest) => Effect.gen(function* () {
-  yield* positive("townhall_level", request.townhall_level)
-  yield* positive("opponent_townhall_level", request.opponent_townhall_level)
-  yield* positive("cwl_league_id", request.cwl_league_id)
-  for (const season of request.seasons ?? []) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) return yield* new InvalidRequest({ message: "seasons must use YYYY-MM" })
-  }
-  const window = yield* statsDateWindow(request.dates)
-  const daily = yield* queryCwlArchiveDaily(window.start, window.endExclusive, request)
-  return { dateRange: dateRange(window), metrics: metric(metricFromDaily(daily), daily),
-    breakdowns: [...Map.groupBy(daily, (point) => point.date.slice(0, 7))].map(([key, points]) => ({ key, metrics: metric(metricFromDaily(points)) })),
+  return { dateRange: dateRange(window), metrics: metric(metrics, daily),
+    breakdowns: townHalls.map((row) => ({ key: `TH${row.town_hall}`, metrics: metric(row) })),
   }
 })
 
@@ -283,3 +268,15 @@ export const queryGroupedCounts = (dimension: GroupedCountDimension) => database
     return { items, count: items.length }
   }),
 )
+
+interface ClanMemberBinRow { min_members: number; max_members: number; count: number | string }
+export const queryClanMemberBins = database("Stats.counts.clan_member_bins", Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql.unsafe<ClanMemberBinRow>(`SELECT
+    CASE WHEN member_count BETWEEN 1 AND 50 THEN 1 + ((member_count - 1) / 5) * 5 ELSE member_count END AS min_members,
+    CASE WHEN member_count BETWEEN 1 AND 50 THEN 5 + ((member_count - 1) / 5) * 5 ELSE member_count END AS max_members,
+    count(*)::bigint AS count
+    FROM basic_clan GROUP BY 1,2 ORDER BY 1`)
+  const items = rows.map(row => ({ minMembers: Number(row.min_members), maxMembers: Number(row.max_members), count: n(row.count) }))
+  return { totalClans: items.reduce((sum, item) => sum + item.count, 0), items }
+}))

@@ -119,7 +119,7 @@ export const LinksAddEndpoint = defineEndpoint({
   path: "/v2/links/:userId",
   auth: "user-or-bot",
   summary: "Link a Clash account to a user",
-  body: Schema.Struct({ player_tag: Schema.String, api_token: Schema.optionalKey(Schema.String) }),
+  body: Schema.Struct({ player_tag: Schema.String, api_token: Schema.String }),
   bodyMode: "json",
   pathParams: UserPath,
   query: NoQuery,

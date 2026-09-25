@@ -8,6 +8,7 @@ import { MAX_DASHBOARD_UPLOAD, uploadMediaFile, validMediaFilename } from "./das
 import { serverMemberAvatar } from "./dashboard-server-reads.js"
 import { dispatchMedia } from "./media-runtime.js"
 import type { WorkerBindings } from "./environment.js"
+import { normalizeBaseLink } from "./base-link.js"
 
 export const dashboardServerBaseOperationIds = ["dashboardBases", "dashboardBase", "createDashboardBase", "updateDashboardBase", "deleteDashboardBase", "uploadDashboardBaseImage", "baseDownloader"] as const
 type BaseValue = typeof Base.Type
@@ -52,27 +53,18 @@ const validUrl = (raw: string, cdn = false) => {
 }
 export const validateBaseCreate = (raw: unknown) => Effect.gen(function* () {
   const decoded = yield* decodeInput(CreateBaseRequest, raw)
-  const body = { ...decoded, channelId: decoded.channelId.trim(), baseLink: decoded.baseLink.trim(), images: decoded.images.map((image) => image.trim()) }
+  const baseLink = yield* Effect.try({ try: () => normalizeBaseLink(decoded.baseLink), catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid baseLink" }) })
+  const body = { ...decoded, channelId: decoded.channelId.trim(), baseLink, images: decoded.images.map((image) => image.trim()) }
   if (!positiveId(body.channelId)) return yield* new InvalidRequest({ message: "channelId must be a valid Discord channel ID" })
-  if (!validBaseLink(body.baseLink)) return yield* new InvalidRequest({ message: "baseLink must be a canonical Clash layout link" })
   if ([...body.description].length > 1000) return yield* new InvalidRequest({ message: "description must be at most 1000 characters" })
   if (body.images.length > 4) return yield* new InvalidRequest({ message: "images must contain at most four URLs" })
   if (body.images.some((image) => !validUrl(image, true))) return yield* new InvalidRequest({ message: "images must use the ClashKing CDN" })
   return body
 })
-const validBaseLink = (raw: string) => {
-  try {
-    const url = new URL(raw)
-    return url.origin === "https://link.clashofclans.com" && url.pathname === "/en" && url.hash === ""
-      && [...url.searchParams.keys()].every((key) => key === "action" || key === "id")
-      && url.searchParams.getAll("action").length === 1 && url.searchParams.get("action") === "OpenLayout"
-      && url.searchParams.getAll("id").length === 1 && (url.searchParams.get("id")?.trim().length ?? 0) > 0
-  } catch { return false }
-}
 export const validateBaseUpdate = (raw: unknown) => Effect.gen(function* () {
   const decoded = yield* decodeInput(UpdateBaseRequest, raw)
-  const body = { ...decoded, baseLink: decoded.baseLink.trim(), images: decoded.images.map((image) => image.trim()) }
-  if (!validBaseLink(body.baseLink)) return yield* new InvalidRequest({ message: "baseLink must be a canonical Clash layout link" })
+  const baseLink = yield* Effect.try({ try: () => normalizeBaseLink(decoded.baseLink), catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid baseLink" }) })
+  const body = { ...decoded, baseLink, images: decoded.images.map((image) => image.trim()) }
   if ([...body.description].length > 1000) return yield* new InvalidRequest({ message: "description must be at most 1000 characters" })
   if (body.images.length > 4) return yield* new InvalidRequest({ message: "images must contain at most four URLs" })
   if (new Set(body.images).size !== body.images.length) return yield* new InvalidRequest({ message: "images must not contain duplicates" })
@@ -166,6 +158,17 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
   const current = (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
     WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]), "Failed to load base"))[0]
   if (current === undefined) return yield* new NotFound({ message: "Base not found" })
+  if (body.baseLink !== normalizeBaseLink(current.base_link)) {
+    return yield* new InvalidRequest({ message: "A base layout link cannot be changed" })
+  }
+  const currentImages = current.images ?? []
+  if (body.images.length === 0 && currentImages.length > 0) {
+    return yield* new InvalidRequest({ message: "At least one base image must remain" })
+  }
+  const retainedImages = currentImages.filter((image) => body.images.includes(image))
+  if (JSON.stringify(retainedImages) !== JSON.stringify(body.images)) {
+    return yield* new InvalidRequest({ message: "Base images cannot be added, replaced, or reordered; only extra images may be removed" })
+  }
   if (![current.server_id, current.channel_id, current.message_id].every(positiveId)) {
     return yield* new InvalidRequest({ message: "Base has an invalid stored Discord message location" })
   }
@@ -181,8 +184,10 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
     return yield* patched.failure
   }
   const persisted = yield* sql.withTransaction(Effect.gen(function* () {
-    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET base_link=$1,description=$2,images=$5::text[]
-      WHERE id=$3::bigint AND server_id=$4 AND channel_id IS NOT NULL RETURNING id::text`, [body.baseLink, body.description, id, serverId, body.images])
+    const updated = yield* sql.unsafe<{ id: string }>(`UPDATE bases SET description=$1,images=$4::text[]
+      WHERE id=$2::bigint AND server_id=$3 AND channel_id IS NOT NULL
+      AND COALESCE(array_remove(images,NULL),'{}'::text[]) @> $4::text[]
+      RETURNING id::text`, [body.description, id, serverId, body.images])
     if (updated[0] === undefined) return undefined
     return (yield* sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base WHERE base.id=$1::bigint`, [id]))[0]
   })).pipe(Effect.result)
@@ -196,12 +201,18 @@ const update = (serverId: string, id: string, raw: unknown, bindings: WorkerBind
     return yield* new DatabaseFailure({ cause: persisted.failure,
       message: "Base database update outcome is unknown after Discord changed. Do not retry automatically" })
   }
-  const restored = yield* patchBaseMessage(discord, current, editableRow(current), bindings).pipe(Effect.result)
+  // A concurrent removal must not be undone by restoring our stale snapshot.
+  const restoreTarget = persisted._tag === "Success"
+    ? (yield* db(sql.unsafe<BaseRow>(`SELECT ${baseColumns} FROM bases base
+      WHERE base.id=$1::bigint AND base.server_id=$2 AND base.channel_id IS NOT NULL`, [id, serverId]), "Failed to reload base after concurrent update"))[0]
+    : current
+  if (restoreTarget === undefined) return yield* new NotFound({ message: "Base not found" })
+  const restored = yield* patchBaseMessage(discord, restoreTarget, editableRow(restoreTarget), bindings).pipe(Effect.result)
   if (restored._tag === "Failure") return yield* new UpstreamUnavailable({
     cause: { database: persisted, rollback: restored.failure },
     message: "Base was not updated in the database and the Discord rollback failed. Do not retry automatically",
   })
-  if (persisted._tag === "Success") return yield* new NotFound({ message: "Base not found" })
+  if (persisted._tag === "Success") return yield* new InvalidRequest({ message: "Base images changed while saving; reload the base before editing" })
   return yield* new DatabaseFailure({ cause: persisted.failure, message: "Failed to update base; the Discord message was restored" })
 })
 const Channel = Schema.Struct({ id: DecimalSnowflake, guild_id: Schema.optionalKey(DecimalSnowflake), type: Schema.Number })

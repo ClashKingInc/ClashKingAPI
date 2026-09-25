@@ -10,6 +10,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare"
 import { getPlatformProxy } from "wrangler"
 import { localProviderOrigin } from "./local-provider-origin.mjs"
 import { createLocalAdminIdentity } from "./local-admin-identity.mjs"
+import { workspaceOrigin, allowedProductionRead } from "./local-workspace-policy.mjs"
 
 // Interactive development uses local-api-database.mjs and a persistent volume.
 // The disposable schema harness remains a separate, explicit test-only path.
@@ -29,6 +30,23 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Inv
 const lan = process.env.CLASHKING_LOCAL_LAN_IP ?? "192.168.5.62"
 if (!/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(lan)) throw new Error("Local LAN IPv4 address required")
 const origin = `http://${lan}:${port}`
+const dashboardOrigin = process.env.CLASHKING_LOCAL_DASHBOARD_ORIGIN ?? "http://localhost:3002"
+const publicOrigin = process.env.CLASHKING_LOCAL_PUBLIC_ORIGIN ?? origin
+const exactOrigin = (value, allowed, name) => {
+  let parsed
+  try { parsed = new URL(value) } catch { throw new Error(`${name} must be an absolute origin`) }
+  if (parsed.origin !== value || parsed.username !== "" || parsed.password !== "" || !allowed.includes(value)) {
+    throw new Error(`${name} is not an approved isolated-local origin`)
+  }
+  return value
+}
+if (process.env.CLASHKING_LOCAL_CUSTOM_ORIGINS === "1") {
+  workspaceOrigin(dashboardOrigin)
+  workspaceOrigin(publicOrigin)
+} else {
+  exactOrigin(dashboardOrigin, ["http://localhost:3002", "https://local-dash.clashk.ing"], "CLASHKING_LOCAL_DASHBOARD_ORIGIN")
+  exactOrigin(publicOrigin, [origin, "https://local-api.clashk.ing"], "CLASHKING_LOCAL_PUBLIC_ORIGIN")
+}
 const discordClientId = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_ID ?? ""
 const discordClientSecret = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_SECRET ?? ""
 const discordBotToken = process.env.CLASHKING_LOCAL_DISCORD_BOT_TOKEN ?? ""
@@ -37,6 +55,8 @@ const localAdmin = persistent && process.env.CLASHKING_LOCAL_ADMIN_IDENTITY === 
 const clashProxyOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_CLASH_PROXY_ORIGIN ?? "", { publicOrigin: "https://proxy.clashk.ing" })
 const schemaRoot = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? ""
 const archiveImportRoot = process.env.CLASHKING_LOCAL_ARCHIVE_IMPORT_ROOT ?? resolve('.local/imported-archives/packs')
+const staticAssetsRoot = process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT ?? ""
+const archiveBridgeEnabled = process.env.CLASHKING_LOCAL_ARCHIVE_BRIDGE !== "0"
 if (!/^\d+$/u.test(discordClientId) || discordClientSecret.length === 0) {
   throw new Error("Set the local Discord client ID and client secret")
 }
@@ -89,6 +109,14 @@ const discordOnly = async request => {
   const certificates = localAdmin?.certificates(request)
   if (certificates !== undefined) return certificates
   const url = new URL(request.url)
+  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1" && allowedProductionRead(request)) {
+    const headers = new Headers()
+    for (const name of ["range", "accept", "if-none-match", "if-modified-since"]) {
+      const value = request.headers.get(name)
+      if (value !== null) headers.set(name, value)
+    }
+    return fetch(url, { method: request.method, headers, redirect: "error" })
+  }
   if (url.protocol !== "https:" || url.hostname !== "discord.com") return unavailable()
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
   return fetch(url, { method: request.method, headers: request.headers, body })
@@ -115,7 +143,7 @@ const result = await build({
 })
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: "0.0.0.0", port,
-  ...(persistent ? { resourcePersistencePath: resolve('.local/worker-storage') } : {}),
+  ...(persistent ? { resourcePersistencePath: resolve(process.env.CLASHKING_LOCAL_STORAGE_ROOT ?? '.local/worker-storage') } : {}),
   modulesRoot: "/local-api",
   modules: [
     { type: "ESModule", path: "/local-api/index.js", contents: result.outputFiles[0].text },
@@ -138,16 +166,16 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   },
   bindings: {
     ...config.vars, ENVIRONMENT: "isolated-local",
-    WEB_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].flatMap(host => [3002, 8081].map(value => `http://${host}:${value}`)).join(","),
+    WEB_ALLOWED_ORIGINS: [...["localhost", "127.0.0.1", lan].flatMap(host => [3002, 8081].map(value => `http://${host}:${value}`)), dashboardOrigin].join(","),
     ADMIN_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].map(host => `http://${host}:3000`).join(","),
     DISCORD_API_ORIGIN: "https://discord.com/api/v10",
-    DISCORD_REDIRECT_URI: "http://localhost:3002/auth/callback",
+    DISCORD_REDIRECT_URI: `${dashboardOrigin}/auth/callback`,
     DISCORD_CLIENT_ID: discordClientId, DISCORD_CLIENT_SECRET: discordClientSecret, DISCORD_BOT_TOKEN: discordBotToken,
     SMTP_HOST: "127.0.0.1", SMTP_PORT: "9", SMTP_USERNAME: "", SMTP_PASSWORD: "",
     STRIPE_RESTRICTED_KEY: "", STRIPE_WEBHOOK_SECRET: localSecret("STRIPE_WEBHOOK_SECRET"),
     ELASTICSEARCH_API_KEY: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUDIENCE: "",
     ...localAdmin?.bindings,
-    POSTS_PUBLIC_ORIGIN: origin, APP_UPDATES_PUBLIC_ORIGIN: origin,
+    POSTS_PUBLIC_ORIGIN: publicOrigin, APP_UPDATES_PUBLIC_ORIGIN: publicOrigin,
     JWT_ACCESS_SECRET: localSecret("JWT_ACCESS_SECRET"), JWT_REFRESH_SECRET: localSecret("JWT_REFRESH_SECRET"), API_BOT_TOKEN: localSecret("API_BOT_TOKEN"),
     AI_USAGE_SECRET: localSecret("AI_USAGE_SECRET"), DATA_ENCRYPTION_KEY: localSecret("DATA_ENCRYPTION_KEY"),
   },
@@ -167,7 +195,38 @@ process.once("SIGINT", stop)
 process.once("SIGTERM", stop)
 try {
   await runtime.ready
+  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1") {
+    const source = readFileSync("workers/api/src/static-metadata.ts", "utf8")
+    const categories = JSON.parse(source.match(/const categories = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
+    const locales = JSON.parse(source.match(/const locales = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
+    const staticBucket = await runtime.getR2Bucket("ASSETS")
+    for (const key of [...categories.map(name => `static_data/${name}.json`), ...locales.map(name => `translations/${name}.json`)]) {
+      const response = await fetch(`https://assets.clashk.ing/${key}`, { redirect: "error", signal: AbortSignal.timeout(15000) })
+      if (!response.ok) throw new Error(`Production static asset ${key} returned ${response.status}`)
+      const body = await response.text()
+      JSON.parse(body)
+      await staticBucket.put(key, body, { httpMetadata: { contentType: "application/json" } })
+    }
+    console.log(JSON.stringify({ event: "production_static_assets_cached", files: categories.length + locales.length }))
+  }
   if (localAdmin) console.log(JSON.stringify({event:'local_admin_identity_ready',origin:await localAdmin.listen(),identity:'local-developer'}))
+  if (staticAssetsRoot !== "") {
+    if (!isAbsolute(staticAssetsRoot)) throw new Error("CLASHKING_LOCAL_STATIC_ASSETS_ROOT must be an absolute path")
+    if (!existsSync(staticAssetsRoot)) throw new Error("Configured local static-assets directory is missing")
+    const staticBucket = await runtime.getR2Bucket('ASSETS')
+    let files = 0
+    let bytes = 0
+    for (const file of readdirSync(staticAssetsRoot).sort()) {
+      if (!file.endsWith('.json')) continue
+      const data = readFileSync(resolve(staticAssetsRoot, file))
+      JSON.parse(data.toString('utf8'))
+      await staticBucket.put(`static_data/${file}`, data, {httpMetadata: {contentType: 'application/json'}})
+      files++
+      bytes += data.byteLength
+    }
+    if (files === 0) throw new Error("Configured local static-assets directory contains no JSON files")
+    console.log(JSON.stringify({event:'local_static_assets_seeded',source:staticAssetsRoot,files,bytes}))
+  }
   const bucket = await runtime.getR2Bucket('WAR_ARCHIVE')
   let seeded = 0
   let archiveFiles = 0
@@ -186,7 +245,7 @@ try {
     }
     console.log(JSON.stringify({event:'local_war_archives_seeded',source:archiveImportRoot,files:archiveFiles,bytes:archiveBytes,seeded}))
   }
-  if (persistent) {
+  if (persistent && archiveBridgeEnabled) {
     if (!isAbsolute(schemaRoot)) throw new Error("Set CLASHKING_LOCAL_SCHEMA_ROOT to the absolute canonical schema checkout")
     const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? ""
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY ?? ""
@@ -204,5 +263,6 @@ try {
   throw error
 }
 console.log(JSON.stringify({ event: "isolated_api_ready", pid: process.pid, url: `http://localhost:${port}`, lanUrl: origin,
+  publicOrigin, dashboardOrigin, discordRedirectUri: `${dashboardOrigin}/auth/callback`,
   database: `127.0.0.1:${database.port}${database.pathname}`, providers: { discord: true, clashProxy: clashProxyOrigin === "" ? "remote-vpc" : "explicit-origin" },
-  storage: persistent ? "persistent local SQL/KV/R2 with loopback archive bridge" : "test-only ephemeral SQL/KV/R2" }))
+  storage: persistent ? `persistent local SQL/KV/R2${archiveBridgeEnabled ? " with loopback archive bridge" : ""}` : "test-only ephemeral SQL/KV/R2" }))

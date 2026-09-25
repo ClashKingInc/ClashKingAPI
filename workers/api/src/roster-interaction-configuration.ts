@@ -8,7 +8,7 @@ import type { RosterFormCursor } from "./roster-interaction-forms.js"
  * not invalidate forms, but admission rules and offered configuration do. */
 export const readRosterPreparationConfiguration = (sql: SqlClient.SqlClient, serverId: string, rosterId: string) => Effect.gen(function* () {
   const roster = (yield* sql<{ signup_questions: unknown; signup_scope: string }>`SELECT signup_questions, signup_scope,
-    clan_tag, min_townhall, max_townhall, capacity, max_accounts_per_user, roster_role_id
+    clan_tag, min_townhall, max_townhall, max_signups, max_accounts_per_user, roster_role_id, require_verified
     FROM rosters WHERE id = ${rosterId}::uuid AND server_id = ${serverId}`)[0]
   if (roster === undefined) return yield* new NotFound({ message: "Roster not found" })
   const settings = yield* sql<{ id: string; label: string; signup_enabled: boolean; role_id: string | null; position: number }>`
@@ -24,7 +24,7 @@ export const readRosterPreparationConfiguration = (sql: SqlClient.SqlClient, ser
   const questions = yield* Schema.decodeUnknownEffect(Schema.Array(DashboardRosterSignupQuestion))(roster.signup_questions).pipe(
     Effect.mapError(() => new Conflict({ message: "The roster signup questions are invalid" })),
   )
-  const clans = roster.signup_scope === "family-wide" ? yield* sql<{ tag: string }>`
+  const clans = roster.signup_scope === "family-only" ? yield* sql<{ tag: string }>`
     SELECT tag FROM server_clans WHERE server_id = ${serverId} ORDER BY tag` : []
   const fingerprint = yield* Effect.promise(async () => {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify({ roster, settings, clans })))
@@ -39,7 +39,7 @@ export const assertRosterDraftCurrent = (sql: SqlClient.SqlClient,
   const tags = cursor.draft.accounts.map(account => account.tag)
   const owned = yield* sql<{ tag: string }>`SELECT tag FROM player_links WHERE user_id = ${scope.actor_user_id} AND tag = ANY(${tags}::text[])`
   if (owned.length !== tags.length) return yield* new Conflict({ message: "Roster account ownership changed; start a new form" })
-  // Removal must remain available after TH, capacity, questions, or groups change.
+  // Removal must remain available after TH, signup limit, questions, or groups change.
   if (scope.action === "remove") return
   const current = yield* readRosterPreparationConfiguration(sql, scope.server_id, scope.roster_id)
   if (cursor.draft.configurationFingerprint !== current.fingerprint) return yield* new Conflict({ message: "Roster signup configuration changed; start a new form" })

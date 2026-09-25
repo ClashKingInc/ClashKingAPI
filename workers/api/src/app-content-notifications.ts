@@ -244,6 +244,11 @@ const registerDevice = (principal: UserPrincipal, body: DeviceRequest, bindings:
       [principal.userId, deviceId, body.platform, provider, environment, ciphertext, hash,
         body.app_version ?? "", body.locale ?? "", body.authorization_status ?? "not_determined", body.enabled]))[0]
       if (row === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Notification registration returned no device" })
+      // Registration is the first persisted push action for a new user. Existing
+      // preference rows, including users who opted out of every category, win.
+      yield* sql.unsafe(`INSERT INTO mobile_notification_preferences
+        (user_id,events_enabled,announcements_enabled,monthly_support_enabled,legend_defenses_enabled)
+        VALUES ($1,true,true,true,true) ON CONFLICT (user_id) DO NOTHING`, [principal.userId])
       return { ...row, last_seen_at: iso(row.last_seen_at) }
     }))
   }))
@@ -259,8 +264,8 @@ const deleteDevice = (principal: UserPrincipal, query: Readonly<Record<string, u
 
 const emptyPreferences = (): PreferencesRow => ({
   war_attacks_enabled: false, war_state_enabled: false, war_reminders_enabled: false,
-  raid_reminders_enabled: false, events_enabled: false, announcements_enabled: false,
-  monthly_support_enabled: false, legend_defenses_enabled: false,
+  raid_reminders_enabled: false, events_enabled: true, announcements_enabled: true,
+  monthly_support_enabled: true, legend_defenses_enabled: true,
   reminder_timings: [], raid_reminder_timings: [],
 })
 

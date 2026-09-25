@@ -87,26 +87,24 @@ export interface CommittedLink {
 export const prepareLink = (principal: ApiPrincipal, rawUserId: string, input: EndpointRequest<typeof LinksAddEndpoint>["body"], bindings: LinkBindings): Effect.Effect<PreparedLink,ApiFailure> => Effect.gen(function* () {
   const userId=yield* subject(principal,rawUserId)
   const playerTag = yield* tag(input.player_tag)
+  const apiToken = input.api_token?.trim() ?? ""
+  if (apiToken === "") return yield* new Forbidden({ message: "A valid in-game API token is required to link an account" })
   const response = yield* fetchClash(bindings, `players/${encodeURIComponent(playerTag)}`)
   if (response.status === 404) { yield* discard(response); return yield* new NotFound({ message: "Clash of Clans account does not exist" }) }
   if (!response.ok) { yield* discard(response); return yield* new UpstreamUnavailable({ cause: response.status, message: "Clash account lookup is unavailable" }) }
   const player = yield* Schema.decodeUnknownEffect(PlayerIdentity)(yield* upstreamJson(response)).pipe(
     Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash account identity is invalid" })))
   if (player.tag !== playerTag) return yield* new UpstreamUnavailable({ cause: "Player tag mismatch", message: "Clash account identity is invalid" })
-  const apiToken = input.api_token?.trim() ?? ""
-  const verifyOwnership = apiToken !== ""
-  if (verifyOwnership) {
-    const verification = yield* fetchClash(bindings, `players/${encodeURIComponent(playerTag)}/verifytoken`, { token: apiToken })
-    if (!verification.ok) {
-      yield* discard(verification)
-      return yield* new UpstreamUnavailable({ cause: verification.status, message: "Clash account verification is unavailable" })
-    }
-    const result = yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literals(["ok", "invalid"]) }))(yield* upstreamJson(verification)).pipe(
-      Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash account verification returned invalid data" })))
-    if (result.status !== "ok") return yield* new Forbidden({ message: "Invalid player token. Check your Clash of Clans account settings and try again." })
+  const verification = yield* fetchClash(bindings, `players/${encodeURIComponent(playerTag)}/verifytoken`, { token: apiToken })
+  if (!verification.ok) {
+    yield* discard(verification)
+    return yield* new UpstreamUnavailable({ cause: verification.status, message: "Clash account verification is unavailable" })
   }
+  const result = yield* Schema.decodeUnknownEffect(Schema.Struct({ status: Schema.Literals(["ok", "invalid"]) }))(yield* upstreamJson(verification)).pipe(
+    Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash account verification returned invalid data" })))
+  if (result.status !== "ok") return yield* new Forbidden({ message: "Invalid player token. Check your Clash of Clans account settings and try again." })
   return Object.freeze({[preparedLinkBrand]:true as const,principal:Object.freeze({...principal}),userId,
-    player:Object.freeze(player),verifiedOwnership:verifyOwnership})
+    player:Object.freeze(player),verifiedOwnership:true as const})
 })
 
 /** SQL only. Callers may wrap this in their receipt/outbox transaction; the

@@ -15,12 +15,11 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
 const TokenBody = Schema.Struct({ token: Schema.String })
 type ProviderStage = "discord" | "player" | "verify"
 
-const race = (suffix: number, stage: ProviderStage, initialPolicy: boolean, nextPolicy: boolean, token?: string) => Effect.gen(function* () {
+const race = (suffix: number, stage: ProviderStage) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const serverId = String(958000000000000000n + BigInt(suffix)), userId = String(959000000000000000n + BigInt(suffix))
   const tag = ["#QGP", "#QGY", "#QGG", "#QGR", "#QGJ"][suffix - 1]!
-  yield* sql`INSERT INTO servers (id,name,require_api_token_when_linking)
-    VALUES (${serverId},'Concurrent link policy',${initialPolicy})`
+  yield* sql`INSERT INTO servers (id,name) VALUES (${serverId},'Concurrent link proof')`
   const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
   const seen: ProviderStage[] = []
   const provider = async (current: ProviderStage) => {
@@ -43,21 +42,20 @@ const race = (suffix: number, stage: ProviderStage, initialPolicy: boolean, next
     await provider("player")
     return Response.json({ tag, name: "Concurrency fixture", townHallLevel: 18 })
   } }
-  const creation = createDashboardServerLink({ CLASH_PROXY: proxy }, serverId, tag, userId, token).pipe(
+  const creation = createDashboardServerLink({ CLASH_PROXY: proxy }, serverId, tag, userId, "valid").pipe(
     Effect.provide(discord),
     Effect.match({ onSuccess: (value) => ({ ok: true as const, value }), onFailure: (error) => ({ ok: false as const, error }) }),
     // If creation unexpectedly fails before the requested provider stage, let
     // the second branch finish; the explicit stage assertion will fail below.
     Effect.ensuring(Effect.sync(() => started.resolve())),
   )
-  const policyUpdate = Effect.promise(() => started.promise).pipe(Effect.flatMap(() => sql.withTransaction(Effect.gen(function* () {
-    // This separate connection must update the server while the provider is
-    // still paused. A held policy row lock fails promptly instead of hanging.
+  const serverUpdate = Effect.promise(() => started.promise).pipe(Effect.flatMap(() => sql.withTransaction(Effect.gen(function* () {
+    // A provider wait must not hold the server row before the link transaction.
     yield* sql.unsafe("SET LOCAL lock_timeout = '500ms'")
-    yield* sql`UPDATE servers SET require_api_token_when_linking=${nextPolicy},name='Updated during provider wait' WHERE id=${serverId}`
+    yield* sql`UPDATE servers SET name='Updated during provider wait' WHERE id=${serverId}`
   }))), Effect.match({ onSuccess: () => ({ ok: true as const }), onFailure: (error) => ({ ok: false as const, error }) }),
   Effect.ensuring(Effect.sync(() => release.resolve())))
-  const [created, updated] = yield* Effect.all([creation, policyUpdate], { concurrency: 2 })
+  const [created, updated] = yield* Effect.all([creation, serverUpdate], { concurrency: 2 })
   expect(seen).toContain(stage)
   expect(updated.ok, `${stage} provider wait must not hold the server row lock`).toBe(true)
   return { sql, tag, userId, serverId, created, seen }
@@ -65,26 +63,10 @@ const race = (suffix: number, stage: ProviderStage, initialPolicy: boolean, next
 
 describe("Dashboard server linking keeps provider waits outside the final transaction", () => {
   it.each(["discord", "player", "verify"] as const)("does not hold a server row lock while %s is pending", (stage) => run(Effect.gen(function* () {
-    const current = yield* race(["discord", "player", "verify"].indexOf(stage) + 1, stage, true, true, "valid")
+    const current = yield* race(["discord", "player", "verify"].indexOf(stage) + 1, stage)
     expect(current.created).toMatchObject({ ok: true, value: { user_id: current.userId, player_tag: current.tag } })
     expect(yield* current.sql`SELECT user_id,is_verified FROM player_links WHERE tag=${current.tag}`)
       .toEqual([{ user_id: current.userId, is_verified: true }])
   })))
 
-  it("rejects a tokenless attempt when policy changes OFF to ON during the player lookup", () => run(Effect.gen(function* () {
-    const current = yield* race(4, "player", false, true)
-    expect(current.created).toMatchObject({ ok: false, error: { _tag: "Forbidden" } })
-    expect(current.seen).not.toContain("verify")
-    expect(yield* current.sql`SELECT require_api_token_when_linking FROM servers WHERE id=${current.serverId}`)
-      .toEqual([{ require_api_token_when_linking: true }])
-    expect(yield* current.sql`SELECT tag FROM player_links WHERE tag=${current.tag}`).toEqual([])
-  })))
-
-  it("accepts valid supplied proof when policy changes OFF to ON during verification", () => run(Effect.gen(function* () {
-    const current = yield* race(5, "verify", false, true, "valid")
-    expect(current.created).toMatchObject({ ok: true })
-    expect(current.seen.filter((stage) => stage === "verify")).toHaveLength(1)
-    expect(yield* current.sql`SELECT user_id,is_verified FROM player_links WHERE tag=${current.tag}`)
-      .toEqual([{ user_id: current.userId, is_verified: true }])
-  })))
 })

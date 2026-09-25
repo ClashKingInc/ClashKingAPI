@@ -62,19 +62,16 @@ const fixture = (suffix: number, options: { expired?: boolean; sourceMismatch?: 
 })
 
 describe("actor-bound ticket linking forms", () => {
-  it("uses the current default-off or enabled policy without account, receipt, or operation mutations", () => run(Effect.gen(function* () {
+  it("always requires the API token without account, receipt, or operation mutations", () => run(Effect.gen(function* () {
     const current = yield* fixture(1), before = yield* current.snapshot()
-    for (const required of [false, true, false]) {
-      yield* current.sql`UPDATE servers SET require_api_token_when_linking=${required} WHERE id=${current.guildId}`
-      const result = yield* ticketAccountInteraction(current.proof)
-      expect(result).toMatchObject({ outcome: "form", preparationId: current.preparationId,
-        form: { kind: "modal", customId: `ck:ticket:link-submit:${current.preparationId}`, title: "Link an account",
-          fields: [
-            { customId: "player_tag", label: "Player tag", required: true, style: "short", maxLength: 12 },
-            { customId: "api_token", label: "API token", required, style: "short", maxLength: 12 },
-          ] } })
-      expect(yield* current.snapshot()).toEqual(before)
-    }
+    const result = yield* ticketAccountInteraction(current.proof)
+    expect(result).toMatchObject({ outcome: "form", preparationId: current.preparationId,
+      form: { kind: "modal", customId: `ck:ticket:link-submit:${current.preparationId}`, title: "Link an account",
+        fields: [
+          { customId: "player_tag", label: "Player tag", required: true, style: "short", maxLength: 12 },
+          { customId: "api_token", label: "API token", required: true, style: "short", maxLength: 12 },
+        ] } })
+    expect(yield* current.snapshot()).toEqual(before)
   })))
 
   it("rejects another actor, guild, or channel while accepting the ephemeral response message", () => run(Effect.gen(function* () {

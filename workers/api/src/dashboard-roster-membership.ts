@@ -7,6 +7,16 @@ import { Conflict, DatabaseFailure, InvalidRequest, NotFound } from "./errors.js
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
 const databaseFailure = (cause: unknown) => new DatabaseFailure({ cause, message: "Unable to serialize roster membership" })
 
+/** Creation and cloning require clans configured on the destination server.
+ * Lock the rows until the surrounding roster transaction finishes. */
+export const requireRosterServerClans = (sql: SqlClient.SqlClient, serverId: string, clanTag?: string | null) => Effect.gen(function* () {
+  const clans = yield* sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId} ORDER BY tag FOR SHARE`
+  if (clans.length === 0) return yield* new InvalidRequest({ message: "Add a clan to this server before creating a roster" })
+  if (clanTag && !clans.some(clan => clan.tag === clanTag)) {
+    return yield* new InvalidRequest({ message: "Select a clan linked to this server" })
+  }
+}).pipe(Effect.catchTag("SqlError", cause => Effect.fail(databaseFailure(cause))))
+
 /** Call inside the writer transaction, before reading members or changing
  * configuration. Every writer uses canonical rows in UUID order, including
  * removals.
@@ -32,6 +42,10 @@ export const lockRosterAdmissionOwners = (sql: SqlClient.SqlClient, tags: Readon
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
 export const assertRosterMembershipLimits = (sql: SqlClient.SqlClient, rosterIds: ReadonlyArray<string>, affectedOwnerIds?: ReadonlyArray<string>) => Effect.gen(function* () {
+  const full = yield* sql`SELECT roster.id FROM rosters roster JOIN roster_members member ON member.roster_id = roster.id
+    WHERE roster.id = ANY(${rosterIds}::uuid[]) AND roster.max_signups IS NOT NULL
+    GROUP BY roster.id, roster.max_signups HAVING count(*) > roster.max_signups LIMIT 1`
+  if (full.length > 0) return yield* new Conflict({ message: "Roster maximum signups would be exceeded" })
   const invalid = yield* sql`SELECT id FROM rosters WHERE id = ANY(${rosterIds}::uuid[])
     AND max_accounts_per_user IS NOT NULL AND max_accounts_per_user <= 0 LIMIT 1`
   if (invalid.length > 0) return yield* new Conflict({ message: "Roster per-user limit configuration is invalid", reason: "invalid_configuration" })

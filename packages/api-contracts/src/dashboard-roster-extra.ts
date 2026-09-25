@@ -14,6 +14,36 @@ const errors = [400, 401, 403, 404, 409, 413, 429, 503].map((status) => ({ statu
 const BuilderPath = Schema.Struct({ serverId: DecimalSnowflake, rosterId: Schema.String })
 const RosterQuery = Schema.Struct({ server_id: DecimalSnowflake, roster_id: Schema.String })
 
+export const DashboardRosterRefreshPublicationEndpoint = defineEndpoint({
+  operationId: "dashboardRosterRefreshPublication", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/refresh-publication",
+  auth: "server-write", body: Schema.Struct({}), bodyMode: "json", pathParams: BuilderPath, query: NoQuery,
+  response: Schema.Struct({ updated: Schema.Boolean }), responseMode: "json", successStatus: 200, errors,
+  summary: "Refresh the newest interactive roster publication",
+})
+
+export const DashboardRosterImageEndpoint = defineEndpoint({
+  operationId: "dashboardRosterImage", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/image",
+  auth: "server-write", body: Schema.Unknown, bodyMode: "multipart", pathParams: BuilderPath, query: NoQuery,
+  response: Schema.Struct({ url: Schema.String, filename: Schema.String }), responseMode: "json",
+  successStatus: 200, errors, summary: "Upload a roster image",
+})
+
+export const DashboardRosterAccountsEndpoint = defineEndpoint({
+  operationId: "dashboardRosterAccounts", method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/accounts",
+  auth: "user-or-bot", body: NoBody, bodyMode: "none", pathParams: BuilderPath,
+  query: Schema.Struct({ discordUserId: Schema.optionalKey(DecimalSnowflake) }),
+  response: Schema.Struct({ remainingSlots: Schema.NullOr(Schema.Number), items: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.String,
+    townhall: Schema.Number, isVerified: Schema.Boolean, signedUp: Schema.Boolean })) }),
+  responseMode: "json", successStatus: 200, errors, summary: "List the actor's linked roster accounts",
+})
+export const DashboardRosterWithdrawEndpoint = defineEndpoint({
+  operationId: "dashboardRosterWithdraw", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/withdraw",
+  auth: "user-or-bot", body: Schema.Struct({ playerTag: Schema.String, discordUserId: Schema.optionalKey(DecimalSnowflake) }),
+  bodyMode: "json", pathParams: BuilderPath, query: NoQuery,
+  response: Schema.Struct({ removed: Schema.Boolean }), responseMode: "json", successStatus: 200, errors,
+  summary: "Withdraw an account owned by the actor from a roster",
+})
+
 export const DashboardRosterBatchRequest = Schema.Struct({
   serverId: DecimalSnowflake,
   rosterIds: Schema.Array(Schema.String),
@@ -74,7 +104,7 @@ export const DashboardRosterQuestionnaire = Schema.Struct({
 })
 export const DashboardRosterQuestionnaireEndpoint = defineEndpoint({
   operationId: "dashboardRosterQuestionnaire", method: "PUT", path: "/v2/roster/questionnaire",
-  auth: "server-write", body: Schema.Struct({ questions: Schema.Array(DashboardRosterQuestion) }), bodyMode: "json",
+  auth: "server-write", body: Schema.Struct({ questions: Schema.Array(DashboardRosterQuestion), reset_answers: Schema.optionalKey(Schema.Boolean) }), bodyMode: "json",
   pathParams: NoPathParams, query: RosterQuery,
   response: Schema.Struct({ questionnaire: DashboardRosterQuestionnaire, affectedMemberCount: Schema.Number }),
   responseMode: "json", successStatus: 200, errors, summary: "Replace roster signup questions",
@@ -95,6 +125,13 @@ export const DashboardRosterSubmissionEndpoint = defineEndpoint({
   }), bodyMode: "json", pathParams: BuilderPath, query: NoQuery,
   response: Schema.Struct({ submission: DashboardRosterSubmission }), responseMode: "json", successStatus: 201,
   errors, summary: "Submit linked account roster signup answers",
+})
+export const DashboardRosterBatchSignupEndpoint = defineEndpoint({
+  operationId: "dashboardRosterBatchSignup", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/submissions/batch",
+  auth: "user-or-bot", body: Schema.Struct({ playerTags: Schema.Array(Schema.String), discordUserId: Schema.optionalKey(DecimalSnowflake) }),
+  bodyMode: "json", pathParams: BuilderPath, query: NoQuery,
+  response: Schema.Struct({ signedUpCount: Schema.Number }), responseMode: "json", successStatus: 201,
+  errors, summary: "Atomically sign up linked accounts to a roster without questions",
 })
 export const DashboardRosterBuilderMissingMembersEndpoint = defineEndpoint({
   operationId: "dashboardRosterBuilderMissingMembers", method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/missing-members",
@@ -157,6 +194,11 @@ export const DashboardRosterAIUsageEndpoint = defineEndpoint({
 })
 
 export const dashboardRosterExtraEndpoints = {
+  dashboardRosterBatchSignup: DashboardRosterBatchSignupEndpoint,
+  dashboardRosterRefreshPublication: DashboardRosterRefreshPublicationEndpoint,
+  dashboardRosterImage: DashboardRosterImageEndpoint,
+  dashboardRosterAccounts: DashboardRosterAccountsEndpoint,
+  dashboardRosterWithdraw: DashboardRosterWithdrawEndpoint,
   dashboardRosterMembersQuery: DashboardRosterMembersQueryEndpoint,
   dashboardRosterAccountGroupsQuery: DashboardRosterAccountGroupsQueryEndpoint,
   dashboardRosterRefreshBatch: DashboardRosterRefreshBatchEndpoint,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { loadLocalApiSecrets, loadLocalDiscordCredentials, localSecretNames } from "./local-api-keychain.mjs"
+import { betaDiscordApplicationId, loadLocalApiSecrets, loadLocalBetaDiscordCredentials, loadLocalDiscordCredentials, localSecretNames } from "./local-api-keychain.mjs"
 
 test("explicit complete stable local keys work without a platform keychain", () => {
   const environment = Object.fromEntries(localSecretNames.map(name => [`CLASHKING_LOCAL_${name}`, "a".repeat(43)]))
@@ -26,4 +26,22 @@ test("explicit Discord OAuth credentials work without a platform keychain", () =
   assert.throws(() => loadLocalDiscordCredentials({ platform: "linux", environment: {
     CLASHKING_LOCAL_DISCORD_CLIENT_ID: "123456789",
   } }), /both valid/u)
+})
+
+test("beta Discord credentials require the exact beta application and a complete isolated set", () => {
+  const environment = {
+    CLASHKING_LOCAL_BETA_DISCORD_CLIENT_ID: betaDiscordApplicationId,
+    CLASHKING_LOCAL_BETA_DISCORD_CLIENT_SECRET: "beta-secret",
+    CLASHKING_LOCAL_BETA_DISCORD_BOT_TOKEN: "beta-token",
+  }
+  assert.deepEqual(loadLocalBetaDiscordCredentials({ platform: "linux", environment }), {
+    clientId: betaDiscordApplicationId, clientSecret: "beta-secret", botToken: "beta-token",
+  })
+  assert.throws(() => loadLocalBetaDiscordCredentials({ platform: "linux", environment: {
+    ...environment, CLASHKING_LOCAL_BETA_DISCORD_CLIENT_ID: "824653933347209227",
+  } }), /complete beta Discord credential set/u)
+  assert.throws(() => loadLocalBetaDiscordCredentials({ platform: "linux", environment: {
+    ...environment, CLASHKING_LOCAL_BETA_DISCORD_CLIENT_SECRET: "",
+  } }), /complete beta Discord credential set/u)
+  assert.throws(() => loadLocalBetaDiscordCredentials({ platform: "linux", environment: {} }), /complete beta Discord credential set/u)
 })

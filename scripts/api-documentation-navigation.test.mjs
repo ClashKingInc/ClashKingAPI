@@ -61,6 +61,8 @@ test("new public operations receive explicit feature names and path-level metada
     ["get", "/v2/auth/export", "App Authentication"],
     ["delete", "/v2/auth/me", "App Authentication"],
     ["get", "/v2/health", "Health"],
+    ["get", "/v2/player/{playerTag}/legend/season", "Player"],
+    ["get", "/v2/player/{playerTag}/legend/comparisons", "Player"],
     ["get", "/v2/leaderboard/{location}/clan/capital-gold", "Leaderboard"],
     ["get", "/v2/media/{filename}", "Media"],
     ["post", "/v2/roster/account-groups/query", "Roster Builder"],

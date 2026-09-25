@@ -7,6 +7,7 @@ import {
   DashboardRosterOperations,
   dashboardRosterRuntimeRoutes,
   dispatchDashboardRoster,
+  rosterMemberAvatar,
 } from "./dashboard-roster-runtime.js"
 import type { WorkerBindings } from "./environment.js"
 import { Forbidden } from "./errors.js"
@@ -17,10 +18,25 @@ import { botEndpoints, dashboardEndpoints } from "@clashking/api-contracts"
 // Dispatcher tests do not decode archive frames; Workers' WASM import is covered
 // by the archive owner's codec tests rather than Node's native WASM linker.
 vi.mock("./war-archive-decoder.js", () => ({ decodeArchiveFrame: () => { throw new Error("Unexpected archive frame decoding") } }))
+vi.mock("./static-metadata.js", () => ({ prepareStaticMetadata: () => Effect.void, rosterHeroNames: () => [], maxLevelAtTownHall: () => 0 }))
 
 const serverId = "1234567890123456789"
 const rosterId = "019fbb92-95e2-7781-9f22-e057c54de9ac"
 const bindings = {} as WorkerBindings
+
+describe("roster member avatars", () => {
+  const userId = "2534567890123456789"
+  it("prefers the guild avatar, including animated hashes", () => {
+    expect(rosterMemberAvatar(serverId, userId, { avatar: "a_guild", user: { avatar: "global" } }))
+      .toBe(`https://cdn.discordapp.com/guilds/${serverId}/users/${userId}/avatars/a_guild.gif`)
+  })
+  it("falls back to global and default avatars", () => {
+    expect(rosterMemberAvatar(serverId, userId, { avatar: null, user: { avatar: "global" } }))
+      .toBe(`https://cdn.discordapp.com/avatars/${userId}/global.png`)
+    expect(rosterMemberAvatar(serverId, userId, { avatar: null, user: { avatar: null } }))
+      .toBe(`https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`)
+  })
+})
 
 const roster = {
   id: rosterId, server_id: serverId, alias: "CWL", roster_type: "clan", signup_scope: "clan-only",
@@ -56,8 +72,8 @@ const run = (request: Request, options: Parameters<typeof testLayer>[0] = {}) =>
 
 describe("Dashboard roster dispatcher", () => {
   it("exports only implemented unique method/path pairs", () => {
-    expect(dashboardRosterRuntimeRoutes).toHaveLength(43)
-    expect(new Set(dashboardRosterRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(43)
+    expect(dashboardRosterRuntimeRoutes).toHaveLength(49)
+    expect(new Set(dashboardRosterRuntimeRoutes.map(({ method, path }) => `${method} ${path}`)).size).toBe(49)
     expect(dashboardRosterRuntimeRoutes).toContainEqual({ method: "PUT", path: "/v2/roster/questionnaire" })
     expect(dashboardRosterRuntimeRoutes).not.toContainEqual({ method: "POST", path: "/v2/roster/ai/context" })
   })
@@ -133,12 +149,12 @@ describe("Dashboard roster dispatcher", () => {
   it("does not authenticate a public roster and strips private fields using its response schema", async () => {
     const require = vi.fn(() => Effect.die("Public roster must not authorize"))
     const execute = () => Effect.succeed(Response.json({
-      id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [],
+      id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [], requireVerified: true,
       webhook_id: serverId, discord_user_id: serverId,
     }))
     const response = await run(new Request("https://api.clashk.ing/v2/public/rosters/public-id"), { require, execute })
     expect(require).not.toHaveBeenCalled()
-    expect(await response?.json()).toEqual({ id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [] })
+    expect(await response?.json()).toEqual({ id: "public-id", name: "Public", updatedAt: "2026-09-03T00:00:00.000Z", members: [], requireVerified: true })
   })
 
   it("uses user-or-bot authentication without manager permission for the signup form", async () => {

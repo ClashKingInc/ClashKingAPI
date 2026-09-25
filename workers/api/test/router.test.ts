@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { Forbidden, InvalidRequest } from "../src/errors.js"
+import { Forbidden, InvalidRequest, UpstreamUnavailable } from "../src/errors.js"
 import type { WorkerBindings } from "../src/environment.js"
 import { adminPreflight, browserPreflight, failureResponse } from "../src/router.js"
 
@@ -76,6 +76,20 @@ describe("Dashboard and App transport policy", () => {
 })
 
 describe("typed API failure mapping", () => {
+  it("reports upstream unavailability without exposing the internal cause", async () => {
+    const response = failureResponse(
+      new UpstreamUnavailable({ cause: "internal_connection_failure", message: "Upstream temporarily unavailable" }),
+      "req-cwl",
+    )
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      code: "upstream_unavailable",
+      message: "Upstream temporarily unavailable",
+      request_id: "req-cwl",
+    })
+  })
+
   it("preserves validation details and request IDs", async () => {
     const response = failureResponse(
       new InvalidRequest({

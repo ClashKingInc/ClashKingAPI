@@ -49,7 +49,7 @@ describe("posted base downloads against authoritative Goose migrations", () => {
       const first = (yield* sql<{ downloaded_at: string }>`SELECT downloads->>${userId} downloaded_at FROM bases WHERE id=${base.id}::bigint`)[0]!.downloaded_at
       expect(yield* store.recordBaseDownload(base.id, userId)).toEqual({ baseId: base.id, userId, downloadCount: 1 })
       expect((yield* sql<{ downloaded_at: string }>`SELECT downloads->>${userId} downloaded_at FROM bases WHERE id=${base.id}::bigint`)[0]!.downloaded_at).toBe(first)
-      expect(yield* sql`SELECT user_id,base_id::text,kind FROM user_saved_bases WHERE user_id=${userId}`).toEqual([{ user_id: userId, base_id: base.id, kind: null }])
+      expect(yield* sql`SELECT user_id,base_id::text FROM user_saved_bases WHERE user_id=${userId}`).toEqual([{ user_id: userId, base_id: base.id }])
     }).pipe(Effect.provide(layer), Effect.provide(dependencies), Effect.scoped))
   })
 })

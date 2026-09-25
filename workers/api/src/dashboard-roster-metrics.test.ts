@@ -70,4 +70,10 @@ describe("roster metric recipes", () => {
       { id: "highlight", target: "cell", columnId: "missing", tone: "red" },
     ] }, new Set(["player.name"])))).rejects.toMatchObject({ _tag: "InvalidRequest" })
   })
+
+  it("accepts a questionnaire UUID as a signup answer metric parameter", async () => {
+    const spec = { schemaVersion: 1 as const, columns: [{ id: "answer", label: "Answer", metricId: "signup.answer",
+      parameters: { questionId: "89d263c3-f2f1-4bea-bc8c-bd2fabcde012" } }] }
+    await expect(Effect.runPromise(validateRosterViewSpec(spec, new Set(["signup.answer"])))).resolves.toBeUndefined()
+  })
 })

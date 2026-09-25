@@ -85,7 +85,7 @@ it("prepares a signed board click once, offers canonical unverified ownership, a
         (${rosterId}::uuid, '#9QQ', 'Foreign cached as actor', 18, ${actorId})`
     const removal = yield* prepareRosterAction(yield* Effect.promise(() => sign(rosterId, '3834567890123456903', undefined, { action: 'remove' })), configuration)
     expect(removal).toMatchObject({ action: 'remove', form: { kind: 'account_select', options: [{ value: '#9QP' }] } })
-    yield* sql`UPDATE rosters SET min_townhall = 19, capacity = 1 WHERE id = ${rosterId}::uuid`
+    yield* sql`UPDATE rosters SET min_townhall = 19, max_signups = 1 WHERE id = ${rosterId}::uuid`
     const select = yield* verifyRosterInteraction(yield* Effect.promise(() => sign(rosterId, '3834567890123456904', undefined,
       { customId: `ck:roster:accounts:${removal.operationId}:1`, values: ['#9QP'] })), configuration)
     expect(yield* advanceRosterDraft(removal.operationId, select.interaction)).toMatchObject({ form: { kind: 'continue',

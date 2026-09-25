@@ -12,8 +12,8 @@ const databaseFailure = (cause: unknown) => new DatabaseFailure({ cause, message
 export const lockRosterMembership = (sql: SqlClient.SqlClient, serverId: string, rosterIds: ReadonlyArray<string>) => Effect.gen(function* () {
   if (rosterIds.some((id) => !uuid.test(id))) return yield* new InvalidRequest({ message: "Invalid roster UUID" })
   const ids = [...new Set(rosterIds.map((id) => id.toLowerCase()))].sort()
-  const rows = yield* sql<{ id: string; revision: number | string; capacity: number; max_accounts_per_user: number | null }>`
-    SELECT id::text, revision, capacity, max_accounts_per_user FROM rosters
+  const rows = yield* sql<{ id: string; revision: number | string; max_signups: number | null; max_accounts_per_user: number | null }>`
+    SELECT id::text, revision, max_signups, max_accounts_per_user FROM rosters
     WHERE server_id = ${serverId} AND id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE
   `
   if (rows.length !== ids.length) return yield* new NotFound({ message: "Roster not found" })
@@ -27,9 +27,9 @@ export const lockRosterMembership = (sql: SqlClient.SqlClient, serverId: string,
 export const assertRosterCapacity = (sql: SqlClient.SqlClient, rosterIds: ReadonlyArray<string>) => Effect.gen(function* () {
   const overfull = yield* sql<{ id: string }>`SELECT roster.id::text FROM rosters roster
     JOIN roster_members member ON member.roster_id = roster.id
-    WHERE roster.id = ANY(${rosterIds}::uuid[])
-    GROUP BY roster.id, roster.capacity HAVING count(*) > roster.capacity LIMIT 1`
-  if (overfull.length > 0) return yield* new Conflict({ message: "Roster capacity would be exceeded" })
+    WHERE roster.id = ANY(${rosterIds}::uuid[]) AND roster.max_signups IS NOT NULL
+    GROUP BY roster.id, roster.max_signups HAVING count(*) > roster.max_signups LIMIT 1`
+  if (overfull.length > 0) return yield* new Conflict({ message: "Roster maximum signups would be exceeded" })
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
 /** Lock canonical link rows before roster admission reads their owners. */

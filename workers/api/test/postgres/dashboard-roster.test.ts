@@ -225,6 +225,13 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       yield* sql`UPDATE rosters SET public_enabled = true, public_share_id = 'RosterFixtureShare2026', require_verified = true WHERE id = ${destinationId}::uuid`
       const shareId = (yield* sql<{ public_share_id: string }>`SELECT public_share_id FROM rosters WHERE id = ${destinationId}::uuid`)[0]!.public_share_id
       expect(yield* run(`/public/rosters/${shareId}`)).toMatchObject({ requireVerified: true, members: [{ playerTag, name: "Fresh player" }] })
+      const unavailableAssets = { ...bindings, ASSETS: { get: async () => { throw new Error("Static heroes are unavailable") } } } as unknown as WorkerBindings
+      const publicDuringAssetOutage = yield* dispatchDashboardRoster(new Request(`https://api.clashk.ing/v2/public/rosters/${shareId}`), unavailableAssets)
+      expect(publicDuringAssetOutage?.status).toBe(200)
+      const derivedDuringAssetOutage = yield* Effect.result(dispatchDashboardRoster(new Request(
+        `https://api.clashk.ing/v2/roster/${destinationId}?server_id=${serverId}`,
+      ), unavailableAssets))
+      expect(derivedDuringAssetOutage).toMatchObject({ _tag: "Failure", failure: { _tag: "UpstreamUnavailable" } })
       expect(yield* run(`/server/${serverId}/rosters/${destinationId}/withdraw`, "POST", { playerTag })).toEqual({ removed: true })
       yield* run(`/roster/${destinationId}/members/${encodeURIComponent(playerTag)}${query}`, "DELETE")
       yield* run(`/roster/views/${view.id}${query}`, "DELETE")

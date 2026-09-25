@@ -92,6 +92,11 @@ const routes = [
 
 export const dashboardRosterRuntimeRoutes = routes.map(({ method, path }) => ({ method, path }))
 
+const heroRosterOperations = new Set([
+  "getRoster", "listRosters", "getGroup", "createRoster", "updateRoster", "deleteRoster", "cloneRoster",
+  "manageMembers", "updateMember", "removeMember", "refreshRosters", "refreshMember",
+])
+
 interface RouteMatch {
   readonly route: (typeof routes)[number]
   readonly params: Readonly<Record<string, string>>
@@ -2337,7 +2342,7 @@ export const dispatchDashboardRoster = (
     }
     if (["manageMembers", "refreshRosters", "refreshMember", "submitSignup", "submitBatchSignup"].includes(match.route.operation)) {
       yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
-    } else {
+    } else if (heroRosterOperations.has(match.route.operation)) {
       yield* prepareStaticMetadata(bindings, ["heroes"])
     }
     const operations = yield* DashboardRosterOperations

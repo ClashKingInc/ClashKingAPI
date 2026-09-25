@@ -36,7 +36,7 @@ test("CI reads the authoritative nested Go module and runs runner checks",()=>{
   assert.doesNotMatch(workflow,/go-version-file: \.schema-test\/go\.mod/u)
   assert.match(workflow,/npm run test:scripts/u)
   assert.match(workflow,/test-postgres\.sh --check \.schema-test/u)
-  assert.match(workflow,/ref: 3e4c66bad5732d9481c252b39f9286c17aa1d30a/u)
+  assert.match(workflow,/ref: 9f57a895b3282a8afadbeb3d57584023cd285a6c/u)
 })
 
 test("CI and package preparation retain strict peer dependency validation",()=>{

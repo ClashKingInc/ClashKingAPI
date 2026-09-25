@@ -1,5 +1,5 @@
 import { rosterWebhook } from "./roster-webhook.js"
-import { normalizeRosterQuestions } from "./roster-questionnaire.js"
+import { normalizeRosterQuestions, validRosterQuestionId } from "./roster-questionnaire.js"
 import { rosterPublication, rosterPublications } from "./roster-publication.js"
 import { readDashboardMultipart, uploadMediaFile } from "./dashboard-upload.js"
 import { Context, Data, Effect, Layer, Schema } from "effect"
@@ -1014,7 +1014,7 @@ const queryMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
   const rosters = yield* metricRosterRows(sql, serverId, body.rosterIds)
   const rows: Array<{ rosterId: string; playerTag: string; value: typeof Schema.Json.Type; attackCount?: number }> = []
   const questionId = body.parameters?.questionId
-  if (body.metricId === "signup.answer" && (typeof questionId !== "string" || !/^[a-z][a-z0-9_]{0,47}$/u.test(questionId))) {
+  if (body.metricId === "signup.answer" && (typeof questionId !== "string" || !validRosterQuestionId(questionId))) {
     return yield* new InvalidRequest({ message: "signup.answer requires a valid questionId parameter" })
   }
   for (const roster of rosters) {
@@ -1341,7 +1341,11 @@ const updateAutomation = (sql: SqlClient.SqlClient, input: DashboardRosterOperat
   const targets = yield* lockAutomationTargets(sql, serverId,
     body.roster_id === undefined ? current.roster_id : body.roster_id,
     body.group_id === undefined ? current.group_id : body.group_id)
-  const offset = body.event_offset_days ?? current.event_offset_days
+  const offset = body.event_offset_days !== undefined ? body.event_offset_days
+    : body.scheduled_at !== undefined ? null : current.event_offset_days
+  if (offset === null && current.event_offset_days !== null && body.scheduled_at === undefined) {
+    return yield* new InvalidRequest({ message: "scheduled_at is required when clearing an event offset" })
+  }
   const scheduledAt = offset === null ? body.scheduled_at ?? current.scheduled_at : yield* relativeAutomationTime(sql, serverId, targets.rosterId, targets.groupId, offset)
   const rows = yield* database("Unable to update roster automation", sql<AutomationRow>`
     UPDATE roster_automation_rules SET
@@ -1993,6 +1997,23 @@ const postRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
   const publications = rosterPublications({ color, id, name: roster.alias, description: roster.description, image: roster.image_url, members, emojis,
     dashboardUrl: dashboard.toString(), joinLabel: String(body.joinLabel), leaveLabel: String(body.leaveLabel),
     viewLabel: String(body.viewLabel), mode: String(body.mode) })
+  const requestPayload = JSON.stringify({ channelId: body.channelId, mode: body.mode, joinLabel: body.joinLabel,
+    leaveLabel: body.leaveLabel, viewLabel: body.viewLabel, dashboardUrl: dashboard.toString() })
+  const reserved = yield* database("Unable to reserve roster publication", sql<{ readonly message_id: string | null }>`
+    INSERT INTO roster_publication_requests (roster_id, nonce, payload)
+    VALUES (${id}::uuid, ${body.nonce}, ${requestPayload}::jsonb)
+    ON CONFLICT (roster_id, nonce) DO NOTHING RETURNING message_id
+  `)
+  if (reserved.length === 0) {
+    const prior = (yield* database("Unable to inspect roster publication retry", sql<{ readonly same: boolean; readonly message_id: string | null }>`
+      SELECT payload = ${requestPayload}::jsonb AS same, message_id FROM roster_publication_requests
+      WHERE roster_id = ${id}::uuid AND nonce = ${body.nonce}
+    `))[0]
+    if (prior === undefined) return yield* new DatabaseFailure({ cause: "missing reservation", message: "Unable to inspect roster publication retry" })
+    if (!prior.same) return yield* new InvalidRequest({ message: "Publication nonce was already used for different options" })
+    if (prior.message_id !== null) return json({ messageId: prior.message_id })
+    return yield* new Conflict({ reason: "publication_pending", message: "Publication status is uncertain. Inspect the destination channel and reconcile the existing post before starting another publication." })
+  }
   const hook = yield* rosterWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, String(body.channelId))
   const ids: string[] = []
   for (const publication of publications) {
@@ -2000,7 +2021,12 @@ const postRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
     if (!isRecord(message) || typeof message.id !== "string" || !discordSnowflakePattern.test(message.id)) return yield* new UpstreamUnavailable({ cause: message, message: "Discord returned an invalid message" })
     ids.push(message.id)
   }
-  if (body.mode !== "static") {
+  yield* sql.withTransaction(Effect.gen(function* () {
+    yield* database("Unable to complete roster publication request", sql`
+      UPDATE roster_publication_requests SET message_id = ${ids[0]!}, updated_at = now()
+      WHERE roster_id = ${id}::uuid AND nonce = ${body.nonce}
+    `)
+    if (body.mode === "static") return
     // Discord snowflakes order actual creation, so a slow older request cannot
     // replace a newer publication when its database write finally completes.
     yield* database("Unable to save roster publication", sql`
@@ -2013,8 +2039,8 @@ const postRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
       RETURNING roster_id, webhook_id, message_id)
       UPDATE rosters SET webhook_id = saved.webhook_id, message_id = saved.message_id FROM saved WHERE rosters.id = saved.roster_id
     `)
-    yield* syncRosterPublication(sql, input, id)
-  }
+  })).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(new DatabaseFailure({ cause, message: "Unable to complete roster publication" }))))
+  if (body.mode !== "static") yield* syncRosterPublication(sql, input, id)
   return json({ messageId: ids[0]! })
 })
 

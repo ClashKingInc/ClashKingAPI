@@ -2,12 +2,13 @@ import { Effect } from "effect"
 import { InvalidRequest } from "./errors.js"
 
 export interface RosterQuestion { id: string; label: string; type: "text" | "boolean" | "single_select"; required: boolean; order: number; options: string[] }
+export const validRosterQuestionId = (value: string) => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u.test(value)
 export const normalizeRosterQuestions = (raw: unknown) => Effect.try({
   try: (): RosterQuestion[] => {
     if (!Array.isArray(raw) || raw.length > 4) throw Error()
     const ids = new Set<string>()
     return raw.map((item, order) => {
-      if (!item || typeof item !== "object" || typeof item.id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u.test(item.id)
+      if (!item || typeof item !== "object" || typeof item.id !== "string" || !validRosterQuestionId(item.id)
         || ["account", "account_selector", "player", "player_selector"].includes(item.id.toLowerCase()) || ids.has(item.id)
         || typeof item.label !== "string" || !item.label.trim() || item.label.length > 45
         || !["text", "boolean", "single_select"].includes(item.type) || typeof item.required !== "boolean") throw Error()

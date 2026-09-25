@@ -323,7 +323,7 @@ export const DashboardCreateRosterAutomationRequest = Schema.Struct({
   active: Schema.optionalKey(Schema.Boolean),
 })
 export const DashboardUpdateRosterAutomationRequest = Schema.Struct({
-  event_offset_days: Schema.optionalKey(Schema.Number),
+  event_offset_days: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   roster_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   group_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   action_type: Schema.optionalKey(Schema.String),

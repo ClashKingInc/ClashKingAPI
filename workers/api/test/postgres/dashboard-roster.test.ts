@@ -40,13 +40,17 @@ const bindings = {
 } as unknown as WorkerBindings
 const db = databaseLayer(bindings)
 const webhook = { id: "4534567890123456789", type: 1, application_id: bindings.DISCORD_CLIENT_ID, guild_id: serverId, channel_id: channelId, name: "ClashKing Rosters", token: "fixture-token" }
-const discord = Layer.succeed(DiscordApi, { request: (path, options) => Effect.succeed(path === `/channels/${channelId}`
+let publicationPosts = 0
+const discord = Layer.succeed(DiscordApi, { request: (path, options) => {
+  if (path.startsWith(`/webhooks/${webhook.id}/fixture-token?`) && options?.method === "POST") publicationPosts++
+  return Effect.succeed(path === `/channels/${channelId}`
   ? { id: channelId, guild_id: serverId, type: 0 }
   : path === "/users/@me" ? { id: bindings.DISCORD_CLIENT_ID, username: "ClashKing Beta", avatar: null }
   : path === `/channels/${channelId}/webhooks` ? [webhook]
   : path === `/webhooks/${webhook.id}` ? webhook
   : path.startsWith(`/webhooks/${webhook.id}/fixture-token?`) && options?.method === "POST" ? { id: userId }
-  : { user: { id: userId, username: "fixture-user", avatar: null } }), token: () => Effect.die("Unexpected OAuth") })
+  : { user: { id: userId, username: "fixture-user", avatar: null } })
+}, token: () => Effect.die("Unexpected OAuth") })
 const principal = { kind: "user" as const, userId }
 const access = { principal, manager: true, sections: {} }
 const layer = Layer.mergeAll(db, DashboardRosterOperations.layer.pipe(Layer.provide(Layer.mergeAll(db, discord))),
@@ -113,7 +117,16 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       expect(missing).toMatchObject({ results: [{ state: "ok", roster_info: { roster_id: rosterId }, missing_members: [{ tag: "#Q0Y" }] }] })
       const canonical = `/server/${serverId}/rosters/${rosterId}`
       expect(yield* run(`${canonical}/submissions/batch`, "POST", { playerTags: [playerTag] })).toEqual({ signedUpCount: 1 })
-      expect(yield* run(`${canonical}/post`, "POST", { channelId, mode: "signup", nonce: "fixture-post-1", joinLabel: "Join", leaveLabel: "Remove signup", viewLabel: "View", dashboardUrl: `https://dash.clashk.ing/dashboard/rosters/detail?guildId=${serverId}&rosterId=${rosterId}` })).toEqual({ messageId: userId })
+      const postBody = { channelId, mode: "signup", nonce: "fixture-post-1", joinLabel: "Join", leaveLabel: "Remove signup", viewLabel: "View", dashboardUrl: `https://dash.clashk.ing/dashboard/rosters/detail?guildId=${serverId}&rosterId=${rosterId}` }
+      expect(yield* run(`${canonical}/post`, "POST", postBody)).toEqual({ messageId: userId })
+      expect(yield* run(`${canonical}/post`, "POST", postBody)).toEqual({ messageId: userId })
+      expect(publicationPosts).toBe(1)
+      const uncertainBody = { ...postBody, nonce: "fixture-post-uncertain" }
+      yield* sql`INSERT INTO roster_publication_requests (roster_id, nonce, payload)
+        VALUES (${rosterId}::uuid, ${uncertainBody.nonce}, ${JSON.stringify({ channelId, mode: "signup", joinLabel: "Join", leaveLabel: "Remove signup", viewLabel: "View", dashboardUrl: postBody.dashboardUrl })}::jsonb)`
+      const pending = yield* Effect.flip(run(`${canonical}/post`, "POST", uncertainBody))
+      expect(pending).toMatchObject({ _tag: "Conflict", reason: "publication_pending" })
+      expect(publicationPosts).toBe(1)
       expect(yield* sql`SELECT webhook_id, channel_id, message_id, needs_sync FROM roster_discord_publications WHERE roster_id = ${rosterId}::uuid`)
         .toEqual([{ webhook_id: webhook.id, channel_id: channelId, message_id: userId, needs_sync: false }])
       yield* run(`/server/${serverId}/rosters`)
@@ -179,6 +192,11 @@ describe("Dashboard roster against authoritative Goose migrations", () => {
       expect(automation.discord_channel_id).toBe(channelId)
       expect(automation.event_offset_days).toBe(-2)
       expect(Date.parse(automation.scheduled_at)).toBe((1796083200 - 172800) * 1000)
+      const absolute = "2026-12-02T00:00:00.000Z"
+      const updatedAutomation = yield* run(`/roster-automation/${automation.automation_id}${query}`, "PATCH", {
+        event_offset_days: null, scheduled_at: absolute,
+      })
+      expect(updatedAutomation).toMatchObject({ rule: { event_offset_days: null, scheduled_at: absolute } })
       yield* run(`/roster-automation/list${query}`)
       yield* run(`/roster-automation/${automation.automation_id}${query}`, "PATCH", { active: false })
       expect(yield* sql`SELECT enabled, ping_type FROM roster_automation_rules WHERE automation_id = ${automation.automation_id}`)

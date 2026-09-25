@@ -30,7 +30,7 @@ export class RateLimited extends Data.TaggedError("RateLimited")<{
 
 export class Conflict extends Data.TaggedError("Conflict")<{
   readonly message: string
-  readonly reason?: "not_open" | "invalid_configuration"
+  readonly reason?: "not_open" | "invalid_configuration" | "publication_pending"
 }> {}
 
 export class PayloadTooLarge extends Data.TaggedError("PayloadTooLarge")<{

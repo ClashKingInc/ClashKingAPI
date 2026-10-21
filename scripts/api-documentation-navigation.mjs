@@ -52,6 +52,7 @@ const additions = new Map([
   ["GET /v2/stats/legend/days", "Stats"],
   ["GET /v2/media/{}", "Media"],
   ["POST /v2/roster/account-groups/query", "Roster Builder"],
+  ["POST /v2/roster/family/war-metrics/query", "Roster Builder"],
   ["POST /v2/roster/ai/usage", "Roster Builder"],
   ["POST /v2/roster/members/query", "Roster Builder"],
   ["POST /v2/roster/membership-changes/validate", "Roster Builder"],

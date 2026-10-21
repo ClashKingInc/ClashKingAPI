@@ -161,7 +161,8 @@ const result = await build({
   } }],
 })
 const runtime = new Miniflare(convertV4MiniflareOptions({
-  host: "0.0.0.0", port,
+  // Public dev traffic goes through the tunnel; opt into loopback binding there.
+  host: process.env.CLASHKING_LOCAL_BIND_HOST === "127.0.0.1" ? "127.0.0.1" : "0.0.0.0", port,
   ...(persistent ? { resourcePersistencePath: resolve(process.env.CLASHKING_LOCAL_STORAGE_ROOT ?? '.local/worker-storage') } : {}),
   modulesRoot: "/local-api",
   modules: [

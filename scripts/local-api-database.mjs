@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises"
 import { parseEnv } from "node:util"
 import pg from "pg"
 import { loadLocalApiSecrets, loadLocalBetaDiscordCredentials } from "./local-api-keychain.mjs"
+import { validateLocalSchemaProfile } from "./local-schema-profile.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
@@ -29,43 +30,7 @@ if (!endpoint.startsWith("unix://") || process.env.DOCKER_HOST && process.env.DO
 process.env.DOCKER_HOST = endpoint
 delete process.env.DOCKER_CONTEXT
 const [image, ...migrations] = output("bash", ["-ec", 'source "$1"; printf "%s\\n" "$fixture_image" "${fixture_sources[@]}"', "local-profile", join(schema, "scripts/retained-api-profile.sh")]).split("\n")
-if (!image?.includes("@sha256:") || migrations.join(",") !== [
-  "001_initial_stats.sql",
-  "002_initial_settings.sql",
-  "003_tracking_observability.sql",
-  "004_developer_link_grants.sql",
-  "005_remove_legacy_admin_auth.sql",
-  "006_simplify_developer_applications.sql",
-  "007_worker_api.sql",
-  "008_ranked_battle_history.sql",
-  "009_league_army_analytics.sql",
-  "010_cwl_season_statistics.sql",
-  "011_active_verified_players.sql",
-  "012_legend_only_army_compositions.sql",
-  "013_battle_player_time_identity.sql",
-  "014_ranked_defense_loot_nullable.sql",
-  "015_army_code_family_compatibility.sql",
-  "016_remove_cwl_season_statistics.sql",
-  "017_final_operational_contract.sql",
-  "018_personal_base_library.sql",
-  "019_unlimited_personal_bases.sql",
-  "020_player_leaderboard_snapshots.sql",
-  "021_inline_base_images_votes.sql",
-  "022_personal_army_library.sql",
-  "023_roster_signup_scope.sql",
-  "024_roster_admission_settings.sql",
-  "025_roster_discord_publications.sql",
-  "026_roster_publication_webhooks.sql",
-  "027_roster_embed_color.sql",
-  "028_roster_automation_event_offsets.sql",
-  "029_roster_default_capacity.sql",
-  "030_legend_daily_metadata.sql",
-  "031_legend_daily_pet_combos.sql",
-  "032_remove_server_link_token_policy.sql",
-  "033_cwl_participation.sql",
-  "034_daily_army_setups.sql",
-  "035_remove_army_analysis_timestamp.sql",
-].join(",")) throw new Error("Unexpected authoritative retained API profile")
+validateLocalSchemaProfile(image, migrations, schema)
 
 function inspect() {
   const ids = docker("ps", "-aq", "--filter", `name=^/${name}$`)

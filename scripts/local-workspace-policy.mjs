@@ -9,3 +9,17 @@ export function allowedProductionRead(request){
  const url=new URL(request.url);
  return ['GET','HEAD'].includes(request.method)&&url.protocol==='https:'&&['wars.clashk.ing','assets.clashk.ing','badges.clashk.ing'].includes(url.hostname)&&!url.username&&!url.password;
 }
+// CCN is a public source for the native esports integration. Keep local
+// transport limited to the same credential-free operations as the API adapter.
+export function allowedCompetitiveRead(request){
+ const url=new URL(request.url);
+ if(request.method!=='GET'||url.origin!=='https://api.competitiveclash.network'||url.username||url.password)return false;
+ const queryByPath=new Map([
+  ['/worlds/events',[]],['/worlds/leaderboard',['segment_id']],
+  ['/players/basicinfo',['player']],['/clans/info',['clan']],['/clans/matches',['clantag']],
+  ['/teams/elo/ranking',['timestamp','limit','offset']],
+  ['/teams/basicinfo',['team_id']],['/teams/matches',['team_id','limit','after','before']],['/teams/upcoming_matches',['team_id','limit','after','before','include_streams']],['/teams/search',['search_str']],
+ ]);
+ const keys=queryByPath.get(url.pathname)??(/^\/worlds\/events\/\d+\/(divisions|segments)$/u.test(url.pathname)||/^\/worlds\/events\/segments\/\d+\/(teams|standings|records)$/u.test(url.pathname)?[]:undefined);
+ return keys!==undefined&&[...url.searchParams.keys()].every(key=>keys.includes(key));
+}

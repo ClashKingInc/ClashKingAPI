@@ -10,7 +10,8 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare"
 import { getPlatformProxy } from "wrangler"
 import { localProviderOrigin } from "./local-provider-origin.mjs"
 import { createLocalAdminIdentity } from "./local-admin-identity.mjs"
-import { workspaceOrigin, allowedProductionRead } from "./local-workspace-policy.mjs"
+import { localNotificationLab } from "./local-notification-lab.mjs"
+import { workspaceOrigin, allowedProductionRead, allowedCompetitiveRead } from "./local-workspace-policy.mjs"
 
 // Interactive development uses local-api-database.mjs and a persistent volume.
 // The disposable schema harness remains a separate, explicit test-only path.
@@ -32,6 +33,9 @@ if (!/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(lan)) throw new Error("Local LAN IPv4 add
 const origin = `http://${lan}:${port}`
 const dashboardOrigin = process.env.CLASHKING_LOCAL_DASHBOARD_ORIGIN ?? "http://localhost:3002"
 const publicOrigin = process.env.CLASHKING_LOCAL_PUBLIC_ORIGIN ?? origin
+const appOrigin = process.env.CLASHKING_LOCAL_APP_ORIGIN ?? "https://local-app.clashk.ing"
+// The temporary dev host uses the same isolated runtime with its own web origin.
+workspaceOrigin(appOrigin)
 const exactOrigin = (value, allowed, name) => {
   let parsed
   try { parsed = new URL(value) } catch { throw new Error(`${name} must be an absolute origin`) }
@@ -50,9 +54,15 @@ if (process.env.CLASHKING_LOCAL_CUSTOM_ORIGINS === "1") {
 const discordClientId = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_ID ?? ""
 const discordClientSecret = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_SECRET ?? ""
 const discordBotToken = process.env.CLASHKING_LOCAL_DISCORD_BOT_TOKEN ?? ""
+const discordPublicKey = process.env.CLASHKING_LOCAL_DISCORD_PUBLIC_KEY ?? ""
 const localAdmin = persistent && process.env.CLASHKING_LOCAL_ADMIN_IDENTITY === "1"
   ? await createLocalAdminIdentity({ apiOrigin: `http://127.0.0.1:${port}` }) : undefined
+const notificationLab = localNotificationLab(Boolean(localAdmin), process.env.CLASHKING_LOCAL_FCM_CREDENTIALS_FILE ?? "")
 const clashProxyOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_CLASH_PROXY_ORIGIN ?? "", { publicOrigin: "https://proxy.clashk.ing" })
+// Isolated service E2E runs can replace Discord with a loopback HTTP provider.
+// Never allow an arbitrary remote host here: the request includes a bot token.
+const discordTestOrigin = process.env.CLASHKING_LOCAL_DISCORD_TEST_ORIGIN ?? ""
+if (discordTestOrigin && !/^http:\/\/127\.0\.0\.1:\d{2,5}$/u.test(discordTestOrigin)) throw new Error("Discord test provider must be loopback")
 const schemaRoot = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? ""
 const archiveImportRoot = process.env.CLASHKING_LOCAL_ARCHIVE_IMPORT_ROOT ?? resolve('.local/imported-archives/packs')
 const staticAssetsRoot = process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT ?? ""
@@ -109,6 +119,14 @@ const discordOnly = async request => {
   const certificates = localAdmin?.certificates(request)
   if (certificates !== undefined) return certificates
   const url = new URL(request.url)
+  if(allowedCompetitiveRead(request))return fetch(url,{headers:{accept:'application/json'},redirect:'error',signal:request.signal})
+  if (request.method === "GET" && url.protocol === "https:" && ["cdn.discordapp.com", "media.discordapp.net"].includes(url.hostname)
+    && /^\/attachments\/\d+\/\d+\//u.test(url.pathname) && !url.username && !url.password && !url.port) {
+    return fetch(url, { redirect: "error", signal: request.signal })
+  }
+  if (notificationLab.allows(request)) {
+    return fetch(url, { method: request.method, headers: request.headers, body: await request.arrayBuffer(), redirect: "error" })
+  }
   if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1" && allowedProductionRead(request)) {
     const headers = new Headers()
     for (const name of ["range", "accept", "if-none-match", "if-modified-since"]) {
@@ -119,6 +137,7 @@ const discordOnly = async request => {
   }
   if (url.protocol !== "https:" || url.hostname !== "discord.com") return unavailable()
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
+  if (discordTestOrigin) return fetch(new URL(url.pathname + url.search, discordTestOrigin), { method: request.method, headers: request.headers, body, redirect: "error" })
   return fetch(url, { method: request.method, headers: request.headers, body })
 }
 // Goose creates these views WITH NO DATA. Initialize them from the empty local
@@ -146,6 +165,24 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   ...(persistent ? { resourcePersistencePath: resolve(process.env.CLASHKING_LOCAL_STORAGE_ROOT ?? '.local/worker-storage') } : {}),
   modulesRoot: "/local-api",
   modules: [
+    // Local equivalent of the public Posts bucket origin used in production.
+    { type: "ESModule", path: "/local-api/entry.js", contents: `
+      import worker from './index.js';
+      export { TicketRuntimeCoordinator } from './index.js';
+      export default { ...worker, async fetch(request, env, ctx) {
+        const path = new URL(request.url).pathname;
+        if (path.startsWith('/admin-stories/') || path.startsWith('/admin-posts/')) {
+          if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405 });
+          const object = await env.POSTS.get(path.slice(1));
+          if (!object) return new Response(null, { status: 404 });
+          const headers = new Headers(); object.writeHttpMetadata(headers);
+          headers.set('etag', object.httpEtag);
+          headers.set('x-content-type-options', 'nosniff');
+          return new Response(request.method === 'HEAD' ? null : object.body, { headers });
+        }
+        return worker.fetch(request, env, ctx);
+      }};
+    ` },
     { type: "ESModule", path: "/local-api/index.js", contents: result.outputFiles[0].text },
     { type: "CompiledWasm", path: "/local-api/zstd.wasm", contents: readFileSync("node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.wasm") },
     { type: "Data", path: "/local-api/dictionary.bin", contents: readFileSync("workers/api/assets/war-json.zdict") },
@@ -155,10 +192,11 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   kvNamespaces: ["API_CACHE"],
   r2Buckets: ["ASSETS", "WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {
+    TICKET_RUNTIME: { className: "TicketRuntimeCoordinator", useSQLite: true },
   },
   serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: unavailable },
-  // Forward Discord requests for real local sign-in. Stripe, FCM and every
-  // other outbound provider remain unavailable in this isolated environment.
+  // Discord sign-in and explicitly configured local FCM are allowed; other
+  // outbound providers remain unavailable in this isolated environment.
   outboundService: discordOnly,
   assets: {
     directory: "workers/api/documentation-assets", binding: "API_DOCUMENTATION", run_worker_first: true,
@@ -166,16 +204,20 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   },
   bindings: {
     ...config.vars, ENVIRONMENT: "isolated-local",
-    WEB_ALLOWED_ORIGINS: [...["localhost", "127.0.0.1", lan].flatMap(host => [3002, 8081].map(value => `http://${host}:${value}`)), dashboardOrigin].join(","),
+    WEB_ALLOWED_ORIGINS: [...["localhost", "127.0.0.1", lan].flatMap(host => [3002, 7357, 8081].map(value => `http://${host}:${value}`)), dashboardOrigin, appOrigin].join(","),
     ADMIN_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].map(host => `http://${host}:3000`).join(","),
     DISCORD_API_ORIGIN: "https://discord.com/api/v10",
     DISCORD_REDIRECT_URI: `${dashboardOrigin}/auth/callback`,
     DISCORD_CLIENT_ID: discordClientId, DISCORD_CLIENT_SECRET: discordClientSecret, DISCORD_BOT_TOKEN: discordBotToken,
+    DISCORD_APPLICATION_ID: discordClientId, DISCORD_PUBLIC_KEY: discordPublicKey,
+    GIVEAWAY_MEDIA_ORIGIN: publicOrigin,
     SMTP_HOST: "127.0.0.1", SMTP_PORT: "9", SMTP_USERNAME: "", SMTP_PASSWORD: "",
     STRIPE_RESTRICTED_KEY: "", STRIPE_WEBHOOK_SECRET: localSecret("STRIPE_WEBHOOK_SECRET"),
     ELASTICSEARCH_API_KEY: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUDIENCE: "",
     ...localAdmin?.bindings,
+    ...notificationLab.bindings,
     POSTS_PUBLIC_ORIGIN: publicOrigin, APP_UPDATES_PUBLIC_ORIGIN: publicOrigin,
+    PROFILE_MEDIA_PUBLIC_ORIGIN: publicOrigin,
     JWT_ACCESS_SECRET: localSecret("JWT_ACCESS_SECRET"), JWT_REFRESH_SECRET: localSecret("JWT_REFRESH_SECRET"), API_BOT_TOKEN: localSecret("API_BOT_TOKEN"),
     AI_USAGE_SECRET: localSecret("AI_USAGE_SECRET"), DATA_ENCRYPTION_KEY: localSecret("DATA_ENCRYPTION_KEY"),
   },
@@ -195,7 +237,9 @@ process.once("SIGINT", stop)
 process.once("SIGTERM", stop)
 try {
   await runtime.ready
-  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1") {
+  // A local asset checkout is the whole metadata source, not a patch over the
+  // CDN. Do not make offline/unpublished development depend on public assets.
+  if (process.env.CLASHKING_LOCAL_PRODUCTION_READS === "1" && staticAssetsRoot === "") {
     const source = readFileSync("workers/api/src/static-metadata.ts", "utf8")
     const categories = JSON.parse(source.match(/const categories = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
     const locales = JSON.parse(source.match(/const locales = new Set\((\[[\s\S]*?\])\)/u)?.[1] ?? "[]")
@@ -225,7 +269,19 @@ try {
       bytes += data.byteLength
     }
     if (files === 0) throw new Error("Configured local static-assets directory contains no JSON files")
-    console.log(JSON.stringify({event:'local_static_assets_seeded',source:staticAssetsRoot,files,bytes}))
+    const translationsRoot = resolve(staticAssetsRoot, '../translations')
+    let translations = 0
+    if (existsSync(translationsRoot)) {
+      for (const file of readdirSync(translationsRoot).sort()) {
+        if (!/^[A-Z]{2,8}\.json$/u.test(file)) continue
+        const data = readFileSync(resolve(translationsRoot, file))
+        JSON.parse(data.toString('utf8'))
+        await staticBucket.put(`translations/${file}`, data, {httpMetadata: {contentType: 'application/json'}})
+        translations++
+        bytes += data.byteLength
+      }
+    }
+    console.log(JSON.stringify({event:'local_static_assets_seeded',source:staticAssetsRoot,files,translations,bytes}))
   }
   const bucket = await runtime.getR2Bucket('WAR_ARCHIVE')
   let seeded = 0

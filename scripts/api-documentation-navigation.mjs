@@ -11,9 +11,26 @@ const original = new Map(source.operations.map(([method, path, tags]) => [
 // previously undocumented handlers and intentionally new retained features.
 // This only assigns navigation; it never adds paths or changes authorization.
 const additions = new Map([
+  ["GET /v2/clan/{}/donations/summary", "Clan"],
+  ["GET /v2/leaderboard/war-triples/{}", "Leaderboard"],
+  ["GET /v2/player/{}/activity-summary", "Player"],
+  ["GET /v2/player/{}/farming", "Player"],
+  ["POST /v2/server/{}/dashboard-access-grants", "App Authentication"],
+  ["GET /v2/users/me/home-layout", "Mobile App"],
+  ["PUT /v2/users/me/home-layout", "Mobile App"],
+  ["POST /v2/server/{}/reminders/{}/send", "Server Reminders"],
+  ["POST /v2/server/{}/tickets/{}/publish", "Server Tickets"],
+  ["GET /v2/server/{}/analytics", "Server Clans"],
+  ["GET /v2/links/server/{}/clans", "Links"],
+  ["POST /v2/links/server/{}/clans/{}/{}", "Links"],
+  ["GET /v2/server/{}/clan/{}/verification", "Server Clans"],
+  ["POST /v2/server/{}/clan/{}/verification", "Server Clans"],
+  ["POST /v2/server/{}/clan/{}/verification/check", "Server Clans"],
   ["GET /v2/app/config", "Mobile App"],
   ["GET /v2/app/posts", "Mobile App"],
   ["GET /v2/app/updates/manifest", "Mobile App"],
+  ["GET /v2/notifications/clans", "Mobile App"],
+  ["PUT /v2/notifications/clans/{}", "Mobile App"],
   ["GET /v2/auth/export", "App Authentication"],
   ["DELETE /v2/auth/me", "App Authentication"],
   ["GET /v2/health", "Health"],
@@ -24,11 +41,9 @@ const additions = new Map([
   ["GET /v2/player/{}/legend/season", "Player"],
   ["GET /v2/player/{}/legend/comparisons", "Player"],
   ["GET /v2/player/{}/league/history", "Player"],
+  ["GET /v2/player/{}/last-activity", "Player"],
   ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
   ["GET /v2/ranked/{}/groups/{}", "Player"],
-  ["GET /v2/stats/armies", "Stats"],
-  ["GET /v2/stats/armies/detail", "Stats"],
-  ["GET /v2/stats/armies/timeline", "Stats"],
   ["GET /v2/stats/army-setups", "Stats"],
   ["GET /v2/stats/army-setups/timeline", "Stats"],
   ["GET /v2/stats/army-setups/rank-history", "Stats"],
@@ -51,8 +66,16 @@ const additions = new Map([
   ["POST /v2/server/{}/rosters/{}/withdraw", "Roster Builder"],
   ["GET /v2/ticket-transcripts/{}", "Ticket Transcripts"],
   ["GET /v2/ticket-transcripts/{}/attachments/{}", "Ticket Transcripts"],
+  ["GET /v2/server/{}/tickets/message-library/templates", "Server Tickets"],
+  ["PUT /v2/server/{}/tickets/message-library/templates", "Server Tickets"],
+  ["POST /v2/server/{}/tickets/records/{}/actions", "Server Tickets"],
+  ["GET /v2/server/{}/tickets/records/{}/actions/{}", "Server Tickets"],
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
+  ?? (path.startsWith("/v2/competitive/") ? "Competitive" : undefined)
+  ?? (path.startsWith("/v2/esports/ccn/") ? "Esports" : undefined)
+  ?? (path.startsWith("/v2/auth/server-dashboard/") ? "App Authentication" : undefined)
+  ?? (path.startsWith("/v2/bot/") ? "Bot" : undefined)
   ?? (path.startsWith("/v2/admin/") ? "Admin" : undefined)
   ?? (path.startsWith("/v2/armies/") ? "Mobile App" : undefined)
   ?? (path.startsWith("/v2/bases/") ? "Bases" : undefined)

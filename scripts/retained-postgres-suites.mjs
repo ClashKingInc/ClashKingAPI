@@ -2,14 +2,16 @@
 // silently executed with bot migrations or silently omitted from coverage.
 export const retainedPostgresSuites = [
   'account-mutations', 'admin', 'announcement-mutations', 'app-content-notifications',
-  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'bot-base-downloads', 'dashboard-bases', 'dashboard-discord-cache',
+  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'bot-base-downloads', 'bot-role-refresh', 'dashboard-bases', 'dashboard-discord-cache',
   'dashboard-roster-ai-context', 'dashboard-roster-ai-usage', 'dashboard-roster-automation-ownership',
   'dashboard-roster-bonuses', 'dashboard-roster-snapshots', 'dashboard-roster',
-  'dashboard-server-activity', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
-  'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
+  'dashboard-server-activity', 'dashboard-server-analytics', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
+  'dashboard-server-clan-links', 'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
   'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-armies', 'personal-bases', 'public-clan-extra',
   'proxy-war-activity', 'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
   'cwl-participation', 'stats', 'tracking-operations', 'war-exports',
+  'ticket-account-link-form', 'ticket-account-runtime', 'ticket-approval-resolver', 'ticket-approval',
+  'ticket-category-retry', 'ticket-dashboard-jobs', 'ticket-effect-guild-scope', 'ticket-effects', 'ticket-panel-publications', 'ticket-runtime', 'ticket-staff',
 ].map(name => `${name}.test.ts`)
 
 export const deferredPostgresSuites = [
@@ -21,10 +23,7 @@ export const deferredPostgresSuites = [
   'roster-interaction-prepare', 'roster-membership-lock', 'roster-operation-status',
   'roster-role-audit', 'roster-role-late-write', 'roster-signup-admission',
   'roster-signup-eligibility', 'roster-stale-role-delivery', 'runtime-recovery',
-  'ticket-account-link-form', 'ticket-account-runtime',
-  'ticket-approval-resolver', 'ticket-approval', 'ticket-category-retry',
-  'ticket-effect-guild-scope', 'ticket-effects', 'ticket-notifications',
-  'ticket-panel-publications', 'ticket-runtime', 'ticket-staff',
+  'ticket-notifications',
 ].map(name => `${name}.test.ts`)
 
 export function validatePostgresInventory(files) {

@@ -1,6 +1,6 @@
 import { DashboardRosterSignupQuestion } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import type { SqlClient } from "effect/unstable/sql"
+import type { SqlClient } from "effect/sql"
 import { Conflict, NotFound } from "./errors.js"
 import type { RosterFormCursor } from "./roster-interaction-forms.js"
 

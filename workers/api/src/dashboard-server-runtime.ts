@@ -10,7 +10,7 @@ import {
   type HttpMethod,
 } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import {
@@ -35,6 +35,9 @@ export interface DashboardServerRuntimeRoute {
 // This inventory is deliberately literal: route-parity checks can compare it with
 // the Go registry without executing contract-module discovery code.
 export const dashboardServerRuntimeRoutes = [
+  { method: "GET", path: "/v2/server/:serverId/analytics" },
+  { method: "POST", path: "/v2/server/:serverId/tickets/records/:ticketId/actions" },
+  { method: "GET", path: "/v2/server/:serverId/tickets/records/:ticketId/actions/:jobId" },
   { method: "GET", path: "/v2/server/:serverId/dashboard-capabilities" },
   { method: "GET", path: "/v2/server/:serverId/dashboard-access" },
   { method: "PUT", path: "/v2/server/:serverId/dashboard-access" },
@@ -95,7 +98,13 @@ export const dashboardServerRuntimeRoutes = [
   { method: "POST", path: "/v2/server/:serverId/reminders" },
   { method: "PUT", path: "/v2/server/:serverId/reminders/:reminderId" },
   { method: "DELETE", path: "/v2/server/:serverId/reminders/:reminderId" },
+  { method: "POST", path: "/v2/server/:serverId/reminders/:reminderId/send" },
   { method: "GET", path: "/v2/links/server/:serverId" },
+  { method: "GET", path: "/v2/links/server/:serverId/clans" },
+  { method: "GET", path: "/v2/server/:serverId/clan/:clanTag/verification" },
+  { method: "POST", path: "/v2/server/:serverId/clan/:clanTag/verification" },
+  { method: "POST", path: "/v2/server/:serverId/clan/:clanTag/verification/check" },
+  { method: "POST", path: "/v2/links/server/:serverId/clans/:clanTag/:playerTag" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards/war-performance" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards/donations" },
@@ -107,12 +116,15 @@ export const dashboardServerRuntimeRoutes = [
   { method: "PUT", path: "/v2/server/:serverId/embeds/:embedName" },
   { method: "DELETE", path: "/v2/server/:serverId/embeds/:embedName" },
   { method: "GET", path: "/v2/server/:serverId/tickets" },
+  { method: "GET", path: "/v2/server/:serverId/tickets/message-library/templates" },
+  { method: "PUT", path: "/v2/server/:serverId/tickets/message-library/templates" },
   { method: "POST", path: "/v2/server/:serverId/tickets" },
   { method: "DELETE", path: "/v2/server/:serverId/tickets/:panelName" },
   { method: "POST", path: "/v2/server/:serverId/tickets/:panelName/buttons" },
   { method: "DELETE", path: "/v2/server/:serverId/tickets/:panelName/buttons/:customId" },
   { method: "PATCH", path: "/v2/server/:serverId/tickets/:panelName/buttons/:customId" },
   { method: "PUT", path: "/v2/server/:serverId/tickets/:panelName" },
+  { method: "POST", path: "/v2/server/:serverId/tickets/:panelName/publish" },
   { method: "PUT", path: "/v2/server/:serverId/tickets/:panelName/buttons/:customId" },
   { method: "PUT", path: "/v2/server/:serverId/tickets/:panelName/approve-messages" },
   { method: "GET", path: "/v2/server/:serverId/clan-categories" },
@@ -300,6 +312,7 @@ const authenticate = (
 const sectionFor = (path: string): string => {
   if (path === "/v2/guild/:guildId") return ""
   if (path.includes("/bases")) return "bases"
+  if (path.includes("/analytics")) return "clans"
   if (path.includes("/dashboard-capabilities")) return ""
   if (path.includes("/links/server/")) return "links"
   if (path.includes("/logs")) return "logs"

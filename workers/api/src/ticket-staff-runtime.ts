@@ -1,7 +1,7 @@
 import { DecimalSnowflake } from "@clashking/api-contracts"
 import { RuntimeUUID, TicketActionEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
@@ -9,11 +9,13 @@ import { parseTicketStaffAction } from "./ticket-staff-actions.js"
 import { requireTicketStaff } from "./ticket-staff-authorization.js"
 import { ticketChannelName } from "./ticket-channel-name.js"
 import { ticketApplicantPermissions } from "./ticket-permissions.js"
+import { ticketStatusLogChannel } from "./ticket-log-settings.js"
 
 export interface StaffTicketSnapshot {
   id: string; server_id: string; channel_id: string; panel_id: string; applicant_user_id: string | null;
   thread_id: string | null; status: string; number: number; naming_convention: string; applicant_accounts: string[];
   data: unknown; panel_name: string; panel_revision: string; assigned_clan_tag: string | null;
+  conversation_deleted_at?: string | null;
 }
 interface Operation {
   id: string; ticket_id: string; panel_id: string; server_id: string; actor_user_id: string; origin_channel_id: string;
@@ -24,6 +26,9 @@ interface QueuedEffect { key: string; type: string; request: Record<string, unkn
 const object = (value: unknown): Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
   ? value as Record<string, unknown> : {}
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Ticket staff operation storage is unavailable" })
+const requireClosePermission = (interaction: VerifiedRuntimeInteraction, ticket: StaffTicketSnapshot) =>
+  ticket.applicant_user_id === interaction.actorId && object(ticket.data).applicant_can_close === true
+    ? Effect.void : requireTicketStaff(interaction, ticket.panel_id, ticket.id)
 const columns = "id::text,ticket_id::text,panel_id::text,server_id,actor_user_id,origin_channel_id,origin_message_id,request_hash,action,state,context,expires_at::text,submission_interaction_id,submitted_request_hash"
 const respond = (operation: Operation) => Schema.decodeUnknownEffect(TicketActionEndpoint.response)(operation.state === "preparing" ? {
   outcome: "ready", operationId: operation.id, ticketId: operation.ticket_id, action: operation.action,
@@ -41,7 +46,7 @@ const queue = (id: string, effects: readonly QueuedEffect[]) => Effect.gen(funct
 export const snapshotStaffTicket = (interaction: VerifiedRuntimeInteraction, ticketId?: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<StaffTicketSnapshot>`SELECT t.id::text,t.server_id,t.channel_id,t.panel_id::text,t.applicant_user_id,t.thread_id,
-    t.status,t.number,t.naming_convention,t.applicant_accounts,t.assigned_clan_tag,p.data,p.name AS panel_name,p.updated_at::text AS panel_revision
+    t.status,t.number,t.naming_convention,t.applicant_accounts,t.assigned_clan_tag,t.conversation_deleted_at,p.data,p.name AS panel_name,p.updated_at::text AS panel_revision
     FROM tickets t JOIN ticket_panels p ON p.id=t.panel_id AND p.server_id=t.server_id
     WHERE t.server_id=${interaction.guildId} AND t.channel_id=${interaction.channelId}
       AND (${ticketId ?? null}::uuid IS NULL OR t.id=${ticketId ?? null}::uuid)`
@@ -71,15 +76,21 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
   yield* requireFreshInteraction(interaction)
   const ticket = yield* snapshotStaffTicket(interaction, "ticketId" in action ? action.ticketId : undefined)
   yield* checkTicketButtonSource(ticket, interaction)
-  yield* requireTicketStaff(interaction, ticket.panel_id, ticket.id)
+  const closing = action.action === "set_status" && ["closed", "delete"].includes(action.status)
+  if (closing) yield* requireClosePermission(interaction, ticket)
+  else yield* requireTicketStaff(interaction, ticket.panel_id, ticket.id)
   if (action.action === "approve") return yield* new Conflict({ message: "Approval template runtime is not ready" })
-  if (action.action === "set_status" && action.status === "delete") return yield* new Conflict({ message: "Ticket transcript export must be ready before deletion" })
-  if (ticket.status === "delete" || (ticket.status === "closed" && action.action !== "set_status")) {
+  if (ticket.status === "delete" || ticket.conversation_deleted_at != null) {
     return yield* new Conflict({ message: "Ticket is closed" })
   }
   const operationId = crypto.randomUUID(), data = object(ticket.data), effects: QueuedEffect[] = []
   const context: Record<string, unknown> = { channelId: ticket.channel_id, threadId: ticket.thread_id,
     previousStatus: ticket.status, applicantUserId: ticket.applicant_user_id, action, actorLabel: interaction.actorLabel }
+  if (closing) context.dashboardJobId = operationId
+  if (closing) context.form = {kind:"continue",customId:`ck:ticket:select:${operationId}`,label:"Confirm close ticket",
+    content: object(ticket.data).transcripts_enabled !== false
+      ? "Close this ticket? Its full transcript will be saved before the Discord channel is permanently deleted. This cannot be undone."
+      : "Close this ticket? Transcripts are disabled for this panel. The Discord channel will be permanently deleted without a transcript. This cannot be undone."}
   if (action.action === "assign") {
     const clans = yield* sql<{ tag: string; name: string; member_count: number }>`SELECT sc.tag,clan.name,clan.member_count
       FROM server_clans sc JOIN basic_clan clan ON clan.tag=sc.tag WHERE sc.server_id=${ticket.server_id}
@@ -100,10 +111,10 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
       { key: "member-announcement", type: "send_message", request: { channelId: ticket.channel_id, nonce: interaction.id,
         content: `<@${action.memberId}> added to this ticket by <@${interaction.actorId}>`, userMentions: [action.memberId,interaction.actorId] } })
   }
-  if (action.action === "set_status" && action.status !== "delete") {
-    if ((action.status === "open" || action.status === "closed") && ticket.applicant_user_id) effects.push({
+  if (action.action === "set_status" && !closing) {
+    if (ticket.applicant_user_id) effects.push({
       key: "applicant-permission", type: "set_channel_permission", request: { channelId: ticket.channel_id,
-        userId: ticket.applicant_user_id, allow: action.status === "open" ? ticketApplicantPermissions : "0", deny: action.status === "closed" ? "1024" : "0" },
+        userId: ticket.applicant_user_id, allow: action.status === "open" ? ticketApplicantPermissions : "0", deny: action.status === "sleep" ? "1024" : "0" },
     })
     const body: Record<string, unknown> = {}
     const category = data[`${action.status}-category`]
@@ -115,11 +126,12 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
       const user = ticket.applicant_user_id ? object(yield* discord.request(`/users/${ticket.applicant_user_id}`)) : {}
       const account = ticket.applicant_accounts[0] ? (yield* sql<{ name:string;townhall_level:number }>`SELECT name,townhall_level FROM basic_player WHERE tag=${ticket.applicant_accounts[0]}`)[0] : undefined
       body.name = ticketChannelName(ticket.naming_convention,{number:ticket.number,user:typeof user.username === "string" ? user.username : "",
-        accountName:account?.name ?? "",accountTownhall:account?.townhall_level ?? null,status:action.status})
+        accountName:account?.name ?? "",accountTownhall:account?.townhall_level ?? null,status:action.status === "delete" ? "closed" : action.status})
     }
     if (Object.keys(body).length) effects.push({ key: "status-channel", type: "edit_channel", request: { channelId: ticket.channel_id, body } })
-    if (typeof data.status_change_log === "string") effects.push({ key: "status-log", type: "send_message", request: {
-      channelId: yield* Schema.decodeUnknownEffect(DecimalSnowflake)(data.status_change_log).pipe(Effect.mapError(failure)), nonce: interaction.id,
+    const statusLog = ticketStatusLogChannel(data)
+    if (statusLog) effects.push({ key: "status-log", type: "send_message", request: {
+      channelId: yield* Schema.decodeUnknownEffect(DecimalSnowflake)(statusLog).pipe(Effect.mapError(failure)), nonce: interaction.id,validateChannel:true,
       content: `Ticket #${ticket.number} status changed to ${action.status} by <@${interaction.actorId}> in <#${ticket.channel_id}>.`, userMentions: [],
     } })
   }
@@ -134,10 +146,20 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
       return yield* respond(raced)
     }
     if (!current || current.status !== ticket.status) return yield* new Conflict({ message: "Ticket changed during staff preparation" })
-    const active = yield* sql`SELECT id FROM ticket_runtime_operations WHERE ticket_id=${ticket.id}::uuid
-      AND (state IN ('submitted','provisioning','reconciling') OR (state='preparing' AND expires_at>clock_timestamp()))`
+    const active = yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE ticket_id=$1::uuid
+      AND (state IN ('submitted','provisioning','reconciling') OR (state='preparing' AND expires_at>clock_timestamp()))`,[ticket.id])
+    const existing = active[0]
+    // Ephemeral dismissal has no Discord event. Reopen the same authorized close
+    // confirmation instead of creating a second operation or rejecting its owner.
+    if (closing && existing && active.length === 1 && existing.action === "set_status" &&
+      existing.actor_user_id === interaction.actorId && existing.server_id === interaction.guildId &&
+      existing.origin_channel_id === interaction.channelId && object(existing.context).previousStatus === ticket.status &&
+      ["closed","delete"].includes(String(object(object(existing.context).action).status))) {
+      return yield* respond(existing)
+    }
     if (active.length) return yield* new Conflict({ message: "Ticket already has an active operation" })
-    const preparing = action.action === "assign"
+    if ((yield* sql`SELECT id FROM ticket_dashboard_jobs WHERE ticket_id=${ticket.id}::uuid AND state IN ('pending','running')`).length) return yield* new Conflict({ message: "Ticket already has an active dashboard action" })
+    const preparing = action.action === "assign" || closing
     const rows = yield* sql.unsafe<Operation>(`INSERT INTO ticket_runtime_operations(id,interaction_id,action,ticket_id,server_id,actor_user_id,panel_id,
       origin_channel_id,origin_message_id,context,request,request_hash,state,submission_interaction_id,submitted_request,submitted_request_hash)
       VALUES($1::uuid,$2,$3,$4::uuid,$5,$6,$7::uuid,$8,$9,$10::jsonb,$11::jsonb,$12,$13,$14,$15::jsonb,$16) RETURNING ${columns}`,
@@ -153,7 +175,7 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
 export const advanceTicketStaff = (operationId: string, interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
   yield* Schema.decodeUnknownEffect(RuntimeUUID)(operationId).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid ticket operation ID"})))
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE id=$1::uuid AND action='assign'`,[operationId])
+  const rows = yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE id=$1::uuid AND action IN ('assign','set_status')`,[operationId])
   const operation = rows[0]
   if (!operation) return undefined
   yield* assertScope(operation,interaction)
@@ -162,6 +184,24 @@ export const advanceTicketStaff = (operationId: string, interaction: VerifiedRun
     return yield* respond(operation)
   }
   yield* requireFreshInteraction(interaction)
+  if (operation.action === "set_status") {
+    const ticket = yield* snapshotStaffTicket(interaction, operation.ticket_id)
+    yield* requireClosePermission(interaction, ticket)
+    const action = object(object(operation.context).action)
+    if (action.status !== "closed" && action.status !== "delete" || interaction.type !== 3 || interaction.data.component_type !== 2 || interaction.data.custom_id !== `ck:ticket:select:${operationId}`) return yield* new InvalidRequest({message:"A matching close confirmation is required"})
+    return yield* sql.withTransaction(Effect.gen(function* () {
+      const current = (yield* sql<{status:string}>`SELECT status FROM tickets WHERE id=${ticket.id}::uuid AND server_id=${ticket.server_id} FOR UPDATE`)[0]
+      const session = (yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE id=$1::uuid FOR UPDATE`,[operationId]))[0]
+      if (!session) return yield* new NotFound({message:"Close confirmation not found"})
+      if (session.submission_interaction_id === interaction.id && session.submitted_request_hash === interaction.requestHash) return yield* respond(session)
+      if (!current || session.state !== "preparing" || Date.parse(session.expires_at) <= Date.now() || current.status !== object(session.context).previousStatus) return yield* new Conflict({message:"Close confirmation expired or ticket changed"})
+      const context = object(session.context)
+      yield* sql`INSERT INTO ticket_dashboard_jobs(id,server_id,ticket_id,actor_user_id,action,request)
+        VALUES(${operationId}::uuid,${ticket.server_id},${ticket.id}::uuid,${interaction.actorId},'delete_ticket',${JSON.stringify({action:"delete_ticket",previousStatus:current.status,transcriptsEnabled:object(ticket.data).transcripts_enabled !== false})}::jsonb)`
+      yield* sql`UPDATE ticket_runtime_operations SET state='submitted',submission_interaction_id=${interaction.id},submitted_request=${JSON.stringify(interaction.data)}::jsonb,submitted_request_hash=${interaction.requestHash},updated_at=clock_timestamp() WHERE id=${operationId}::uuid`
+      return yield* respond({...session,context,state:"submitted"})
+    }))
+  }
   yield* requireTicketStaff(interaction,operation.panel_id,operation.ticket_id)
   if (interaction.type !== 3 || interaction.data.component_type !== 3 || interaction.data.custom_id !== `ck:ticket:select:${operationId}` || interaction.data.values?.length !== 1) {
     return yield* new InvalidRequest({ message: "A matching ticket clan selection is required" })

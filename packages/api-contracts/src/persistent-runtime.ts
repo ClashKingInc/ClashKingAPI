@@ -118,15 +118,30 @@ const TicketAccountSelectFormBase = Schema.Struct({
   options: Schema.Array(Schema.Struct({
     value: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
     label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(100))),
+    townhall: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 100 }))),
   })).check(Schema.isMinLength(1), Schema.isMaxLength(25)),
 })
 export const TicketAccountSelectForm = TicketAccountSelectFormBase.check(Schema.makeFilter((form) =>
   form.minValues <= form.maxValues && form.maxValues <= form.options.length
     ? undefined : "account select bounds must fit the supplied options"))
+export const TicketModalSelectField = Schema.Struct({
+  customId: DiscordCustomId, label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(45)),
+  required: Schema.Boolean, style: Schema.Literal("select"),
+  minValues: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 25 })),
+  maxValues: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 25 })),
+  options: Schema.Array(Schema.Struct({ value: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(100))),
+    townhall: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 100 }))),
+  })).check(Schema.isMinLength(1), Schema.isMaxLength(25)),
+}).check(Schema.makeFilter(field => field.minValues <= field.maxValues && field.maxValues <= field.options.length
+  ? undefined : "Modal selection bounds must fit the available options"))
+export const TicketModalField = Schema.Union([TicketTextField, TicketModalSelectField])
 export const TicketModalForm = Schema.Struct({
   kind: Schema.Literal("modal"), customId: DiscordCustomId,
   title: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(45)),
-  fields: Schema.Array(TicketTextField).check(Schema.isMinLength(1), Schema.isMaxLength(5)),
+  fields: Schema.Array(TicketModalField).check(Schema.isMinLength(1), Schema.isMaxLength(5)),
 })
 export const TicketContinueForm = Schema.Struct({
   kind: Schema.Literal("continue"), customId: DiscordCustomId,
@@ -146,9 +161,10 @@ export const TicketStringSelectForm = Schema.Struct({
 })
 export const TicketApplicationForm = Schema.Union([TicketAccountSelectForm, TicketStringSelectForm, TicketModalForm, TicketContinueForm])
 const TicketReadyResponse = Schema.Struct({ outcome: Schema.Literal("ready"), operationId: RuntimeUUID,
-  ticketId: RuntimeUUID, action: Schema.Literals(["open", "approve", "assign"]), expiresAt: Schema.String, form: TicketApplicationForm })
+  ticketId: RuntimeUUID, action: Schema.Literals(["open", "approve", "assign", "set_status"]), expiresAt: Schema.String, form: TicketApplicationForm })
 const TicketAcceptedResponse = Schema.Struct({ outcome: Schema.Literals(["accepted", "complete"]),
-  operationId: RuntimeUUID, ticketId: RuntimeUUID, state: TicketRuntimeState })
+  operationId: RuntimeUUID, ticketId: RuntimeUUID, state: TicketRuntimeState,
+  channelId: Schema.optionalKey(DecimalSnowflake) })
 /** A scoped preparation exists, but no ticket or opening operation exists yet. */
 export const TicketLinkRequiredResponse = Schema.Struct({ outcome: Schema.Literal("link_required"),
   preparationId: RuntimeUUID, expiresAt: Schema.String,

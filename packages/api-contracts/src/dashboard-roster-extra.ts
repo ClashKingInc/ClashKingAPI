@@ -164,7 +164,7 @@ export const DashboardRosterAIContextRequest = Schema.Struct({
   })),
 })
 export const DashboardRosterAIContextResponse = Schema.Struct({
-  requestId: Schema.String, model: Schema.Literal("gpt-5.6-luna"),
+  requestId: Schema.String, model: Schema.Literal("gpt-6-luna"),
   budget: Schema.Struct({ serverSpentUsd: Schema.Number, serverLimitUsd: Schema.Number,
     globalSpentUsd: Schema.Number, globalLimitUsd: Schema.Number, userSpentUsd: Schema.Number, userLimitUsd: Schema.Number,
     paidSpentUsd: Schema.Number, paidLimitUsd: Schema.Number, paidRemainingUsd: Schema.Number,
@@ -187,7 +187,7 @@ export const DashboardRosterAITokenUsage = Schema.Struct({
 })
 export const DashboardRosterAIUsageEndpoint = defineEndpoint({
   operationId: "dashboardRosterAIUsage", method: "POST", path: "/v2/roster/ai/usage",
-  auth: "ai-metering", body: Schema.Struct({ requestId: Schema.String, model: Schema.Literal("gpt-5.6-luna"),
+  auth: "ai-metering", body: Schema.Struct({ requestId: Schema.String, model: Schema.Literals(["gpt-5.6-luna", "gpt-6-luna"]),
     usage: DashboardRosterAITokenUsage, steps: Schema.Array(DashboardRosterAITokenUsage),
   }), bodyMode: "json", pathParams: NoPathParams, query: NoQuery, response: NoContent,
   responseMode: "none", successStatus: 204, errors, summary: "Settle AI usage with the dedicated metering secret",

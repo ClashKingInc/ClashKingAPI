@@ -1,6 +1,6 @@
 import { botEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
 import { Context, Data, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, bearerToken } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"

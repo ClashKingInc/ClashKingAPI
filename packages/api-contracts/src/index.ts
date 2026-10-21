@@ -1,7 +1,10 @@
 export * from "./app-config.js"
+export * from "./competitive.js"
+import { competitiveEndpoints } from "./competitive.js"
 export * from "./admin.js"
 export * from "./bot.js"
 export * from "./dashboard.js"
+export * from "./dashboard-analytics.js"
 export * from "./discord.js"
 export * from "./endpoint.js"
 export * from "./errors.js"
@@ -21,6 +24,7 @@ export * from "./army-setups.js"
 export * from "./legends.js"
 export * from "./personal-bases.js"
 export * from "./personal-armies.js"
+export * from "./bot-clash.js"
 export * from "./billing-webhook.js"
 export * from "./media.js"
 export * from "./legacy-public.js"
@@ -40,17 +44,19 @@ import {
   StatsRankedEndpoint,
   StatsWarEndpoint,
 } from "./stats.js"
-import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { leagueAnalyticsEndpoints } from "./league-analytics.js"
 import { armySetupEndpoints } from "./army-setups.js"
 import { legendEndpoints } from "./legends.js"
 import { personalBaseEndpoints } from "./personal-bases.js"
 import { personalArmyEndpoints } from "./personal-armies.js"
+import { botClashEndpoints } from "./bot-clash.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
 export const endpoints = {
+  ...competitiveEndpoints,
   ...legacyPublicEndpoints,
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,
@@ -60,6 +66,7 @@ export const endpoints = {
   ...legendEndpoints,
   ...personalBaseEndpoints,
   ...personalArmyEndpoints,
+  ...botClashEndpoints,
   ...statsHistoryEndpoints,
   initialization: InitializationEndpoint,
   appAnnouncements: AppAnnouncementsEndpoint,
@@ -72,7 +79,6 @@ export const endpoints = {
   appConfig: AppConfigEndpoint,
   homeActivity: HomeActivityEndpoint,
   health: HealthEndpoint,
-  statsArmies: ArmySearchEndpoint,
   statsCwl: StatsCwlEndpoint,
   statsRanked: StatsRankedEndpoint,
   statsWar: StatsWarEndpoint,

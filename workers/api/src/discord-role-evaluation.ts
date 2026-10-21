@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { InvalidRequest } from "./errors.js"
 
 export type DiscordRoleRule = Pick<typeof ServerRole.Type,
-  "id" | "server_id" | "clan_tag" | "type" | "option" | "role_id" | "mode">
+  "id" | "server_id" | "clan_tag" | "type" | "option" | "role_id">
 
 /** Internal immutable projection, not a new HTTP contract. The API snapshot
  * owner supplies canonical links joined to current player/clan facts. Never
@@ -141,7 +141,6 @@ export const evaluateDiscordRoles = (input: DiscordRoleEvaluationInput): Effect.
     const matched = new Set<string>()
     for (const rule of input.rules) {
       if (rule.server_id !== input.serverId || !rule.id || !rule.role_id.trim() || !rule.option.trim()
-        || !["add", "remove", "both"].includes(rule.mode)
         || rule.clan_tag != null && rule.type !== "clan_role") {
         return yield* invalid("Role rule does not belong to the canonical server configuration")
       }
@@ -187,16 +186,16 @@ export const evaluateDiscordRoles = (input: DiscordRoleEvaluationInput): Effect.
         // an unknown rule as a reason to remove a member's existing role.
         return yield* invalid(`Role evaluation is not implemented for ${rule.type}`)
       }
-      if (rule.mode !== "add") removable.add(rule.role_id)
+      removable.add(rule.role_id)
       if (qualifies) {
         matched.add(rule.id)
         desired.add(rule.role_id)
-        if (rule.mode !== "remove") additions.add(rule.role_id)
+        additions.add(rule.role_id)
       }
     }
     const current = new Set(input.currentRoleIds)
     // A matching rule protects the role from a nonmatching rule for that same
-    // role. Remove-only never grants; add-only never revokes. Unmanaged roles
+    // role. Unmanaged roles
     // do not appear in the delta and remain the executor's responsibility.
     return {
       matchedRuleIds: sorted(matched), desiredRoleIds: sorted(desired),

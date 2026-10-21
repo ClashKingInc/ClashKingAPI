@@ -1,9 +1,11 @@
 import { RuntimeUUID,TicketPanelPublicationPrepareEndpoint,TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect,Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { TicketPanelMessage } from "@clashking/api-contracts"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict,DatabaseFailure,Forbidden,InvalidRequest,NotFound,RateLimited,UpstreamUnavailable,type ApiFailure } from "./errors.js"
 import { requireFreshInteraction,type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
+import { ticketPanelActionsError } from "./ticket-panel-actions.js"
 
 type Prepare=typeof TicketPanelPublicationPrepareEndpoint.response.Type
 type Status=typeof TicketPanelPublicationStatusEndpoint.response.Type
@@ -18,6 +20,7 @@ const componentIds=(value:unknown):ReadonlyArray<string>=>{
     const record=object(item)
     if(typeof record.custom_id==="string")ids.push(record.custom_id)
     if(Array.isArray(record.components))visit(record.components)
+    if(record.accessory)visit(record.accessory)
   }
   visit(value)
   return ids.sort()
@@ -61,7 +64,10 @@ export const prepareTicketPanelPublication=(interaction:VerifiedRuntimeInteracti
   yield* requireFreshInteraction(interaction)
   const permissions=BigInt(interaction.permissions)
   if((permissions&8n)===0n&&(permissions&32n)===0n)return yield* new Forbidden({ message:"Manage Server permission is required" })
-  const { panelId,channelId }=command,requestId=interaction.id
+  return yield* preparePanelPublication(interaction.guildId, interaction.actorId, interaction.id, command.panelId, command.channelId)
+})
+
+const preparePanelPublication=(serverId:string,actorId:string,requestId:string,panelId:string,channelId:string,expectedUpdatedAt?:string,editExisting=false):Effect.Effect<Prepare,ApiFailure,SqlClient.SqlClient>=>Effect.gen(function*(){
   yield* decodePanelId(panelId)
   const sql=yield* SqlClient.SqlClient,effectId=yield* digest(JSON.stringify([panelId,channelId,requestId]))
   return yield* sql.withTransaction(Effect.gen(function*(){
@@ -71,23 +77,36 @@ export const prepareTicketPanelPublication=(interaction:VerifiedRuntimeInteracti
     if(existing){
       if(existing.panel_id!==panelId||existing.channel_id!==channelId)return yield* new Conflict({ message:"Panel publication request identity was reused" })
       const storedPayload=object(existing.payload)
-      if(storedPayload.actorUserId!==interaction.actorId||storedPayload.serverId!==interaction.guildId)return yield* new Conflict({ message:"Panel publication request identity was reused" })
+      if(storedPayload.actorUserId!==actorId||storedPayload.serverId!==serverId)return yield* new Conflict({ message:"Panel publication request identity was reused" })
       return { effectId,panelId,state:existing.state,statusCustomId:`ck:ticket:panel-status:${effectId}` }
     }
     const panel=(yield* sql<{ server_id:string;name:string;components:unknown;data:unknown;updated_at:string }>`SELECT server_id,name,components,data,updated_at::text
-      FROM ticket_panels WHERE id=${panelId}::uuid AND archived_at IS NULL FOR SHARE`)[0]
-    if(!panel||panel.server_id!==interaction.guildId)return yield* new NotFound({ message:"Ticket panel not found" })
+      FROM ticket_panels WHERE id=${panelId}::uuid AND archived_at IS NULL FOR UPDATE`)[0]
+    if(!panel||panel.server_id!==serverId)return yield* new NotFound({ message:"Ticket panel not found" })
+    if(expectedUpdatedAt !== undefined && panel.updated_at !== expectedUpdatedAt) return yield* new Conflict({ message:"The saved panel changed. Reload it before publishing." })
+    const active=editExisting ? (yield* sql<{ message_id:string;channel_id:string;payload:unknown }>`SELECT p.message_id,p.channel_id,e.payload FROM ticket_panel_publications p JOIN ticket_panel_publication_effects e USING(effect_id) WHERE p.panel_id=${panelId}::uuid AND p.state='active'`)[0] : undefined
+    if(editExisting && (!active || active.channel_id !== channelId)) return yield* new Conflict({ message:"The live panel changed. Reload it before publishing." })
     const unresolved=yield* sql`SELECT effect_id FROM ticket_panel_publication_effects WHERE panel_id=${panelId}::uuid AND state IN ('pending','executing','uncertain')`
     if(unresolved.length)return yield* new Conflict({ message:"Ticket panel already has an unresolved publication" })
     const components=discordButtons(panelId,panel.components)
     if(!components)return yield* new Conflict({ message:"Ticket panel buttons are not publishable" })
     const data=object(panel.data),embedName=typeof data.embed_name === "string" ? data.embed_name : undefined
-    const embed=embedName ? (yield* sql<{ data:unknown }>`SELECT data FROM server_custom_embeds WHERE server_id=${panel.server_id} AND name=${embedName}`)[0]?.data : undefined
-    const configured=object(embed),firstMessage=Array.isArray(configured.messages)?object(object(configured.messages[0]).data):configured
+    const native=data.panel_message == null ? undefined : yield* Schema.decodeUnknownEffect(TicketPanelMessage)(data.panel_message,{ onExcessProperty:"error" }).pipe(
+      Effect.mapError(()=>new Conflict({ message:"Stored ticket panel message is not publishable" })))
+    if (native?.components) {
+      const actionError = ticketPanelActionsError(panelId, native.components, components as readonly { custom_id: string }[])
+      if (actionError) return yield* new Conflict({ message: actionError })
+    }
+    const embed=native ?? (embedName ? (yield* sql<{ data:unknown }>`SELECT data FROM server_custom_embeds WHERE server_id=${panel.server_id} AND name=${embedName}`)[0]?.data : undefined)
+    const configured=object(embed)
+    const wrapped=Array.isArray(configured.messages)?object(object(configured.messages[0]).data):configured
+    const firstMessage=typeof wrapped.title==="string"||typeof wrapped.description==="string"||Array.isArray(wrapped.fields)
+      ? { embeds:[wrapped] } : wrapped
     const message={ ...firstMessage,
-      ...(typeof firstMessage.content === "string"||Array.isArray(firstMessage.embeds)?{}:{ content:`Open a ${panel.name} ticket using a button below.` }),
-      components:[{ type:1,components }],nonce:requestId,enforce_nonce:true,allowed_mentions:{ parse:[] } }
-    const payload={ version:1,actorUserId:interaction.actorId,serverId:interaction.guildId,requestId,message }
+      ...(firstMessage.flags===32768||typeof firstMessage.content === "string"||Array.isArray(firstMessage.embeds)?{}:{ content:`Open a ${panel.name} ticket.` }),
+      components:native?.components ?? [{ type:1,components }],nonce:requestId,enforce_nonce:true,allowed_mentions:{ parse:[] } }
+    if(active && object(object(active.payload).message).flags===32768 && object(message).flags!==32768) return yield* new Conflict({ message:"Discord cannot change an existing Components v2 message back to Classic. Post a new panel message instead." })
+    const payload={ version:1,actorUserId:actorId,serverId,requestId,message,...(active ? { targetMessageId:active.message_id } : {}) }
     if(new TextEncoder().encode(JSON.stringify(payload)).byteLength>262_144)return yield* new Conflict({ message:"Ticket panel publication exceeds the payload limit" })
     const revision=(yield* sql<{ revision:string|number }>`SELECT COALESCE(max(revision),0)+1 AS revision FROM ticket_panel_publication_effects WHERE panel_id=${panelId}::uuid`)[0]?.revision
     if(revision===undefined)return yield* databaseFailure(undefined)
@@ -162,7 +181,9 @@ export const runTicketPanelPublication=(effectId:string):Effect.Effect<Status,Ap
   // Only this invocation's fresh claim may send; uncertain work only reconciles.
   if(!claim.send&&claimed.state!=="uncertain")return response(claimed)
   const discord=yield* DiscordApi
-  if(claimed.state==="uncertain"&&claimed.claim_token){
+  const targetMessageId=object(claimed.payload).targetMessageId
+  const isEdit=typeof targetMessageId === "string"
+  if(claimed.state==="uncertain"&&claimed.claim_token&&!isEdit){
     const bot=yield* discord.request("/users/@me").pipe(Effect.result)
     const listed=yield* discord.request(`/channels/${claimed.channel_id}/messages?limit=100`).pipe(Effect.result)
     if(bot._tag==="Success"&&typeof object(bot.success).id==="string"&&listed._tag==="Success"&&Array.isArray(listed.success)){
@@ -175,11 +196,13 @@ export const runTicketPanelPublication=(effectId:string):Effect.Effect<Status,Ap
       WHERE effect_id=${effectId} AND state='uncertain' AND claim_token=${claimed.claim_token}::uuid`
     return response(claimed)
   }
-  if(claimed.state!=="executing"||!claimed.claim_token)return response(claimed)
-  const sent=yield* discord.request(`/channels/${claimed.channel_id}/messages`,{ method:"POST",body:object(claimed.payload).message }).pipe(Effect.result)
+  if((claimed.state!=="executing"&&!(claimed.state==="uncertain"&&isEdit))||!claimed.claim_token)return response(claimed)
+  const messageBody=object(object(claimed.payload).message)
+  const { nonce:_nonce,enforce_nonce:_enforce,...editBody }=messageBody
+  const sent=yield* discord.request(`/channels/${claimed.channel_id}/messages${isEdit ? `/${targetMessageId}` : ""}`,{ method:isEdit ? "PATCH" : "POST",body:isEdit ? { content:null,embeds:messageBody.flags===32768 ? null : [],...editBody } : messageBody }).pipe(Effect.result)
   if(sent._tag==="Failure"){
     const failure=sent.failure
-    if(failure instanceof RateLimited){
+    if(failure instanceof RateLimited && claimed.state!=="uncertain"){
       yield* sql`UPDATE ticket_panel_publication_effects SET state='pending',retry_reason='rate_limited',next_attempt_at=clock_timestamp()+(${failure.retryAfterSeconds}*interval '1 second'),
         claim_token=NULL,claimed_at=NULL,lease_expires_at=NULL,last_error='rate_limited',updated_at=clock_timestamp()
         WHERE effect_id=${effectId} AND state='executing' AND claim_token=${claimed.claim_token}::uuid`
@@ -187,10 +210,22 @@ export const runTicketPanelPublication=(effectId:string):Effect.Effect<Status,Ap
     }
     const state=failure instanceof UpstreamUnavailable ? "uncertain" : "failed"
     yield* sql`UPDATE ticket_panel_publication_effects SET state=${state},last_error=${failure._tag},updated_at=clock_timestamp()
-      WHERE effect_id=${effectId} AND state='executing' AND claim_token=${claimed.claim_token}::uuid`
-    return state==="uncertain" ? yield* runTicketPanelPublication(effectId) : yield* ticketPanelPublicationStatus(effectId)
+      WHERE effect_id=${effectId} AND state IN ('executing','uncertain') AND claim_token=${claimed.claim_token}::uuid`
+    return state==="uncertain" && !isEdit ? yield* runTicketPanelPublication(effectId) : yield* ticketPanelPublicationStatus(effectId)
   }
   const message=yield* Schema.decodeUnknownEffect(Schema.Struct({ id:Schema.String }))(sent.success).pipe(
     Effect.mapError(()=>new UpstreamUnavailable({ cause:undefined,message:"Discord panel message response is invalid" })))
+  if(isEdit && message.id!==targetMessageId) return yield* new UpstreamUnavailable({cause:undefined,message:"Discord returned a different panel message identity"})
   return yield* commitPanelSuccess(claimed,message.id)
+}).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(databaseFailure(cause))))
+
+export const publishDashboardTicketPanel=(serverId:string,panelName:string,actorId:string,requestId:string,expectedUpdatedAt:string,channelId?:string):Effect.Effect<Status,ApiFailure,SqlClient.SqlClient|DiscordApi>=>Effect.gen(function*(){
+  const sql=yield* SqlClient.SqlClient
+  const panel=(yield* sql<{id:string}>`SELECT id::text FROM ticket_panels WHERE server_id=${serverId} AND name=${panelName} AND archived_at IS NULL`)[0]
+  if(!panel)return yield* new NotFound({message:"Ticket panel not found"})
+  const active=(yield* sql<{channel_id:string}>`SELECT channel_id FROM ticket_panel_publications WHERE panel_id=${panel.id}::uuid AND state='active'`)[0]
+  const destination=channelId ?? active?.channel_id
+  if(!destination)return yield* new InvalidRequest({message:"Choose a channel for the first panel publication."})
+  const prepared=yield* preparePanelPublication(serverId,actorId,requestId,panel.id,destination,expectedUpdatedAt,channelId===undefined)
+  return yield* runTicketPanelPublication(prepared.effectId)
 }).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(databaseFailure(cause))))

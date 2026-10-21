@@ -3,6 +3,9 @@ import { Context, Layer } from "effect"
 // Wrangler owns resource and public-var types. Only secret-store values and
 // explicitly optional deployment settings are augmented here.
 interface WorkerSecrets {
+  readonly PROFILE_MEDIA_PUBLIC_ORIGIN?: string
+  readonly GIVEAWAY_MEDIA_ORIGIN?: string
+  readonly CLAN_NOTIFICATION_BETA?: string
   readonly API_BOT_TOKEN: string
   readonly AI_USAGE_SECRET: string
   readonly DATA_ENCRYPTION_KEY: string
@@ -22,9 +25,7 @@ interface WorkerSecrets {
   readonly STRIPE_WEBHOOK_SECRET: string
 }
 
-// Retained only to type-check unmounted reference modules and their isolated
-// tests. The active Wrangler configuration supplies no ticket runtime binding;
-// no API dispatcher, export or scheduled handler may use this capability.
+// Structural wake capability also used by isolated ticket coordinator tests.
 interface DeferredRuntimeReferenceBindings {
   readonly TICKET_RUNTIME: {
     getByName(name: string): { wake(operationId: string): Promise<void> }
@@ -35,7 +36,7 @@ export type WorkerBindings = {
   readonly [Key in keyof Cloudflare.Env]: Cloudflare.Env[Key] extends string ? string : Cloudflare.Env[Key]
 } & WorkerSecrets
 
-/** Reference-only capabilities, deliberately absent from the active API environment. */
+/** Ticket coordinator capabilities for signed interaction dispatch. */
 export type DeferredRuntimeBindings = WorkerBindings & DeferredRuntimeReferenceBindings
 
 export class WorkerEnvironment extends Context.Service<

@@ -1,11 +1,12 @@
 import { DecimalSnowflake, Giveaway, GiveawayBooster, GiveawayEntry, GiveawayRerollRequest } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { uploadMediaFile, mediaFileUrl } from "./dashboard-upload.js"
 import { DiscordApi } from "./discord-api.js"
 import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
+import { enqueueGiveawayPublication } from "./giveaway-publications.js"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, RateLimited, Forbidden, Unauthenticated, PayloadTooLarge, type ApiFailure } from "./errors.js"
 
 export const dashboardGiveawayOperationIds = ["serverGiveaways", "serverGiveaway", "createServerGiveaway", "updateServerGiveaway", "deleteServerGiveaway", "giveawayEntries", "rerollGiveaway"] as const
@@ -105,7 +106,7 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)
-    const existing = operation === "createServerGiveaway" ? undefined : (yield* sql.unsafe<Row>(`SELECT ${columns} FROM giveaways WHERE server_id=$1 AND id=$2 FOR UPDATE`, [serverId,id]))[0]
+    const existing = operation === "createServerGiveaway" ? undefined : (yield* sql.unsafe<Row & { closed: boolean }>(`SELECT ${columns},(status='ended' OR end_time<=clock_timestamp()) AS closed FROM giveaways WHERE server_id=$1 AND id=$2 FOR UPDATE`, [serverId,id]))[0]
     if (operation !== "createServerGiveaway" && existing === undefined) return yield* new NotFound({ message: "Giveaway not found" })
     if (operation === "deleteServerGiveaway") {
       yield* sql`DELETE FROM giveaways WHERE server_id=${serverId} AND id=${id}`
@@ -115,6 +116,11 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
     if (operation === "rerollGiveaway") {
       const body = yield* requestValue(GiveawayRerollRequest, input.body)
       if (existing?.status !== "ended" || body.user_ids_to_replace.length === 0) return yield* new InvalidRequest({ message: "Select current winners from an ended giveaway" })
+      if (existing.message_id) {
+        const published = (yield* sql<{ published: boolean }>`SELECT EXISTS(SELECT 1 FROM giveaway_publication_effects
+          WHERE giveaway_id=${id} AND kind='end' AND state='succeeded') AS published`)[0]?.published
+        if (!published) return yield* new InvalidRequest({ message: "Wait for the giveaway result to be published before rerolling" })
+      }
       for (const userId of body.user_ids_to_replace) yield* requestValue(DecimalSnowflake, userId)
       const winners = yield* stored(Schema.Array(StoredWinner), existing.winners_list), entries = yield* stored(Schema.Array(GiveawayEntry), existing.entries)
       const current = new Set(winners.filter((winner) => winner.status === "winner").map((winner) => winner.user_id))
@@ -127,13 +133,17 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
       secureShuffle(eligible)
       const newWinners = [...new Set(eligible)].slice(0, body.user_ids_to_replace.length), now = new Date().toISOString().replace(/\.\d{3}Z$/u, "Z"), replace = new Set(body.user_ids_to_replace)
       const updated = [...winners.map((winner) => replace.has(winner.user_id) ? { ...winner, status: "rerolled", timestamp: now, reason: "dashboard_reroll" } : winner), ...newWinners.map((user_id) => ({ user_id, status: "winner", timestamp: now }))]
-      // The existing Dashboard endpoint updates winner data only. Bot message
-      // publication and its new journals are not prerequisites for rerolling.
       yield* sql`UPDATE giveaways SET winners_list=${JSON.stringify(updated)}::jsonb,updated_at=now() WHERE server_id=${serverId} AND id=${id}`
+      if (existing.message_id) yield* enqueueGiveawayPublication(id, "reroll", { operationId: crypto.randomUUID(), winnerIds: newWinners,
+        replacedIds: body.user_ids_to_replace, actorLabel: "Dashboard", occurredAt: now }, input.bindings.GIVEAWAY_MEDIA_ORIGIN)
       return { message: "Winners rerolled successfully", giveawayId: id, serverId, newWinners }
     }
+    if (existing?.closed) return yield* new InvalidRequest({ message: "Ended giveaways cannot be edited or restarted. Duplicate the giveaway to create a new one." })
     if (!(input.body instanceof FormData)) return yield* new InvalidRequest({ message: "Multipart form data is required" })
     const body = yield* parseGiveawayForm(input.body)
+    if (existing?.message_id && existing.channel_id !== body.channelId) {
+      return yield* new InvalidRequest({ message: "A published giveaway cannot change its channel" })
+    }
     let image = body.removeImage ? null : existing?.image_url ?? null
     const file = input.body.get("image")
     if (file instanceof File && file.name !== "") {
@@ -141,9 +151,13 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
       yield* uploadMediaFile(input.bindings, filename, file)
       image = filename.slice("giveaway_".length)
     }
-    const values = [id,serverId,body.prize,body.channelId,body.start.toISOString(),body.end.toISOString(),body.winners,body.mentions,body.textAboveEmbed,body.textInEmbed,body.textOnEnd,image,body.profilePictureRequired,body.cocAccountRequired,body.rolesMode,body.roles,JSON.stringify(body.boosters)]
+    const values = [id,serverId,body.prize,body.channelId,existing?.message_id ? timestamp(existing.start_time) : body.start.toISOString(),body.end.toISOString(),body.winners,body.mentions,body.textAboveEmbed,body.textInEmbed,body.textOnEnd,image,body.profilePictureRequired,body.cocAccountRequired,body.rolesMode,body.roles,JSON.stringify(body.boosters)]
     if (operation === "createServerGiveaway") yield* sql.unsafe(`INSERT INTO giveaways (id,server_id,prize,channel_id,status,start_time,end_time,winners,mentions,text_above_embed,text_in_embed,text_on_end,image_url,profile_picture_required,coc_account_required,roles_mode,roles,boosters) VALUES ($1,$2,$3,$4,'scheduled',$5::timestamptz,$6::timestamptz,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`, values)
-    else yield* sql.unsafe(`UPDATE giveaways SET prize=$3,channel_id=$4,start_time=$5::timestamptz,end_time=$6::timestamptz,winners=$7,mentions=$8,text_above_embed=$9,text_in_embed=$10,text_on_end=$11,image_url=$12,profile_picture_required=$13,coc_account_required=$14,roles_mode=$15,roles=$16,boosters=$17::jsonb,updated=true,disabled=false,disabled_reason=NULL,updated_at=now() WHERE id=$1 AND server_id=$2`, values)
+    else {
+      // Recheck the old deadline after parsing/uploading: extending it must not reopen a closed giveaway.
+      const updated = yield* sql.unsafe<{ id: string }>(`UPDATE giveaways SET prize=$3,channel_id=$4,start_time=$5::timestamptz,end_time=$6::timestamptz,winners=$7,mentions=$8,text_above_embed=$9,text_in_embed=$10,text_on_end=$11,image_url=$12,profile_picture_required=$13,coc_account_required=$14,roles_mode=$15,roles=$16,boosters=$17::jsonb,updated=true,disabled=false,disabled_reason=NULL,updated_at=now() WHERE id=$1 AND server_id=$2 AND status<>'ended' AND end_time>clock_timestamp() RETURNING id`, values)
+      if (updated.length === 0) return yield* new InvalidRequest({ message: "Ended giveaways cannot be edited or restarted. Duplicate the giveaway to create a new one." })
+    }
     return { message: operation === "createServerGiveaway" ? "Giveaway created successfully" : "Giveaway updated successfully", giveawayId: id, serverId }
   }))
 }).pipe(Effect.mapError((cause) => cause instanceof DatabaseFailure || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof UpstreamUnavailable || cause instanceof RateLimited || cause instanceof Forbidden || cause instanceof Unauthenticated || cause instanceof PayloadTooLarge ? cause : new DatabaseFailure({ cause, message: "Giveaway database operation failed" })))

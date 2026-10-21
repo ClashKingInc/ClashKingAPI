@@ -8,14 +8,16 @@ import {
   type AnyEndpoint,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type UserPrincipal } from "./auth.js"
 import type { WorkerBindings } from "./environment.js"
-import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { encryptPushToken, hashPushToken } from "./push-secrets.js"
 import { readBoundedJson } from "./request-body.js"
 import { notifyTracking } from "./tracking-wake.js"
+import { getNotificationClans, putNotificationClan } from "./clan-notifications.js"
+import type { NotificationClanRequest } from "@clashking/api-contracts"
 
 export type AppContentNotificationBindings = WorkerBindings & { readonly DATA_ENCRYPTION_KEY?: string }
 type Announcement = typeof AppAnnouncement.Type
@@ -31,6 +33,8 @@ export const appContentNotificationRuntimeRoutes = [
   { method: "GET", path: "/v2/notifications/preferences" },
   { method: "PUT", path: "/v2/notifications/preferences" },
   { method: "PUT", path: "/v2/notifications/accounts/:tag" },
+  { method: "GET", path: "/v2/notifications/clans" },
+  { method: "PUT", path: "/v2/notifications/clans/:tag" },
 ] as const
 
 const descriptors: ReadonlyArray<AnyEndpoint> = [
@@ -42,6 +46,8 @@ const descriptors: ReadonlyArray<AnyEndpoint> = [
   expoEndpoints.notificationPreferencesGet,
   expoEndpoints.notificationPreferencesPut,
   expoEndpoints.notificationAccountPut,
+  expoEndpoints.notificationClansGet,
+  expoEndpoints.notificationClanPut,
 ]
 
 const asRecord = (value: unknown): Readonly<Record<string, unknown>> =>
@@ -49,7 +55,7 @@ const asRecord = (value: unknown): Readonly<Record<string, unknown>> =>
 
 const sqlEffect = <A, E, R>(message: string, effect: Effect.Effect<A, E, R>): Effect.Effect<A, ApiFailure, R> =>
   effect.pipe(Effect.mapError((cause) =>
-    cause instanceof DatabaseFailure || cause instanceof Forbidden || cause instanceof InvalidRequest ||
+    cause instanceof Conflict || cause instanceof DatabaseFailure || cause instanceof Forbidden || cause instanceof InvalidRequest ||
     cause instanceof NotFound || cause instanceof Unauthenticated || cause instanceof UpstreamUnavailable
       ? cause : new DatabaseFailure({ cause, message })))
 
@@ -405,6 +411,8 @@ export const dispatchAppContentNotifications = (
         case "getExpoNotificationPreferences": value = yield* getPreferences(principal); break
         case "putExpoNotificationPreferences": value = yield* putPreferences(principal, body as PreferencesRequest); break
         case "putExpoNotificationAccount": value = yield* putAccount(principal, String(path.tag), asRecord(body).enabled === true); break
+        case "getExpoNotificationClans": value = yield* sqlEffect("Clan notification lookup failed", getNotificationClans(principal, bindings.CLAN_NOTIFICATION_BETA !== "false")); break
+        case "putExpoNotificationClan": value = yield* sqlEffect("Clan notification update failed", putNotificationClan(principal, String(path.tag), body as typeof NotificationClanRequest.Type, bindings.CLAN_NOTIFICATION_BETA !== "false")); break
         default: return yield* new NotFound({ message: "Unknown notification operation" })
       }
     }

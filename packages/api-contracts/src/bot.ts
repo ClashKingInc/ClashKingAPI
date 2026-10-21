@@ -1,4 +1,10 @@
 import { botAdjacentEndpoints } from "./bot-adjacent.js"
+import { BotLegendStatsEndpoint } from "./bot-legend-stats.js"
+import { BotPlayerSeasonEndpoint } from "./bot-player-season.js"
+import { BotPlayerIdentityEndpoint } from "./bot-player-identity.js"
+import { BotPlayerClanTimelineEndpoint } from "./bot-player-history.js"
+import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint } from "./bot-clan-stats.js"
+export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint } from "./bot-clan-stats.js"
 import {
   BotClanCachedEndpoint,
   BotClanCapitalLeaderboardEndpoint,
@@ -64,11 +70,20 @@ import {
 export * from "./bot-public.js"
 export * from "./bot-server.js"
 export * from "./bot-adjacent.js"
+export * from "./bot-legend-stats.js"
+export * from "./bot-player-season.js"
+export * from "./bot-player-identity.js"
 
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
   ...botAdjacentEndpoints,
+  legendStats: BotLegendStatsEndpoint,
+  playerSeasonStats: BotPlayerSeasonEndpoint,
+  playerIdentity: BotPlayerIdentityEndpoint,
+  playerClanHistory: BotPlayerClanTimelineEndpoint,
+  clanSeasonStats: BotClanSeasonStatsEndpoint,
+  clanGames: BotClanGamesEndpoint,
   accounts: BotAccountsEndpoint,
   addStrike: BotAddStrikeEndpoint,
   base: BotBaseEndpoint,

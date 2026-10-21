@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { ArmySetupResponse, ArmySetupTimelineResponse, ArmySetupRankHistoryResponse, type ArmySetupStatistics } from "@clashking/api-contracts"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { parseLegendAggregateWindow } from "./league-analytics-query.js"

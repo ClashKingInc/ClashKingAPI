@@ -3,16 +3,16 @@ import {
   BotCwlLeaderboardEndpoint, BotCwlRankingHistoryEndpoint, type AnyEndpoint,
 } from "@clashking/api-contracts"
 import { Effect, Schema, Stream } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import locations from "./data/search-locations.json"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
-import { decodeStoredCwlRounds, ensureCwlLeagueIds } from "./public-cwl.js"
+import { decodeStoredCwlRounds } from "./public-cwl.js"
 import { publicTag } from "./public-war.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls, officialArchiveWar } from "./war-archive-model.js"
-import { readArchiveWar } from "./war-archive.js"
+import { loadArchiveWars } from "./war-archive.js"
 
 const maxResponseBytes = 8 * 1024 * 1024
 const encoder = new TextEncoder()
@@ -26,6 +26,17 @@ const collect = <A, E>(stream: Stream.Stream<A, E>) => Effect.gen(function* () {
     if (bytes > maxResponseBytes) return yield* tooLarge()
     rows.push(row)
   })).pipe(Effect.mapError(failure))
+  return rows
+})
+// CWL group/history metadata is small. Complete the SQL query without a
+// server-side cursor so Hyperdrive never waits for a later portal message.
+const collectCwlRows = <A, E, R>(query: Effect.Effect<ReadonlyArray<A>, E, R>) => Effect.gen(function* () {
+  const rows = yield* query.pipe(Effect.mapError(failure))
+  let bytes = 2
+  for (const row of rows) {
+    bytes += encoder.encode(JSON.stringify(row)).byteLength + 1
+    if (bytes > maxResponseBytes) return yield* tooLarge()
+  }
   return rows
 })
 const leagueReference = (category: string, id: number) => {
@@ -68,16 +79,42 @@ export const queryCachedClan = (rawTag: string) => Effect.gen(function* () {
 
 export const queryClanRankings = (rawTag: string) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), sql = yield* SqlClient.SqlClient
-  const profile = (yield* sql<{ name: string; badge_token: string; clan_points: number; builder_base_points: number; capital_points: number }>`
-    SELECT name, badge_token, clan_points, builder_base_points, capital_points FROM basic_clan WHERE tag = ${tag}`.pipe(Effect.mapError(failure)))[0]
+  const profile = (yield* sql<{ name: string; badge_token: string; clan_points: number; builder_base_points: number; capital_points: number;
+    location_id: number | null; troops_donated: number; troops_received: number; war_wins: number; war_win_streak: number; capital_gold_total: string }>`
+    SELECT name, badge_token, clan_points, builder_base_points, capital_points, location_id,
+      troops_donated, troops_received, war_wins, war_win_streak, capital_gold_total::text
+    FROM basic_clan WHERE tag = ${tag}`.pipe(Effect.mapError(failure)))[0]
+  const tracked = (yield* sql<{ donated_rank: string | null; received_rank: string | null; war_wins_rank: string | null;
+    war_win_streak_rank: string | null; capital_gold_rank: string | null; location_donated_rank: string | null;
+    location_received_rank: string | null; location_war_wins_rank: string | null; location_capital_gold_rank: string | null }>`
+    SELECT donated_rank::text, received_rank::text, war_wins_rank::text, war_win_streak_rank::text,
+      capital_gold_rank::text, location_donated_rank::text, location_received_rank::text,
+      location_war_wins_rank::text, location_capital_gold_rank::text
+    FROM clan_leaderboards WHERE tag = ${tag}`.pipe(Effect.mapError(failure)))[0]
   const placements = yield* collect(sql<{ ranking_type: string; locationId: string; rank: number; points: number }>`
     SELECT ranking_type, location_id AS "locationId", rank, points FROM clan_rankings_current WHERE clan_tag = ${tag}
     ORDER BY CASE ranking_type WHEN 'home' THEN 1 WHEN 'builder_base' THEN 2 WHEN 'capital' THEN 3 END,
       CASE WHEN location_id = 'global' THEN 0 ELSE 1 END, location_id`.stream)
   const category = (kind: string, points: number) => ({ points, placements: placements.filter((row) => row.ranking_type === kind).map(({ ranking_type: _type, ...placement }) => placement) })
+  // Reuse the materialized ranks used by the rankings page. Never rank only
+  // the returned subset, or derive a country rank for global-only win streaks.
+  const trackedCategory = (points: number, global: string | null | undefined, local?: string | null) => ({
+    points,
+    placements: [
+      ...(global && Number(global) > 0 ? [{ locationId: 'global', rank: Number(global), points }] : []),
+      ...(local && Number(local) > 0 && profile?.location_id ? [{ locationId: String(profile.location_id), rank: Number(local), points }] : []),
+    ],
+  })
+  const capitalGold = Number(profile?.capital_gold_total ?? 0)
+  if (!Number.isSafeInteger(capitalGold)) return yield* new UpstreamUnavailable({ cause: 'unsafe_integer', message: 'Clan capital gold exceeds the numeric response range' })
   return { name: profile?.name ?? null, tag, badge: profile?.badge_token.trim() ? badgeUrls(profile.badge_token).large : null,
     homeVillage: category("home", profile?.clan_points ?? 0), builderBase: category("builder_base", profile?.builder_base_points ?? 0),
-    clanCapital: category("capital", profile?.capital_points ?? 0) }
+    clanCapital: category("capital", profile?.capital_points ?? 0),
+    donations: trackedCategory(profile?.troops_donated ?? 0, tracked?.donated_rank, tracked?.location_donated_rank),
+    donationsReceived: trackedCategory(profile?.troops_received ?? 0, tracked?.received_rank, tracked?.location_received_rank),
+    warWins: trackedCategory(profile?.war_wins ?? 0, tracked?.war_wins_rank, tracked?.location_war_wins_rank),
+    warWinStreak: trackedCategory(profile?.war_win_streak ?? 0, tracked?.war_win_streak_rank),
+    capitalGold: trackedCategory(capitalGold, tracked?.capital_gold_rank, tracked?.location_capital_gold_rank) }
 })
 
 interface Standing {
@@ -111,14 +148,14 @@ interface HistoryRow {
 }
 export const queryCwlClanRankingHistory = (rawTag: string) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), sql = yield* SqlClient.SqlClient
-  const rows = yield* collect(sql<HistoryRow>`SELECT g.season, g.cwl_league_id, g.state, g.war_size, g.rounds,
+  const rows = yield* collectCwlRows(sql<HistoryRow>`SELECT g.season, g.cwl_league_id, g.state, g.war_size, g.rounds,
     clan.clan_tag, clan.name, clan.clan_level, clan.badge_token,
     COALESCE((SELECT jsonb_agg(jsonb_build_object('tag', member.tag, 'name', member.name, 'townHallLevel', member.town_hall) ORDER BY member.tag)
       FROM cwl_group_members member WHERE member.cwl_id = clan.cwl_id AND member.clan_tag = clan.clan_tag), '[]'::jsonb) AS members,
     CASE WHEN saved.cwl_id IS NULL THEN NULL ELSE to_jsonb(saved) END AS standing
     FROM cwl_groups g JOIN cwl_group_clans clan ON clan.cwl_id = g.cwl_id
     LEFT JOIN cwl_standings saved ON saved.cwl_id = clan.cwl_id AND saved.clan_tag = clan.clan_tag
-    WHERE clan.clan_tag = ${tag} ORDER BY g.season DESC, g.cwl_id DESC`.stream)
+    WHERE clan.clan_tag = ${tag} ORDER BY g.season DESC, g.cwl_id DESC`)
   const items = yield* Effect.forEach(rows, (row) => Effect.gen(function* () {
     const tags = yield* rounds(row.rounds)
     return { season: row.season, state: row.state, ...(row.cwl_league_id === null ? {} : { cwlLeagueId: row.cwl_league_id }),
@@ -135,20 +172,23 @@ export const queryStoredCwlGroup = (rawTag: string, query: URLSearchParams) => E
     || !Number.isFinite(Date.parse(season)) || new Date(season).toISOString().slice(0, season.length) !== season)) {
     return yield* new InvalidRequest({ message: "A valid YYYY-MM or YYYY-MM-DD season is required" })
   }
-  yield* ensureCwlLeagueIds(tag)
   const sql = yield* SqlClient.SqlClient
   const group = (yield* sql<{ cwl_id: string; season: string; state: string; rounds: unknown; cwl_league_id: number | null }>`
     SELECT g.cwl_id, g.season, g.state, g.rounds, g.cwl_league_id FROM cwl_groups g
-    JOIN cwl_group_clans clan ON clan.cwl_id = g.cwl_id WHERE clan.clan_tag = ${tag} AND (${season} = '' OR g.season = ${season})
-    ORDER BY g.season DESC, g.cwl_id DESC LIMIT 1`.pipe(Effect.mapError(failure)))[0]
+    JOIN cwl_group_clans clan ON clan.cwl_id = g.cwl_id WHERE clan.clan_tag = ${tag}
+      AND (${season} = '' OR g.season = ${season} OR (length(${season}) = 7 AND left(g.season, 7) = ${season}))
+    ORDER BY
+      CASE WHEN length(${season}) = 7 THEN CASE WHEN length(g.season) = 7 THEN g.season || '-01' ELSE g.season END END ASC,
+      CASE WHEN length(${season}) = 7 THEN g.cwl_id END ASC,
+      g.season DESC, g.cwl_id DESC LIMIT 1`.pipe(Effect.mapError(failure)))[0]
   if (!group) return yield* new NotFound({ message: "Stored CWL group not found" })
   if (encoder.encode(JSON.stringify(group)).byteLength > maxResponseBytes) return yield* tooLarge()
   const tags = yield* rounds(group.rounds)
-  const clans = yield* collect(sql<{ tag: string; name: string; clanLevel: number; badge_token: string; members: HistoryRow["members"] }>`
+  const clans = yield* collectCwlRows(sql<{ tag: string; name: string; clanLevel: number; badge_token: string; members: HistoryRow["members"] }>`
     SELECT clan.clan_tag AS tag, clan.name, clan.clan_level AS "clanLevel", clan.badge_token,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('tag', member.tag, 'name', member.name, 'townHallLevel', member.town_hall) ORDER BY member.tag)
         FROM cwl_group_members member WHERE member.cwl_id = clan.cwl_id AND member.clan_tag = clan.clan_tag), '[]'::jsonb) AS members
-    FROM cwl_group_clans clan WHERE clan.cwl_id = ${group.cwl_id} ORDER BY clan.clan_tag`.stream)
+    FROM cwl_group_clans clan WHERE clan.cwl_id = ${group.cwl_id} ORDER BY clan.clan_tag`)
   const warLeague = group.cwl_league_id === null ? null : leagueReference("war_leagues", group.cwl_league_id) ?? null
   const base = { state: group.state, season: group.season, warLeague,
     clans: clans.map(({ badge_token, ...clan }) => ({ ...clan, badgeUrls: badgeUrls(badge_token) })),
@@ -157,14 +197,15 @@ export const queryStoredCwlGroup = (rawTag: string, query: URLSearchParams) => E
   if (bytes > maxResponseBytes) return yield* tooLarge()
   const frequencies = new Map<string, number>()
   for (const round of tags) for (const warTag of round) if (warTag && warTag !== "#0") frequencies.set(warTag, (frequencies.get(warTag) ?? 0) + 1)
-  const refs = yield* collect(sql<{ war_id: string; clan_tag: string; war_tag: string }>`SELECT war_id::text, clan_tag, war_tag
-    FROM wars WHERE war_type = 'cwl' AND war_tag = ANY(${[...frequencies.keys()]}::text[])`.stream)
+  const refs = yield* collectCwlRows(sql<{ war_id: string; clan_tag: string; war_tag: string }>`SELECT war_id::text, clan_tag, war_tag
+    FROM wars WHERE war_type = 'cwl' AND war_tag = ANY(${[...frequencies.keys()]}::text[])`)
   const wars = new Map<string, object>()
   const sizes = new Map<string, number>()
+  const archives = yield* loadArchiveWars(refs.map((ref) => ref.war_id))
   for (const ref of refs) {
-    const archive = yield* readArchiveWar(ref.war_id)
+    const archive = archives.get(ref.war_id)
     if (!archive) continue
-    const { battleModifier: _modifier, ...war } = officialArchiveWar(archive.war, ref.clan_tag)
+    const { battleModifier: _modifier, ...war } = officialArchiveWar(archive, ref.clan_tag)
     const value = { ...war, season: group.season }
     const valueBytes = encoder.encode(JSON.stringify(value)).byteLength
     const previousBytes = sizes.get(ref.war_tag) ?? encoder.encode(JSON.stringify({ tag: ref.war_tag })).byteLength

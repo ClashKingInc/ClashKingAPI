@@ -1,6 +1,6 @@
 import { AuthDeleteEndpoint, AuthExportEndpoint, type EndpointResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, Unauthenticated } from "./errors.js"

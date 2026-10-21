@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 
+import { strictObject } from "./strict-object.js"
+
 import { DecimalSnowflake } from "./discord.js"
 import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endpoint.js"
 
@@ -77,8 +79,8 @@ export const StageLegacyBaseImageEndpoint = defineEndpoint({
   summary: "Copy and idempotently stage one Discord base attachment",
 })
 export const FinalizeLegacyBaseEndpoint = defineEndpoint({
-  auth: "bot", body: Schema.Struct({ serverId: DecimalSnowflake, channelId: DecimalSnowflake,
-    description: Schema.String.check(Schema.isMaxLength(1000)) }).annotate({ parseOptions: { onExcessProperty: "error" } }), bodyMode: "json", method: "POST",
+  auth: "bot", body: strictObject(Schema.Struct({ serverId: DecimalSnowflake, channelId: DecimalSnowflake,
+    description: Schema.String.check(Schema.isMaxLength(1000)) })), bodyMode: "json", method: "POST",
   operationId: "finalizeLegacyBase", path: "/v2/bases/:baseId/finalize", pathParams: Schema.Struct({ baseId: BaseId }), query: NoQuery,
   response: Schema.Struct({ baseId: BaseId, serverId: DecimalSnowflake, channelId: DecimalSnowflake, description: Schema.String }), responseMode: "json", successStatus: 200,
   summary: "Finalize a converted legacy base after the Discord edit succeeds",

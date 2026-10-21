@@ -19,6 +19,18 @@ import { dispatchAdmin } from "./admin.js"
 import { dispatchAuthLifecycle } from "./auth-lifecycle.js"
 import { dispatchAppContentNotifications } from "./app-content-notifications.js"
 import { dispatchBotAdjacentRuntime } from "./bot-adjacent-runtime.js"
+import { dispatchBotWarPanel } from "./bot-war-panel.js"
+import { dispatchBotArmies } from "./bot-armies.js"
+import { dispatchBotClash } from "./bot-clash.js"
+import { dispatchBotLegendStats } from "./bot-legend-stats.js"
+import { dispatchBotPlayerSeason } from "./bot-player-season.js"
+import { dispatchBotPlayerIdentity } from "./bot-player-identity.js"
+import { dispatchBotPlayerHistory } from "./bot-player-history.js"
+import { dispatchBotClanStats } from "./bot-clan-stats.js"
+import { dispatchBotRoleRefresh } from "./bot-role-refresh.js"
+import { dispatchBotManualReminders } from "./bot-manual-reminders.js"
+import { dispatchGiveawayRuntime } from "./giveaway-dispatch.js"
+import { dispatchTicketRuntime } from "./persistent-runtime.js"
 import { dispatchBotRuntime } from "./bot-runtime.js"
 import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
 import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
@@ -26,9 +38,12 @@ import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
 import { dispatchPublicData } from "./public-data-runtime.js"
 import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
 import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
+import { dispatchCompetitive } from "./competitive.js"
 import { dispatchDashboardMisc } from "./dashboard-misc-runtime.js"
 import { dispatchWarExports } from "./war-exports.js"
 import { dispatchMobilePersistence } from "./mobile-persistence.js"
+import { dispatchHomeLayout } from "./home-layout.js"
+import { dispatchDashboardAccess, guardDashboardScope } from "./dashboard-access.js"
 import { dispatchCdnUpload } from "./cdn-upload.js"
 import { dispatchMedia } from "./media-runtime.js"
 import { dispatchAnnouncementMutations } from "./announcement-mutations.js"
@@ -212,6 +227,11 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "OPTIONS") {
       return browserPreflight(request, bindings)
     }
+    yield* guardDashboardScope(request)
+    const competitiveResponse = yield* dispatchCompetitive(request)
+    if (competitiveResponse !== undefined) return competitiveResponse
+    const dashboardAccessResponse=yield* dispatchDashboardAccess(request)
+    if(dashboardAccessResponse!==undefined)return dashboardAccessResponse
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
@@ -295,6 +315,30 @@ export const route = (request: Request, bindings: WorkerBindings,
     // /links/:userId can interpret "shared" as a user ID.
     const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
     if (botAdjacentResponse !== undefined) return botAdjacentResponse
+    const botWarPanelResponse = yield* dispatchBotWarPanel(request, bindings)
+    if (botWarPanelResponse !== undefined) return botWarPanelResponse
+    const botArmyResponse = yield* dispatchBotArmies(request, bindings)
+    if (botArmyResponse !== undefined) return botArmyResponse
+    const botClashResponse = yield* dispatchBotClash(request, bindings)
+    if (botClashResponse !== undefined) return botClashResponse
+    const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
+    if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const botPlayerSeasonResponse = yield* dispatchBotPlayerSeason(request)
+    if (botPlayerSeasonResponse !== undefined) return botPlayerSeasonResponse
+    const botPlayerIdentityResponse = yield* dispatchBotPlayerIdentity(request,bindings)
+    if (botPlayerIdentityResponse !== undefined) return botPlayerIdentityResponse
+    const botPlayerHistoryResponse = yield* dispatchBotPlayerHistory(request)
+    if (botPlayerHistoryResponse !== undefined) return botPlayerHistoryResponse
+    const botClanStatsResponse = yield* dispatchBotClanStats(request)
+    if (botClanStatsResponse !== undefined) return botClanStatsResponse
+    const roleRefreshResponse = yield* dispatchBotRoleRefresh(request, bindings)
+    if (roleRefreshResponse !== undefined) return roleRefreshResponse
+    const botManualReminderResponse = yield* dispatchBotManualReminders(request)
+    const giveawayRuntimeResponse = yield* dispatchGiveawayRuntime(request, bindings)
+    if (giveawayRuntimeResponse !== undefined) return giveawayRuntimeResponse
+    const ticketRuntimeResponse = yield* dispatchTicketRuntime(request, bindings)
+    if (ticketRuntimeResponse !== undefined) return ticketRuntimeResponse
+    if (botManualReminderResponse !== undefined) return botManualReminderResponse
     const linkResponse = yield* dispatchLinkMutations(request, bindings)
     if (linkResponse !== undefined) return linkResponse
     const billingResponse = yield* dispatchBillingMutations(request, bindings)
@@ -329,6 +373,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (miscResponse !== undefined) return miscResponse
     const exportResponse = yield* dispatchWarExports(request)
     if (exportResponse !== undefined) return exportResponse
+    const homeLayoutResponse = yield* dispatchHomeLayout(request)
+    if (homeLayoutResponse !== undefined) return homeLayoutResponse
     const mobileResponse = yield* dispatchMobilePersistence(request, bindings)
     if (mobileResponse !== undefined) return mobileResponse
     const uploadResponse = yield* dispatchCdnUpload(request, bindings)

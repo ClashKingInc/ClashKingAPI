@@ -26,6 +26,8 @@ export const AccountConflictErrorResponse = Schema.Struct({
   account: LinkedPlayer,
 })
 export const LinkedAccount = Schema.Struct({
+  player_name: Schema.optionalKey(Schema.String),
+  town_hall: Schema.optionalKey(Schema.Number),
   user_id: Schema.String,
   player_tag: Schema.String,
   order_index: Schema.Number,

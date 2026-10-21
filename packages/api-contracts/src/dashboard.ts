@@ -1,7 +1,12 @@
+import { ClanVerificationEndpoint, StartClanVerificationEndpoint, CheckClanVerificationEndpoint } from "./dashboard-clan-verification.js"
+export * from "./dashboard-clan-verification.js"
+import { ServerClanLinksEndpoint, CreateClanRosterLinkEndpoint } from "./dashboard-clan-links.js"
+export * from "./dashboard-clan-links.js"
 import * as Misc from "./dashboard-misc.js"
 import * as Roster from "./dashboard-roster.js"
 import * as Server from "./dashboard-server.js"
 import * as Extra from "./dashboard-server-extra.js"
+import { ServerAnalyticsEndpoint } from "./dashboard-analytics.js"
 import { dashboardRosterExtraEndpoints } from "./dashboard-roster-extra.js"
 
 export * from "./dashboard-misc.js"
@@ -14,6 +19,11 @@ export * from "./dashboard-roster-extra.js"
 export { RosterCapacity, RosterMemberGroupSetting, RosterBuilderMemberGroupSetting } from "./roster-configuration.js"
 
 export const dashboardEndpoints = {
+  clanVerification: ClanVerificationEndpoint,
+  startClanVerification: StartClanVerificationEndpoint,
+  checkClanVerification: CheckClanVerificationEndpoint,
+  serverClanLinks: ServerClanLinksEndpoint,
+  createClanRosterLink: CreateClanRosterLinkEndpoint,
   ...dashboardRosterExtraEndpoints,
   serverGiveaway: Extra.ServerGiveawayEndpoint,
   serverDiscordTest: Extra.ServerDiscordTestEndpoint,
@@ -69,6 +79,7 @@ export const dashboardEndpoints = {
   dashboardDeleteRosterAutomation: Roster.DashboardDeleteRosterAutomationEndpoint,
   dashboardListRosterMetrics: Roster.DashboardListRosterMetricsEndpoint,
   dashboardQueryRosterMetric: Roster.DashboardQueryRosterMetricEndpoint,
+  dashboardQueryFamilyWarMetric: Roster.DashboardQueryFamilyWarMetricEndpoint,
   dashboardListRosterViews: Roster.DashboardListRosterViewsEndpoint,
   dashboardGetRosterView: Roster.DashboardGetRosterViewEndpoint,
   dashboardResolveSharedRosterView: Roster.DashboardResolveSharedRosterViewEndpoint,
@@ -123,6 +134,7 @@ export const dashboardEndpoints = {
   serverChannels: Server.ServerChannelsEndpoint,
   serverThreads: Server.ServerThreadsEndpoint,
   serverReminders: Server.ServerRemindersEndpoint,
+  sendServerReminder: Server.SendServerReminderEndpoint,
   createServerReminder: Server.CreateServerReminderEndpoint,
   updateServerReminder: Server.UpdateServerReminderEndpoint,
   deleteServerReminder: Server.DeleteServerReminderEndpoint,
@@ -133,6 +145,11 @@ export const dashboardEndpoints = {
   giveawayEntries: Server.GiveawayEntriesEndpoint,
   rerollGiveaway: Server.RerollGiveawayEndpoint,
   ticketPanels: Server.TicketPanelsEndpoint,
+  publishTicketPanel: Server.PublishTicketPanelEndpoint,
+  ticketDashboardAction: Server.TicketDashboardActionEndpoint,
+  ticketDashboardJob: Server.TicketDashboardJobEndpoint,
+  ticketMessageLibrary: Server.TicketMessageLibraryEndpoint,
+  updateTicketMessageLibrary: Server.UpdateTicketMessageLibraryEndpoint,
   createTicketPanel: Server.CreateTicketPanelEndpoint,
   deleteTicketPanel: Server.DeleteTicketPanelEndpoint,
   createTicketButton: Server.CreateTicketButtonEndpoint,
@@ -161,4 +178,5 @@ export const dashboardEndpoints = {
   previewClanCategoryDelete: Server.PreviewClanCategoryDeleteEndpoint,
   deleteClanCategory: Server.DeleteClanCategoryEndpoint,
   serverLinks: Server.ServerLinksEndpoint,
+  serverAnalytics: ServerAnalyticsEndpoint,
 } as const

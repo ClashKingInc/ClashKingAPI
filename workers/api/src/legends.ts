@@ -9,7 +9,7 @@ import {
   LegendTrophyBucketsResponse,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import locations from "./data/search-locations.json"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"

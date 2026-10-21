@@ -4,24 +4,25 @@ import {
   UpgradePreferencesPatchEndpoint, UpgradesGetEndpoint, UpgradesPutEndpoint,
   DeleteOldPersonalBasesEndpoint, PersonalBasesEndpoint,
   SavePersonalBaseEndpoint, UnsavePersonalBaseEndpoint,
-  DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint,
+  DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint, UpdatePersonalArmyEndpoint,
   requireEndpointSuccessStatus,
   type AnyEndpoint, type Bookmark, type BookmarkType, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal, type UserPrincipal } from "./auth.js"
 import { normalizeArmyLink } from "./army-link.js"
-import type { WorkerBindings } from "./environment.js"
+import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, type ApiFailure } from "./errors.js"
 import { correctTag } from "./home.js"
 import { checkMobileAchievements } from "./mobile-achievements.js"
 import { readBoundedJson } from "./request-body.js"
+import { lookupArmyStaticItem, prepareStaticMetadata } from "./static-metadata.js"
 
 type EntityType = typeof BookmarkType.Type
 type JsonObject = EndpointResponse<typeof UpgradesGetEndpoint>["data"]
-type Runtime<A> = Effect.Effect<A, ApiFailure, SqlClient.SqlClient>
+type Runtime<A> = Effect.Effect<A, ApiFailure, SqlClient.SqlClient | WorkerEnvironment>
 const database = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.mapError((cause) =>
   cause instanceof Conflict || cause instanceof NotFound || cause instanceof InvalidRequest || cause instanceof Unauthenticated
     || cause instanceof Forbidden
@@ -98,8 +99,16 @@ const deleteBookmark = (principal: ApiPrincipal, userId: string, type: EntityTyp
   const tag = yield* normalizedTag(rawTag)
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockBookmarkSubject(principal, userId)
-    const rows = yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = ${type} AND tag = ${tag} RETURNING tag`
-    if (rows.length === 0) return yield* new NotFound({ message: "Bookmark not found" })
+    const followed = yield* sql`SELECT tag FROM user_bookmarks WHERE user_id=${userId}
+      AND entity_type=${type} AND tag=${tag} AND (war_notifications_enabled OR raid_notifications_enabled)`
+    if (followed.length > 0) return yield* new Conflict({ message: "Turn off clan notifications before removing this bookmark" })
+    const rows = yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = ${type} AND tag = ${tag}
+      AND NOT war_notifications_enabled AND NOT raid_notifications_enabled RETURNING tag`
+    if (rows.length === 0) {
+      const retained = yield* sql`SELECT tag FROM user_bookmarks WHERE user_id=${userId} AND entity_type=${type} AND tag=${tag}`
+      if (retained.length > 0) return yield* new Conflict({ message: "Turn off clan notifications before removing this bookmark" })
+      return yield* new NotFound({ message: "Bookmark not found" })
+    }
     return { message: "Bookmark deleted" }
   })))
 })
@@ -217,6 +226,8 @@ interface PersonalBaseRow {
 }
 export const readPersonalBases = (userId: string): Runtime<EndpointResponse<typeof PersonalBasesEndpoint>> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
+  // Discord downloads and explicit saves share one library. Removing a base
+  // clears both its saved row and this user's download entry, not other users'.
   const bases = yield* database(sql<PersonalBaseRow>`SELECT base.id::text id,base.base_link,
       array_remove(base.images,NULL) images,
       base.description,base.created_at,base.server_id,base.channel_id,base.message_id,
@@ -224,11 +235,9 @@ export const readPersonalBases = (userId: string): Runtime<EndpointResponse<type
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='1') upvotes,
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='-1') downvotes,
       saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
-    FROM (SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
-      UNION SELECT id FROM bases WHERE downloads ? ${userId}) library
-    JOIN bases base ON base.id=library.base_id
-    LEFT JOIN user_saved_bases saved ON saved.base_id=base.id AND saved.user_id=${userId}
-    WHERE base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
+    FROM user_saved_bases saved
+    JOIN bases base ON base.id=saved.base_id
+    WHERE saved.user_id=${userId} AND base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
     ORDER BY GREATEST(COALESCE(saved.saved_at,'epoch'),COALESCE((base.downloads->>${userId})::timestamptz,'epoch')) DESC,base.id DESC`)
   return {
     items: bases.map((row) => ({ id: row.id, baseLink: row.base_link, images: row.images, description: row.description,
@@ -261,6 +270,8 @@ type ArmySpellRow = ArmyUnitRow & { readonly clanCastle: boolean }
 type ArmyEquipmentRow = { readonly equipmentId: number; readonly heroId: number }
 type ArmyPetRow = { readonly petId: number; readonly heroId: number }
 interface PersonalArmyRow {
+  readonly name: string | null
+  readonly notes: string | null
   readonly share_code: string
   readonly main_troops: ReadonlyArray<ArmyUnitRow>
   readonly clan_castle_troops: ReadonlyArray<ArmyUnitRow>
@@ -281,25 +292,59 @@ const armyLink = (shareCode: string) => {
   url.searchParams.set("army", shareCode)
   return url.toString()
 }
-export const readPersonalArmies = (userId: string): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
+export const readPersonalArmies = (userId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const armies = yield* database(sql<PersonalArmyRow>`SELECT composition.share_code,composition.main_troops,
       composition.clan_castle_troops,composition.spells,composition.heroes,composition.equipment,
-      composition.pet_assignments,composition.siege_machine_id,saved.saved_at
+      composition.pet_assignments,composition.siege_machine_id,saved.saved_at,saved.name,saved.notes
     FROM user_saved_armies saved JOIN army_compositions composition ON composition.share_code=saved.share_code
     WHERE saved.user_id=${userId} ORDER BY saved.saved_at DESC,saved.share_code`)
+  // Artwork/metadata availability must not hide or block editing saved rows.
+  const metadataReady = armies.length === 0 || (yield* prepareStaticMetadata(yield* WorkerEnvironment, ["troops","spells","heroes","pets","equipment","buildings"])
+    .pipe(Effect.as(true),Effect.catch(() => Effect.succeed(false))))
+  const minimumTownHall = (row: PersonalArmyRow) => {
+    if (!metadataReady) return null
+    // A saved army has no player's Town Hall. Filter by its unit-unlock floor,
+    // excluding donated CC units; unknown metadata must not become a fake TH1.
+    const units = [
+      ...row.main_troops.map(item => lookupArmyStaticItem("troops",item.id)),
+      ...row.spells.filter(item => !item.clanCastle).map(item => lookupArmyStaticItem("spells",item.id)),
+      ...row.heroes.map(id => lookupArmyStaticItem("heroes",id)),
+      ...row.equipment.map(item => lookupArmyStaticItem("equipment",item.equipmentId)),
+      ...row.pet_assignments.map(item => lookupArmyStaticItem("pets",item.petId)),
+      ...(row.siege_machine_id === null ? [] : [lookupArmyStaticItem("troops",row.siege_machine_id)]),
+    ]
+    return units.some(item => !item) ? null : Math.max(1,...units.map(item => item!.minimumTownHall))
+  }
   return { items: armies.map((row) => ({ shareCode: row.share_code, armyLink: armyLink(row.share_code),
     mainTroops: [...row.main_troops], clanCastleTroops: [...row.clan_castle_troops], spells: [...row.spells],
     heroes: [...row.heroes], equipment: [...row.equipment], petAssignments: [...row.pet_assignments],
-    siegeMachineId: row.siege_machine_id, savedAt: timestamp(row.saved_at) })) }
+    siegeMachineId: row.siege_machine_id, savedAt: timestamp(row.saved_at), name: row.name, notes: row.notes,
+    minimumTownHall: minimumTownHall(row) })) }
 })
-const savePersonalArmy = (userId: string, rawShareCode: string): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
+const updatePersonalArmy = (userId: string, rawShareCode: string, body: {name: string; notes: string | null}) => Effect.gen(function* () {
+  const shareCode = yield* armyShareCode(rawShareCode), sql = yield* SqlClient.SqlClient
+  if (!body.name.trim()) return yield* new InvalidRequest({message:"An army name is required"})
+  const rows = yield* database(sql`UPDATE user_saved_armies SET name=${body.name?.trim() || null},notes=${body.notes?.trim() || null}
+    WHERE user_id=${userId} AND share_code=${shareCode} RETURNING share_code`)
+  if (!rows.length) return yield* new NotFound({message:"Saved army not found"})
+  return yield* readPersonalArmies(userId)
+})
+export const savePersonalArmy = (userId: string, rawShareCode: string, metadata?: { name: string | null; notes: string | null }): Runtime<EndpointResponse<typeof PersonalArmiesEndpoint>> => Effect.gen(function* () {
   const shareCode = yield* armyShareCode(rawShareCode), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
+    // Locking the user above serializes concurrent saves of different armies.
+    // Re-saving an existing entry does not consume another one of the 25 slots.
+    const library = yield* sql<{count: number; exists: boolean}>`SELECT count(*)::int AS count,
+      coalesce(bool_or(share_code=${shareCode}),false) AS exists FROM user_saved_armies WHERE user_id=${userId}`
+    if (!library[0]!.exists && library[0]!.count >= 25) return yield* new InvalidRequest({message:"You can save up to 25 armies. Remove one before saving another."})
     const rows = yield* sql`WITH target AS (SELECT share_code FROM army_compositions WHERE share_code=${shareCode}), inserted AS (
-        INSERT INTO user_saved_armies(user_id,share_code) SELECT ${userId},share_code FROM target
-        ON CONFLICT (user_id,share_code) DO NOTHING RETURNING share_code
+        INSERT INTO user_saved_armies(user_id,share_code,name,notes) SELECT ${userId},share_code,${metadata?.name ?? null},${metadata?.notes ?? null} FROM target
+        ON CONFLICT (user_id,share_code) DO UPDATE SET
+          name=CASE WHEN ${metadata !== undefined} THEN EXCLUDED.name ELSE user_saved_armies.name END,
+          notes=CASE WHEN ${metadata !== undefined} THEN EXCLUDED.notes ELSE user_saved_armies.notes END
+        RETURNING share_code
       ) SELECT share_code FROM target`
     if (rows.length === 0) return yield* new NotFound({ message: "Army composition not found" })
     return yield* readPersonalArmies(userId)
@@ -318,6 +363,9 @@ const unsavePersonalBase = (userId: string, rawBaseId: string): Runtime<Endpoint
   const baseId = yield* positiveBaseId(rawBaseId), sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
+    // Take the base lock before deleting its saved row, matching the Discord
+    // download writer's order so a concurrent re-download cannot deadlock.
+    yield* sql`UPDATE bases SET downloads=downloads-${userId}::text WHERE id=${baseId}::bigint`
     yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND base_id=${baseId}::bigint`
     return yield* readPersonalBases(userId)
   })))
@@ -327,7 +375,17 @@ const deleteOldPersonalBases = (userId: string): Runtime<EndpointResponse<typeof
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockAuthenticatedUser(userId)
-    yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND saved_at < now() - interval '90 days'`
+    const expired = yield* sql<{ id: string }>`SELECT base.id::text id FROM bases base
+      JOIN user_saved_bases saved ON saved.base_id=base.id
+      WHERE saved.user_id=${userId} AND saved.saved_at < now() - interval '90 days'
+      ORDER BY base.id FOR UPDATE OF base`
+    if (expired.length > 0) {
+      const ids = expired.map((base) => base.id)
+      // Bulk removal has the same semantics as removing one base: no retained
+      // download history for this user, while everyone else's records survive.
+      yield* sql`UPDATE bases SET downloads=downloads-${userId}::text WHERE id=ANY(${ids}::bigint[])`
+      yield* sql`DELETE FROM user_saved_bases WHERE user_id=${userId} AND base_id=ANY(${ids}::bigint[])`
+    }
     return yield* readPersonalBases(userId)
   })))
 })
@@ -357,6 +415,7 @@ const routes = [
   route(PersonalArmiesEndpoint, (_, { principal }) => principal.kind === "user" ? readPersonalArmies(principal.userId) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(SavePersonalArmyEndpoint, ({ path }, { principal }) => principal.kind === "user" ? savePersonalArmy(principal.userId, path.shareCode) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(DeletePersonalArmyEndpoint, ({ path }, { principal }) => principal.kind === "user" ? deletePersonalArmy(principal.userId, path.shareCode) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
+  route(UpdatePersonalArmyEndpoint, ({ path, body }, { principal }) => principal.kind === "user" ? updatePersonalArmy(principal.userId, path.shareCode, body) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(AchievementsCheckEndpoint, (_, { principal, bindings }) => principal.kind === "user"
     ? checkMobileAchievements(principal.userId, bindings) : Effect.fail(new Unauthenticated({ message: "User authentication is required" }))),
   route(BookmarksListEndpoint, ({ path, query }, { principal }) => subject(principal, path.userId).pipe(Effect.flatMap((id) => listMobileBookmarks(id, query.type)))),
@@ -390,6 +449,7 @@ export const mobilePersistenceRuntimeRoutes = [
   { method: "DELETE", path: "/v2/bases/personal/:baseId" },
   { method: "GET", path: "/v2/armies/personal" },
   { method: "PUT", path: "/v2/armies/personal/:shareCode" },
+  { method: "PATCH", path: "/v2/armies/personal/:shareCode" },
   { method: "DELETE", path: "/v2/armies/personal/:shareCode" },
   { method: "POST", path: "/v2/achievements/check" },
   { method: "GET", path: "/v2/links/:userId/bookmarks" },
@@ -410,7 +470,7 @@ export const dispatchMobilePersistence = (request: Request, bindings: WorkerBind
     const path = yield* Effect.try({ try: () => Object.fromEntries(expected.flatMap((part, i) => part.startsWith(":") ? [[part.slice(1), decodeURIComponent(actual[i]!)]] : [])), catch: () => new InvalidRequest({ message: "Malformed path encoding" }) })
     const auth = yield* AuthIdentity
     const principal = yield* (candidate.endpoint.auth === "user" ? auth.requireUser(request) : auth.requireUserOrBot(request))
-    return yield* candidate.run(request, path, { principal, bindings })
+    return yield* candidate.run(request, path, { principal, bindings }).pipe(Effect.provideService(WorkerEnvironment, bindings))
   }
   return undefined
 })

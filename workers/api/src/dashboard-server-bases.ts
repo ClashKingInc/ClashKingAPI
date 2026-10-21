@@ -1,6 +1,6 @@
 import { BaseCreateFailure, BaseDeleteFailure, BasesEndpoint, CreateBaseRequest, DecimalSnowflake, UpdateBaseRequest, type Base } from "@clashking/api-contracts"
 import { Data, Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
 import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
@@ -315,7 +315,9 @@ const downloader = (serverId: string, id: string, userId: string) => Effect.gen(
   const discord = yield* DiscordApi
   const member = yield* discord.request(`/guilds/${serverId}/members/${userId}`).pipe(Effect.flatMap((raw) => decodeDiscord(Member, raw)), Effect.result)
   if (member._tag === "Failure") {
-    // Go's GetMemberDirect is deliberately best-effort after ownership proof.
+    // Only a confirmed missing member means they are no longer on the server.
+    // Rate limits, forbidden access and upstream failures must remain retryable errors.
+    if (member.failure._tag !== "NotFound") return yield* member.failure
     yield* Effect.logWarning("Base downloader Discord profile unavailable", { failure: member.failure._tag })
     return { userId, displayName: null, avatarUrl: null }
   }

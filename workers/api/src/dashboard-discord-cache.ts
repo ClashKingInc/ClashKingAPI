@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { WorkerBindings } from "./environment.js"
 
 // The Gateway has no list-completeness marker. Only enrich parent IDs already

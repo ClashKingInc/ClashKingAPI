@@ -1,12 +1,14 @@
 import { Schema } from "effect"
 
+import { strictObject } from "./strict-object.js"
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 
 export const PersonalBaseId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u)).annotate({
   description: "Base ID as a decimal string; never convert it to a JavaScript number.",
 })
-export const PersonalBase = Schema.Struct({
+export const PersonalBase = strictObject(Schema.Struct({
   id: PersonalBaseId,
   baseLink: Schema.String,
   images: Schema.Array(Schema.String),
@@ -22,10 +24,10 @@ export const PersonalBase = Schema.Struct({
   saved: Schema.Boolean,
   savedAt: Schema.NullOr(Schema.String),
   downloadedAt: Schema.NullOr(Schema.String),
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
-export const PersonalBasesState = Schema.Struct({
+}))
+export const PersonalBasesState = strictObject(Schema.Struct({
   items: Schema.Array(PersonalBase),
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
+}))
 
 const PersonalErrors = [
   { status: 400, body: ErrorResponse },

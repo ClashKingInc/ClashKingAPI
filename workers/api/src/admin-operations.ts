@@ -8,7 +8,7 @@ import {
 } from "@clashking/api-contracts"
 import { importPKCS8, SignJWT } from "jose"
 import { Effect, Schema } from "effect"
-import { SqlClient, SqlError } from "effect/unstable/sql"
+import { SqlClient, SqlError } from "effect/sql"
 
 import { familyIdentity, parseFamilyId, queryAdminFamilies, queryAdminFamilyMembers, type FamilyIdentityRow } from "./army-family-analytics.js"
 import type { AdminPrincipal } from "./access.js"
@@ -1164,7 +1164,13 @@ const sendFcm = (bindings: AdminWorkerBindings, token: string, message: PushMess
     try: () => fetch(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(project)}/messages:send`, {
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-      body: JSON.stringify({ message: { token, notification: { title: message.title, body: message.body }, data: message.data } }),
+      body: JSON.stringify({ message: {
+        token, notification: { title: message.title, body: message.body }, data: message.data,
+        ...(message.data.image_url?.startsWith("https://") ? {
+          apns: { payload: { aps: { "mutable-content": 1 } }, fcm_options: { image: message.data.image_url } },
+          android: { notification: { image: message.data.image_url } },
+        } : {}),
+      } }),
     }),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "FCM send failed" }),
   })
@@ -1229,20 +1235,16 @@ const testPush = (input: AdminOperationInput) => Effect.gen(function* () {
 })
 
 const notificationLabTypes = [
-  { id: "legend-defense", category: "Legend League", label: "Legend defense", description: "A defense received by a notification-enabled verified account.", title: "Legend defense", body: "Archer Queen attacked Barbarian King: 2 stars, 86%.", data: { type: "legend_defense", player_tag: "#PLAYER", event_id: "0".repeat(64), battle_time: "2026-09-11T00:00:00Z" } },
-  { id: "war-start", category: "War state", label: "Clan war started", description: "The tracking service found a new regular war.", title: "Clan war started", body: "A new war is available for your selected clan.", data: { type: "new_war", target_tag: "#CLAN" } },
-  { id: "war-score", category: "War attacks", label: "War score updated", description: "A regular-war attack changed the score.", title: "War score updated", body: "A new attack changed the clan war score.", data: { type: "new_attacks", target_tag: "#CLAN" } },
-  { id: "cwl-attack", category: "War attacks", label: "CWL score updated", description: "A CWL attack changed the score.", title: "War score updated", body: "A new attack changed the clan war score.", data: { type: "cwl_new_attacks", target_tag: "#CLAN" } },
-  { id: "war-state", category: "War state", label: "War status changed", description: "Preparation, battle day, or war end state changed.", title: "War status changed", body: "Your clan war status changed.", data: { type: "war_state", target_tag: "#CLAN" } },
-  { id: "cwl-state", category: "War state", label: "CWL updated", description: "A CWL round has new state information.", title: "CWL updated", body: "Your Clan War League round has new information.", data: { type: "cwl_war_update", target_tag: "#CLAN" } },
-  { id: "war-reminder", category: "War reminders", label: "War attacks remaining", description: "A selected account still has attacks at a configured reminder time.", title: "War attacks remaining", body: "Barbarian King still has 1 attack left with 5 hours remaining.", data: { type: "war_reminder", target_tag: "#PLAYER" } },
-  { id: "event-cwl", category: "Events", label: "CWL started", description: "The monthly Clan War League start alert.", title: "Clan War League has started", body: "Clan War League is now live in game.", data: { type: "admin_campaign", campaign_id: "game-event-cwl-test" } },
+  { id: "legend-defense", category: "Legend League", label: "Legend defense", description: "Opens the player’s Legends screen. Replace target_tag with a real player tag.", title: "Legend defense", body: "A new Legend League defense is available.", data: { type: "legend_defense", target_tag: "#PLAYER" } },
+  { id: "war-reminder", category: "War reminders", label: "War attacks remaining", description: "One-account example. Multiple accounts show only clan context. Replace target_tag with a real clan tag.", title: "HellInaHelmet: War reminder", body: "Magic Jr. has 1 war attack left. Ends in 5 hours.", data: { type: "war_reminder", target_tag: "#P09LP8CY" } },
+  { id: "raid-reminder", category: "Raid reminders", label: "Raid attacks remaining", description: "One-account example; no specific screen navigation.", title: "HellInaHelmet: Raid reminder", body: "Magic Jr. has 2 raid attacks left. Ends in 5 hours.", data: { type: "raid_reminder", target_tag: "#P09LP8CY" } },
+  { id: "raid-unstarted", category: "Raid reminders", label: "Multiple accounts — raids not started", description: "Example when all accounts with remaining attacks have not started raids.", title: "HellInaHelmet: Raid reminder", body: "You have 3 accounts that haven't started raids. Ends in 5 hours.", data: { type: "raid_reminder", target_tag: "#P09LP8CY" } },
+  { id: "event-cwl", category: "Events", label: "CWL signups", description: "The monthly Clan War League signup alert.", title: "CWL signups have started", body: "Sign your clan up for Clan War League.", data: { type: "admin_campaign", campaign_id: "game-event-cwl-test" } },
   { id: "event-clan-games", category: "Events", label: "Clan Games started", description: "The monthly Clan Games start alert.", title: "Clan Games have started", body: "Clan Games are now live in game.", data: { type: "admin_campaign", campaign_id: "game-event-clan-games-test" } },
   { id: "event-raid-weekend", category: "Events", label: "Raid Weekend started", description: "The weekly Raid Weekend start alert.", title: "Raid Weekend has started", body: "Raid Weekend is now live in game.", data: { type: "admin_campaign", campaign_id: "game-event-raid-weekend-test" } },
-  { id: "event-season", category: "Events", label: "Season started", description: "The Clash of Clans season start alert.", title: "A new season has started", body: "The new Clash of Clans season is now live.", data: { type: "admin_campaign", campaign_id: "game-event-season-start-test" } },
   { id: "announcement", category: "Announcements", label: "App announcement", description: "A general campaign with an optional supported app route.", title: "ClashKing announcement", body: "This is a test app announcement.", data: { type: "admin_campaign", campaign_id: "notification-lab-announcement", route: "/posts" } },
   { id: "admin-post", category: "Announcements", label: "Published post", description: "A published admin post; replace post_id with a real post to test opening it.", title: "New from ClashKing", body: "Open this notification to read the post.", data: { type: "admin_post", post_id: "REPLACE_WITH_POST_ID", route: "/posts/REPLACE_WITH_POST_ID" } },
-  { id: "monthly-support", category: "Monthly support", label: "Creator support reminder", description: "The monthly creator-code support reminder.", title: "New Season is Live", body: "A new season has started. If you're getting the Gold Pass, consider using creator code ClashKing.", data: { type: "admin_campaign", campaign_id: "monthly-support", route: "/settings/support" } },
+  { id: "monthly-support", category: "Monthly support", label: "Creator support reminder", description: "Creator-code reminder; opens the app without navigating to a specific screen.", title: "New Season is Live", body: "A new season has started. If you're getting the Gold Pass, consider using our creator code ClashKing. ❤️", data: { type: "admin_campaign", campaign_id: "monthly-support" } },
 ] as const
 
 const requireNotificationLab = (bindings: AdminWorkerBindings) =>
@@ -1288,6 +1290,22 @@ const labSend = (input: AdminOperationInput) => Effect.gen(function* () {
   const body = asRecord(input.body)
   const ids = Array.isArray(body.device_ids) ? body.device_ids.map(String) : []
   const sql = yield* SqlClient.SqlClient
+  const data = { ...asRecord(body.data) } as Record<string, string>
+  let notificationBody = String(body.body)
+  if (data.type === "war_reminder" || data.type === "raid_reminder") {
+    const clans = yield* database("Notification badge lookup failed", sql.unsafe<{ badge_token: string }>(
+      "SELECT badge_token FROM basic_clan WHERE tag=$1", [data.target_tag]))
+    if (clans[0]?.badge_token) data.image_url = `https://api-assets.clashofclans.com/badges/200/${clans[0].badge_token}.png`
+  } else if (data.type === "legend_defense") {
+    data.image_url = "https://assets.clashk.ing/leagues/league-tier/legend_league_1.png"
+  } else if (data.campaign_id === "monthly-support") {
+    delete data.image_url
+    notificationBody = notificationBody.replace(/\s*❤️$/u, "").trimEnd() + " ❤️"
+  } else {
+    for (const [slug, icon] of Object.entries({ cwl: "Icon_DC_CWL_No_Border", "clan-games": "Icon_HV_Clan_Games_Medal", "raid-weekend": "Icon_HV_Raid_Attack" })) {
+      if (data.campaign_id?.startsWith(`game-event-${slug}-`)) data.image_url = `https://assets.clashk.ing/icons/${icon}.png`
+    }
+  }
   const devices = yield* database("Notification lab device lookup failed", sql.unsafe<PushDeviceRow>(`SELECT
     md5(user_id || chr(31) || device_id || chr(31) || environment) id, user_id, device_id,
     platform, provider, environment, token_ciphertext, coalesce(nullif(locale,''),'en') locale
@@ -1304,7 +1322,7 @@ const labSend = (input: AdminOperationInput) => Effect.gen(function* () {
       if (device.provider !== "fcm") return yield* new UpstreamUnavailable({ cause: undefined, message: `Unsupported push provider ${device.provider}` })
       const token = yield* decryptPushToken(device.token_ciphertext, input.bindings.DATA_ENCRYPTION_KEY ?? "")
       return yield* sendFcm(input.bindings, token, {
-        title: String(body.title), body: String(body.body), data: asRecord(body.data) as Readonly<Record<string, string>>,
+        title: String(body.title), body: notificationBody, data,
       })
     }))
     const common = { device_id: id, device_name: device.device_id, platform: device.platform, environment: device.environment }

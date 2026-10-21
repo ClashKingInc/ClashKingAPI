@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure } from "./errors.js"
 import type { StatsWarRequest } from "./stats-internal.js"

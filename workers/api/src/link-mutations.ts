@@ -4,12 +4,13 @@ import {
   type AnyEndpoint, type EndpointRequest, type EndpointResponse,
 } from "@clashking/api-contracts"
 import { Data, Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import type { WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { correctTag } from "./home.js"
+import { queueSubjectRoleRefresh } from "./role-refresh-queue.js"
 import { readBoundedJson } from "./request-body.js"
 
 type LinkedPlayer = EndpointResponse<typeof LinksAddEndpoint>["account"]
@@ -128,6 +129,7 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
         ON CONFLICT (tag) DO NOTHING RETURNING is_verified, hidden`
       if (inserted[0] !== undefined) {
         if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
+        yield* queueSubjectRoleRefresh(userId)
         return {response:{
           message: verifyOwnership ? "Clash of Clans account linked successfully with ownership verification" : "Clash of Clans account linked successfully",
           account: { ...player, ...inserted[0] },
@@ -159,6 +161,7 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
       RETURNING is_verified, hidden`
     if (saved[0] === undefined) return yield* new LinkOwnershipConflict({ account: { ...player, is_verified: false, hidden: false } })
     if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
+    for (const subjectId of new Set([userId, ...(existing?.user_id ? [existing.user_id] : [])])) yield* queueSubjectRoleRefresh(subjectId)
     return {response:{
       message: verifyOwnership ? "Clash of Clans account linked successfully with ownership verification" : "Clash of Clans account linked successfully",
       account: { ...player, ...saved[0] },
@@ -182,6 +185,7 @@ export const removeLink = (principal: ApiPrincipal, userId: string, rawTag: stri
     yield* sql`DELETE FROM player_links WHERE user_id = ${userId} AND tag = ${playerTag}`
     yield* sql`DELETE FROM mobile_notification_accounts WHERE user_id = ${userId} AND player_tag = ${playerTag}`
     yield* compactOrder(userId)
+    yield* queueSubjectRoleRefresh(userId)
     return { message: "Clash of Clans account unlinked successfully" }
   })))
 })
@@ -193,7 +197,7 @@ export const setLinkVisibility = (principal: ApiPrincipal, userId: string, rawTa
     const rows = yield* sql<LinkRow>`UPDATE player_links SET hidden = ${hidden}, updated_at = now()
       WHERE user_id = ${userId} AND tag = ${playerTag} AND is_verified = true
       RETURNING tag, user_id, order_index, is_verified, hidden, added_at, verified_at, last_login`
-    if (rows[0] !== undefined) return linkedAccount(rows[0])
+    if (rows[0] !== undefined) { yield* queueSubjectRoleRefresh(userId); return linkedAccount(rows[0]) }
     const existing = yield* sql`SELECT tag FROM player_links WHERE user_id = ${userId} AND tag = ${playerTag}`
     if (existing.length === 0) return yield* new NotFound({ message: "Clash of Clans account not found or not linked to your profile" })
     return yield* new Forbidden({ message: "Only verified links can be hidden" })

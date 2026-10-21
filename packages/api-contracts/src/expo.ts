@@ -1,11 +1,12 @@
 import { AppConfigEndpoint } from "./app-config.js"
+export { BotClanRankingsEndpoint as ClanCurrentRankingsEndpoint, ClanRankingsResponse } from "./bot-public.js"
 import {
   DeleteOldPersonalBasesEndpoint,
   PersonalBasesEndpoint,
   SavePersonalBaseEndpoint,
   UnsavePersonalBaseEndpoint,
 } from "./personal-bases.js"
-import { DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint } from "./personal-armies.js"
+import { DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint, UpdatePersonalArmyEndpoint } from "./personal-armies.js"
 import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
 export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
@@ -66,6 +67,8 @@ import {
 } from "./expo-links.js"
 import {
   NotificationAccountPutEndpoint,
+  NotificationClansGetEndpoint,
+  NotificationClanPutEndpoint,
   NotificationDeviceDeleteEndpoint,
   NotificationDeviceRegisterEndpoint,
   NotificationPreferencesGetEndpoint,
@@ -77,6 +80,7 @@ import {
   PlayerCwlHistoryEndpoint,
   PlayerJoinLeaveEndpoint,
   PlayerJoinLeaveTotalsEndpoint,
+  PlayerLastActivityEndpoint,
   PlayerSearchEndpoint,
   PlayerTimersEndpoint,
   PlayerWarStatsEndpoint,
@@ -85,6 +89,7 @@ import {
   LeaderboardClanDonationsEndpoint,
   LeaderboardClanWarWinsEndpoint,
   LeaderboardClanWinStreakEndpoint,
+  WarTripleStreakEndpoint,
   LeaderboardHistoryEndpoint,
   LeaderboardLeagueEndpoint,
   LeaderboardTownhallsEndpoint,
@@ -151,7 +156,21 @@ export { StatsCwlEndpoint, StatsCwlQuery,
   StatsRankedEndpoint, StatsRankedQuery,
   StatsWarEndpoint, StatsWarQuery } from "./stats.js"
 
+export * from "./home-layout.js"
+export * from "./dashboard-access.js"
+export { GuildsEndpoint } from "./dashboard-server.js"
+import { DashboardGrantEndpoint, DashboardExchangeEndpoint, DashboardScopedRefreshEndpoint, DashboardScopedLogoutEndpoint } from "./dashboard-access.js"
+import { HomeLayoutGetEndpoint, HomeLayoutPutEndpoint, PlayerFarmingEndpoint, ClanDonationSummaryEndpoint, PlayerActivityEndpoint } from "./home-layout.js"
 export const expoEndpoints = {
+  dashboardGrant: DashboardGrantEndpoint,
+  dashboardExchange: DashboardExchangeEndpoint,
+  dashboardScopedRefresh: DashboardScopedRefreshEndpoint,
+  dashboardScopedLogout: DashboardScopedLogoutEndpoint,
+  homeLayoutGet: HomeLayoutGetEndpoint,
+  homeLayoutPut: HomeLayoutPutEndpoint,
+  playerFarming: PlayerFarmingEndpoint,
+  playerActivity: PlayerActivityEndpoint,
+  clanDonationSummary: ClanDonationSummaryEndpoint,
   ...leagueAnalyticsEndpoints,
   ...armySetupEndpoints,
   ...legendEndpoints,
@@ -163,6 +182,7 @@ export const expoEndpoints = {
   personalArmies: PersonalArmiesEndpoint,
   savePersonalArmy: SavePersonalArmyEndpoint,
   deletePersonalArmy: DeletePersonalArmyEndpoint,
+  updatePersonalArmy: UpdatePersonalArmyEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,
@@ -203,6 +223,7 @@ export const expoEndpoints = {
   playerTimers: PlayerTimersEndpoint,
   playerJoinLeave: PlayerJoinLeaveEndpoint,
   playerJoinLeaveTotals: PlayerJoinLeaveTotalsEndpoint,
+  playerLastActivity: PlayerLastActivityEndpoint,
   playerWarStats: PlayerWarStatsEndpoint,
   clanCwlSeasons: ClanCwlSeasonsEndpoint,
   clanLeaderboardHistory: ClanLeaderboardHistoryEndpoint,
@@ -222,11 +243,14 @@ export const expoEndpoints = {
   leaderboardClanDonations: LeaderboardClanDonationsEndpoint,
   leaderboardClanWarWins: LeaderboardClanWarWinsEndpoint,
   leaderboardClanWinStreak: LeaderboardClanWinStreakEndpoint,
+  warTripleStreak: WarTripleStreakEndpoint,
   notificationDeviceRegister: NotificationDeviceRegisterEndpoint,
   notificationDeviceDelete: NotificationDeviceDeleteEndpoint,
   notificationPreferencesGet: NotificationPreferencesGetEndpoint,
   notificationPreferencesPut: NotificationPreferencesPutEndpoint,
   notificationAccountPut: NotificationAccountPutEndpoint,
+  notificationClansGet: NotificationClansGetEndpoint,
+  notificationClanPut: NotificationClanPutEndpoint,
   achievementsCheck: AchievementsCheckEndpoint,
   appUpdateManifest: AppUpdateManifestEndpoint,
   activeAnnouncements: ActiveAnnouncementsEndpoint,

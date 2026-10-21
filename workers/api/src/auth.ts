@@ -1,11 +1,12 @@
 import { jwtVerify } from "jose"
 import { Context, Effect, Layer } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure, Unauthenticated } from "./errors.js"
 import { WorkerEnvironment } from "./environment.js"
 
 export interface UserPrincipal {
+  readonly dashboardScope?: { readonly serverId: string; readonly sessionId: string; readonly permissions: { readonly manager: boolean; readonly sections: Readonly<Record<string,"view"|"manage">> } }
   readonly deviceId?: string
   readonly kind: "user"
   readonly userId: string
@@ -73,7 +74,7 @@ export class AuthIdentity extends Context.Service<
         const verified = yield* Effect.tryPromise({
           try: () => jwtVerify(token, jwtKey, {
             algorithms: ["HS256"],
-            audience: [env.NATIVE_TOKEN_AUDIENCE, env.WEB_TOKEN_AUDIENCE],
+            audience: [env.NATIVE_TOKEN_AUDIENCE, env.WEB_TOKEN_AUDIENCE, "clashking-server-dashboard"],
           }),
           catch: () => new Unauthenticated({ message: "Invalid or expired token" }),
         })
@@ -93,9 +94,22 @@ export class AuthIdentity extends Context.Service<
         if (rows[0]?.exists !== true) {
           return yield* new Unauthenticated({ message: "User session is no longer valid" })
         }
+        let dashboardScope: UserPrincipal["dashboardScope"]
+        if(verified.payload.aud === "clashking-server-dashboard" || Array.isArray(verified.payload.aud) && verified.payload.aud.includes("clashking-server-dashboard")) {
+          const sessionId=verified.payload.dashboard_session
+          if(typeof sessionId!=="string"||!/^[a-f0-9-]{36}$/iu.test(sessionId))return yield* new Unauthenticated({message:"Invalid dashboard session"})
+          const sessions=yield* sql<{server_id:string;permissions:NonNullable<UserPrincipal["dashboardScope"]>["permissions"]}>`
+            SELECT server_id,permissions FROM dashboard_scoped_sessions s WHERE s.id=${sessionId}::uuid AND s.user_id=${sub}
+            AND s.revoked_at IS NULL AND s.expires_at>now()
+            AND (s.device_id IS NULL OR EXISTS(SELECT 1 FROM auth_refresh_tokens r WHERE r.user_id=s.user_id AND r.device_id=s.device_id AND r.expires_at>now()))`
+            .pipe(Effect.mapError(cause=>new DatabaseFailure({cause,message:"Dashboard session unavailable"})))
+          if(!sessions[0])return yield* new Unauthenticated({message:"Dashboard session expired"})
+          dashboardScope={serverId:sessions[0].server_id,sessionId,permissions:sessions[0].permissions}
+        }
         return {
           kind: "user" as const,
           userId: sub,
+          ...(dashboardScope?{dashboardScope}:{}),
           ...(typeof device === "string" && device.length > 0 ? { deviceId: device } : {}),
         }
       })

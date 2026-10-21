@@ -8,6 +8,7 @@ const NotFound = [{ status: 404, body: ErrorResponse }] as const
 const BadRequest = [{ status: 400, body: ErrorResponse }] as const
 const LeagueReference = Schema.Struct({ id: Schema.Number, name: Schema.String })
 const CwlRounds = Schema.Struct({ won: Schema.Number, tied: Schema.Number, lost: Schema.Number })
+// destruction is summed across completed wars, not averaged; totals can exceed 100%.
 export const ClanCwlSeasonsResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ season: Schema.String, state: Schema.String, warSize: Schema.NullOr(Schema.Number), warLeague: Schema.NullOr(LeagueReference), rank: Schema.NullOr(Schema.Number), stars: Schema.NullOr(Schema.Number), destruction: Schema.NullOr(Schema.Number), rounds: Schema.NullOr(CwlRounds) })) })
 const Location = Schema.Struct({ id: Schema.Number, name: Schema.optionalKey(Schema.String), isCountry: Schema.Boolean, countryCode: Schema.optionalKey(Schema.String), localizedName: Schema.optionalKey(Schema.String) })
 export const ClanLeaderboardHistoryResponse = Schema.Struct({ items: Schema.Array(Schema.Struct({ date: Schema.String, rank: Schema.Number, clanPoints: Schema.optionalKey(Schema.Number), builderBasePoints: Schema.optionalKey(Schema.Number), capitalPoints: Schema.optionalKey(Schema.Number), members: Schema.Number, location: Schema.optionalKey(Location) })) })

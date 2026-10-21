@@ -1,6 +1,6 @@
 import { CwlSummaryExportEndpoint, PlayerWarStatsExportEndpoint } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure, InvalidRequest, NotFound } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"

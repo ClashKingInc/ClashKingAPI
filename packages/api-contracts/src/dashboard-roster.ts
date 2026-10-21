@@ -383,6 +383,18 @@ export const DashboardRosterMetricQueryResponse = Schema.Struct({
   evaluatedAt: Schema.String,
 })
 
+export const DashboardFamilyWarMetricQueryRequest = Schema.Struct({
+  playerTags: Schema.Array(Schema.String),
+  metricId: Schema.Literals(["war.hit_rate", "war.regular_hit_rate", "war.cwl_hit_rate", "war.hit_rate_confidence", "war.missed_attacks", "war.participation"]),
+  parameters: Schema.optionalKey(JsonRecord),
+})
+export const DashboardFamilyWarMetricQueryResponse = Schema.Struct({
+  metricId: Schema.String,
+  parameters: JsonRecord,
+  rows: Schema.Array(Schema.Struct({ playerTag: Schema.String, value: Schema.Json, attackCount: Schema.Number })),
+  evaluatedAt: Schema.String,
+})
+
 export const DashboardRosterViewColumn = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
@@ -411,12 +423,20 @@ export const DashboardRosterViewHighlightCondition = Schema.Struct({
   operator: DashboardRosterViewFilterOperator,
   value: Schema.Json,
 })
+export const DashboardRosterViewGradient = Schema.Struct({
+  columnId: Schema.String,
+  min: Schema.Number,
+  max: Schema.Number,
+  from: Schema.String,
+  to: Schema.String,
+})
 export const DashboardRosterViewHighlight = Schema.Struct({
   id: Schema.String,
   target: Schema.Literals(["row", "column", "cell"]),
   columnId: Schema.optionalKey(Schema.String),
   when: Schema.optionalKey(DashboardRosterViewHighlightCondition),
   tone: Schema.Literals(["red", "amber", "green", "blue", "purple", "gray"]),
+  gradient: Schema.optionalKey(DashboardRosterViewGradient),
 })
 export const DashboardRosterViewSpec = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -545,7 +565,7 @@ export const DashboardCreateRosterEndpoint = defineEndpoint({
   body: DashboardCreateRosterRequest,
   bodyMode: "json",
   pathParams: NoPathParams,
-  query: ServerQuery,
+  query: Schema.Struct({ server_id: ServerID, unassigned_only: Schema.optionalKey(Schema.Boolean) }),
   response: DashboardCreateRosterResponse,
   responseMode: "json",
   successStatus: 201,
@@ -931,6 +951,22 @@ export const DashboardQueryRosterMetricEndpoint = defineEndpoint({
   pathParams: NoPathParams,
   query: ServerQuery,
   response: DashboardRosterMetricQueryResponse,
+  responseMode: "json",
+  successStatus: 200,
+  errors: [],
+})
+
+export const DashboardQueryFamilyWarMetricEndpoint = defineEndpoint({
+  operationId: "dashboardQueryFamilyWarMetric",
+  method: "POST",
+  path: "/v2/roster/family/war-metrics/query",
+  auth: "server-read",
+  summary: "Evaluate war history for current members of configured server clans",
+  body: DashboardFamilyWarMetricQueryRequest,
+  bodyMode: "json",
+  pathParams: NoPathParams,
+  query: ServerQuery,
+  response: DashboardFamilyWarMetricQueryResponse,
   responseMode: "json",
   successStatus: 200,
   errors: [],

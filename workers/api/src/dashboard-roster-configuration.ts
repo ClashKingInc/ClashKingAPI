@@ -5,7 +5,7 @@ import { DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEn
   DashboardReplaceRosterMemberGroupsEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { DecimalSnowflake, requireEndpointSuccessStatus } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { DiscordApi } from "./discord-api.js"

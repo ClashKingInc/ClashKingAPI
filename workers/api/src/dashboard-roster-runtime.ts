@@ -4,10 +4,10 @@ import { rosterPublication, rosterPublications } from "./roster-publication.js"
 import { readDashboardMultipart, uploadMediaFile } from "./dashboard-upload.js"
 import { Context, Data, Effect, Layer, Schema } from "effect"
 import {
-  botEndpoints, dashboardEndpoints, DashboardRosterMetricQueryRequest, DashboardRosterViewPreviewRequest, RosterCapacity,
+  botEndpoints, dashboardEndpoints, DashboardRosterMetricQueryRequest, DashboardFamilyWarMetricQueryRequest, DashboardRosterViewPreviewRequest, RosterCapacity,
   type DashboardRosterViewSpec, type DashboardRosterViewResultRow, type AnyEndpoint,
 } from "@clashking/api-contracts"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
@@ -23,7 +23,7 @@ import {
   type ApiFailure,
 } from "./errors.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
-import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
+import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, queryPlayerWarMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
 import { readBoundedJson } from "./request-body.js"
 import { hydrateRosterMember, loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
 import { prepareStaticMetadata, rosterHeroNames, maxLevelAtTownHall } from "./static-metadata.js"
@@ -53,6 +53,7 @@ const routes = [
   { method: "GET", path: "/v2/roster/missing-members", operation: "missingMembers", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/metrics", operation: "listMetrics", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/metrics/query", operation: "queryMetric", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/roster/family/war-metrics/query", operation: "queryFamilyWarMetric", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views/preview", operation: "previewView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views", operation: "listViews", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views", operation: "createView", auth: "user-or-bot" },
@@ -295,7 +296,8 @@ const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
   sql<RosterMemberRow>`
     SELECT member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
            member.league_id, member.league_name, member.hero_level_sum, member.max_percent, member.war_preference,
-           link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url, member.last_online,
+           link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url,
+           GREATEST(member.last_online, (SELECT max(seen_at) FROM player_online_events activity WHERE activity.tag = member.tag)) AS last_online,
            member.refreshed_at, member.signup_answers, roster.server_id AS discord_guild_id, cached.data AS cached_discord,
            shard.application_id IS NOT NULL AS discord_cache_ready
     FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
@@ -397,16 +399,26 @@ export const rosterMetrics = [
   { id: "player.heroes", label: "Heroes", valueType: "number", kind: "snapshot", description: "Sum of current home-village hero levels", cacheTtlSeconds: 0 },
   { id: "player.max_percent", label: "Maxed", valueType: "number", kind: "snapshot", description: "Upgrade completion percentage", cacheTtlSeconds: 0 },
   { id: "player.war_preference", label: "War preference", valueType: "boolean", kind: "snapshot", description: "Current war preference", cacheTtlSeconds: 0 },
-  { id: "player.last_online", label: "Last online", valueType: "time", kind: "snapshot", description: "Last observed activity", cacheTtlSeconds: 0 },
+  { id: "player.last_online", label: "Last observed activity", valueType: "time", kind: "historical", description: "Last observed activity", cacheTtlSeconds: 0 },
   { id: "discord.username", label: "Discord", valueType: "string", kind: "snapshot", description: "Stored Discord username", cacheTtlSeconds: 0 },
   { id: "signup.answer", label: "Signup answer", valueType: "json", kind: "snapshot", description: "Answer selected by a roster-scoped questionId parameter", cacheTtlSeconds: 0 },
   { id: "roster.name", label: "Roster", valueType: "string", kind: "presentation", description: "Roster alias", cacheTtlSeconds: 0 },
   { id: "view.rank", label: "Rank", valueType: "number", kind: "presentation", description: "Rank after sorting", cacheTtlSeconds: 0 },
   { id: "view.computed", label: "Computed value", valueType: "json", kind: "presentation", description: "A value computed transiently by the roster assistant from authorized tool data; the saved replay prompt is its authoritative recipe", cacheTtlSeconds: 0 },
+  { id: "player.hero_percent", label: "Hero completion", valueType: "number", kind: "derived", description: "Home-village hero levels / released maxima at Town Hall, from profile details or a refreshed roster snapshot; unknown without either source", cacheTtlSeconds: 0 },
+  { id: "player.hero_rushed_percent", label: "Hero rushed", valueType: "number", kind: "derived", description: "100 minus hero-only completion percentage; not troop or building progress", cacheTtlSeconds: 0 },
+  { id: "cwl.league_history", label: "CWL league history", valueType: "json", kind: "historical", description: "CWL season, clan and league from registered squads; registration does not prove attacks", cacheTtlSeconds: 0 },
+  { id: "cwl.performance_history", label: "CWL participation performance", valueType: "json", kind: "historical", description: "Last seasonCount (default 6, max 24) participated CWL seasons, proven by completed war lineups. Per-season and summary attack/defense averages, triples, misses and completion. Zero-attack lineup counts; bench registration does not. Observed coverage only. No late-attack timestamps.", cacheTtlSeconds: 0 },
+  { id: "war.regular_hit_rate", label: "Regular war hit rate", valueType: "number", kind: "historical", description: "Three-star percentage in completed regular wars only; excludes CWL/friendly. windowDays (default 30) or per-player latest warCount (1..500). Returns attackCount", cacheTtlSeconds: 0 },
+  { id: "war.missed_attacks", label: "Missed war attacks", valueType: "number", kind: "historical", description: "Unused attack slots in observed completed wars. Uses war attacksPerMember, or one for CWL. Null if no wars or unknown allowance. windowDays default 30, optional warCount and warType.", cacheTtlSeconds: 0 },
+  { id: "war.participation", label: "War participation evidence", valueType: "json", kind: "historical", description: "Observed completedWars, attacks, expectedAttacks, missedAttacks and completionPercent = 100*attacks/expectedAttacks. Null when unobserved; unknown allowances stay null. Supports windowDays, warCount, warType.", cacheTtlSeconds: 0 },
+  { id: "war.hit_rate_confidence", label: "Hit rate confidence interval", valueType: "json", kind: "historical", description: "Actual attacks, triples, completedWars, ratePercent and Wilson 95% low/high percentages (z=1.96). This is a sampling interval, not a skill/confidence score. No attacks gives null rate and bounds. Supports windowDays, warCount, warType.", cacheTtlSeconds: 0 },
+  { id: "war.cwl_hit_rate", label: "CWL hit rate", valueType: "number", kind: "historical", description: "Three-star percentage in completed CWL wars only; windowDays (default 30) or per-player latest warCount (1..500). Returns attackCount", cacheTtlSeconds: 0 },
+  { id: "benchmark.th_hit_rate", label: "Global TH hit rate", valueType: "number", kind: "historical", description: "Attack-weighted regular-war three-star percentage across all tracked wars for each player's current Town Hall; windowDays default 30. Returns global attackCount", cacheTtlSeconds: 0 },
   { id: "war.hit_rate", label: "Hit rate", valueType: "number", kind: "historical", description: "War hit rate with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "cwl.stars", label: "CWL stars", valueType: "number", kind: "historical", description: "CWL stars with a replayable seasonOffset parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "trophies.delta", label: "Trophy delta", valueType: "number", kind: "historical", description: "Trophy delta with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
-  { id: "benchmark.th_hit_rate_delta", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Hit-rate difference from the Town Hall benchmark with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate", "player.townhall"] },
+  { id: "benchmark.th_hit_rate_delta", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Regular-war hit rate minus the global baseline for current Town Hall in percentage points, over the same windowDays", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate", "player.townhall"] },
   { id: "war.hit_rate.30d", label: "Hit rate (30d)", valueType: "number", kind: "historical", description: "Trailing 30-day war hit rate", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "cwl.stars.current", label: "CWL stars", valueType: "number", kind: "historical", description: "Current-season CWL stars", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "benchmark.th_hit_rate_delta.30d", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Hit-rate difference from the Town Hall benchmark", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate.30d", "player.townhall"] },
@@ -514,6 +526,8 @@ const executeRosterOperation = (
       return json({ items: rosterMetrics })
     case "queryMetric":
       return yield* queryMetric(sql, input)
+    case "queryFamilyWarMetric":
+      return yield* queryFamilyWarMetric(sql, input)
     case "previewView":
       return yield* previewView(sql, input)
     case "getRoster": {
@@ -666,6 +680,23 @@ const createRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   const members = Array.isArray(body.members)
     ? body.members.filter((item): item is Record<string, unknown> => isRecord(item))
     : []
+  if (input.url.searchParams.get("unassigned_only") === "true") {
+    // createRoster runs under the existing destination server FOR UPDATE lock.
+    // Keep this check and all inserts in that transaction: another Apply must
+    // observe this transaction's membership before it can claim the same tags.
+    const tags = [...new Set(members.map(member => normalizeTag(String(member.tag ?? ""))))]
+    if (tags.length === 0) return yield* new InvalidRequest({ message: "An unassigned-family roster requires at least one player" })
+    const assigned = yield* database("Unable to check unassigned family members", sql`
+      SELECT member.tag FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
+      WHERE roster.server_id = ${serverId} AND member.tag = ANY(${tags}::text[]) LIMIT 1
+    `)
+    if (assigned.length > 0) return yield* new Conflict({ message: "A proposed player is already assigned to a roster. Request an updated proposal." })
+    const family = yield* database("Unable to check configured family membership", sql<{ tag: string }>`
+      SELECT player.tag FROM basic_player player JOIN server_clans clan ON clan.tag = player.clan_tag AND clan.server_id = ${serverId}
+      WHERE player.tag = ANY(${tags}::text[]) AND (${rosterType !== "clan"} OR player.clan_tag = ${clanTag})
+    `)
+    if (family.length !== tags.length) return yield* new Conflict({ message: "A proposed player is no longer in the configured family. Request an updated proposal." })
+  }
   const owners = yield* lockRosterAdmissionOwners(sql, members.map((member) => normalizeTag(String(member.tag ?? ""))))
   const id = crypto.randomUUID()
   yield* database("Unable to create roster", sql`
@@ -1056,6 +1087,33 @@ const queryMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
   return json({ metricId: body.metricId, parameters: normalizeRosterMetricParameters(body.metricId, body.parameters), rows, cached: false, evaluatedAt: new Date().toISOString() })
 })
 
+const queryFamilyWarMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const body = yield* Schema.decodeUnknownEffect(DashboardFamilyWarMetricQueryRequest)(yield* decodeJson(input.request)).pipe(
+    Effect.mapError(() => new InvalidRequest({ message: "Invalid family war metric query" })),
+  )
+  const serverId = yield* requireServerId(input)
+  const tags = [...new Set(body.playerTags.map(normalizeTag))]
+  if (tags.length < 1 || tags.length > 500) return yield* new InvalidRequest({ message: "Choose between 1 and 500 current family players" })
+  const parameters = yield* Effect.try({ try: () => normalizeRosterMetricParameters(body.metricId, body.parameters),
+    catch: () => new InvalidRequest({ message: "Invalid family war metric parameters" }) })
+  const clans = yield* database("Unable to load server clans", sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId}`)
+  // Authorize against current clan membership, not model-supplied tags or a
+  // possibly stale basic_player clan pointer. Any failed snapshot fails closed.
+  const snapshots = yield* Effect.forEach(clans, clan => loadClanSnapshot(input.bindings, clan.tag).pipe(
+    Effect.flatMap(snapshot => snapshot.tag === clan.tag ? Effect.succeed(snapshot)
+      : Effect.fail(new UpstreamUnavailable({ cause: "Clan tag mismatch", message: "Clash clan response did not match the requested clan" }))),
+  ), { concurrency: 4 })
+  const current = new Map(snapshots.flatMap(clan => clan.memberList.map(member => [member.tag, { tag: member.tag, townhall: member.townHallLevel }] as const)))
+  if (tags.some(tag => !current.has(tag))) return yield* new Forbidden({ message: "War metrics are limited to current members of this server's configured clans" })
+  const counts = new Map<string, number>()
+  const evaluatedAt = new Date()
+  const values = yield* queryPlayerWarMetric(tags.map(tag => current.get(tag)!), body.metricId, parameters, evaluatedAt, counts).pipe(
+    Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(WorkerEnvironment, input.bindings),
+  )
+  return json({ metricId: body.metricId, parameters, evaluatedAt: evaluatedAt.toISOString(),
+    rows: tags.map(playerTag => ({ playerTag, value: values.get(playerTag) ?? null, attackCount: counts.get(playerTag) ?? 0 })) })
+})
+
 const previewView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* Schema.decodeUnknownEffect(DashboardRosterViewPreviewRequest)(yield* decodeJson(input.request)).pipe(
     Effect.mapError(() => new InvalidRequest({ message: "Invalid roster view preview" })),
@@ -1077,8 +1135,8 @@ const previewView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
     }
   } else {
     for (const roster of rosters) {
-      const dynamic = new Map<string, ReadonlyMap<string, number | null>>()
-      const recipes = new Map<string, ReadonlyMap<string, number | null>>()
+      const dynamic = new Map<string, ReadonlyMap<string, typeof Schema.Json.Type>>()
+      const recipes = new Map<string, ReadonlyMap<string, typeof Schema.Json.Type>>()
       for (const column of spec.columns) {
         const metric = rosterMetrics.find((item) => item.id === column.metricId)
         if (metric?.kind === "historical" || metric?.kind === "derived") {
@@ -2324,7 +2382,7 @@ export const dispatchDashboardRoster = (
         if (body?.serverId !== undefined && body.serverId !== serverId) {
           return yield* new InvalidRequest({ message: "serverId must match the authorized server_id" })
         }
-        const readOnlyPost = (match.route.operation === "queryMetric" || match.route.operation === "previewView"
+        const readOnlyPost = (match.route.operation === "queryMetric" || match.route.operation === "queryFamilyWarMetric" || match.route.operation === "previewView"
           || match.route.operation === "membersQuery" || match.route.operation === "accountGroupsQuery"
           || match.route.operation === "validateMembershipChanges")
           && descriptor?.auth === "server-read"

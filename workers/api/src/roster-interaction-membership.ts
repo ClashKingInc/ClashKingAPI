@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { SqlClient } from "effect/unstable/sql"
+import type { SqlClient } from "effect/sql"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound } from "./errors.js"
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu

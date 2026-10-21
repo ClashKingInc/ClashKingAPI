@@ -1,15 +1,20 @@
 import { CreateReminderRequest, Reminder, RemindersResponse, UpdateReminderRequest } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
 import { validateDiscordDestination } from "./discord-destination.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, RateLimited, Unauthenticated, Forbidden, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { notifyTracking } from "./tracking-wake.js"
+import { requestManualReminders } from "./manual-reminders.js"
 
-export const dashboardReminderOperationIds = ["serverReminders", "createServerReminder", "updateServerReminder", "deleteServerReminder"] as const
-const groups = { War: "war_reminders", "Clan Capital": "capital_reminders", "Clan Games": "clan_games_reminders", Inactivity: "inactivity_reminders", roster: "roster_reminders" } as const
+export const dashboardReminderOperationIds = ["serverReminders", "createServerReminder", "updateServerReminder", "deleteServerReminder", "sendServerReminder"] as const
+const groups = { War: "war_reminders", "Clan Capital": "capital_reminders", "Clan Games": "clan_games_reminders", roster: "roster_reminders" } as const
+// Stored numeric IDs must stay stable when a reminder type is removed; roster remains 5.
+const reminderTypeIds = { War: 1, "Clan Capital": 2, "Clan Games": 3, roster: 5 } as const
+// Reject retired numeric IDs as well as names during staggered local/release upgrades.
+const supportedReminderRow = "type<>4 AND lower(COALESCE(type_name,''))<>'inactivity'"
 type ReminderValue = Schema.Schema.Type<typeof Reminder>
 interface Row { readonly id: string; readonly type_name: string; readonly clan_tag: string; readonly channel_id: string | null; readonly thread_id: string | null; readonly trigger_time: string | null; readonly custom_text: string; readonly townhalls: ReadonlyArray<number> | null; readonly roles: ReadonlyArray<string>; readonly war_type_names: ReadonlyArray<string>; readonly point_threshold: unknown; readonly attack_threshold: unknown; readonly roster_id: string | null; readonly ping_type: string | null; readonly disabled: boolean; readonly disabled_reason: string | null }
 const columns = "id::text,type_name,clan_tag,channel_id,thread_id,trigger_time,custom_text,townhalls,roles,war_type_names,point_threshold,attack_threshold,roster_id,ping_type,disabled,disabled_reason"
@@ -36,13 +41,27 @@ const validateFields = (body: Schema.Schema.Type<typeof UpdateReminderRequest>) 
   }
 })
 
+const rejectDuplicateReminder = (sql: SqlClient.SqlClient, serverId: string, type: string, clanTag: string, time: string, rosterId: string | null, excludingId: string | null = null) => Effect.gen(function* () {
+  // The caller holds the server row lock, so concurrent configuration writers
+  // cannot both pass this check before inserting or changing a reminder.
+  const rows = yield* sql.unsafe<{ trigger_time: string | null }>(`SELECT trigger_time FROM reminders WHERE ${supportedReminderRow} AND server_id=$1 AND type_name=$2 AND clan_tag=$3 AND ($4::uuid IS NULL OR id<>$4::uuid) AND ($2<>'roster' OR roster_id IS NOT DISTINCT FROM $5::text)`, [serverId, type, clanTag, excludingId, rosterId])
+  if (rows.some((row) => reminderMinutes(row.trigger_time ?? "") === reminderMinutes(time))) {
+    return yield* new Conflict({ message: "This clan already has this reminder type at that time. Choose a different clan or time." })
+  }
+})
+
 export const executeDashboardReminders = (input: DashboardServerOperationInput): Effect.Effect<unknown, ApiFailure, SqlClient.SqlClient | DiscordApi> => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const serverId = typeof input.path.serverId === "string" ? input.path.serverId : ""
   const id = typeof input.path.reminderId === "string" ? input.path.reminderId : ""
+  if (input.endpoint.operationId === "sendServerReminder") {
+    if (input.principal.kind !== "user") return yield* new Unauthenticated({ message: "A user session is required" })
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id)) return yield* new NotFound({ message: "Reminder not found" })
+    return yield* requestManualReminders(sql, serverId, { reminderId: id })
+  }
   if (input.endpoint.operationId === "serverReminders") {
-    const result: Record<keyof Schema.Schema.Type<typeof RemindersResponse>, ReminderValue[]> = { war_reminders: [], capital_reminders: [], clan_games_reminders: [], inactivity_reminders: [], roster_reminders: [] }
-    for (const row of yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE server_id=$1 ORDER BY created_at ASC`, [serverId])) {
+    const result: Record<keyof Schema.Schema.Type<typeof RemindersResponse>, ReminderValue[]> = { war_reminders: [], capital_reminders: [], clan_games_reminders: [], roster_reminders: [] }
+    for (const row of yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE ${supportedReminderRow} AND server_id=$1 ORDER BY created_at ASC`, [serverId])) {
       if (Object.hasOwn(groups, row.type_name)) result[groups[row.type_name as keyof typeof groups]].push(yield* rowValue(row))
     }
     return result
@@ -58,7 +77,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     const body = yield* decode(UpdateReminderRequest, input.body)
     yield* validateFields(body)
     if (body.channel_id !== undefined || body.thread_id !== undefined) {
-      const rows = yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE server_id=$1 AND id=$2::uuid`, [serverId, id])
+      const rows = yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE ${supportedReminderRow} AND server_id=$1 AND id=$2::uuid`, [serverId, id])
       if (rows[0] === undefined) return yield* new NotFound({ message: "Reminder not found" })
       validatedChannel = body.channel_id ?? rows[0].channel_id ?? ""
       yield* validateDiscordDestination(serverId, validatedChannel, body.thread_id || null)
@@ -71,14 +90,15 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
       const body = yield* decode(CreateReminderRequest, input.body)
       yield* validateFields(body)
       if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
+      yield* rejectDuplicateReminder(sql, serverId, body.type, tag(body.clan_tag ?? ""), body.time, body.roster_id ?? null)
       const data = { type: body.type, server: serverId, channel: body.channel_id, time: body.time, clan: tag(body.clan_tag ?? ""), custom_text: body.custom_text ?? "", [body.type === "Clan Capital" || body.type === "Clan Games" ? "townhalls" : "townhall_filter"]: body.townhall_filter ?? [], roles: body.roles ?? [], types: body.war_types ?? [], point_threshold: body.point_threshold, attack_threshold: body.attack_threshold, roster: body.roster_id, ping_type: body.ping_type }
-      const rows = yield* sql.unsafe<{ id: string }>(`INSERT INTO reminders (server_id,type,type_name,clan_tag,webhook_token,channel_id,thread_id,minutes_remaining,trigger_time,custom_text,townhalls,roles,war_type_names,trigger_threshold,point_threshold,attack_threshold,roster_id,ping_type,data) VALUES ($1,$2,$3,$4,'',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,NULLIF($16,''),NULLIF($17,''),$18::jsonb) RETURNING id::text`, [serverId, Object.keys(groups).indexOf(body.type) + 1, body.type, tag(body.clan_tag ?? ""), body.channel_id, body.thread_id || null, reminderMinutes(body.time), body.time, body.custom_text ?? "", body.townhall_filter ?? null, body.roles ?? [], body.war_types ?? [], body.point_threshold ?? body.attack_threshold ?? null, body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold), body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold), body.roster_id ?? "", body.ping_type ?? "", JSON.stringify(data)])
+      const rows = yield* sql.unsafe<{ id: string }>(`INSERT INTO reminders (server_id,type,type_name,clan_tag,webhook_token,channel_id,thread_id,minutes_remaining,trigger_time,custom_text,townhalls,roles,war_type_names,trigger_threshold,point_threshold,attack_threshold,roster_id,ping_type,data) VALUES ($1,$2,$3,$4,'',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,NULLIF($16,''),NULLIF($17,''),$18::jsonb) RETURNING id::text`, [serverId, reminderTypeIds[body.type as keyof typeof reminderTypeIds], body.type, tag(body.clan_tag ?? ""), body.channel_id, body.thread_id || null, reminderMinutes(body.time), body.time, body.custom_text ?? "", body.townhall_filter ?? null, body.roles ?? [], body.war_types ?? [], body.point_threshold ?? body.attack_threshold ?? null, body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold), body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold), body.roster_id ?? "", body.ping_type ?? "", JSON.stringify(data)])
       if (rows[0] === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Reminder insertion returned no identifier" })
       yield* notifyTracking(sql, { kind: "reminder_config", clanTag: tag(body.clan_tag ?? ""), reminderType: body.type })
       return { message: "Reminder created successfully", reminder_id: rows[0].id, server_id: serverId }
     }
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id)) return yield* new NotFound({ message: "Reminder not found" })
-    const existing = (yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE server_id=$1 AND id=$2::uuid FOR UPDATE`, [serverId, id]))[0]
+    const existing = (yield* sql.unsafe<Row>(`SELECT ${columns} FROM reminders WHERE ${supportedReminderRow} AND server_id=$1 AND id=$2::uuid FOR UPDATE`, [serverId, id]))[0]
     if (existing === undefined) return yield* new NotFound({ message: "Reminder not found" })
     if (operation === "deleteServerReminder") {
       yield* sql`DELETE FROM reminders WHERE server_id=${serverId} AND id=${id}::uuid`
@@ -87,6 +107,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     }
     const body = yield* decode(UpdateReminderRequest, input.body)
     yield* validateFields(body)
+    if (body.time !== undefined) yield* rejectDuplicateReminder(sql, serverId, existing.type_name, existing.clan_tag, body.time, existing.roster_id, id)
     const destinationChanged = body.channel_id !== undefined || body.thread_id !== undefined
     const channel = body.channel_id ?? existing.channel_id
     if (destinationChanged && (channel ?? "") !== validatedChannel) {

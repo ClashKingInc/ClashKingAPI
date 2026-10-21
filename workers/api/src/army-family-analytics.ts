@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { InvalidRequest, NotFound } from "./errors.js"
 import { normalizeArmyLink, parseArmyLinkQuery } from "./army-link.js"
 import { parseArmySearchQuery, parseLegendAggregateWindow, type AnalyticsWindow, type ArmySearchOptions } from "./league-analytics-query.js"
@@ -88,7 +88,7 @@ export const queryArmySearch = (query: URLSearchParams, now = new Date()) => Eff
 })
 const aggregateSelection = (query: URLSearchParams, now: Date, maximumDays: number) => Effect.gen(function* () {
   const cohort = query.get("cohort") ?? "legend_i"
-  if (query.getAll("cohort").length > 1 || !["legend_i", "top_1000", "top_200", "top_100"].includes(cohort)) {
+  if (query.getAll("cohort").length > 1 || !["legend_i", "top_1000", "top_200"].includes(cohort)) {
     return yield* new InvalidRequest({ message: "Invalid cohort" })
   }
   const time = new URLSearchParams(query)

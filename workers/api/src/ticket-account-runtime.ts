@@ -1,6 +1,6 @@
 import { RuntimeUUID, TicketAccountInteractionEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"

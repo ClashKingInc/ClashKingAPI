@@ -1,6 +1,6 @@
 import { botEndpoints, dashboardEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"

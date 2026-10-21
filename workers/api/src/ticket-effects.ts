@@ -1,5 +1,8 @@
-import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { Effect, Option, Schema } from "effect"
+import { WorkerEnvironment } from "./environment.js"
+import { runTicketDashboardJob } from "./ticket-dashboard-jobs.js"
+import { TicketPanelMessage } from "@clashking/api-contracts"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, RateLimited, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { ticketEmbedTextLength, validateTicketEmbeds } from "./ticket-opening-message.js"
@@ -32,6 +35,7 @@ const componentIds = (value: unknown): ReadonlyArray<string> => {
     const record = object(item)
     if (typeof record.custom_id === "string") ids.push(record.custom_id)
     if (Array.isArray(record.components)) visit(record.components)
+    if (record.accessory) visit(record.accessory)
   }
   visit(value)
   return ids.sort()
@@ -101,10 +105,19 @@ const executeEffect = (work: Work, prior: Map<string,Record<string,unknown>>, ch
     case "send_message": {
       const target = text(request.channelId) ?? (request.target === "thread" ? threadId : channelId)
       if (!target) return yield* new Conflict({ message:"Ticket message target is not provisioned" })
+      if (request.validateChannel === true) yield* requireTicketChannel(work.operation.server_id,target)
+      if (request.message !== undefined) {
+        const message = yield* Schema.decodeUnknownEffect(TicketPanelMessage)(request.message, { onExcessProperty: "error" }).pipe(Effect.mapError(() => new Conflict({ message: "Stored ticket message is invalid" })))
+        const value = yield* discord.request(`/channels/${target}/messages`, { method: "POST", body: { ...message,
+          nonce: text(request.nonce), enforce_nonce: true, allowed_mentions: { parse: [], users: strings(request.userMentions) },
+        } })
+        return { id: yield* decodedId(value), channelId: target }
+      }
       if (typeof request.content === "string") {
-        if (request.content.length < 1 || request.content.length > 2000) return yield* new Conflict({ message:"Stored ticket message exceeds Discord limits" })
+        const content = request.content + (request.appendTicketChannel === true && channelId ? ` <#${channelId}>` : "")
+        if (content.length < 1 || content.length > 2000) return yield* new Conflict({ message:"Stored ticket message exceeds Discord limits" })
         const value = yield* discord.request(`/channels/${target}/messages`, { method:"POST",body:{
-          content:request.content,nonce:text(request.nonce),enforce_nonce:true,
+          content,nonce:text(request.nonce),enforce_nonce:true,
           allowed_mentions:{parse:[],users:strings(request.userMentions)},
         } })
         return { id:yield* decodedId(value),channelId:target }
@@ -124,9 +137,9 @@ const executeEffect = (work: Work, prior: Map<string,Record<string,unknown>>, ch
         return yield* new Conflict({ message:"Stored ticket message exceeds Discord limits" })
       }
       const components = work.effect.effect_key === "application:0" ? [{ type:1,components:[
-        { type:2,style:2,label:"Delete Ticket",custom_id:`ck:ticket:delete:${work.operation.ticket_id}` },
+        { type:2,style:2,label:"Close Ticket",custom_id:`ck:ticket:close:${work.operation.ticket_id}` },
         { type:2,style:2,label:"Assign",custom_id:`ck:ticket:assign:${work.operation.ticket_id}` },
-        { type:2,style:3,label:"Approve",custom_id:`ck:ticket:approve:${work.operation.ticket_id}` },
+        { type:2,style:2,label:"Send message",custom_id:`ck:ticket:approve:${work.operation.ticket_id}` },
         ...(accounts.length ? [{ type:2,style:2,label:"Accounts",custom_id:`ck:ticket:accounts-view:${work.operation.ticket_id}` }] : []),
       ] }] : work.effect.effect_key === "thread-application:0" && accounts.length > 0 ? [{ type:1,components:[
         { type:2,style:2,label:"Accounts",custom_id:`ck:ticket:accounts-view:${work.operation.ticket_id}` },
@@ -279,10 +292,10 @@ const reconcile = (operation: Operation,effect: StoredEffect) => Effect.gen(func
     const expectedComponents = effect.effect_key === "application:0" ? [
       `ck:ticket:approve:${operation.ticket_id}`,
       `ck:ticket:assign:${operation.ticket_id}`,
-      `ck:ticket:delete:${operation.ticket_id}`,
+      `ck:ticket:close:${operation.ticket_id}`,
       ...(strings(request.accounts).length ? [`ck:ticket:accounts-view:${operation.ticket_id}`] : []),
     ].sort() : effect.effect_key === "thread-application:0" && strings(request.accounts).length > 0
-      ? [`ck:ticket:accounts-view:${operation.ticket_id}`] : []
+      ? [`ck:ticket:accounts-view:${operation.ticket_id}`] : componentIds(object(request.message).components)
     const matches = messages.map(object).filter((message) => message.nonce === nonce && typeof message.id === "string" &&
       object(message.author).id === bot.id && JSON.stringify(componentIds(message.components)) === JSON.stringify(expectedComponents))
     return matches.length === 1 ? { id:matches[0]!.id as string,channelId:target } : undefined
@@ -347,9 +360,9 @@ const finalize = (operation: Operation) => Effect.gen(function* () {
     if (!channelId) return yield* new Conflict({ message:"Ticket operation completed without a channel" })
     const context = object(operation.context),settings = object(context.settings),progress = object((yield* sql<{ progress:unknown }>`SELECT progress FROM ticket_runtime_operations WHERE id=${operation.id}::uuid FOR UPDATE`)[0]?.progress)
     const inserted = yield* sql<{ id:string }>`INSERT INTO tickets(id,server_id,channel_id,is_thread,status_id,number,panel_id,applicant_accounts,applicant_user_id,
-      thread_id,status,naming_convention) VALUES(${operation.ticket_id}::uuid,${operation.server_id},${channelId},false,0,
+      thread_id,status,naming_convention,application_accounts) VALUES(${operation.ticket_id}::uuid,${operation.server_id},${channelId},false,0,
       ${operation.ticket_number},${operation.panel_id}::uuid,${strings(progress.accounts)},${operation.actor_user_id},${threadId ?? null},'open',
-      ${text(settings.naming) ?? "{ticket_count}-{user}"}) ON CONFLICT(id) DO NOTHING RETURNING id::text`
+      ${text(settings.naming) ?? "{ticket_count}-{user}"},${JSON.stringify(Array.isArray(progress.applicationAccounts) ? progress.applicationAccounts : [])}::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id::text`
     if (inserted.length === 0) {
       const existing = (yield* sql<{ server_id:string;channel_id:string;number:number;panel_id:string;applicant_user_id:string|null;thread_id:string|null }>`
         SELECT server_id,channel_id,number,panel_id::text,applicant_user_id,thread_id FROM tickets WHERE id=${operation.ticket_id}::uuid FOR UPDATE`)[0]
@@ -365,6 +378,18 @@ const finalize = (operation: Operation) => Effect.gen(function* () {
 })
 
 export const runTicketOperation = (operationId: string) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const operation = (yield* sql<{state:string;context:unknown}>`SELECT state,context FROM ticket_runtime_operations WHERE id=${operationId}::uuid`)[0]
+  if (operation && object(operation.context).dashboardJobId === operationId && ["submitted","provisioning","reconciling"].includes(operation.state)) {
+    const environment = yield* Effect.serviceOption(WorkerEnvironment)
+    if (Option.isNone(environment)) return yield* new UpstreamUnavailable({cause: undefined, message: "Ticket archive storage is unavailable"})
+    const terminal = yield* runTicketDashboardJob(operationId).pipe(Effect.provideService(WorkerEnvironment, environment.value))
+    if (!terminal) return "waiting" as const
+    const job = (yield* sql<{state:string;result:unknown;last_error:string|null}>`SELECT state,result,last_error FROM ticket_dashboard_jobs WHERE id=${operationId}::uuid`)[0]
+    const completed = job?.state === "completed"
+    yield* sql`UPDATE ticket_runtime_operations SET state=${completed ? "completed" : "failed"},result=${JSON.stringify(completed ? job.result : {failure:job?.last_error})}::jsonb,updated_at=clock_timestamp() WHERE id=${operationId}::uuid`
+    return completed ? "completed" as const : "failed" as const
+  }
   for (let step=0;step<32;step++) {
     const claimed = yield* claimNext(operationId)
     if (claimed.outcome === "missing" || claimed.outcome === "completed" || claimed.outcome === "failed" || claimed.outcome === "waiting") return claimed.outcome

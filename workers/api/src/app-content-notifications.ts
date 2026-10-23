@@ -210,7 +210,8 @@ const mapPreferences = (
   row: PreferencesRow,
   accounts: PreferencesResponse["accounts"],
 ): PreferencesResponse => ({
-  warAttacksEnabled: row.war_attacks_enabled,
+  // Keep the compatibility field, but attack-by-attack pushes are retired.
+  warAttacksEnabled: false,
   warStateEnabled: row.war_state_enabled,
   warRemindersEnabled: row.war_reminders_enabled,
   raidRemindersEnabled: row.raid_reminders_enabled,
@@ -302,12 +303,12 @@ const putPreferences = (principal: UserPrincipal, body: PreferencesRequest) =>
           announcements_enabled=excluded.announcements_enabled,monthly_support_enabled=excluded.monthly_support_enabled,
           legend_defenses_enabled=excluded.legend_defenses_enabled,reminder_timings=excluded.reminder_timings,
           raid_reminder_timings=excluded.raid_reminder_timings,updated_at=now()`,
-      [principal.userId, body.warAttacksEnabled, body.warStateEnabled, body.warRemindersEnabled,
+      [principal.userId, false, body.warStateEnabled, body.warRemindersEnabled,
         body.raidRemindersEnabled, body.eventsEnabled, body.announcementsEnabled,
         body.monthlySupportEnabled, body.legendDefensesEnabled, reminders, raidReminders])
       yield* notifyTracking(sql, { kind: "mobile_reminder_config", userId: principal.userId })
       return {
-        ...body, reminderTimings: reminders, raidReminderTimings: raidReminders,
+        ...body, warAttacksEnabled: false, reminderTimings: reminders, raidReminderTimings: raidReminders,
         accounts: yield* accountRows(principal.userId),
       }
     }))

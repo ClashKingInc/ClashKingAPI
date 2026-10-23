@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-workspace",
-  "version": "0.1.0-rc.26",
+  "version": "0.1.0-rc.28",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -20,11 +20,8 @@
     "openapi:check": "npm run openapi:generate && node scripts/check-openapi.mjs",
     "docs:build": "npm run openapi:generate && node scripts/build-api-documentation.mjs",
     "lint": "oxlint --deny-warnings --ignore-pattern '**/dist/**' packages workers/api",
-    "test": "vitest run",
-    "test:archive-runtime": "npm run docs:build && vitest run --config vitest.archive-runtime.config.ts",
-    "test:postgres": "vitest run --config vitest.postgres.config.ts",
-    "test:postgres:all": "bash scripts/test-postgres.sh",
-    "test:scripts": "node --test scripts/*.test.mjs",
+    "e2e:roster-assistant": "node scripts/e2e/roster-assistant.mjs",
+    "e2e:competitive": "node scripts/e2e/competitive.mjs",
     "typecheck": "npm run build --workspace @clashking/api-contracts && npm run typecheck --workspace @clashking/api-client && npm run typecheck --workspace @clashking/api-worker",
     "worker:build": "npm run build --workspace @clashking/api-worker",
     "worker:deploy": "npm run deploy --workspace @clashking/api-worker",
@@ -32,16 +29,16 @@
     "worker:dry-run": "npm run deploy:dry-run --workspace @clashking/api-worker"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.22.0",
     "@types/node": "26.4.1",
+    "miniflare": "^5.20260831.0-alpha",
     "oxlint": "1.81.0",
+    "pg": "8.23.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.11",
     "wrangler": "4.128.0"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "0.0.27",
-    "@clashking/clash-contract": "https://github.com/ClashKingInc/ClashTestingAPI/releases/download/v1.0.0/clashking-clash-contract-1.0.0.tgz",
+    "@clashking/clash-contract": "file:vendor/clashking-clash-contract-1.0.1-capital-location.tgz",
     "@sentry/cloudflare": "10.73.0"
   }
 }

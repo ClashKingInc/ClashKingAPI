@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { DecimalSnowflake } from "@clashking/api-contracts"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { prepareRosterBoardSnapshot } from "./roster-interaction-board-store.js"

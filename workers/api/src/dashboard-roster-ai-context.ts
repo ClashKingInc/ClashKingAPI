@@ -1,6 +1,6 @@
 import { dashboardEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited } from "./errors.js"
@@ -21,10 +21,10 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
     Effect.catchTag("SchemaError", () => Effect.fail(new InvalidRequest({ message: "Request body failed schema validation" }))))
   const rosterIds = body.rosterIds.map((id) => id.toLowerCase())
   const viewId = body.viewId?.trim() || null
-  if (rosterIds.length < 1 || rosterIds.length > 25 || rosterIds.some((id) => !uuid.test(id))
+  if (rosterIds.length > 25 || rosterIds.some((id) => !uuid.test(id))
     || new Set(rosterIds).size !== rosterIds.length || viewId !== null && !uuid.test(viewId)
     || body.messages.length < 1 || body.messages.length > 30) {
-    return yield* new InvalidRequest({ message: "AI requests require 1 to 30 messages and 1 to 25 unique roster UUIDs, with a valid optional viewId" })
+    return yield* new InvalidRequest({ message: "AI requests require 1 to 30 messages and up to 25 unique roster UUIDs, with a valid optional viewId" })
   }
   const limit = Number(maxPromptChars)
   if (!Number.isSafeInteger(limit) || limit < 1000) return yield* new DatabaseFailure({ cause: "Invalid AI_ROSTER_MAX_PROMPT_CHARS", message: "Roster AI prompt limit is not configured" })
@@ -47,10 +47,10 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
     const rows = yield* sql<{ id: string; alias: string; clan_tag: string | null; revision: number; signup_questions: unknown; member_count: number }>`
       SELECT r.id::text, r.alias, r.clan_tag, r.revision::integer, r.signup_questions,
         (SELECT count(*)::integer FROM roster_members member WHERE member.roster_id = r.id) AS member_count
-      FROM rosters r WHERE r.server_id = ${body.serverId} AND r.id = ANY(${rosterIds}::uuid[]) ORDER BY r.id FOR SHARE
+      FROM rosters r WHERE r.server_id = ${body.serverId} AND (${rosterIds.length === 0} OR r.id = ANY(${rosterIds}::uuid[])) ORDER BY r.id LIMIT 25 FOR SHARE
     `
-    if (rows.length !== rosterIds.length) return yield* new InvalidRequest({ message: "One or more roster attachments do not belong to this server" })
-    const attachments = rosterIds.map((id) => {
+    if (rosterIds.length > 0 && rows.length !== rosterIds.length) return yield* new InvalidRequest({ message: "One or more roster attachments do not belong to this server" })
+    const attachments = (rosterIds.length === 0 ? rows.map(row => row.id) : rosterIds).map((id) => {
       const row = rows.find((candidate) => candidate.id === id)!
       return { rosterId: row.id, alias: row.alias, clanTag: row.clan_tag, revision: row.revision,
         signupQuestions: row.signup_questions, memberCount: row.member_count }
@@ -84,7 +84,7 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
       : spent.server >= 0.05 ? "This server has used its monthly roster AI budget" : "The monthly free roster AI budget has been used",
     retryAfterSeconds: Math.max(1, Math.ceil((resetsAt.getTime() - now.getTime()) / 1000)) })
     const requestId = crypto.randomUUID()
-    const response = yield* Schema.encodeUnknownEffect(endpoint.response)({ requestId, model: "gpt-5.6-luna",
+    const response = yield* Schema.encodeUnknownEffect(endpoint.response)({ requestId, model: "gpt-6-luna",
       budget: { serverSpentUsd: spent.server, serverLimitUsd: 0.05, globalSpentUsd: spent.global, globalLimitUsd: 10,
         userSpentUsd: spent.user, userLimitUsd: 0, paidSpentUsd: paidSpent, paidLimitUsd: paidLimit, paidRemainingUsd: paidRemaining,
         usesPaidPool: sponsors.length > 0, resetsAt: resetsAt.toISOString() },
@@ -92,7 +92,7 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
     }).pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Roster AI context failed response encoding" })))
     // Preserve zero-cost authorization: this records admission, not an estimated charge.
     yield* sql`INSERT INTO roster_ai_usage (id, server_id, roster_id, view_id, discord_user_id, operation, provider, model)
-      VALUES (${requestId}, ${body.serverId}, ${rosterIds[0]!}, ${viewId}, ${principal.userId}, 'view_or_membership_proposal', 'openai', 'gpt-5.6-luna')`
+      VALUES (${requestId}, ${body.serverId}, ${rosterIds[0] ?? null}, ${viewId}, ${principal.userId}, 'view_or_membership_proposal', 'openai', 'gpt-6-luna')`
     for (const [position, sponsor] of sponsors.entries()) {
       if (sponsor.remaining > 0) yield* sql`INSERT INTO roster_ai_usage_sponsors (usage_id, user_id, position) VALUES (${requestId}, ${sponsor.user_id}, ${position})`
     }

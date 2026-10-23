@@ -1,4 +1,6 @@
 import { Schema } from "effect"
+
+import { ignoreObject, strictObject } from "./strict-object.js"
 import { ArmyFamilyId, ArmyResultStatistics, ArmySearchQuery } from "./league-analytics.js"
 
 import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endpoint.js"
@@ -89,6 +91,7 @@ export const CreatedDeveloperApplication = Schema.Struct({
 export const PostStatus = Schema.Literals(["draft", "scheduled", "live", "expired", "archived"])
 export const PostPresentationType = Schema.Literals(["article", "story"])
 export const PostBlock = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("markdown"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("heading"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("bullet_list"), items: Schema.Array(Schema.String) }),
@@ -384,9 +387,9 @@ const AppReleaseVersionInput = Schema.Trim.check(Schema.isPattern(/^(0|[1-9]\d*)
 const ReleaseDate = "(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-8])))"
 const AppReleaseDateTimeInput = Schema.String.check(Schema.isPattern(new RegExp(`^${ReleaseDate}T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$`, "u")))
 const AppUpdateSchedule = Schema.Struct({ fromBasisPoints: IntBetween(0, 10_000), toBasisPoints: IntBetween(0, 10_000), startsAt: Schema.String, endsAt: Schema.String })
-const AppUpdateScheduleInput = Schema.Struct({ fromBasisPoints: IntBetween(0, 10_000), toBasisPoints: IntBetween(0, 10_000), startsAt: AppReleaseDateTimeInput, endsAt: AppReleaseDateTimeInput }).annotate({ parseOptions: { onExcessProperty: "ignore" } })
+const AppUpdateScheduleInput = ignoreObject(Schema.Struct({ fromBasisPoints: IntBetween(0, 10_000), toBasisPoints: IntBetween(0, 10_000), startsAt: AppReleaseDateTimeInput, endsAt: AppReleaseDateTimeInput }))
 export const AppUpdateChannel = Schema.Struct({ channel: AppReleaseTrack, platform: AppReleasePlatform, runtimeVersion: Schema.String, activeVersion: Schema.NullOr(Schema.String), rollbackTargetVersion: Schema.NullOr(Schema.String), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateSchedule), updatedAt: Schema.String })
-export const AppUpdateChannelInput = Schema.Struct({ expectedUpdatedAt: Schema.NullOr(AppReleaseDateTimeInput), activeVersion: Schema.NullOr(AppReleaseVersionInput), rollbackTargetVersion: Schema.NullOr(AppReleaseVersionInput), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateScheduleInput) }).annotate({ parseOptions: { onExcessProperty: "error" } })
+export const AppUpdateChannelInput = strictObject(Schema.Struct({ expectedUpdatedAt: Schema.NullOr(AppReleaseDateTimeInput), activeVersion: Schema.NullOr(AppReleaseVersionInput), rollbackTargetVersion: Schema.NullOr(AppReleaseVersionInput), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateScheduleInput) }))
 export const AppReleasesResponse = Schema.Struct({ releases: Schema.Array(AppReleaseMarker), channels: Schema.Array(AppUpdateChannel) })
 
 export const AdminArmyFamily = Schema.Struct({
@@ -415,9 +418,9 @@ export const AdminArmyFamilyMembersQuery = Schema.Struct({
   limit: Schema.optionalKey(IntBetween(1, 200)),
 })
 export const AdminArmyFamilyMembersResponse = Schema.Struct({ familyId: ArmyFamilyId, items: Schema.Array(AdminArmyFamilyMember), ...ArmyPagination })
-export const UpdateAdminArmyFamilyInput = Schema.Struct({
+export const UpdateAdminArmyFamilyInput = strictObject(Schema.Struct({
   name: Schema.NullOr(Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
+}))
 
 const adminRead = { auth: "admin" as const, body: NoBody, bodyMode: "none" as const, responseMode: "json" as const, successStatus: 200 }
 const adminJson = { auth: "admin" as const, bodyMode: "json" as const, responseMode: "json" as const, successStatus: 200 }

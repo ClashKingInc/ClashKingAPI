@@ -1,6 +1,6 @@
 import { DecimalSnowflake } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { WorkerEnvironment } from "./environment.js"
 import { DatabaseFailure, UpstreamUnavailable, type ApiFailure } from "./errors.js"

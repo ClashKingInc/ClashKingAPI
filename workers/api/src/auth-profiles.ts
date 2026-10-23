@@ -1,6 +1,6 @@
 import { DecimalSnowflake, type AuthUser, type CurrentUserResponse } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { UserPrincipal } from "./auth.js"
 import type { SessionKind } from "./auth-crypto.js"
 import { AuthSessions, emailAuthUser, requireSessionDevice, type AuthSession, type EmailAccount } from "./auth-sessions.js"
@@ -71,8 +71,21 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
           ? new DatabaseFailure({ cause, message: "Discord authentication storage failed" }) : cause))
       }),
       currentUser: (principal) => Effect.gen(function* () {
-        const rows = yield* database(sql<EmailAccount & { provider: string }>`SELECT user_id,provider,username,password_hash
-          FROM auth_users WHERE user_id = ${principal.userId}`)
+        // Fetch account metadata and its follower count in one database round trip.
+        // Session/provider validation remains live; no authorization is cached.
+        const rows = yield* database(sql<EmailAccount & {
+          provider: string; follower_count: number; access_token_ciphertext: string | null;
+          refresh_token_ciphertext: string | null; expires_at: Date | string | null;
+        }>`
+          SELECT auth_users.user_id,provider,username,password_hash,
+            tokens.access_token_ciphertext,tokens.refresh_token_ciphertext,tokens.expires_at,
+            (SELECT COUNT(DISTINCT bookmarks.user_id)::float8
+              FROM player_links AS links JOIN user_bookmarks AS bookmarks
+                ON bookmarks.tag = links.tag AND bookmarks.entity_type = 'player'
+              WHERE links.user_id = auth_users.user_id AND links.is_verified = true) AS follower_count
+          FROM auth_users LEFT JOIN auth_discord_tokens tokens
+            ON tokens.user_id = auth_users.user_id AND tokens.device_id = ${principal.deviceId ?? ''}
+          WHERE auth_users.user_id = ${principal.userId}`)
         const account = rows[0]
         if (account === undefined) return yield* new Unauthenticated({ message: "User session is no longer valid" })
         let user: typeof AuthUser.Type
@@ -81,7 +94,13 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
           if (principal.deviceId === undefined || principal.deviceId.trim() === "") {
             return yield* new Unauthenticated({ message: "Missing device identity" })
           }
-          const access = yield* credentials.accessToken(principal.userId, principal.deviceId).pipe(Effect.provideService(SqlClient.SqlClient, sql))
+          // A usable device credential was already read with the account. Only
+          // expired/missing credentials need the rotation service's locked reread.
+          const expiresAt = account.expires_at === null ? 0 : new Date(account.expires_at).valueOf()
+          const access = account.access_token_ciphertext && account.refresh_token_ciphertext &&
+              Number.isFinite(expiresAt) && expiresAt - 60_000 > Date.now()
+            ? yield* cipher.decrypt(account.access_token_ciphertext)
+            : yield* credentials.accessToken(principal.userId, principal.deviceId).pipe(Effect.provideService(SqlClient.SqlClient, sql))
           const current = yield* profile(access)
           if (current.id !== principal.userId) {
             return yield* new Unauthenticated({ message: "Discord session does not match the authenticated user" })
@@ -90,10 +109,12 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
         } else return yield* new Unauthenticated({ message: "User identity is not configured" })
         yield* database(sql`UPDATE player_links SET last_login = now(), updated_at = now()
           WHERE user_id = ${principal.userId} AND is_verified = true`)
-        const counts = yield* database(sql<{ follower_count: number }>`SELECT COUNT(DISTINCT bookmarks.user_id)::float8 AS follower_count
-          FROM player_links AS links JOIN user_bookmarks AS bookmarks ON bookmarks.tag = links.tag AND bookmarks.entity_type = 'player'
-          WHERE links.user_id = ${principal.userId} AND links.is_verified = true`)
-        return { ...user, account_summary: { follower_count: counts[0]?.follower_count ?? 0 } }
+        yield* database(sql`UPDATE user_bookmarks SET
+          war_active_until=CASE WHEN war_notifications_enabled THEN now()+interval '7 days' ELSE NULL END,
+          raid_active_until=CASE WHEN raid_notifications_enabled THEN now()+interval '7 days' ELSE NULL END
+          WHERE user_id=${principal.userId} AND entity_type='clan'
+            AND (war_notifications_enabled OR raid_notifications_enabled)`)
+        return { ...user, account_summary: { follower_count: account.follower_count ?? 0 } }
       }),
     })
   }))

@@ -1,6 +1,6 @@
 import { botEndpoints } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { ServerAuthorization } from "./server-authorization.js"
 import { readBoundedJson } from "./request-body.js"

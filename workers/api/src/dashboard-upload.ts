@@ -9,7 +9,7 @@ const embedFilename = /^embed_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 export const mediaFileUrl = (filename: string) => `https://api.clashk.ing/v2/media/${encodeURIComponent(filename)}`
 export const validMediaFilename = (filename: string) => {
   const extension = embedFilename.exec(filename)?.[1]
-  return /^(?:base|giveaway)_[a-z0-9_-]+\.(?:png|jpg|jpeg|gif|webp)$/u.test(filename) ||
+  return /^(?:base|giveaway|roster)_[a-z0-9_-]+\.(?:png|jpg|jpeg|gif|webp)$/u.test(filename) ||
     Boolean(extension && CDN_UPLOAD_EXTENSIONS.some((allowed) => allowed === extension))
 }
 export const mediaContentType = (filename: string): string => ({
@@ -18,14 +18,14 @@ export const mediaContentType = (filename: string): string => ({
 }[filename.split(".").at(-1)!] ?? "application/octet-stream")
 
 /** New uploads are isolated in MEDIA; no provider fallback or arbitrary key writes. */
-export const uploadMediaFile = (bindings: MediaUploadBindings, filename: string, file: File) => Effect.tryPromise({
+export const uploadMediaFile = (bindings: MediaUploadBindings, filename: string, file: File, publicOrigin?: string) => Effect.tryPromise({
   try: async () => {
     if (!validMediaFilename(filename)) {
       throw new InvalidRequest({ message: "Invalid upload filename" })
     }
     if (file.size > MAX_DASHBOARD_UPLOAD) throw new PayloadTooLarge({ message: "File exceeds the 25 MB limit" })
     if (!bindings.MEDIA) throw new Error("R2 media storage is not configured")
-    const url = mediaFileUrl(filename)
+    const url = publicOrigin ? new URL(`/v2/media/${encodeURIComponent(filename)}`, publicOrigin).toString() : mediaFileUrl(filename)
     const uploaded = await bindings.MEDIA.put(`uploads/${filename}`, file.stream(), {
       httpMetadata: { contentType: mediaContentType(filename), cacheControl: "public, max-age=31536000, immutable" },
       customMetadata: { visibility: "public-media", filename }, onlyIf: { etagDoesNotMatch: "*" },

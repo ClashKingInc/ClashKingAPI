@@ -1,6 +1,6 @@
 import { DecimalSnowflake, ServerLeaderboardsEndpoint, ServerLinksEndpoint, type EndpointResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
 import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
@@ -102,7 +102,7 @@ export const getDashboardServerLinks = (bindings: WorkerBindings, serverId: stri
     const links = byUser.get(member.user.id) ?? []
     if (parsed.roleIds.length > 0 && !parsed.roleIds.some((id) => member.roles?.includes(id))) continue
     if (parsed.playerTag !== "" && !links.some((row) => row.tag === parsed.playerTag)) continue
-    if (parsed.text !== "" && !member.user.username.toLowerCase().includes(parsed.text) && !memberName(member).toLowerCase().includes(parsed.text)) continue
+    if (parsed.text !== "" && !member.user.username.toLowerCase().includes(parsed.text) && !memberName(member).toLowerCase().includes(parsed.text) && !member.user.id.includes(parsed.text)) continue
     if (query.account_filter === "none" && links.length > 0) continue
     filtered.push({ user_id: member.user.id, username: member.user.username, display_name: memberName(member), avatar_url: serverMemberAvatar(serverId, member),
       account_count: links.length, linked_accounts: links.map((row) => ({

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { InvalidRequest, NotFound } from "./errors.js"
 import { normalizeArmyLink, parseArmyLinkQuery } from "./army-link.js"
 import { parseArmySearchQuery, parseLegendAggregateWindow, type AnalyticsWindow, type ArmySearchOptions } from "./league-analytics-query.js"

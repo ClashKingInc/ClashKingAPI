@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 import { defineEndpoint, NoBody, NoPathParams } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
+import { CwlParticipationQuery, CwlParticipationResponse } from "./cwl-participation.js"
 
 const StatsErrors = [
   { status: 400, body: ErrorResponse },
@@ -22,14 +23,17 @@ export const StatsWarQuery = Schema.Struct({
   townHallLevel: OptionalPositiveInt, opponentTownHallLevel: OptionalPositiveInt,
   equalTownHalls: Schema.optionalKey(Schema.Boolean),
 })
-export const StatsCwlQuery = Schema.Struct({
-  ...StatsWarQuery.fields, cwlLeagueId: OptionalPositiveInt,
-  seasons: Schema.optionalKey(Schema.Array(Schema.String)),
-})
+export const StatsCwlQuery = CwlParticipationQuery
 
 export const StatsDailyPoint = Schema.Struct({
   date: Schema.String,
   sampleSize: Schema.Number,
+  airCount: Schema.optionalKey(Schema.Number),
+  groundCount: Schema.optionalKey(Schema.Number),
+  mixedCount: Schema.optionalKey(Schema.Number),
+  unknownCount: Schema.optionalKey(Schema.Number),
+  classifiedCount: Schema.optionalKey(Schema.Number),
+  classificationCoverage: Schema.optionalKey(Schema.Number),
   useCount: Schema.optionalKey(Schema.Number),
   usageRate: Schema.optionalKey(Schema.Number),
   averageStars: Schema.Number,
@@ -43,6 +47,12 @@ export const StatsDailyPoint = Schema.Struct({
 export const StatsMetrics = Schema.Struct({
   available: Schema.Boolean,
   sampleSize: Schema.Number,
+  airCount: Schema.optionalKey(Schema.Number),
+  groundCount: Schema.optionalKey(Schema.Number),
+  mixedCount: Schema.optionalKey(Schema.Number),
+  unknownCount: Schema.optionalKey(Schema.Number),
+  classifiedCount: Schema.optionalKey(Schema.Number),
+  classificationCoverage: Schema.optionalKey(Schema.Number),
   usageRate: Schema.optionalKey(Schema.Number),
   averageStars: Schema.Number,
   averageDestruction: Schema.Number,
@@ -85,7 +95,7 @@ export const StatsWarEndpoint = defineEndpoint({
   method: "GET",
   path: "/v2/stats/war",
   auth: "public",
-  summary: "Query regular-war performance",
+  summary: "Query retained regular-war performance, including pending archive rows, over up to 20,000 days",
   body: NoBody,
   bodyMode: "none",
   pathParams: NoPathParams,
@@ -101,12 +111,12 @@ export const StatsCwlEndpoint = defineEndpoint({
   method: "GET",
   path: "/v2/stats/cwl",
   auth: "public",
-  summary: "Query CWL performance",
+  summary: "Latest calculated CWL roster participation by league and war size, with observed equal-Town-Hall hit rates",
   body: NoBody,
   bodyMode: "none",
   pathParams: NoPathParams,
   query: StatsCwlQuery,
-  response: StatsPerformanceResponse,
+  response: CwlParticipationResponse,
   responseMode: "json",
   successStatus: 200,
   errors: StatsErrors,

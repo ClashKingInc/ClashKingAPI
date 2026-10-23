@@ -5,12 +5,14 @@ import { InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 
 interface RawStaticItem {
   readonly _id?: number; readonly name?: string; readonly TID?: { readonly name?: string }; readonly village?: string; readonly type?: string
-  readonly production_building?: string; readonly production_building_level?: number; readonly super_troop?: unknown; readonly is_seasonal?: boolean
+  readonly is_flying?: boolean; readonly housing_space?: number
+  readonly production_building?: string; readonly production_building_level?: number; readonly super_troop?: unknown; readonly is_seasonal?: boolean; readonly hero?: string
   readonly levels?: ReadonlyArray<{ readonly level?: number; readonly required_townhall?: number | null }>
 }
 interface StaticItem {
   readonly id: number | null; readonly name: string; readonly tid: string; readonly village: string; readonly type: string
-  readonly isSuperTroop: boolean; readonly isSeasonal: boolean; readonly productionBuilding: string; readonly productionBuildingLevel: number
+  readonly isFlying: boolean | null; readonly housingSpace: number | null
+  readonly isSuperTroop: boolean; readonly isSeasonal: boolean; readonly productionBuilding: string; readonly productionBuildingLevel: number; readonly hero: string
   readonly levels: ReadonlyArray<{ readonly level: number; readonly townHall: number | null }>
 }
 
@@ -27,8 +29,10 @@ const decodeSection = (value: unknown, category: string): ReadonlyArray<StaticIt
   return (value as { items: ReadonlyArray<RawStaticItem> }).items.map((item) => {
     if (typeof item.name !== "string" || (item._id !== undefined && !Number.isSafeInteger(item._id))) throw new Error(`Invalid ${category} static-data item`)
     return { id: item._id ?? null, name: item.name, tid: item.TID?.name ?? "", village: item.village ?? "", type: item.type ?? "",
+      isFlying: typeof item.is_flying === "boolean" ? item.is_flying : null,
+      housingSpace: Number.isSafeInteger(item.housing_space) && item.housing_space! > 0 ? item.housing_space! : null,
       isSuperTroop: item.super_troop !== undefined, isSeasonal: item.is_seasonal === true, productionBuilding: item.production_building ?? "",
-      productionBuildingLevel: item.production_building_level ?? 0,
+      productionBuildingLevel: item.production_building_level ?? 0, hero: item.hero ?? "",
       levels: (item.levels ?? []).map((level) => ({ level: level.level ?? 0, townHall: level.required_townhall ?? null })) }
   })
 }
@@ -37,7 +41,7 @@ const readJson = <A>(bindings: Pick<WorkerBindings, "ASSETS">, key: string): Eff
   catch: (cause) => upstream(cause, `Static metadata '${key}' is unavailable`),
 })
 
-/** Load only the released R2 sections needed by the current operation. */
+/** Load only the bound R2 sections needed here; local development can seed unpublished JSONs. */
 export const prepareStaticMetadata = (bindings: Pick<WorkerBindings, "ASSETS">, requested: ReadonlyArray<string>) => Effect.gen(function* () {
   const unique = [...new Set(requested)]
   for (const category of unique) if (!categories.has(category)) return yield* new NotFound({ message: `Static category '${category}' not found` })
@@ -60,6 +64,24 @@ export const lookupStaticItem = (category: string, idOrName: number | string): S
   return item === undefined || item.id === null ? undefined : { id: item.id, name: item.name, isSuperTroop: item.isSuperTroop }
 }
 export const hasStaticItemId = (category: string, id: number): boolean => section(category).some((item) => item.id === id)
+
+/** Army previews use the same bound metadata as the other API surfaces. */
+export const lookupArmyStaticItem = (category: string, id: number) => {
+  const item = section(category).find(candidate => candidate.id === id)
+  if (!item) return undefined
+  const building = section("buildings").find(candidate => candidate.name === item.productionBuilding && candidate.village === "home")
+  const unlock = building?.levels.find(level => level.level === item.productionBuildingLevel)?.townHall
+  const levelMinimum = Math.min(...item.levels.map(level => level.townHall ?? Infinity))
+  return { id, name: item.name, village: item.village, housingSpace: item.housingSpace ?? 0,
+    superTroop: item.isSuperTroop, siegeMachine: item.productionBuilding === "Workshop", hero: item.hero,
+    minimumTownHall: item.isSuperTroop ? Math.max(11, Number.isFinite(levelMinimum) ? levelMinimum : 1)
+      : unlock ?? (Number.isFinite(levelMinimum) ? levelMinimum : 1) }
+}
+
+/** Released home-village troop weights for ranked army classification. */
+export const rankedTroopWeights = (): ReadonlyArray<{ id: number; flying: boolean; housing: number }> =>
+  section("troops").filter((item) => item.id !== null && item.village === "home" && item.isFlying !== null && item.housingSpace !== null)
+    .map((item) => ({ id: item.id!, flying: item.isFlying!, housing: item.housingSpace! }))
 
 export interface StaticNameQuery {
   readonly locale?: string | undefined; readonly name?: string | undefined; readonly village?: string | undefined
@@ -112,6 +134,21 @@ export interface RosterProgressPlayer {
 const isHome = (unit: RosterProgressUnit): boolean => !unit.village || unit.village === "home"
 export const rosterHeroLevelSum = (heroes: ReadonlyArray<RosterProgressUnit>): number => heroes.filter(isHome).reduce((sum, hero) => sum + hero.level, 0)
 export const rosterHeroNames = (): ReadonlyArray<string> => rosterItems("heroes").map((item) => item.name)
+/** Hero-only progress, using the same released names and TH maxima as roster hero totals. */
+export const calculateRosterHeroPercent = (townHall: number, heroes: ReadonlyArray<RosterProgressUnit>): number | undefined => {
+  const names = rosterHeroNames()
+  if (names.length === 0) return undefined
+  const levels = new Map(heroes.filter(isHome).map(hero => [hero.name, hero.level]))
+  let current = 0, maximum = 0
+  for (const name of names) {
+    const max = maxLevelAtTownHall("heroes", name, townHall)
+    if (max === 0) continue
+    const level = levels.get(name) ?? 0
+    current += Number.isFinite(level) ? Math.max(0, Math.min(level, max)) : 0
+    maximum += max
+  }
+  return maximum === 0 ? 100 : current / maximum * 100
+}
 export const calculateRosterMaxPercent = (player: RosterProgressPlayer): number => {
   let currentLevels = 0, maximumLevels = 0
   for (const category of ["troops", "spells", "heroes"] as const) {
@@ -126,12 +163,17 @@ export const calculateRosterMaxPercent = (player: RosterProgressPlayer): number 
 }
 
 export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<string> => {
+  if (pathname === "/v2/runtime/tickets/open/prepare" || /^\/v2\/runtime\/ticket-operations\/[^/]+\/advance$/u.test(pathname)) return ["heroes"]
   const staticMatch = pathname.match(/^\/v2\/static\/([^/]+)\//u)
   if (staticMatch?.[1]) { try { return [decodeURIComponent(staticMatch[1])] } catch { return [] } }
   if (/^\/v2\/player\/[^/]+\/history\/changes$/u.test(pathname)) return ["troops", "heroes", "spells", "pets", "equipment"]
   if (pathname === "/v2/player/search" || /^\/v2\/player\/[^/]+\/(?:legend-history|ranked\/\d+\/|league\/history|leaderboard-history\/)/u.test(pathname)) return ["league_tiers"]
   if (/^\/v2\/(?:ranked\/|leaderboard\/|stats\/league\/)/u.test(pathname)) return ["league_tiers"]
-  if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment"]
+  if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment", "troops", "spells"]
+  if (pathname === "/v2/stats/ranked") return ["troops"]
+  // CWL history resolves league names by ID. Load metadata for this route family
+  // even on a cold worker; another clan request must not be a prerequisite.
+  if (pathname.startsWith("/v2/cwl/")) return ["war_leagues"]
   if (/^\/v2\/(?:clan\/search|clan\/[^/]+\/(?:cached|rankings|cwl)|player\/[^/]+\/cwl)/u.test(pathname)) return ["war_leagues", "capital_leagues"]
   return []
 }

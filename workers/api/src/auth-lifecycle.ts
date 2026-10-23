@@ -1,6 +1,6 @@
 import { expoEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { AuthProfiles } from "./auth-profiles.js"

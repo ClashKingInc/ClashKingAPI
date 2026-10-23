@@ -1,15 +1,17 @@
 import { Schema } from "effect"
 
+import { strictObject } from "./strict-object.js"
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 
-export const LegendRankRequest = Schema.Struct({
+export const LegendRankRequest = strictObject(Schema.Struct({
   tags: Schema.Array(Schema.String).check(Schema.isMaxLength(100)),
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
-export const LegendHistoricalRankRequest = Schema.Struct({
+}))
+export const LegendHistoricalRankRequest = strictObject(Schema.Struct({
   day: Schema.String,
   tags: Schema.Array(Schema.String).check(Schema.isMaxLength(100)),
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
+}))
 export const LegendDaySummariesRequest = LegendHistoricalRankRequest
 const LegendLocation = Schema.Struct({
   id: Schema.Int,

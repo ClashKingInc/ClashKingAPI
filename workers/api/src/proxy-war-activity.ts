@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { UserPrincipal } from "./auth.js"
 import { DatabaseFailure } from "./errors.js"
 

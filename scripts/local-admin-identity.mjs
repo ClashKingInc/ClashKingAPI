@@ -75,9 +75,10 @@ export async function createLocalAdminIdentity({ apiOrigin: requestedOrigin, por
         signal: AbortSignal.timeout(30_000),
       });
       outgoing.statusCode = response.status;
-      // fetch decodes HTTP content encodings; don't advertise the old wire size.
+      // The node:http adapter forwards raw bytes, including compressed bodies.
+      // Preserve the encoding so the browser can decode them correctly.
       response.headers.forEach((value, name) => {
-        if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(name)) outgoing.setHeader(name, value);
+        if (!['content-length', 'transfer-encoding', 'connection'].includes(name)) outgoing.setHeader(name, value);
       });
       outgoing.setHeader('cache-control', 'no-store');
       if (response.body) await pipeline(Readable.fromWeb(response.body), outgoing);

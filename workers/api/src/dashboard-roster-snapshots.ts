@@ -1,6 +1,6 @@
 import { botEndpoints, dashboardEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
@@ -71,6 +71,7 @@ const refreshData = (sql: SqlClient.SqlClient, bindings: WorkerBindings, serverI
           trophies = ${player.trophies}, current_clan_tag = ${player.clan?.tag ?? null}, current_clan_name = ${player.clan?.name ?? null},
           league_id = ${player.leagueTier?.id || null}, league_name = ${player.leagueTier?.name || null},
           hero_level_sum = ${snapshot.hero_level_sum}, max_percent = ${snapshot.max_percent},
+          war_preference = ${snapshot.war_pref ?? null},
           last_online = (SELECT max(seen_at) FROM player_online_events WHERE tag = ${player.tag}), refreshed_at = now()
           WHERE roster_id = ${rosterId} AND tag = ${player.tag} AND xmin::text = ${result.member.row_version} RETURNING tag`
         refreshedPlayers += updated.length

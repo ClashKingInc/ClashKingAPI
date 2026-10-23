@@ -1,5 +1,8 @@
 # `@clashking/api-contracts`
 
+Requires exactly Effect `4.0.0`. The API package versions remain independent
+release candidates; stable Effect does not change their release channel.
+
 Browser- and Worker-safe Effect v4 schemas plus endpoint descriptors for the
 canonical ClashKing `/v2` surface and the actively consumed `/proxy/v1` surface.
 The package contains no environment access, credentials, database code, or
@@ -18,7 +21,7 @@ former `QUERY` operations are exported only as `POST`.
 ```ts
 import { endpoints, type EndpointResponse } from "@clashking/api-contracts"
 
-type Response = EndpointResponse<typeof endpoints.statsArmies>
+type Response = EndpointResponse<typeof endpoints.armySetups>
 ```
 
 Release candidates use exact `0.1.0-rc.N` versions and npm's `rc` dist-tag.

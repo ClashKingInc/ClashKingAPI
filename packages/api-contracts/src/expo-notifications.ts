@@ -21,6 +21,22 @@ export const NotificationPreferencesRequest = Schema.Struct({
   reminderTimings: Schema.Array(Schema.Number), raidReminderTimings: Schema.Array(Schema.Number),
 })
 export const NotificationAccount = Schema.Struct({ tag: Schema.String, enabled: Schema.Boolean })
+export const NotificationClan = Schema.Struct({
+  tag: Schema.String, warEnabled: Schema.Boolean, raidEnabled: Schema.Boolean,
+  warActiveUntil: Schema.NullOr(Schema.String), raidActiveUntil: Schema.NullOr(Schema.String),
+  warTracked: Schema.Boolean, raidTracked: Schema.Boolean,
+})
+export const NotificationClansResponse = Schema.Struct({
+  clans: Schema.Array(NotificationClan),
+  limits: Schema.Struct({ war: Schema.Number, raid: Schema.Number }),
+  usage: Schema.Struct({ war: Schema.Number, raid: Schema.Number }),
+})
+export const NotificationClanRequest = Schema.Struct({
+  warEnabled: Schema.Boolean, raidEnabled: Schema.Boolean,
+  removeBookmark: Schema.optionalKey(Schema.Boolean),
+})
+export const NotificationClansGetEndpoint = defineEndpoint({ operationId: "getExpoNotificationClans", method: "GET", path: "/v2/notifications/clans", auth: "user", summary: "List clan notification choices and allowances", body: NoBody, bodyMode: "none", pathParams: NoPathParams, query: NoQuery, response: NotificationClansResponse, responseMode: "json", successStatus: 200 })
+export const NotificationClanPutEndpoint = defineEndpoint({ operationId: "putExpoNotificationClan", method: "PUT", path: "/v2/notifications/clans/:tag", auth: "user", summary: "Set clan notifications and automatically bookmark the clan", body: NotificationClanRequest, bodyMode: "json", pathParams: Schema.Struct({ tag: Schema.String }), query: NoQuery, response: NotificationClansResponse, responseMode: "json", successStatus: 200 })
 export const NotificationPreferencesResponse = Schema.Struct({
   ...NotificationPreferencesRequest.fields, accounts: Schema.Array(NotificationAccount),
 })

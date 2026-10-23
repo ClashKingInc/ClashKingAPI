@@ -3,9 +3,10 @@ import { Schema } from "effect"
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 
-export const Achievement = Schema.Struct({ id: Schema.String, asset_url: Schema.String, repeatable: Schema.Boolean, earned_count: Schema.Number })
+export const Achievement = Schema.Struct({ id: Schema.String, asset_url: Schema.String.annotate({description:'HTTPS model URL or bundled:<achievement_id> for a model shipped with the app.'}), repeatable: Schema.Boolean, earned_count: Schema.Number })
 export const AchievementsResponse = Schema.Struct({ items: Schema.Array(Achievement) })
 export const AppPostBlock = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("markdown"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("heading"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("paragraph"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("bullet_list"), items: Schema.Array(Schema.String) }),

@@ -23,6 +23,13 @@ const BotApplication = Schema.Struct({
 })
 const CachedApplication = Schema.Struct({ observedAt: Schema.Number, profile: BotApplication })
 
+// Discord image hashes are opaque path segments. Empty or malformed values
+// cannot form a CDN URL and should fall back to the global bot image.
+const imageHash = (value: string | null | undefined): string | null => {
+  const hash = value?.trim()
+  return hash && /^[A-Za-z0-9_-]+$/u.test(hash) ? hash : null
+}
+
 // Cache outages must not hold up a valid live profile. This is a per-operation
 // wait budget, not a new freshness policy; a late KV write can still complete.
 const optionalCache = <A>(operation: Effect.Effect<A, unknown>) => operation.pipe(
@@ -102,13 +109,16 @@ export const discordBotProfile = (
   }))
   const nick = member.nick?.trim() ? member.nick : null
   const bio = member.bio?.trim() ? member.bio : null
-  const avatarInherited = member.avatar === null || member.avatar === undefined
-  const bannerInherited = member.banner === null || member.banner === undefined
+  const avatarInherited = imageHash(member.avatar) === null
+  const bannerInherited = imageHash(member.banner) === null
   const global = nick !== null && bio !== null && !avatarInherited && !bannerInherited
     ? undefined : yield* globalProfile(bindings, member.user.id)
   const userId = member.user.id
-  const avatar = member.avatar ?? global?.bot.avatar
-  const banner = member.banner ?? global?.bot.banner
+  const avatar = imageHash(member.avatar) ?? imageHash(global?.bot.avatar)
+  const banner = imageHash(member.banner) ?? imageHash(global?.bot.banner)
+  if (avatar === null && (member.avatar != null || global?.bot.avatar != null)) {
+    return yield* new UpstreamUnavailable({ cause: new Error("invalid_discord_avatar_hash"), message: "Discord bot avatar hash is invalid" })
+  }
   const inheritedName = global?.bot.global_name?.trim() ? global.bot.global_name : global?.bot.username || global?.name || ""
   return {
     name: nick ?? inheritedName,

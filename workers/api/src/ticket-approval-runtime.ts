@@ -1,7 +1,7 @@
-import { ApproveMessages, DecimalSnowflake } from "@clashking/api-contracts"
+import { ApproveMessages, DecimalSnowflake, TicketMessageTemplates } from "@clashking/api-contracts"
 import { RuntimeUUID, TicketApprovePrepareEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Context, Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
@@ -10,6 +10,7 @@ import { renderApprovalMessages, type TicketApprovalToken } from "./ticket-appro
 import { parseTicketStaffAction } from "./ticket-staff-actions.js"
 import { requireTicketStaff } from "./ticket-staff-authorization.js"
 import { checkTicketButtonSource, snapshotStaffTicket, type StaffTicketSnapshot } from "./ticket-staff-runtime.js"
+import { renderRichTicketTemplate, runtimeMessageTemplate } from "./ticket-rich-template.js"
 
 /** Read-only provider resolution. Delivery happens only through ticket_runtime_effects. */
 export class TicketApprovalResolver extends Context.Service<TicketApprovalResolver, {
@@ -30,6 +31,7 @@ const ApprovalContext = Schema.Struct({
   panelId: RuntimeUUID, channelId: DecimalSnowflake, previousStatus: Schema.String, panelRevision: Schema.String,
   applicantUserId: Schema.NullOr(DecimalSnowflake), assignedClanTag: Schema.NullOr(Schema.String),
   applicantAccounts: Schema.Array(Schema.String), names: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(25)),
+  libraryRevision: Schema.optionalKey(Schema.NullOr(Schema.String)),
 })
 type ApprovalContext = typeof ApprovalContext.Type
 const object = (value: unknown): Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
@@ -49,8 +51,12 @@ const response = (row: Operation): Effect.Effect<Reply, ApiFailure> => Effect.ge
   return yield* stored(TicketApprovePrepareEndpoint.response, { outcome: "ready", operationId: row.id, ticketId: row.ticket_id,
     action: "approve", expiresAt: new Date(row.expires_at).toISOString(), form })
 })
-const templatesFor = (ticket: StaffTicketSnapshot) => stored(ApproveMessages, object(ticket.data).approve_messages ?? []).pipe(
-  Effect.map(messages => messages.map(message => ({ ...message, name: message.name.trim() }))))
+const templatesFor = (ticket: StaffTicketSnapshot) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const library = (yield* sql<{ templates: unknown; revision: string }>`SELECT templates,updated_at::text AS revision FROM ticket_message_libraries WHERE server_id=${ticket.server_id} FOR SHARE`)[0]
+  if (library) return { revision: library.revision, items: (yield* stored(TicketMessageTemplates, library.templates)).map(runtimeMessageTemplate) }
+  return { revision: null, items: (yield* stored(ApproveMessages, object(ticket.data).approve_messages ?? [])).map(message => ({ ...message, name: message.name.trim() })) }
+})
 const sameSnapshot = (ticket: StaffTicketSnapshot, context: ApprovalContext) =>
   ticket.panel_id === context.panelId && ticket.channel_id === context.channelId && ticket.status === context.previousStatus && ticket.panel_revision === context.panelRevision &&
   ticket.applicant_user_id === context.applicantUserId && ticket.assigned_clan_tag === context.assignedClanTag &&
@@ -81,11 +87,11 @@ export const prepareTicketApproval = (interaction: VerifiedRuntimeInteraction) =
   yield* checkTicketButtonSource(ticket, interaction)
   yield* requireTicketStaff(interaction, ticket.panel_id, ticket.id)
   if (!["open", "sleep"].includes(ticket.status)) return yield* new Conflict({ message: "Ticket is closed" })
-  const templates = yield* templatesFor(ticket)
-  if (!templates.length) return yield* new Conflict({ message: "No approval messages are configured for this panel" })
+  const library = yield* templatesFor(ticket), templates = library.items
+  if (!templates.length) return yield* new Conflict({ message: "Add a shared message on the dashboard Ticketing page first" })
   const context: ApprovalContext = { panelId: ticket.panel_id, channelId: ticket.channel_id, previousStatus: ticket.status, panelRevision: ticket.panel_revision,
     applicantUserId: ticket.applicant_user_id, assignedClanTag: ticket.assigned_clan_tag, applicantAccounts: ticket.applicant_accounts,
-    names: templates.map(template => template.name) }
+    names: templates.map(template => template.name), libraryRevision: library.revision }
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockTicketAndPanel(ticket.id, ticket.panel_id)
     const raced = (yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE interaction_id=$1`, [interaction.id]))[0]
@@ -95,6 +101,7 @@ export const prepareTicketApproval = (interaction: VerifiedRuntimeInteraction) =
     const active = yield* sql`SELECT id FROM ticket_runtime_operations WHERE ticket_id=${ticket.id}::uuid
       AND (state IN ('submitted','provisioning','reconciling') OR (state='preparing' AND expires_at>clock_timestamp()))`
     if (active.length) return yield* new Conflict({ message: "Ticket already has an active operation" })
+    if ((yield* sql`SELECT id FROM ticket_dashboard_jobs WHERE ticket_id=${ticket.id}::uuid AND state IN ('pending','running')`).length) return yield* new Conflict({ message: "Ticket already has an active dashboard action" })
     const id = crypto.randomUUID()
     const rows = yield* sql.unsafe<Operation>(`INSERT INTO ticket_runtime_operations(id,interaction_id,action,ticket_id,server_id,actor_user_id,panel_id,
       origin_channel_id,origin_message_id,context,request,request_hash,progress,expires_at)
@@ -127,12 +134,14 @@ export const advanceTicketApproval = (id: string, interaction: VerifiedRuntimeIn
   const context = yield* stored(ApprovalContext, row.context), progress = yield* stored(ApprovalProgress, row.progress)
   const ticket = yield* snapshotStaffTicket(interaction, row.ticket_id)
   yield* sameSnapshot(ticket, context)
-  const templates = yield* templatesFor(ticket)
+  const library = yield* templatesFor(ticket), templates = library.items
+  if (context.libraryRevision !== undefined && context.libraryRevision !== library.revision) return yield* new Conflict({ message: "Shared messages changed; start a new message session" })
   const next = yield* safely(() => advanceApprovalForm(id, progress, interaction, templates))
   // Template provider reads happen before row locks and cannot send messages. A later CAS
   // rejects stale pages, changed templates, revoked grants or ticket assignments.
   const resolution = next.stage === "complete" ? yield* (yield* TicketApprovalResolver).resolve(ticket, next.template) : undefined
-  const messages = resolution ? yield* safely(() => renderApprovalMessages(next.template, resolution.builtins, approvalAnswers(next))) : []
+  const richMessage = resolution && next.rich_message ? yield* Effect.try({ try: () => renderRichTicketTemplate(next.rich_message!, resolution.builtins, approvalAnswers(next)), catch: () => new InvalidRequest({ message: "Filled message exceeds Discord layout or text limits" }) }) : undefined
+  const messages = resolution && !richMessage ? yield* safely(() => renderApprovalMessages(next.template, resolution.builtins, approvalAnswers(next))) : []
   if (messages.length > 10_000) return yield* new InvalidRequest({ message: "Expanded approval message is too large" })
   const mentions = resolution ? yield* stored(Schema.Array(DecimalSnowflake), [...new Set(resolution.userMentions)]) : []
   return yield* sql.withTransaction(Effect.gen(function* () {
@@ -146,19 +155,20 @@ export const advanceTicketApproval = (id: string, interaction: VerifiedRuntimeIn
       return yield* new Conflict({ message: "Ticket approval page is no longer current" })
     }
     yield* sameSnapshot(yield* snapshotStaffTicket(interaction, row.ticket_id), context)
+    if (context.libraryRevision !== undefined && context.libraryRevision !== (yield* templatesFor(ticket)).revision) return yield* new Conflict({ message: "Shared messages changed; start a new message session" })
     yield* requireTicketStaff(interaction, row.panel_id, row.ticket_id)
     const receipts = { ...object(current.progress_receipts), [interaction.id]: interaction.requestHash }
     const sizes = (yield* sql<{ progress_bytes: number; receipt_bytes: number }>`SELECT
       octet_length(${JSON.stringify(next)}::jsonb::text) AS progress_bytes,
       octet_length(${JSON.stringify(receipts)}::jsonb::text) AS receipt_bytes`)[0]!
-    if (sizes.progress_bytes > 524288 || sizes.receipt_bytes > 131072) return yield* new InvalidRequest({ message: "Ticket approval form exceeds journal limits" })
+    if (sizes.progress_bytes > 524288 || sizes.receipt_bytes > 131072) return yield* new InvalidRequest({ message: "Ticket message form exceeds journal limits" })
     if (next.stage !== "complete") {
       yield* sql`UPDATE ticket_runtime_operations SET progress=${JSON.stringify(next)}::jsonb,progress_receipts=${JSON.stringify(receipts)}::jsonb,
         version=version+1,updated_at=clock_timestamp() WHERE id=${id}::uuid`
       return yield* response({ ...current, progress: next })
     }
-    for (const [index, content] of messages.entries()) {
-      const request = { channelId: ticket.channel_id, content, userMentions: mentions, nonce: `${interaction.id}:${index}` }
+    for (const [index, message] of (richMessage ? [richMessage] : messages.map(content => ({ content }))).entries()) {
+      const request = { channelId: ticket.channel_id, ...(richMessage ? { message } : { content: message.content }), userMentions: mentions, nonce: `${interaction.id}:${index}` }
       yield* sql`INSERT INTO ticket_runtime_effects(operation_id,effect_key,ordinal,effect_type,request)
         VALUES(${id}::uuid,${`approval:${index}`},${index},'send_message',${JSON.stringify(request)}::jsonb)`
     }

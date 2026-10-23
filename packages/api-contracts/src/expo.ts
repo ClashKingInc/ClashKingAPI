@@ -1,10 +1,12 @@
 import { AppConfigEndpoint } from "./app-config.js"
+export { BotClanRankingsEndpoint as ClanCurrentRankingsEndpoint, ClanRankingsResponse } from "./bot-public.js"
 import {
   DeleteOldPersonalBasesEndpoint,
   PersonalBasesEndpoint,
   SavePersonalBaseEndpoint,
   UnsavePersonalBaseEndpoint,
 } from "./personal-bases.js"
+import { DeletePersonalArmyEndpoint, PersonalArmiesEndpoint, SavePersonalArmyEndpoint, UpdatePersonalArmyEndpoint } from "./personal-armies.js"
 import { StoredCwlGroupEndpoint } from "./stored-cwl.js"
 export { StoredCwlGroupEndpoint, StoredCwlGroupResponse } from "./stored-cwl.js"
 import {
@@ -65,6 +67,8 @@ import {
 } from "./expo-links.js"
 import {
   NotificationAccountPutEndpoint,
+  NotificationClansGetEndpoint,
+  NotificationClanPutEndpoint,
   NotificationDeviceDeleteEndpoint,
   NotificationDeviceRegisterEndpoint,
   NotificationPreferencesGetEndpoint,
@@ -76,6 +80,7 @@ import {
   PlayerCwlHistoryEndpoint,
   PlayerJoinLeaveEndpoint,
   PlayerJoinLeaveTotalsEndpoint,
+  PlayerLastActivityEndpoint,
   PlayerSearchEndpoint,
   PlayerTimersEndpoint,
   PlayerWarStatsEndpoint,
@@ -84,6 +89,7 @@ import {
   LeaderboardClanDonationsEndpoint,
   LeaderboardClanWarWinsEndpoint,
   LeaderboardClanWinStreakEndpoint,
+  WarTripleStreakEndpoint,
   LeaderboardHistoryEndpoint,
   LeaderboardLeagueEndpoint,
   LeaderboardTownhallsEndpoint,
@@ -91,6 +97,7 @@ import {
 import {
   ClanCapitalLeagueCountsEndpoint,
   ClanLocationCountsEndpoint,
+  ClanMemberBinsEndpoint,
   CwlLeagueCountsEndpoint,
   GlobalCountsEndpoint,
   PlayerBuilderhallCountsEndpoint,
@@ -124,6 +131,7 @@ import {
   StatsWarEndpoint,
 } from "./stats.js"
 import { leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { armySetupEndpoints } from "./army-setups.js"
 import { legendEndpoints } from "./legends.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 
@@ -137,6 +145,7 @@ export * from "./expo-player.js"
 export * from "./expo-rankings.js"
 export * from "./expo-stats.js"
 export * from "./expo-war.js"
+export * from "./personal-armies.js"
 export * from "./league-analytics.js"
 export * from "./legends.js"
 export * from "./stats-history.js"
@@ -147,14 +156,33 @@ export { StatsCwlEndpoint, StatsCwlQuery,
   StatsRankedEndpoint, StatsRankedQuery,
   StatsWarEndpoint, StatsWarQuery } from "./stats.js"
 
+export * from "./home-layout.js"
+export * from "./dashboard-access.js"
+export { GuildsEndpoint } from "./dashboard-server.js"
+import { DashboardGrantEndpoint, DashboardExchangeEndpoint, DashboardScopedRefreshEndpoint, DashboardScopedLogoutEndpoint } from "./dashboard-access.js"
+import { HomeLayoutGetEndpoint, HomeLayoutPutEndpoint, PlayerFarmingEndpoint, ClanDonationSummaryEndpoint, PlayerActivityEndpoint } from "./home-layout.js"
 export const expoEndpoints = {
+  dashboardGrant: DashboardGrantEndpoint,
+  dashboardExchange: DashboardExchangeEndpoint,
+  dashboardScopedRefresh: DashboardScopedRefreshEndpoint,
+  dashboardScopedLogout: DashboardScopedLogoutEndpoint,
+  homeLayoutGet: HomeLayoutGetEndpoint,
+  homeLayoutPut: HomeLayoutPutEndpoint,
+  playerFarming: PlayerFarmingEndpoint,
+  playerActivity: PlayerActivityEndpoint,
+  clanDonationSummary: ClanDonationSummaryEndpoint,
   ...leagueAnalyticsEndpoints,
+  ...armySetupEndpoints,
   ...legendEndpoints,
   ...statsHistoryEndpoints,
   personalBases: PersonalBasesEndpoint,
   savePersonalBase: SavePersonalBaseEndpoint,
   unsavePersonalBase: UnsavePersonalBaseEndpoint,
   deleteOldPersonalBases: DeleteOldPersonalBasesEndpoint,
+  personalArmies: PersonalArmiesEndpoint,
+  savePersonalArmy: SavePersonalArmyEndpoint,
+  deletePersonalArmy: DeletePersonalArmyEndpoint,
+  updatePersonalArmy: UpdatePersonalArmyEndpoint,
   storedCwlGroup: StoredCwlGroupEndpoint,
   appConfig: AppConfigEndpoint,
   authMe: AuthMeEndpoint,
@@ -195,6 +223,7 @@ export const expoEndpoints = {
   playerTimers: PlayerTimersEndpoint,
   playerJoinLeave: PlayerJoinLeaveEndpoint,
   playerJoinLeaveTotals: PlayerJoinLeaveTotalsEndpoint,
+  playerLastActivity: PlayerLastActivityEndpoint,
   playerWarStats: PlayerWarStatsEndpoint,
   clanCwlSeasons: ClanCwlSeasonsEndpoint,
   clanLeaderboardHistory: ClanLeaderboardHistoryEndpoint,
@@ -214,11 +243,14 @@ export const expoEndpoints = {
   leaderboardClanDonations: LeaderboardClanDonationsEndpoint,
   leaderboardClanWarWins: LeaderboardClanWarWinsEndpoint,
   leaderboardClanWinStreak: LeaderboardClanWinStreakEndpoint,
+  warTripleStreak: WarTripleStreakEndpoint,
   notificationDeviceRegister: NotificationDeviceRegisterEndpoint,
   notificationDeviceDelete: NotificationDeviceDeleteEndpoint,
   notificationPreferencesGet: NotificationPreferencesGetEndpoint,
   notificationPreferencesPut: NotificationPreferencesPutEndpoint,
   notificationAccountPut: NotificationAccountPutEndpoint,
+  notificationClansGet: NotificationClansGetEndpoint,
+  notificationClanPut: NotificationClanPutEndpoint,
   achievementsCheck: AchievementsCheckEndpoint,
   appUpdateManifest: AppUpdateManifestEndpoint,
   activeAnnouncements: ActiveAnnouncementsEndpoint,
@@ -232,6 +264,7 @@ export const expoEndpoints = {
   playerBuilderhallCounts: PlayerBuilderhallCountsEndpoint,
   playerLeagueTierCounts: PlayerLeagueTierCountsEndpoint,
   clanLocationCounts: ClanLocationCountsEndpoint,
+  clanMemberBins: ClanMemberBinsEndpoint,
   cwlLeagueCounts: CwlLeagueCountsEndpoint,
   clanCapitalLeagueCounts: ClanCapitalLeagueCountsEndpoint,
   statsRanked: StatsRankedEndpoint,
@@ -256,3 +289,5 @@ export const expoEndpoints = {
   proxyBuilderClanRankings: ProxyBuilderClanRankingsEndpoint,
   proxyCapitalRankings: ProxyCapitalRankingsEndpoint,
 } as const
+export * from "./army-setups.js"
+export * from "./cwl-participation.js"

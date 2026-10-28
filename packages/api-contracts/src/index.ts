@@ -93,7 +93,7 @@ type EndpointMap = Omit<typeof coreEndpoints, keyof typeof botEndpoints | keyof 
   & typeof expoEndpoints
 export const endpoints: EndpointMap = { ...coreEndpoints, ...botEndpoints, ...dashboardEndpoints, ...expoEndpoints }
 
-export * from "./clan-member-warning.js"
+export * from "./clan-war-events.js"
 
 export * from "./bot-graph-total.js"
 

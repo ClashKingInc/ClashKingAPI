@@ -53,7 +53,7 @@ export const dashboardServerCoreOperationIds = [
 type CoreEnvironment = SqlClient.SqlClient | DiscordApi | DiscordCredentials | ServerAuthorization
 type JsonRecord = Readonly<Record<string, unknown>>
 
-const sections = ["settings", "logs", "clans", "rosters", "links", "moderation", "roles", "reminders", "autoboards", "giveaways", "panels", "tickets", "embeds", "wars", "leaderboards"] as const
+const sections = ["settings", "logs", "clans", "rosters", "links", "moderation", "roles", "reminders", "autoboards", "giveaways", "panels", "tickets", "embeds", "wars", "leaderboards", "competitive"] as const
 const optionalText = Schema.optionalKey(Schema.NullOr(Schema.String))
 const RawGuild = Schema.Struct({
   id: DecimalSnowflake, name: Schema.String, icon: optionalText,

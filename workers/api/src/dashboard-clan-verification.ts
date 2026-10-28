@@ -7,6 +7,16 @@ import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailab
 import { correctTag } from "./home.js"
 
 export const verificationWords = ["apple", "tiger", "lemon", "mango", "peach", "berry", "panda", "zebra", "otter", "eagle", "maple", "river", "ocean", "beach", "cloud", "forest", "garden", "planet", "rocket", "candle"] as const
+// Equal-width buckets avoid modulo bias for a word count that does not divide
+// 2^32. Reject the tiny tail instead of giving early words extra outcomes.
+const randomWordIndex = () => {
+  const width = Math.floor(0x1_0000_0000 / verificationWords.length)
+  const limit = width * verificationWords.length
+  let sample: number
+  do { sample = crypto.getRandomValues(new Uint32Array(1))[0]! } while (sample >= limit)
+  return Math.floor(sample / width)
+}
+const nextWordIndex = (index: number) => index + 1 === verificationWords.length ? 0 : index + 1
 interface VerificationRow {
   server_id: string; clan_tag: string; challenge_id: string; marker: string; marker_index: number;
   state: "pending" | "verified" | "expired"; check_after: Date | string; expires_at: Date | string;
@@ -57,8 +67,8 @@ export const startClanVerification = (bindings: WorkerBindings, serverId: string
     if (prior?.state === "verified" || (prior?.state === "pending" && Date.parse(timestamp(prior.expires_at)!) > Date.now())) return status(prior)
     const current = (yield* description(bindings, tag)).toLowerCase()
     const reserved = new Set((yield* sql<{marker:string}>`SELECT marker FROM server_clan_verifications WHERE clan_tag=${tag} AND state='pending' AND server_id<>${serverId}`).map(row => row.marker))
-    let index = prior ? (prior.marker_index + 1) % verificationWords.length : crypto.getRandomValues(new Uint32Array(1))[0]! % verificationWords.length
-    for (let n = 0; n < verificationWords.length && (current.includes(`${verificationWords[index]}ck`) || reserved.has(`${verificationWords[index]}ck`)); n++) index = (index + 1) % verificationWords.length
+    let index = prior ? nextWordIndex(prior.marker_index) : randomWordIndex()
+    for (let n = 0; n < verificationWords.length && (current.includes(`${verificationWords[index]}ck`) || reserved.has(`${verificationWords[index]}ck`)); n++) index = nextWordIndex(index)
     const id = crypto.randomUUID(), marker = `${verificationWords[index]}ck`
     if (current.includes(marker) || reserved.has(marker)) return yield* new InvalidRequest({ message: "No unused verification word is available. Remove old verification words from the description or wait for pending checks to expire." })
     const rows = yield* sql<VerificationRow>`INSERT INTO server_clan_verifications(server_id,clan_tag,challenge_id,marker,marker_index,requested_by,check_after,next_check_at,expires_at)

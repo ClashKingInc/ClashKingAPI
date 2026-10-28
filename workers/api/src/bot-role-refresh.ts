@@ -98,7 +98,12 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string) => Effec
 
 export const loadRefreshData = (bindings: WorkerBindings, serverId: string, userId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const settings = (yield* sql<Record<string, unknown>>`SELECT change_nickname,auto_eval_nickname,flair_non_family,nickname_rule,non_family_nickname_rule,autoeval_enabled FROM servers WHERE id=${serverId}`)[0]
+  // New servers have nullable formats. Match the dashboard defaults rather
+  // than passing null to the bot's template renderer and failing the whole job.
+  const settings = (yield* sql<Record<string, unknown>>`SELECT change_nickname,auto_eval_nickname,flair_non_family,
+    COALESCE(nickname_rule,'[{player_clan_abbreviation}] {player_name}') AS nickname_rule,
+    COALESCE(non_family_nickname_rule,'{player_name}') AS non_family_nickname_rule,
+    autoeval_enabled FROM servers WHERE id=${serverId}`)[0]
   if (!settings) return yield* new NotFound({ message: "Server not found" })
   const rules = yield* sql<{ type: string; option: string; role_id: string; clan_tag: string | null }>`SELECT type,option,role_id,clan_tag FROM server_roles WHERE server_id=${serverId}`
   const clans = yield* sql<{ tag: string; category: string | null; abbreviation: string }>`SELECT clan.tag,category.name AS category,clan.abbreviation FROM server_clans clan LEFT JOIN server_clan_categories category ON category.id=clan.category_id WHERE clan.server_id=${serverId}`

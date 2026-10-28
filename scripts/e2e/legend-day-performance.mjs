@@ -39,7 +39,7 @@ try {
           (day,cohort,direction,source_window_start,source_window_end,eligible_player_count,observed_player_count,
            complete_player_count,invalid_player_count,observed_battle_count,observed_triple_count,
            perfect_player_count,complete_trophy_sum,trophy_buckets)
-          VALUES($1,$2,$3,$1::date+interval '5 hours 10 minutes',$1::date+interval '29 hours 10 minutes',$4,$5,$5,0,$6,$7,$8,$9,$10)`,
+          VALUES($1,$2,$3,$1::date+interval '5 hours',$1::date+interval '29 hours',$4,$5,$5,0,$6,$7,$8,$9,$10)`,
           [day,cohort,direction,members.length,observed.length,observed.length*8,perfect.length*8,perfect.length,observed.reduce((n,p)=>n+p[key],0),buckets])
       }
     }
@@ -76,7 +76,7 @@ try {
     {rankBand:'1001_plus',offensePlayerDays:1,defensePlayerDays:0},
   ])
   for(const period of body.periods.slice(1)){assert.equal(period.availableDays,1);assert.equal(period.offense.meanTrophies,160)}
-  assert.equal(body.items.length,2);assert(body.items.every(item=>item.sourceWindowStart.endsWith('05:10:00.000Z')))
+  assert.equal(body.items.length,2);assert(body.items.every(item=>item.sourceWindowStart.endsWith('05:00:00.000Z')))
   const top=await (await fetch(endpoint('&cohort=top_200'))).json()
   assert.equal(top.periods[0].offense.completePlayerDays,1)
   assert.deepEqual(top.perfectDayContributions,body.perfectDayContributions,'Contribution bands remain global and disjoint')
@@ -85,6 +85,25 @@ try {
   const empty=await (await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${date(200)}&time[before]=${date(200)}`)).json()
   assert.equal(empty.periods[0].availableDays,0);assert.equal(empty.periods[0].offense.meanTrophies,null)
   assert.equal(empty.periods[0].offense.perfectDayRate,null);assert.equal(empty.items.length,0)
+  // Previously stored 05:10 summaries must disappear until recalculated;
+  // otherwise changing the reader's date math would silently mix day definitions.
+  await db.query("UPDATE legend_day_performance SET source_window_start=source_window_start+interval '10 minutes',source_window_end=source_window_end+interval '10 minutes' WHERE day=$1",[first])
+  const oldWindow=await(await fetch(endpoint())).json()
+  assert.equal(oldWindow.periods[0].availableDays,1)
+  assert.equal(oldWindow.periods[0].offense.perfectPlayerDays,1)
+  assert.equal(oldWindow.perfectDayContributions[0].offensePlayerDays,0)
+  await db.query("UPDATE legend_day_performance SET source_window_start=source_window_start-interval '10 minutes',source_window_end=source_window_end-interval '10 minutes' WHERE day=$1",[first])
+  assert.equal((await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}T05:10:00Z&time[before]=${last}T05:10:00Z`)).status,400)
+  assert.equal((await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}T05:00:00Z&time[before]=${last}T05:00:00Z`)).status,200)
+  for(const timestamp of [`${first}T04:59:59Z`,`${first}T05:00:00Z`,`${first}T05:09:59Z`,`${date(4)}T05:00:00Z`]) {
+    await db.query(`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,direction,battle_mode,player_town_hall,opponent_town_hall,stars,destruction_percentage,duration_seconds,looted_resources)
+      VALUES('#PYP','#QQQ',$1,1,2,18,18,3,100,120,'{}')`,[timestamp])
+  }
+  const dayResponse=await fetch(`http://127.0.0.1:${port}/v2/legends/days`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({day:first,tags:['#PYP']})})
+  const dayBody=await dayResponse.json()
+  assert.equal(dayResponse.status,200,JSON.stringify(dayBody))
+  assert.equal(dayBody.items[0].attacks,2,'05:00 and 05:09 belong to the same new game day')
+  assert.equal(dayBody.items[0].attackTrophies,80)
   // A saved aggregate without matching retained player observations must not
   // falsely turn two perfect player-days into zero distinct perfect players.
   await db.query('UPDATE legend_rankings_history SET observed_attack_triples=0 WHERE tag=$1',['#PYP'])

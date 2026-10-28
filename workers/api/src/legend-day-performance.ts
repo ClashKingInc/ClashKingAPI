@@ -57,15 +57,26 @@ export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date
     // A rebuild updates player observations and rollups in one transaction.
     // Keep every response query on the same snapshot to preserve that pairing.
     yield* sql.unsafe("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+    // Never mix old 05:10 closeouts with corrected 05:00 days. They become
+    // available here only after the existing bounded rebuild recalculates them.
     const rows = yield* sql.unsafe<Row>(`SELECT * FROM legend_day_performance
-      WHERE cohort=$1 AND day BETWEEN $2::date AND $3::date ORDER BY day`,
+      WHERE cohort=$1 AND day BETWEEN $2::date AND $3::date
+        AND source_window_start=(day::timestamp AT TIME ZONE 'UTC') + interval '5 hours'
+        AND source_window_end=source_window_start + interval '24 hours'
+      ORDER BY day`,
     [options.cohort, periods[2]!.firstDay, options.window.lastDay])
     const unique = yield* sql.unsafe<{ kind: PeriodKind; direction: number; players: number | string; player_days: number | string }>(`
-      WITH periods(kind,first_day,last_day) AS (VALUES
+      WITH valid_days AS (
+        SELECT day FROM legend_day_performance WHERE cohort=$1
+          AND source_window_start=(day::timestamp AT TIME ZONE 'UTC') + interval '5 hours'
+          AND source_window_end=source_window_start + interval '24 hours'
+        GROUP BY day HAVING count(*)=2
+      ), periods(kind,first_day,last_day) AS (VALUES
         ('selected',$2::date,$3::date),('previous_30',$4::date,$5::date),('previous_90',$6::date,$5::date))
       SELECT p.kind,s.direction,count(DISTINCT r.tag) players,count(*) player_days
       FROM periods p
       JOIN legend_rankings_history r ON r.day BETWEEN p.first_day AND p.last_day
+      JOIN valid_days v ON v.day=r.day
       CROSS JOIN LATERAL (VALUES
         (1,r.observed_attack_count,r.observed_attack_triples),
         (2,r.observed_defense_count,r.observed_defense_triples)
@@ -78,7 +89,9 @@ export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date
       SELECT CASE WHEN global_rank<=200 THEN '1_200' WHEN global_rank<=1000 THEN '201_1000' ELSE '1001_plus' END rank_band,
         count(*) FILTER (WHERE observed_attack_count=8 AND observed_attack_triples=8) offense,
         count(*) FILTER (WHERE observed_defense_count=8 AND observed_defense_triples=8) defense
-      FROM legend_rankings_history WHERE day BETWEEN $1::date AND $2::date AND performance_calculated_at IS NOT NULL
+      FROM legend_rankings_history r WHERE day BETWEEN $1::date AND $2::date AND performance_calculated_at IS NOT NULL
+        AND EXISTS (SELECT 1 FROM legend_day_performance p WHERE p.day=r.day AND p.cohort='legend_i'
+          AND p.source_window_start=(p.day::timestamp AT TIME ZONE 'UTC') + interval '5 hours')
       GROUP BY rank_band`, [options.window.firstDay, options.window.lastDay])
     const periodResults = periods.map((period) => {
       const selected = rows.filter((row) => date(row.day) >= period.firstDay && date(row.day) <= period.lastDay)

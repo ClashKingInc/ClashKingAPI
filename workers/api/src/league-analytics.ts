@@ -158,7 +158,7 @@ export const queryRankedBattlelog = (rawTag: string, rawSeason: string) => datab
 
 const legendWindow = (raw: string): { start: Date; end: Date } | undefined => {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(raw)) return undefined
-  const start = new Date(`${raw}T05:10:00.000Z`)
+  const start = new Date(`${raw}T05:00:00.000Z`)
   if (Number.isNaN(start.valueOf()) || start.toISOString().slice(0, 10) !== raw) return undefined
   return { start, end: new Date(start.valueOf() + 86_400_000) }
 }
@@ -307,10 +307,10 @@ export const queryLegendPlayerComparisons = (rawTag: string, now = new Date()) =
   const rows = yield* sql.unsafe<ComparisonRow>(`
     WITH covered AS (
       SELECT day,cohort,attack_count,three_star_count FROM legend_daily_stats
-      WHERE day >= ($2::timestamptz AT TIME ZONE 'UTC')::date AND day < (($3::timestamptz AT TIME ZONE 'UTC') - INTERVAL '5 hours 10 minutes')::date
+      WHERE day >= ($2::timestamptz AT TIME ZONE 'UTC')::date AND day < (($3::timestamptz AT TIME ZONE 'UTC') - INTERVAL '5 hours')::date
         AND cohort IN ('legend_i','top_1000','top_200') AND attack_count > 0
     ), personal AS (
-      SELECT (battle_time AT TIME ZONE 'UTC' - INTERVAL '5 hours 10 minutes')::date AS day,
+      SELECT (battle_time AT TIME ZONE 'UTC' - INTERVAL '5 hours')::date AS day,
         count(*) attacks, count(*) FILTER (WHERE stars=3) triples
       FROM battles_ranked WHERE player_tag=$1 AND battle_mode=2 AND direction=1 AND battle_time >= $2::timestamptz AND battle_time < $3::timestamptz
       GROUP BY 1
@@ -331,7 +331,7 @@ export const queryLegendPlayerDailySeries = (rawTag: string, query: URLSearchPar
       FROM battles_ranked WHERE player_tag=$1 AND battle_mode=2
       AND battle_time >= $2 AND battle_time < $3 ORDER BY battle_time,direction`,
     [tag, new Date(window.start.valueOf() - 2 * dayMilliseconds), window.end])
-    const rowDay = (row: LegendTrophyRow) => new Date(new Date(row.battle_time).valueOf() - (5 * 60 + 10) * 60_000)
+    const rowDay = (row: LegendTrophyRow) => new Date(new Date(row.battle_time).valueOf() - (5 * 60) * 60_000)
       .toISOString().slice(0, 10)
     const ranks = yield* sql.unsafe<{ day: string; trophies: number; global_rank: number }>(
       `SELECT day::text, trophies, global_rank FROM legend_rankings_history WHERE tag=$1 AND day >= $2::date AND day <= $3::date ORDER BY day`,

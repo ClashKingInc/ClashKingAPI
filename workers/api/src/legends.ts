@@ -107,7 +107,7 @@ export const legendDaySummaries = (raw: unknown, now = new Date()) => Effect.gen
   const requestedDay = yield* date(body.day)
   const tags = yield* uniqueTags(body.tags)
   if (tags.length === 0) return { items: [] }
-  const start = new Date(`${requestedDay}T05:10:00.000Z`)
+  const start = new Date(`${requestedDay}T05:00:00.000Z`)
   const dayMilliseconds = 86_400_000
   const end = new Date(start.valueOf() + dayMilliseconds)
   const sql = yield* SqlClient.SqlClient

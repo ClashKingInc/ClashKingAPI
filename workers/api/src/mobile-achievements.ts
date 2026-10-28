@@ -16,6 +16,7 @@ const definitions = [
   { id: "war_warrior", asset: "war-champion-achievement-badge.glb" },
   { id: "mr_legend", asset: "perfect-legends-day-achievement-badge.glb" },
   { id: "defense_doesnt_matter", asset: "bad-legends-achievement-badge.glb" },
+  { id: "first_tournament", asset: "bundled:first_tournament" },
   { id: "verified_accounts", asset: "town-hall-18-achievement-badge.glb" },
 ] as const
 
@@ -86,9 +87,18 @@ export const checkMobileAchievements = (
     SELECT awards.achievement_id, count(*)::text AS count FROM achievement_player_awards awards
     JOIN player_links links ON links.tag = awards.player_tag
     WHERE links.user_id = ${userId} AND links.is_verified = true
-      -- Deferred tournament awards stay stored, but ordinary achievement
-      -- checks must work without the future tournament tables.
-      AND awards.achievement_id <> 'first_tournament' GROUP BY awards.achievement_id
+      -- A transferred account must not lend its previous owner's tournament
+      -- participation to the new profile. Require observed, completed attacks
+      -- attributed to this registered owner; registration alone is insufficient.
+      AND (awards.achievement_id <> 'first_tournament' OR EXISTS (
+        SELECT 1 FROM competitive_matches match
+        JOIN competitive_tournaments tournament ON tournament.id=match.tournament_id
+        CROSS JOIN LATERAL jsonb_array_elements(match.observed_attacks) observation
+        WHERE match.status='completed' AND tournament.status NOT IN ('draft','cancelled')
+          AND observation->>'playerTag'=awards.player_tag
+          AND observation->>'userId'=${userId}
+          AND (observation->>'attacks')::integer>0
+      )) GROUP BY awards.achievement_id
   `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Unable to count verified player achievements" })))
   const byId = new Map(counts.map((row) => [row.achievement_id, Number(row.count)]))
   // This badge describes current ownership, not a permanent per-player award.

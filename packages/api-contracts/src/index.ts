@@ -1,4 +1,6 @@
 export * from "./app-config.js"
+export * from "./competitive.js"
+import { competitiveEndpoints } from "./competitive.js"
 export * from "./admin.js"
 export * from "./bot.js"
 export * from "./dashboard.js"
@@ -54,6 +56,7 @@ import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
 export const endpoints = {
+  ...competitiveEndpoints,
   ...legacyPublicEndpoints,
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,

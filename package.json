@@ -21,6 +21,7 @@
     "docs:build": "npm run openapi:generate && node scripts/build-api-documentation.mjs",
     "lint": "oxlint --deny-warnings --ignore-pattern '**/dist/**' packages workers/api",
     "e2e:roster-assistant": "node scripts/e2e/roster-assistant.mjs",
+    "e2e:competitive": "node scripts/e2e/competitive.mjs",
     "typecheck": "npm run build --workspace @clashking/api-contracts && npm run typecheck --workspace @clashking/api-client && npm run typecheck --workspace @clashking/api-worker",
     "worker:build": "npm run build --workspace @clashking/api-worker",
     "worker:deploy": "npm run deploy --workspace @clashking/api-worker",

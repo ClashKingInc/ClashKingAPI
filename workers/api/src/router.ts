@@ -38,6 +38,7 @@ import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
 import { dispatchPublicData } from "./public-data-runtime.js"
 import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
 import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
+import { dispatchCompetitive } from "./competitive.js"
 import { dispatchDashboardMisc } from "./dashboard-misc-runtime.js"
 import { dispatchWarExports } from "./war-exports.js"
 import { dispatchMobilePersistence } from "./mobile-persistence.js"
@@ -227,6 +228,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     yield* guardDashboardScope(request)
+    const competitiveResponse = yield* dispatchCompetitive(request)
+    if (competitiveResponse !== undefined) return competitiveResponse
     const dashboardAccessResponse=yield* dispatchDashboardAccess(request)
     if(dashboardAccessResponse!==undefined)return dashboardAccessResponse
     const staticSections = staticMetadataSectionsForPath(url.pathname)

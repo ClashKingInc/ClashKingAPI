@@ -1,3 +1,5 @@
+import { BotDailyGraphEndpoint } from "./bot-daily-graph.js"
+export { BotDailyGraphEndpoint } from "./bot-daily-graph.js"
 import { BotRoleMembersEndpoint } from "./bot-role-members.js"
 export { BotRoleMembersEndpoint } from "./bot-role-members.js"
 import { BotWarStatisticsEndpoint } from "./bot-war-statistics.js"
@@ -91,6 +93,7 @@ export * from "./bot-player-identity.js"
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
+  dailyGraph: BotDailyGraphEndpoint,
   moderationImage: BotModerationImageEndpoint,
   ...botAdjacentEndpoints,
   legendStats: BotLegendStatsEndpoint,

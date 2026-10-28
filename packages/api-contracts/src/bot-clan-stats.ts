@@ -20,3 +20,12 @@ export const BotClanCapitalContributionsEndpoint=defineEndpoint({
  response:Schema.Struct({weekend:Schema.String,start:Schema.String,end:Schema.String,truncated:Schema.Boolean,items:Schema.Array(Schema.Struct({tag:Schema.String,name:Schema.String,donated:Schema.Number}))}),
  responseMode:"json",successStatus:200,summary:"Read recorded clan-attributed Capital Gold donations for Friday 07:00 UTC through the next Friday, excluding the endpoint.",
 })
+
+export const BotActivityEndpoint=defineEndpoint({
+ auth:"bot",method:"POST",path:"/v2/bot/clans/activity",operationId:"botActivity",
+ pathParams:Schema.Struct({}),query:NoQuery,body:Schema.Struct({clanTags:Schema.Array(Schema.String),season:Schema.optionalKey(Schema.String)}),bodyMode:"json",
+ response:Schema.Struct({season:Schema.String,current:Schema.Boolean,truncated:Schema.Boolean,
+  items:Schema.Array(Schema.Struct({tag:Schema.String,name:Schema.String,townHallLevel:Schema.Number,activity:Schema.Number,lastObservedAt:Schema.NullOr(Schema.String)})),
+  clanTotals:Schema.Array(Schema.Struct({tag:Schema.String,activity:Schema.Number}))}),
+ responseMode:"json",successStatus:200,summary:"Read clan-attributed activity counts and current-season last observed game activity without Discord ownership.",
+})

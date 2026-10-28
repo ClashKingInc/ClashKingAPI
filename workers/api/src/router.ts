@@ -40,6 +40,7 @@ import { dispatchBotLegendStats } from "./bot-legend-stats.js"
 import { dispatchBotPlayerSeason } from "./bot-player-season.js"
 import { dispatchBotPlayerIdentity } from "./bot-player-identity.js"
 import { dispatchBotPlayerHistory } from "./bot-player-history.js"
+import { dispatchBotActivity } from "./bot-activity.js"
 import { dispatchBotClanStats } from "./bot-clan-stats.js"
 import { dispatchBotRoleRefresh } from "./bot-role-refresh.js"
 import { dispatchBotManualReminders } from "./bot-manual-reminders.js"
@@ -369,6 +370,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if(graphTotalResponse!==undefined)return graphTotalResponse
     const dailyGraphResponse = yield* dispatchBotDailyGraph(request)
     if (dailyGraphResponse !== undefined) return dailyGraphResponse
+    const activityResponse=yield* dispatchBotActivity(request)
+    if(activityResponse!==undefined)return activityResponse
     const botClanStatsResponse = yield* dispatchBotClanStats(request)
     if (botClanStatsResponse !== undefined) return botClanStatsResponse
     const roleRefreshResponse = yield* dispatchBotRoleRefresh(request, bindings)

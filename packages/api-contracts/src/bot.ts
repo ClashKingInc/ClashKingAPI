@@ -23,8 +23,8 @@ import { BotLegendStatsEndpoint } from "./bot-legend-stats.js"
 import { BotPlayerSeasonEndpoint } from "./bot-player-season.js"
 import { BotPlayerIdentityEndpoint } from "./bot-player-identity.js"
 import { BotPlayerClanTimelineEndpoint } from "./bot-player-history.js"
-import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint } from "./bot-clan-stats.js"
-export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint } from "./bot-clan-stats.js"
+import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint, BotActivityEndpoint } from "./bot-clan-stats.js"
+export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint, BotActivityEndpoint } from "./bot-clan-stats.js"
 import {
   BotClanCachedEndpoint,
   BotClanCapitalLeaderboardEndpoint,
@@ -112,6 +112,7 @@ export const botEndpoints = {
   roleMembers: BotRoleMembersEndpoint,
   playerWarStatus: BotWarStatusEndpoint,
   warStatistics: BotWarStatisticsEndpoint,
+  clanActivity: BotActivityEndpoint,
   clanSeasonStats: BotClanSeasonStatsEndpoint,
   clanGames: BotClanGamesEndpoint,
   clanCapitalContributions: BotClanCapitalContributionsEndpoint,

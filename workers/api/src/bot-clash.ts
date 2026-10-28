@@ -24,7 +24,7 @@ export const dispatchBotClash = (request: Request, bindings: WorkerBindings) => 
       : template[index] === ":locationId" ? /^(?:global|[0-9]{1,12})$/u.test(value) : /^#[0289PYLQGRJCUV]{1,15}$/u.test(value)
     if (!valid) return yield* new InvalidRequest({ message: "Invalid Clash path parameter" })
   }
-  const supportsLimit = /(?:capitalraidseasons|rankings\/players(?:-builder-base)?)$/u.test(url.pathname)
+  const supportsLimit = /(?:capitalraidseasons|warlog|rankings\/players(?:-builder-base)?)$/u.test(url.pathname)
   const leagueGroup = url.pathname.startsWith("/v2/bot/clash/leaguegroup/")
   if (leagueGroup && (url.searchParams.getAll("playerTag").length !== 1 || !/^#[0289PYLQGRJCUV]{1,15}$/u.test(url.searchParams.get("playerTag") ?? ""))) {
     return yield* new InvalidRequest({message:"A valid playerTag is required for the league group"})

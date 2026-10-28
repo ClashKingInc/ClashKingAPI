@@ -52,7 +52,11 @@ export const dispatchPublicData = (request: Request, bindings: WorkerBindings) =
     const segments = endpoint.path.split("/")
     if (segments.length !== actual.length || segments.some((part, index) => !part.startsWith(":") && part !== actual[index])) continue
     const path = yield* Effect.try({ try: () => Object.fromEntries(segments.flatMap((part, index) => part.startsWith(":") ? [[part.slice(1), decodeURIComponent(actual[index] ?? "")]] : [])), catch: () => new InvalidRequest({ message: "Malformed path encoding" }) })
-    const principal = endpoint.auth === "public" ? undefined : yield* (yield* AuthIdentity).requireUser(request)
+    // Shared stored-war history is readable by the app and the bot. Other
+    // user-only routes (especially private activity) retain their user guard.
+    const auth = yield* AuthIdentity
+    const principal = endpoint.auth === "public" ? undefined : endpoint.auth === "user-or-bot"
+      ? yield* auth.requireUserOrBot(request) : yield* auth.requireUser(request)
     const numeric = new Set(["limit", "days", "top", "townhallLevel", "leagueTierId"])
     const typed = (entries: Iterable<readonly [string, string]>) => Object.fromEntries([...entries].map(([key, value]) => [key,
       numeric.has(key) ? (value.trim() ? Number(value) : NaN) : key === "attack"
@@ -60,7 +64,7 @@ export const dispatchPublicData = (request: Request, bindings: WorkerBindings) =
         : value]))
     yield* Schema.decodeUnknownEffect(endpoint.pathParams)(typed(Object.entries(path))).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid path parameters" })))
     yield* Schema.decodeUnknownEffect(endpoint.query)(typed(url.searchParams)).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid query parameters" })))
-    const result = yield* executePublicData(endpoint.operationId, path, url.searchParams, bindings, principal?.userId).pipe(Effect.provideService(WorkerEnvironment, bindings))
+    const result = yield* executePublicData(endpoint.operationId, path, url.searchParams, bindings, principal?.kind === "user" ? principal.userId : undefined).pipe(Effect.provideService(WorkerEnvironment, bindings))
     const encoded = yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Stored public data does not match the response contract" })))
     return Response.json(encoded)
   }

@@ -7,8 +7,8 @@ import { BotLegendStatsEndpoint } from "./bot-legend-stats.js"
 import { BotPlayerSeasonEndpoint } from "./bot-player-season.js"
 import { BotPlayerIdentityEndpoint } from "./bot-player-identity.js"
 import { BotPlayerClanTimelineEndpoint } from "./bot-player-history.js"
-import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint } from "./bot-clan-stats.js"
-export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint } from "./bot-clan-stats.js"
+import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint } from "./bot-clan-stats.js"
+export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint } from "./bot-clan-stats.js"
 import {
   BotClanCachedEndpoint,
   BotClanCapitalLeaderboardEndpoint,
@@ -90,6 +90,7 @@ export const botEndpoints = {
   taskProgress: BotTaskProgressEndpoint,
   clanSeasonStats: BotClanSeasonStatsEndpoint,
   clanGames: BotClanGamesEndpoint,
+  clanCapitalContributions: BotClanCapitalContributionsEndpoint,
   accounts: BotAccountsEndpoint,
   addStrike: BotAddStrikeEndpoint,
   base: BotBaseEndpoint,

@@ -14,7 +14,7 @@ export const dispatchBotGraphTotal=(request:Request)=>Effect.gen(function*(){
  const decoded=yield* Effect.try({try:()=>decodeURIComponent(match[1]!),catch:()=>new InvalidRequest({message:"Invalid clan tag"})})
  const tag=yield* publicTag(decoded),window=yield* serverActivitySeason(query.season)
  if(window.start>new Date())return yield* new InvalidRequest({message:"Choose a current or past season"})
- const sql=yield* SqlClient.SqlClient;let rows:readonly {value:string}[],basis:"recorded_clan"|"latest_stored_members"="recorded_clan"
+ const sql=yield* SqlClient.SqlClient;let rows:readonly {value:string|null}[],basis:"recorded_clan"|"latest_stored_members"="recorded_clan"
  if(["gold","elixir","darkElixir","attackWins"].includes(query.metric)){
   basis="latest_stored_members"
   // Battles have no historical clan field. These totals describe the latest
@@ -23,6 +23,12 @@ export const dispatchBotGraphTotal=(request:Request)=>Effect.gen(function*(){
     SELECT player_tag,stars,looted_resources FROM battles_farming WHERE battle_time>=${window.start} AND battle_time<${window.end}
     UNION ALL SELECT player_tag,stars,looted_resources FROM battles_ranked WHERE direction=1 AND battle_time>=${window.start} AND battle_time<${window.end}
    ) battle JOIN basic_player player ON player.tag=battle.player_tag WHERE player.clan_tag=${tag}`
+ }else if(query.metric==="capitalRaided"||query.metric==="raidParticipants"){
+  rows=yield* sql<{value:string|null}>`SELECT CASE WHEN count(*)=0 THEN NULL WHEN ${query.metric}='capitalRaided' THEN sum(loot)::text ELSE avg(participants)::text END value FROM (
+   SELECT COALESCE((raid.data->>'capitalTotalLoot')::numeric,0) loot,
+    (SELECT count(DISTINCT member->>'tag') FROM jsonb_array_elements(COALESCE(raid.data->'members','[]'::jsonb)) member WHERE COALESCE((member->>'attacks')::int,0)>0) participants
+   FROM capital_raid_history raid WHERE raid.clan_tag=${tag} AND raid.start_time>=${window.start} AND raid.start_time<${window.end} AND raid.state='ended'
+  ) weekends`
  }else if(query.metric==="activity"){
   rows=yield* sql<{value:string}>`SELECT count(*)::text value FROM player_online_events WHERE clan_tag=${tag} AND seen_at>=${window.start} AND seen_at<${window.end}`
  }else if(query.metric==="troopLevels"||query.metric==="heroLevels"){
@@ -35,6 +41,6 @@ export const dispatchBotGraphTotal=(request:Request)=>Effect.gen(function*(){
   rows=yield* sql<{value:string}>`SELECT COALESCE(sum(CASE WHEN ${query.metric}='warsSpun' THEN 1 WHEN ${query.metric}='warStars' THEN CASE WHEN clan_tag=${tag} THEN clan_stars ELSE opponent_stars END ELSE CASE WHEN (clan_tag=${tag} AND (clan_stars>opponent_stars OR (clan_stars=opponent_stars AND clan_destruction_percentage>opponent_destruction_percentage))) OR (opponent_tag=${tag} AND (opponent_stars>clan_stars OR (opponent_stars=clan_stars AND opponent_destruction_percentage>clan_destruction_percentage))) THEN 1 ELSE 0 END END),0)::text value
    FROM wars WHERE (clan_tag=${tag} OR opponent_tag=${tag}) AND prep_time>=${window.start} AND prep_time<${window.end} AND war_type IN ('random','cwl') AND (${query.metric}='warsSpun' OR lower(state) IN ('ended','warended'))`
  }
- const value=Number(rows[0]?.value??0);if(!Number.isSafeInteger(value)||value<0)return yield* new DatabaseFailure({cause:"unsafe_integer",message:"Graph total exceeds numeric range"})
+ const raw=rows[0]?.value,value=raw===null?null:Number(raw??0);if(value!==null&&(!Number.isFinite(value)||value<0||(query.metric!=="raidParticipants"&&!Number.isSafeInteger(value))||(query.metric==="raidParticipants"&&value>50)))return yield* new DatabaseFailure({cause:"unsafe_integer",message:"Graph total exceeds numeric range"})
  return Response.json({season:window.season,value,basis})
 }).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(new DatabaseFailure({cause,message:"Graph total unavailable"}))))

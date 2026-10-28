@@ -15,3 +15,19 @@ export const queueSubjectRoleRefresh = (userId: string) => Effect.gen(function* 
       grace_until=CASE WHEN role_refresh_jobs.completed_at IS NOT NULL THEN NULL ELSE role_refresh_jobs.grace_until END,
       completed_at=NULL,result=NULL,attempts=0,revision=role_refresh_jobs.revision+1,updated_at=now()`
 })
+
+/** Settings changes affect cached human members even without a new game event.
+ * Keep a pending leave grace window: a cosmetic/template change must not remove
+ * a departed player's roles early. The consumer still checks current settings. */
+export const queueServerRoleRefresh = (serverId: string) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id)
+    SELECT 'auto:' || server.id || ':' || member.user_id,server.id,member.user_id
+    FROM servers server JOIN discord_cache.members member ON member.guild_id=server.id
+    WHERE server.id=${serverId} AND server.autoeval_enabled AND server.left_at IS NULL
+      AND COALESCE(member.data->'user'->>'bot','false') <> 'true'
+    ON CONFLICT(id) DO UPDATE SET due_at=CASE WHEN role_refresh_jobs.completed_at IS NOT NULL THEN now()
+      ELSE COALESCE(role_refresh_jobs.grace_until,now()) END,
+      grace_until=CASE WHEN role_refresh_jobs.completed_at IS NOT NULL THEN NULL ELSE role_refresh_jobs.grace_until END,
+      completed_at=NULL,result=NULL,attempts=0,revision=role_refresh_jobs.revision+1,updated_at=now()`
+})

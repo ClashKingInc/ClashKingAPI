@@ -22,6 +22,7 @@ import { dashboardServerActivityOperationIds, executeDashboardServerActivity } f
 import { dashboardServerReadOperationIds, executeDashboardServerReads } from "./dashboard-server-reads.js"
 import { readServerAnalytics } from "./dashboard-server-analytics.js"
 import { ServerAuthorization, discordGuildManager, gatewayHeartbeatFreshnessSeconds, resolveListedGuildAccess } from "./server-authorization.js"
+import { queueServerRoleRefresh } from "./role-refresh-queue.js"
 import { notifyTracking } from "./tracking-wake.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited, Unauthenticated, UnprocessableEntity, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { ClashClanProfile, normalizeClashClanProfile } from "./clash-clan-profile.js"
@@ -400,6 +401,7 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
 }))
 
 const settingsFields: Readonly<Record<string, string>> = { role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
+const roleRefreshSettings = new Set(["role_leave_delay_minutes", "nickname_rule", "non_family_nickname_rule", "change_nickname", "flair_non_family", "auto_eval_nickname", "autoeval"])
 const loadSettings = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
@@ -419,10 +421,15 @@ const updateSettings = (serverId: string, body: JsonRecord) => Effect.gen(functi
   yield* sql.withTransaction(Effect.gen(function* () {
     const existing = yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`
     yield* requireRow(existing, "Server not found")
+    let refreshRoles = false
     for (const [field, column] of Object.entries(settingsFields)) if (body[field] !== undefined) {
       const value = field === "embed_color" ? String(body[field]) : body[field]
-      yield* sql.unsafe(`UPDATE servers SET ${column} = $2, updated_at = now() WHERE id = $1`, [serverId, value])
+      const changed = yield* sql.unsafe(`UPDATE servers SET ${column} = $2, updated_at = now() WHERE id = $1 AND ${column} IS DISTINCT FROM $2 RETURNING id`, [serverId, value])
+      if (changed.length > 0 && roleRefreshSettings.has(field)) refreshRoles = true
     }
+    // Queue inside the same transaction, only for changed evaluation inputs.
+    // Enabling auto-evaluation reconciles members without waiting for game activity.
+    if (refreshRoles) yield* queueServerRoleRefresh(serverId)
     const linkParse = record(body.link_parse)
     for (const field of ["clan", "army", "player", "base", "show"]) if (linkParse[field] !== undefined) yield* sql.unsafe(`UPDATE servers SET link_parse_${field} = $2, updated_at = now() WHERE id = $1`, [serverId, linkParse[field]])
 

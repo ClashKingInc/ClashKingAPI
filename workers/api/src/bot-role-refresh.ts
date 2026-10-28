@@ -45,11 +45,11 @@ export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string,
   const actor = String(body.actorId ?? ""), requestId = String(body.requestId ?? "")
   const target = String(body.targetId ?? actor), kind = body.targetKind ?? "user"
   const categories = body.categories === undefined ? [...roleRefreshCategories] : body.categories
-  const roleTreatment = body.roleTreatment ?? "both"
+  const roleTreatment = body.roleTreatment === undefined ? "both" : body.roleTreatment
   yield* requireInput(snowflake(actor) && snowflake(requestId) && snowflake(target) && ["user", "role"].includes(String(kind))
     && Array.isArray(categories) && categories.length > 0 && categories.every(item => roleRefreshCategories.includes(item))
     && (body.preview === undefined || typeof body.preview === "boolean")
-    && ["add", "remove", "both"].includes(String(roleTreatment)))
+    && typeof roleTreatment === "string" && ["add", "remove", "both"].includes(roleTreatment))
   yield* refreshActorAllowed(bindings, serverId, actor, kind === "role" || target !== actor)
   let users = [target]
   if (kind === "role") {

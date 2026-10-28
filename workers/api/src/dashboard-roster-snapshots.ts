@@ -1,3 +1,4 @@
+import { rosterRoleInputs, queueRosterRoleRefresh } from "./roster-role-refresh.js"
 import { botEndpoints, dashboardEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -54,6 +55,7 @@ const refreshData = (sql: SqlClient.SqlClient, bindings: WorkerBindings, serverI
       const current = yield* sql`SELECT id FROM rosters WHERE id = ${rosterId} AND server_id = ${serverId}
         AND refresh_started_at = ${lease}::timestamptz FOR UPDATE`
       if (current.length !== 1) return yield* new Conflict({ message: "Roster refresh was superseded" })
+      const oldRoleInputs = yield* rosterRoleInputs(sql,serverId)
       let refreshedPlayers = 0, failedPlayers = 0
       for (const result of results) {
         if (result.player === null && !result.missing) { failedPlayers++; continue }
@@ -84,6 +86,7 @@ const refreshData = (sql: SqlClient.SqlClient, bindings: WorkerBindings, serverI
           AND member.discord_user_id IS DISTINCT FROM linked.user_id`
       const finished = (yield* sql<{ refreshed_at: Date }>`UPDATE rosters SET last_refreshed_at = now(), refresh_started_at = NULL,
         updated_at = now(), revision = revision + 1 WHERE id = ${rosterId} RETURNING last_refreshed_at AS refreshed_at`)[0]!
+      yield* queueRosterRoleRefresh(sql,serverId,oldRoleInputs)
       return { ...base, status: "completed" as const, refreshedPlayers, failedPlayers, refreshedAt: finished.refreshed_at.toISOString(), reused: false }
     })))
   })
@@ -152,7 +155,8 @@ export const dispatchDashboardRosterSnapshots = (request: Request, bindings: Wor
     }
     const members = yield* sql<{ discord_user_id: string }>`SELECT DISTINCT discord_user_id FROM roster_members
       WHERE roster_id = ${params.rosterId} AND discord_user_id IS NOT NULL ORDER BY discord_user_id`
-    return { refreshId: crypto.randomUUID(), scope: "role" as const, status: "ready", refreshedPlayers: 0, failedPlayers: 0,
+    yield* queueRosterRoleRefresh(sql,serverId)
+    return { refreshId: crypto.randomUUID(), scope: "role" as const, status: "queued", refreshedPlayers: 0, failedPlayers: 0,
       refreshedAt: new Date().toISOString(), reused: false, roleId: roster.roster_role_id, roleMemberUserIds: members.map((member) => member.discord_user_id) }
   })))
   const encoded = yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(

@@ -1,3 +1,4 @@
+import { rosterRoleState } from "./roster-role-refresh.js"
 import { gatewayHeartbeatFreshnessSeconds } from "./server-authorization.js"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -8,7 +9,7 @@ import type { WorkerBindings } from "./environment.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 
-export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure"] as const
+export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure", "roster"] as const
 const idPattern = /^[0-9]{15,20}$/u
 const uuid = /^[0-9a-f-]{36}$/iu
 const Member = Schema.Struct({ user: Schema.Struct({ id: Schema.String, bot: Schema.optionalKey(Schema.Boolean) }), roles: Schema.Array(Schema.String) })
@@ -69,7 +70,7 @@ export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string,
   return { requestId, queued: users.length }
 })
 
-export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false) => Effect.gen(function* () {
+export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A single lease per member serializes manual and automatic refreshes. Token
   // fencing prevents a crashed/expired attempt acknowledging a newer revision.
@@ -101,9 +102,10 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
       ON CONFLICT(id) DO UPDATE SET completed_at=NULL,result=NULL,attempts=0,due_at=now(),revision=role_refresh_jobs.revision+1,updated_at=now()
       WHERE role_refresh_jobs.completed_at<now()-interval '1 hour' OR (role_refresh_jobs.attempts>=12 AND role_refresh_jobs.updated_at<now()-interval '1 hour')`
     yield* sql`DELETE FROM role_refresh_jobs WHERE id IN (SELECT id FROM role_refresh_jobs WHERE completed_at<now()-interval '7 days' ORDER BY completed_at LIMIT 100)`
-    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[] }>`
-      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories FROM role_refresh_jobs job
+    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[]; roster_role_ids: string[] }>`
+      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids FROM role_refresh_jobs job
       WHERE completed_at IS NULL AND due_at<=now() AND attempts<12
+        AND (${includeRoster} OR NOT ('roster'=ANY(job.categories)))
         AND (${requestId ?? null}::text IS NULL OR request_id=${requestId ?? null})
         AND (${serverId ?? null}::text IS NULL OR server_id=${serverId ?? null})
         AND NOT EXISTS(SELECT 1 FROM role_refresh_leases lease WHERE lease.server_id=job.server_id AND lease.user_id=job.user_id AND lease.expires_at>now())
@@ -146,7 +148,8 @@ export const loadRefreshData = (bindings: WorkerBindings, serverId: string, user
     if (player.tag !== link.tag) return yield* new UpstreamUnavailable({ cause: "Mismatched player", message: "Player data unavailable; refresh left unchanged" })
     return player
   }), { concurrency: 5 })
-  return { settings, rules, clans, accounts, mainTag: links.find(link => link.server_main)?.tag ?? links.find(link => link.is_main)?.tag ?? null }
+  const roster = yield* rosterRoleState(sql,serverId,userId)
+  return { settings, rules, clans, accounts, roster, mainTag: links.find(link => link.server_main)?.tag ?? links.find(link => link.is_main)?.tag ?? null }
 })
 
 export const setServerMainAccount = (serverId: string, userId: string, rawTag: string) => Effect.gen(function* () {
@@ -186,8 +189,8 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   yield* auth.requireBot(request)
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
-    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean"))
-    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true))
+    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.includeRoster === undefined || typeof body.includeRoster === "boolean"))
+    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true))
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/validate") {
     const body = object(yield* readBoundedJson(request, 8192))
@@ -198,9 +201,13 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
       JOIN role_refresh_leases lease ON lease.job_id=job.id AND lease.revision=job.revision
       JOIN servers server ON server.id=job.server_id
       WHERE job.id=${String(body.id)} AND lease.token=${String(body.token)}::uuid AND lease.expires_at>now()
-        AND (job.request_id IS NOT NULL OR server.autoeval_enabled OR job.categories=ARRAY['tenure']::text[])
+        AND (job.request_id IS NOT NULL OR server.autoeval_enabled OR job.categories <@ ARRAY['tenure','roster']::text[])
         AND ARRAY(SELECT tag FROM player_links WHERE user_id=job.user_id AND hidden=false ORDER BY tag)
           = ARRAY(SELECT unnest(${body.accountTags as string[]}::text[]) ORDER BY 1)`
+    if (rows.length > 0 && typeof body.rosterFingerprint === "string") {
+      const job = (yield* sql<{server_id:string;user_id:string}>`SELECT server_id,user_id FROM role_refresh_jobs WHERE id=${String(body.id)}`)[0]
+      if (!job || (yield* rosterRoleState(sql,job.server_id,job.user_id)).fingerprint !== body.rosterFingerprint) return Response.json({valid:false})
+    }
     return Response.json({ valid: rows.length > 0 })
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/complete") return Response.json(yield* finishRefreshJob(object(yield* readBoundedJson(request, 16_384))))

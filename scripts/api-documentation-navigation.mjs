@@ -11,6 +11,8 @@ const original = new Map(source.operations.map(([method, path, tags]) => [
 // previously undocumented handlers and intentionally new retained features.
 // This only assigns navigation; it never adds paths or changes authorization.
 const additions = new Map([
+  ["PUT /v2/server/{}/rosters/{}/role", "Roster Builder"],
+  ["POST /v2/server/{}/rosters/{}/role-refresh", "Roster Builder"],
   ["GET /v2/server/{}/roster-member-groups", "Roster Builder"],
   ["POST /v2/server/{}/roster-member-groups", "Roster Builder"],
   ["PATCH /v2/server/{}/roster-member-groups/{}", "Roster Builder"],

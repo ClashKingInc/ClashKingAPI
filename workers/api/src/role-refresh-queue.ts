@@ -1,3 +1,4 @@
+import { queueRosterRoleRefresh } from "./roster-role-refresh.js"
 import { Effect } from "effect"
 import { SqlClient } from "effect/sql"
 
@@ -6,6 +7,11 @@ import { SqlClient } from "effect/sql"
  * transaction; preserve a pending leave grace window. */
 export const queueSubjectRoleRefresh = (userId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
+  const rosterServers = yield* sql<{id:string}>`SELECT DISTINCT roster.server_id AS id FROM rosters roster
+    JOIN discord_cache.members member ON member.guild_id=roster.server_id AND member.user_id=${userId}
+    LEFT JOIN roster_member_group_settings setting ON setting.roster_id=roster.id
+    WHERE roster.roster_role_id IS NOT NULL OR setting.role_id IS NOT NULL`
+  for(const server of rosterServers) yield* queueRosterRoleRefresh(sql,server.id,{roles:[],owners:[userId]})
   yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id)
     SELECT 'auto:' || server.id || ':' || ${userId},server.id,${userId}
     FROM servers server JOIN discord_cache.members member ON member.guild_id=server.id AND member.user_id=${userId}

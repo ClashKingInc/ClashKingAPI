@@ -1,3 +1,4 @@
+import { rosterRoleInputs, queueRosterRoleRefresh } from "./roster-role-refresh.js"
 import { rosterWebhook } from "./roster-webhook.js"
 import { normalizeRosterQuestions, validRosterQuestionId } from "./roster-questionnaire.js"
 import { rosterPublication, rosterPublications } from "./roster-publication.js"
@@ -178,6 +179,7 @@ const requireRosterBatch = (body: Record<string, unknown>) => Effect.gen(functio
 })
 
 interface RosterRow {
+  readonly roster_role_id: string | null
   readonly max_signups: number | null
   readonly require_verified: boolean
   readonly hero_red_percent: number
@@ -324,7 +326,7 @@ const loadRosters = (
     return yield* new InvalidRequest({ message: "invalid roster_id" })
   }
   return yield* database("Unable to load rosters", sql<RosterRow>`
-  SELECT id::text, server_id, group_id, clan_tag, alias, description, embed_color,
+  SELECT id::text, server_id, group_id, clan_tag, alias, description, embed_color, roster_role_id,
          roster_type, signup_scope, min_townhall, max_townhall, min_signups,
          max_accounts_per_user, display_column_ids, sort_configuration,
          webhook_id, message_id, image_url, event_start_time, recurrence_days,
@@ -462,7 +464,10 @@ export class DashboardRosterOperations extends Context.Service<
             const locked = yield* database("Unable to lock roster destinations", sql<{ readonly id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`)
             if (locked.length !== 1) return yield* new NotFound({ message: "Server not found" })
           }
+          const roleServerId = ["updateRoster","deleteRoster","cloneRoster","manageMembers","updateMember","removeMember","submitSignup","submitBatchSignup","withdrawSignup"].includes(operation) ? yield* requireServerId(input) : undefined
+          const oldRoleInputs = roleServerId ? yield* rosterRoleInputs(sql,roleServerId) : undefined
           const response = yield* effect
+          if (response.ok && roleServerId && oldRoleInputs) yield* queueRosterRoleRefresh(sql,roleServerId,oldRoleInputs)
           if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup", "manageMembers", "updateMember", "removeMember", "refreshMember"].includes(operation)) {
             yield* database("Unable to mark roster publication pending", sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${input.params.rosterId ?? ""}::uuid`)
           }
@@ -838,7 +843,7 @@ const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
       min_townhall, max_townhall, min_signups, max_accounts_per_user,
       display_column_ids, sort_configuration, webhook_id, message_id, image_url,
       event_start_time, recurrence_days, recurrence_day_of_month, signup_questions,
-      created_at, updated_at, max_signups, require_verified, hero_red_percent, hero_yellow_percent, hero_green_percent, embed_color
+      created_at, updated_at, max_signups, require_verified, hero_red_percent, hero_yellow_percent, hero_green_percent, embed_color, roster_role_id
     ) VALUES (
       ${id}::uuid, ${targetServerId}, ${sameServer ? row.group_id : null}, ${row.clan_tag}, ${alias}, ${row.description},
       ${row.roster_type}, ${row.signup_scope}, ${row.min_townhall}, ${row.max_townhall},
@@ -846,7 +851,7 @@ const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
       ${JSON.stringify(row.sort_configuration ?? [])}::jsonb, NULL, NULL,
       ${row.image_url}, ${row.event_start_time}, ${row.recurrence_days}, ${row.recurrence_day_of_month},
       ${JSON.stringify(row.signup_questions ?? [])}::jsonb, now(), now(), ${row.max_signups}, ${row.require_verified},
-      ${row.hero_red_percent}, ${row.hero_yellow_percent}, ${row.hero_green_percent}, ${row.embed_color}
+      ${row.hero_red_percent}, ${row.hero_yellow_percent}, ${row.hero_green_percent}, ${row.embed_color}, ${sameServer ? row.roster_role_id : null}
     )
   `)
   yield* lockRosterMembership(sql, targetServerId, [id])
@@ -1997,6 +2002,7 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
     if (locked.length !== rosterIds.length || locked.some((row) => Number(row.revision) !== expected[row.id])) {
       return yield* new RosterConflict({ message: "Roster data has changed since this proposal was created" })
     }
+    const oldRoleInputs = yield* rosterRoleInputs(sql,serverId)
     for (const change of changes) {
       if (change.action === "add") {
         const inserted = yield* sql<{ readonly tag: string }>`
@@ -2037,6 +2043,7 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
       })
       yield* assertRosterMembershipLimits(sql, [destination], affectedOwners)
     }
+    yield* queueRosterRoleRefresh(sql,serverId,oldRoleInputs)
     const revised = yield* sql<{ readonly id: string; readonly revision: number | string }>`
       UPDATE rosters SET revision = revision + 1, updated_at = now()
       WHERE id = ANY(${rosterIds}::uuid[]) RETURNING id::text, revision

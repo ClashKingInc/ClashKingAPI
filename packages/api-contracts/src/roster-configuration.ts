@@ -61,7 +61,23 @@ export const DashboardAssignRosterMemberGroupEndpoint = defineEndpoint({
   response: Schema.Struct({ updated: Schema.Number }), responseMode: "json", successStatus: 200, errors,
   summary: "Assign roster players to a server label, or Main with null",
 })
+export const DashboardSetRosterRoleEndpoint = defineEndpoint({
+  operationId: "dashboardSetRosterRole", method: "PUT", path: "/v2/server/:serverId/rosters/:rosterId/role",
+  auth: "server-write", body: Schema.Struct({ roleId: Schema.NullOr(DecimalSnowflake), memberGroupId: Schema.NullOr(RuntimeUUID) }), bodyMode: "json",
+  pathParams: Schema.Struct({ serverId: DecimalSnowflake, rosterId: RuntimeUUID }), query: NoQuery,
+  response: Schema.Struct({ queued: Schema.Number }), responseMode: "json", successStatus: 200, errors,
+  summary: "Configure the roster role or a label role and queue reconciliation",
+})
+export const DashboardRefreshRosterRolesEndpoint = defineEndpoint({
+  operationId: "dashboardRefreshRosterRoles", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/role-refresh",
+  auth: "server-write", body: NoBody, bodyMode: "none",
+  pathParams: Schema.Struct({ serverId: DecimalSnowflake, rosterId: RuntimeUUID }), query: NoQuery,
+  response: Schema.Struct({ queued: Schema.Number }), responseMode: "json", successStatus: 200, errors,
+  summary: "Queue roster role reconciliation including former holders",
+})
 export const rosterConfigurationEndpoints = {
+  dashboardSetRosterRole: DashboardSetRosterRoleEndpoint,
+  dashboardRefreshRosterRoles: DashboardRefreshRosterRolesEndpoint,
   dashboardAssignRosterMemberGroup: DashboardAssignRosterMemberGroupEndpoint,
   dashboardRosterMemberGroups: DashboardRosterMemberGroupsEndpoint,
   dashboardCreateRosterMemberGroup: DashboardCreateRosterMemberGroupEndpoint,

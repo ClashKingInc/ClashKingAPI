@@ -269,6 +269,47 @@ export const LegendDay = Schema.Struct({
 export const LegendDaysQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendCohort) })
 export const LegendDaysResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(LegendDay) })
 
+// Ratios use 0..1. A missing period is not a zero-performance period.
+export const LegendDayPerformanceSide = Schema.Struct({
+  eligiblePlayerDays: Schema.Int,
+  observedPlayerDays: Schema.Int,
+  completePlayerDays: Schema.Int,
+  partialPlayerDays: Schema.Int,
+  missingPlayerDays: Schema.Int,
+  invalidPlayerDays: Schema.Int,
+  observedBattles: Schema.Int,
+  observedTriples: Schema.Int,
+  perfectPlayerDays: Schema.Int,
+  tripleRate: Schema.NullOr(Schema.Number),
+  perfectDayRate: Schema.NullOr(Schema.Number),
+  meanTrophies: Schema.NullOr(Schema.Number),
+  buckets: Schema.Array(Schema.Struct({
+    minimum: Schema.Int, maximum: Schema.Int, playerDays: Schema.Int, share: Schema.NullOr(Schema.Number),
+  })),
+})
+export const LegendDayPerformanceResponse = Schema.Struct({
+  cohort: LegendCohort,
+  periods: Schema.Array(Schema.Struct({
+    kind: Schema.Literals(["selected", "previous_30", "previous_90"]),
+    firstDay: Schema.String, lastDay: Schema.String,
+    expectedDays: Schema.Int, availableDays: Schema.Int,
+    offense: LegendDayPerformanceSide,
+    defense: LegendDayPerformanceSide,
+    // Null signals that retained player observations do not reconcile with
+    // the rollup. Never present player-days as distinct people.
+    perfectOffensePlayers: Schema.NullOr(Schema.Int),
+    perfectedDefensePlayers: Schema.NullOr(Schema.Int),
+  })),
+  perfectDayContributions: Schema.Array(Schema.Struct({
+    rankBand: Schema.Literals(["1_200", "201_1000", "1001_plus"]),
+    offensePlayerDays: Schema.Int, defensePlayerDays: Schema.Int,
+  })).annotate({ description: "Selected-period perfect days across all saved Legend ranks, independent of the selected overlapping cohort." }),
+  items: Schema.Array(Schema.Struct({
+    day: Schema.String, sourceWindowStart: Schema.String, sourceWindowEnd: Schema.String,
+    offense: LegendDayPerformanceSide, defense: LegendDayPerformanceSide,
+  })),
+})
+
 const PublicErrors = [{ status: 400, body: ErrorResponse }, { status: 404, body: ErrorResponse }] as const
 const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q extends Schema.Codec<unknown, unknown, never, never>, R extends Schema.Codec<unknown, unknown, never, never>>(
   operationId: string, path: `/v2/${string}`, pathParams: P, query: Q, response: R, summary: string,
@@ -300,7 +341,11 @@ export const LeagueTierStatisticsEndpoint = publicGet("getLeagueTierStatistics",
 export const LegendDaysEndpoint = publicGet("getLegendDays", "/v2/stats/legend/days",
   NoPathParams, LegendDaysQuery, LegendDaysResponse, "Get detailed Legend-day statistics")
 
+export const LegendDayPerformanceEndpoint = publicGet("getLegendDayPerformance", "/v2/stats/legend/performance",
+  NoPathParams, LegendDaysQuery, LegendDayPerformanceResponse, "Get recorded Legend-day trophy distributions and perfect-day rates")
+
 export const leagueAnalyticsEndpoints = {
+  legendDayPerformance: LegendDayPerformanceEndpoint,
   playerBattlelogHistory: PlayerBattlelogHistoryEndpoint,
   rankedBattlelog: RankedBattlelogEndpoint,
   legendBattlelog: LegendBattlelogEndpoint,

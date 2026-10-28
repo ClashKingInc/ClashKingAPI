@@ -66,6 +66,7 @@ const additions = new Map([
   ["GET /v2/stats/league/hit-rates", "Stats"],
   ["GET /v2/stats/league/tournaments/{}/tiers/{}", "Stats"],
   ["GET /v2/stats/legend/days", "Stats"],
+  ["GET /v2/stats/legend/performance", "Stats"],
   ["GET /v2/media/{}", "Media"],
   ["POST /v2/roster/account-groups/query", "Roster Builder"],
   ["POST /v2/roster/family/war-metrics/query", "Roster Builder"],

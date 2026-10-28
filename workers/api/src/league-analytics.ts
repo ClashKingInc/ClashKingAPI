@@ -5,6 +5,7 @@ import {
   LegendPlayerSeasonResponse,
   LegendPlayerComparisonsResponse,
   LegendDaysResponse,
+  LegendDayPerformanceResponse,
   PlayerBattlelogHistoryResponse,
   PlayerLeagueHistoryResponse,
   RankedBattlelogResponse,
@@ -21,6 +22,7 @@ import {
   parseLegendPlayerSeriesQuery,
   parsePlayerHistoryWindow,
 } from "./league-analytics-query.js"
+import { queryLegendDayPerformance } from "./legend-day-performance.js"
 import { rankedPeriodPredicate } from "./ranked-period.js"
 import * as families from "./army-family-analytics.js"
 import { hasStaticItemId, lookupStaticItem, lookupArmyStaticItem, prepareStaticMetadata } from "./static-metadata.js"
@@ -568,6 +570,7 @@ export const dispatchLeagueAnalytics = (request: Request) => Effect.gen(function
     const [season = "", tier = ""] = yield* decodedParts(parts, [5, 7])
     return yield* response(LeagueTierStatisticsResponse, yield* queryTierStatistics(season, tier))
   }
+  if (url.pathname === "/v2/stats/legend/performance") return yield* response(LegendDayPerformanceResponse, yield* queryLegendDayPerformance(url.searchParams))
   if (url.pathname === "/v2/stats/legend/days") return yield* response(LegendDaysResponse, yield* queryLegendDays(url.searchParams))
   return undefined
 })

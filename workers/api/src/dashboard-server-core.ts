@@ -596,7 +596,7 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }))
 
-const logTypes = new Set(["join_log", "leave_log", "donation_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
+const logTypes = new Set(["join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
 const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
 interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
@@ -610,7 +610,7 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
   const body = record(input.body)
   const selected = [...new Set((Array.isArray(body.log_types) ? body.log_types : []).map((value) => text(value).trim()).filter(Boolean))]
   if (selected.length === 0) return yield* new InvalidRequest({ message: "No log types provided" })
-  if (selected.includes("donation_log") && body.disabled !== true) return yield* new InvalidRequest({ message: "Donation logs were replaced by donation autoboards" })
+  if (selected.includes("donation_log")) return yield* new InvalidRequest({ message: "Donation logs were replaced by donation autoboards" })
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })

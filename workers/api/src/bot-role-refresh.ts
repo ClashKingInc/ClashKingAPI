@@ -72,7 +72,7 @@ export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string,
   return { requestId, queued: users.length }
 })
 
-export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false) => Effect.gen(function* () {
+export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A single lease per member serializes manual and automatic refreshes. Token
   // fencing prevents a crashed/expired attempt acknowledging a newer revision.
@@ -104,17 +104,23 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
       ON CONFLICT(id) DO UPDATE SET completed_at=NULL,result=NULL,attempts=0,due_at=now(),revision=role_refresh_jobs.revision+1,updated_at=now()
       WHERE role_refresh_jobs.completed_at<now()-interval '1 hour' OR (role_refresh_jobs.attempts>=12 AND role_refresh_jobs.updated_at<now()-interval '1 hour')`
     yield* sql`DELETE FROM role_refresh_jobs WHERE id IN (SELECT id FROM role_refresh_jobs WHERE completed_at<now()-interval '7 days' ORDER BY completed_at LIMIT 100)`
-    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[]; roster_role_ids: string[]; role_treatment: "add" | "remove" | "both" }>`
-      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment FROM role_refresh_jobs job
+    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[]; roster_role_ids: string[]; role_treatment: "add" | "remove" | "both"; auto_role_treatment: "add" | "remove" | "both"; auto_role_blacklist_ids: string[] }>`
+      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment,server.auto_role_treatment,server.auto_role_blacklist_ids FROM role_refresh_jobs job
+      JOIN servers server ON server.id=job.server_id
       WHERE completed_at IS NULL AND due_at<=now() AND attempts<12
         AND (${includeRoster} OR NOT ('roster'=ANY(job.categories)))
         -- Older consumers apply both directions unconditionally. They must not
         -- claim a restricted policy and silently remove/add forbidden roles.
         AND (${includeRoleTreatment} OR job.role_treatment='both')
+        -- Independent roster/tenure jobs are not the legacy game-auto-refresh
+        -- feature. Older workers can keep those, but cannot bypass its policy.
+        AND (${includeAutomaticPolicy} OR job.request_id IS NOT NULL
+          OR job.categories <@ ARRAY['tenure','roster']::text[]
+          OR (server.auto_role_treatment='both' AND cardinality(server.auto_role_blacklist_ids)=0))
         AND (${requestId ?? null}::text IS NULL OR request_id=${requestId ?? null})
         AND (${serverId ?? null}::text IS NULL OR server_id=${serverId ?? null})
         AND NOT EXISTS(SELECT 1 FROM role_refresh_leases lease WHERE lease.server_id=job.server_id AND lease.user_id=job.user_id AND lease.expires_at>now())
-      ORDER BY due_at,id LIMIT ${requestId ? 1 : 20} FOR UPDATE SKIP LOCKED`
+      ORDER BY due_at,job.id LIMIT ${requestId ? 1 : 20} FOR UPDATE OF job SKIP LOCKED`
     const jobs = []
     for (const row of candidates) {
       const lease = yield* sql<{ token: string; expires_at: string }>`INSERT INTO role_refresh_leases(server_id,user_id,job_id,revision,expires_at)
@@ -197,19 +203,27 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
-    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean"))
-    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true))
+    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
+    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true, body.includeAutomaticPolicy === true))
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/validate") {
     const body = object(yield* readBoundedJson(request, 8192))
     yield* requireInput(typeof body.id === "string" && typeof body.token === "string" && uuid.test(body.token)
       && Array.isArray(body.accountTags) && body.accountTags.every(tag => typeof tag === "string"))
     const sql = yield* SqlClient.SqlClient
+    const policy = body.automaticRoleTreatment === undefined ? "both" : body.automaticRoleTreatment
+    const blacklist = body.automaticBlacklistRoles === undefined ? [] : body.automaticBlacklistRoles
+    yield* requireInput(typeof policy === "string" && ["add","remove","both"].includes(policy)
+      && Array.isArray(blacklist) && blacklist.every(snowflake))
     const rows = yield* sql<{ valid: boolean }>`SELECT true AS valid FROM role_refresh_jobs job
       JOIN role_refresh_leases lease ON lease.job_id=job.id AND lease.revision=job.revision
       JOIN servers server ON server.id=job.server_id
       WHERE job.id=${String(body.id)} AND lease.token=${String(body.token)}::uuid AND lease.expires_at>now()
         AND (job.request_id IS NOT NULL OR server.autoeval_enabled OR job.categories <@ ARRAY['tenure','roster']::text[])
+        -- Recheck policy even if a stale/missing member cache prevented the
+        -- settings update from revising this particular queued job.
+        AND (job.request_id IS NOT NULL OR job.categories <@ ARRAY['tenure','roster']::text[]
+          OR (server.auto_role_treatment=${String(policy)} AND server.auto_role_blacklist_ids=${blacklist as string[]}::text[]))
         AND ARRAY(SELECT tag FROM player_links WHERE user_id=job.user_id AND hidden=false ORDER BY tag)
           = ARRAY(SELECT unnest(${body.accountTags as string[]}::text[]) ORDER BY 1)`
     if (rows.length > 0 && typeof body.rosterFingerprint === "string") {

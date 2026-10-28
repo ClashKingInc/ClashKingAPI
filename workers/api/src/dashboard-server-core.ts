@@ -417,11 +417,11 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
   }))
 }))
 
-const settingsFields: Readonly<Record<string, string>> = { role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
-const roleRefreshSettings = new Set(["role_leave_delay_minutes", "nickname_rule", "non_family_nickname_rule", "change_nickname", "flair_non_family", "auto_eval_nickname", "autoeval"])
+const settingsFields: Readonly<Record<string, string>> = { auto_eval_role_treatment: "auto_role_treatment", auto_eval_blacklist_roles: "auto_role_blacklist_ids", role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
+const roleRefreshSettings = new Set(["auto_eval_role_treatment", "auto_eval_blacklist_roles","role_leave_delay_minutes", "nickname_rule", "non_family_nickname_rule", "change_nickname", "flair_non_family", "auto_eval_nickname", "autoeval"])
 const loadSettings = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
+  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, auto_role_treatment AS auto_eval_role_treatment, auto_role_blacklist_ids AS auto_eval_blacklist_roles, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
     jsonb_build_object('clan', link_parse_clan, 'army', link_parse_army, 'player', link_parse_player, 'base', link_parse_base, 'show', link_parse_show) AS link_parse FROM servers WHERE id = ${serverId}`
   const row = yield* requireRow(rows, "Server not found")
   const countdowns = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NULL ORDER BY type`
@@ -433,6 +433,12 @@ const loadSettings = (serverId: string) => Effect.gen(function* () {
 const updateSettings = (serverId: string, body: JsonRecord) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   if (body.role_leave_delay_minutes !== undefined && (!Number.isInteger(body.role_leave_delay_minutes) || Number(body.role_leave_delay_minutes) < 5 || Number(body.role_leave_delay_minutes) > 60)) return yield* new InvalidRequest({ message: "Leave delay must be an integer from 5 to 60 minutes" })
+  if (body.auto_eval_role_treatment !== undefined && (typeof body.auto_eval_role_treatment !== "string" || !["add","remove","both"].includes(body.auto_eval_role_treatment))) return yield* new InvalidRequest({message:"Invalid automatic role treatment"})
+  if (body.auto_eval_blacklist_roles !== undefined) {
+    if (!Array.isArray(body.auto_eval_blacklist_roles) || body.auto_eval_blacklist_roles.length > 250) return yield* new InvalidRequest({message:"Invalid automatic refresh exclusion roles"})
+    for (const id of body.auto_eval_blacklist_roles) yield* discordDestinationId(id,"auto_eval_blacklist_roles")
+    body = {...body,auto_eval_blacklist_roles:[...new Set(body.auto_eval_blacklist_roles as string[])].sort()}
+  }
   if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
   for (const field of ["autoeval_log", "full_whitelist_role"]) if (body[field] !== undefined && body[field] !== null) yield* discordDestinationId(body[field], field)
   yield* sql.withTransaction(Effect.gen(function* () {
@@ -488,7 +494,7 @@ const settingsOperation = (input: DashboardServerOperationInput) => database("Se
     return operation === "updateRoleSettings" ? { message: "Role settings updated.", server_id: serverId } : { message: "Server settings updated successfully", server_id: serverId, updated_fields: Object.keys(body).length }
   }
   const settings = yield* loadSettings(serverId)
-  if (operation === "roleSettings") return { server_id: serverId, change_nickname: record(settings).change_nickname, ...optional("nickname_rule", record(settings).nickname_rule), ...optional("non_family_nickname_rule", record(settings).non_family_nickname_rule), flair_non_family: record(settings).flair_non_family, auto_eval_status: settings.autoeval, role_leave_delay_minutes: record(settings).role_leave_delay_minutes, auto_eval_nickname: settings.auto_eval_nickname, ...optional("autoeval_log", record(settings).autoeval_log) }
+  if (operation === "roleSettings") return { server_id: serverId, change_nickname: record(settings).change_nickname, ...optional("nickname_rule", record(settings).nickname_rule), ...optional("non_family_nickname_rule", record(settings).non_family_nickname_rule), flair_non_family: record(settings).flair_non_family, auto_eval_status: settings.autoeval, auto_eval_role_treatment: record(settings).auto_eval_role_treatment, auto_eval_blacklist_roles: record(settings).auto_eval_blacklist_roles, role_leave_delay_minutes: record(settings).role_leave_delay_minutes, auto_eval_nickname: settings.auto_eval_nickname, ...optional("autoeval_log", record(settings).autoeval_log) }
   if (input.query.clan_settings === true) return { ...settings, clans: yield* clanSettingsRows(serverId) }
   return settings
 }))

@@ -1,3 +1,4 @@
+import { dispatchBotRoleMembers } from "./bot-role-members.js"
 import { dispatchBotWarStatistics } from "./bot-war-statistics.js"
 import { dispatchBotWarStatus } from "./bot-war-status.js"
 import { dispatchBotSeasonSummary } from "./bot-season-summary.js"
@@ -333,6 +334,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const roleMembersResponse = yield* dispatchBotRoleMembers(request, bindings)
+    if (roleMembersResponse) return roleMembersResponse
     const botWarStatisticsResponse = yield* dispatchBotWarStatistics(request)
     if (botWarStatisticsResponse !== undefined) return botWarStatisticsResponse
     const botWarStatusResponse = yield* dispatchBotWarStatus(request)

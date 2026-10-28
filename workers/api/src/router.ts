@@ -1,3 +1,4 @@
+import { dispatchBotGraphTotal } from "./bot-graph-total.js"
 import { dispatchClanMemberWarning } from "./clan-member-warning.js"
 import { dispatchBotUserRosters } from "./bot-user-rosters.js"
 import { dispatchBotStatus } from "./bot-status.js"
@@ -361,6 +362,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (userRostersResponse !== undefined) return userRostersResponse
     const botStatusResponse = yield* dispatchBotStatus(request,bindings)
     if (botStatusResponse !== undefined) return botStatusResponse
+    const graphTotalResponse=yield* dispatchBotGraphTotal(request)
+    if(graphTotalResponse!==undefined)return graphTotalResponse
     const dailyGraphResponse = yield* dispatchBotDailyGraph(request)
     if (dailyGraphResponse !== undefined) return dailyGraphResponse
     const botClanStatsResponse = yield* dispatchBotClanStats(request)

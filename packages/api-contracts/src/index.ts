@@ -88,3 +88,5 @@ export const endpoints = {
 } as const
 
 export * from "./clan-member-warning.js"
+
+export * from "./bot-graph-total.js"

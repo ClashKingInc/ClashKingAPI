@@ -1,5 +1,6 @@
 import { dispatchBotCapitalTrophyHistory } from "./bot-capital-trophy-history.js"
 import { dispatchBotGraphTotal } from "./bot-graph-total.js"
+import { dispatchClanWarEvents } from "./clan-war-events.js"
 import { dispatchClanMemberWarning } from "./clan-member-warning.js"
 import { dispatchBotUserRosters } from "./bot-user-rosters.js"
 import { dispatchBotStatus } from "./bot-status.js"
@@ -358,6 +359,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botPlayerIdentityResponse !== undefined) return botPlayerIdentityResponse
     const botPlayerHistoryResponse = yield* dispatchBotPlayerHistory(request)
     if (botPlayerHistoryResponse !== undefined) return botPlayerHistoryResponse
+    const warEventsResponse=yield* dispatchClanWarEvents(request)
+    if(warEventsResponse!==undefined)return warEventsResponse
     const warningResponse = yield* dispatchClanMemberWarning(request)
     if (warningResponse !== undefined) return warningResponse
     const userRostersResponse = yield* dispatchBotUserRosters(request)

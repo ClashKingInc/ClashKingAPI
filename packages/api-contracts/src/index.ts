@@ -55,7 +55,7 @@ import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
-export const endpoints = {
+const coreEndpoints = {
   aiNotice: AiNoticeGetEndpoint,
   acknowledgeAiNotice: AiNoticeAcceptEndpoint,
   ...legacyPublicEndpoints,
@@ -74,9 +74,7 @@ export const endpoints = {
   createAppAnnouncement: AppAnnouncementCreateEndpoint,
   updateAppAnnouncement: AppAnnouncementUpdateEndpoint,
   archiveAppAnnouncement: AppAnnouncementArchiveEndpoint,
-  ...botEndpoints,
-  ...dashboardEndpoints,
-  ...expoEndpoints,
+
   appConfig: AppConfigEndpoint,
   homeActivity: HomeActivityEndpoint,
   health: HealthEndpoint,
@@ -86,6 +84,14 @@ export const endpoints = {
   billingStripeWebhook: BillingStripeWebhookEndpoint,
   mediaFile: MediaFileEndpoint,
 } as const
+
+// Keep each contract group named in declarations rather than serializing the
+// whole expanded schema tree, which exceeds TypeScript's declaration limit.
+type EndpointMap = Omit<typeof coreEndpoints, keyof typeof botEndpoints | keyof typeof dashboardEndpoints | keyof typeof expoEndpoints>
+  & Omit<typeof botEndpoints, keyof typeof dashboardEndpoints | keyof typeof expoEndpoints>
+  & Omit<typeof dashboardEndpoints, keyof typeof expoEndpoints>
+  & typeof expoEndpoints
+export const endpoints: EndpointMap = { ...coreEndpoints, ...botEndpoints, ...dashboardEndpoints, ...expoEndpoints }
 
 export * from "./clan-member-warning.js"
 

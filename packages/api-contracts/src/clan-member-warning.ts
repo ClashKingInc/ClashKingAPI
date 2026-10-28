@@ -7,3 +7,7 @@ const shared={path:"/v2/server/:serverId/clan/:clanTag/member-warning" as const,
 export const ClanMemberWarningGet=defineEndpoint({...shared,operationId:"clanMemberWarningGet",method:"GET",auth:"server-manager-read",body:NoBody,bodyMode:"none",summary:"Read a linked clan's member threshold warning"})
 export const ClanMemberWarningPut=defineEndpoint({...shared,operationId:"clanMemberWarningPut",method:"PUT",auth:"server-manager-write",body:ClanMemberWarning,bodyMode:"json",summary:"Configure a linked clan's member threshold warning"})
 export const ClanMemberWarningDelete=defineEndpoint({...shared,operationId:"clanMemberWarningDelete",method:"DELETE",auth:"server-manager-write",body:NoBody,bodyMode:"none",summary:"Disable a linked clan's member threshold warning"})
+
+const warEvents={path:"/v2/server/:serverId/clan/:clanTag/war-events" as const,pathParams:Schema.Struct({serverId:DecimalSnowflake,clanTag:Schema.String}),query:NoQuery,response:Schema.Struct({enabled:Schema.Boolean}),responseMode:"json" as const,successStatus:200 as const}
+export const ClanWarEventsGet=defineEndpoint({...warEvents,operationId:"clanWarEventsGet",method:"GET",auth:"server-manager-read",body:NoBody,bodyMode:"none",summary:"Read automatic Discord war-event configuration"})
+export const ClanWarEventsPut=defineEndpoint({...warEvents,operationId:"clanWarEventsPut",method:"PUT",auth:"server-manager-write",body:Schema.Struct({enabled:Schema.Boolean}),bodyMode:"json",summary:"Enable or disable automatic Discord war events for a linked clan"})

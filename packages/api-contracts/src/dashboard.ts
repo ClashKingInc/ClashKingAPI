@@ -1,3 +1,4 @@
+import { ClanWarEventsGet, ClanWarEventsPut, ClanMemberWarningGet, ClanMemberWarningPut, ClanMemberWarningDelete } from "./clan-member-warning.js"
 import { ClanVerificationEndpoint, StartClanVerificationEndpoint, CheckClanVerificationEndpoint } from "./dashboard-clan-verification.js"
 export * from "./dashboard-clan-verification.js"
 import { ServerClanLinksEndpoint, CreateClanRosterLinkEndpoint } from "./dashboard-clan-links.js"
@@ -18,6 +19,11 @@ export * from "./roster-configuration.js"
 import { rosterConfigurationEndpoints } from "./roster-configuration.js"
 
 export const dashboardEndpoints = {
+  clanWarEventsGet: ClanWarEventsGet,
+  clanWarEventsPut: ClanWarEventsPut,
+  clanMemberWarningGet: ClanMemberWarningGet,
+  clanMemberWarningPut: ClanMemberWarningPut,
+  clanMemberWarningDelete: ClanMemberWarningDelete,
   ...rosterConfigurationEndpoints,
   clanVerification: ClanVerificationEndpoint,
   startClanVerification: StartClanVerificationEndpoint,

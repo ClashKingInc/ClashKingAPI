@@ -7,14 +7,13 @@ import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailab
 import { correctTag } from "./home.js"
 
 export const verificationWords = ["apple", "tiger", "lemon", "mango", "peach", "berry", "panda", "zebra", "otter", "eagle", "maple", "river", "ocean", "beach", "cloud", "forest", "garden", "planet", "rocket", "candle"] as const
-// Equal-width buckets avoid modulo bias for a word count that does not divide
-// 2^32. Reject the tiny tail instead of giving early words extra outcomes.
+// Every accepted byte is already a valid index with equal probability. Reject
+// out-of-range bytes instead of transforming them with modulo or rounding.
 const randomWordIndex = () => {
-  const width = Math.floor(0x1_0000_0000 / verificationWords.length)
-  const limit = width * verificationWords.length
-  let sample: number
-  do { sample = crypto.getRandomValues(new Uint32Array(1))[0]! } while (sample >= limit)
-  return Math.floor(sample / width)
+  for (;;) {
+    const bytes = crypto.getRandomValues(new Uint8Array(32))
+    for (const value of bytes) if (value < verificationWords.length) return value
+  }
 }
 const nextWordIndex = (index: number) => index + 1 === verificationWords.length ? 0 : index + 1
 interface VerificationRow {

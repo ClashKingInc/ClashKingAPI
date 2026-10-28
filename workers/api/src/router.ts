@@ -1,3 +1,4 @@
+import { dispatchBotSeasonSummary } from "./bot-season-summary.js"
 import { dispatchBotPlayerProgress } from "./bot-player-progress.js"
 import { dispatchBotTaskProgress } from "./bot-task-progress.js"
 import { dispatchBotModerationMedia } from "./bot-moderation-media.js"
@@ -330,6 +331,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const botSeasonSummaryResponse = yield* dispatchBotSeasonSummary(request)
+    if (botSeasonSummaryResponse !== undefined) return botSeasonSummaryResponse
     const botPlayerProgressResponse = yield* dispatchBotPlayerProgress(request)
     if (botPlayerProgressResponse !== undefined) return botPlayerProgressResponse
     const botPlayerSeasonResponse = yield* dispatchBotPlayerSeason(request)

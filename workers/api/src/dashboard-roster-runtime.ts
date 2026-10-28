@@ -213,6 +213,8 @@ interface RosterRow {
 }
 
 interface RosterMemberRow {
+  readonly member_group_id: string | null
+  readonly member_group_name: string | null
   readonly cached_discord?: { user?: { username?: string; global_name?: string; avatar?: string | null }; nick?: string; avatar?: string | null } | null
   readonly discord_cache_ready?: boolean
   readonly discord_guild_id: string
@@ -272,6 +274,8 @@ const memberJson = (row: RosterMemberRow) => ({
 })
 
 const builderMemberJson = (row: RosterMemberRow) => ({
+  memberGroupId: row.member_group_id,
+  memberGroupName: row.member_group_name,
   playerTag: row.tag,
   playerName: row.name,
   clanTag: row.current_clan_tag,
@@ -294,13 +298,14 @@ const builderMemberJson = (row: RosterMemberRow) => ({
 const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
   "Unable to load roster members",
   sql<RosterMemberRow>`
-    SELECT member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
+    SELECT member.member_group_id::text, member_label.name AS member_group_name, member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
            member.league_id, member.league_name, member.hero_level_sum, member.max_percent, member.war_preference,
            link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url,
            GREATEST(member.last_online, (SELECT max(seen_at) FROM player_online_events activity WHERE activity.tag = member.tag)) AS last_online,
            member.refreshed_at, member.signup_answers, roster.server_id AS discord_guild_id, cached.data AS cached_discord,
            shard.application_id IS NOT NULL AS discord_cache_ready
     FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
+    LEFT JOIN roster_member_groups member_label ON member_label.id = member.member_group_id
     LEFT JOIN player_links link ON link.tag = member.tag
     LEFT JOIN discord_cache.guilds guild ON guild.id = roster.server_id AND guild.available AND guild.members_complete AND guild.metadata_complete
     LEFT JOIN discord_cache.gateway_shards shard ON shard.application_id = guild.application_id AND shard.shard_id = guild.shard_id
@@ -845,17 +850,24 @@ const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
     )
   `)
   yield* lockRosterMembership(sql, targetServerId, [id])
+  // Labels belong to a server. Same-server copies retain their label settings;
+  // cross-server copies start in Main rather than leaking foreign configuration.
+  if (sameServer) yield* database("Unable to copy roster labels", sql`
+    INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id, signup_enabled, position, role_id)
+    SELECT ${id}::uuid, member_group_id, server_id, signup_enabled, position, role_id
+    FROM roster_member_group_settings WHERE roster_id = ${row.id}::uuid
+  `)
   if (members.length > 0) {
     yield* database("Unable to clone roster members", sql`
       INSERT INTO roster_members (
         roster_id, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
         league_id, league_name, hero_level_sum, max_percent, war_preference,
         discord_user_id, discord_username, discord_avatar_url, last_online,
-        refreshed_at, signup_answers, position
+        refreshed_at, signup_answers, position, member_group_id
       ) SELECT ${id}::uuid, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
                league_id, league_name, hero_level_sum, max_percent, war_preference,
                discord_user_id, discord_username, discord_avatar_url, last_online,
-               refreshed_at, signup_answers, position
+               refreshed_at, signup_answers, position, CASE WHEN ${sameServer} THEN member_group_id ELSE NULL END
         FROM roster_members WHERE roster_id = ${row.id}::uuid
     `)
   }
@@ -1995,14 +2007,20 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
         `
         if (inserted.length !== 1) return yield* new RosterConflict({ message: "Approved add account snapshot is unavailable" })
       } else if (change.action === "move") {
+        // Preserve the player's label without enabling destination signup or
+        // copying a source roster's Discord role configuration.
+        yield* sql`INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id)
+          SELECT ${change.toRosterId}::uuid, member_group_id, ${serverId} FROM roster_members
+          WHERE roster_id = ${change.fromRosterId}::uuid AND tag = ${change.playerTag} AND member_group_id IS NOT NULL
+          ON CONFLICT DO NOTHING`
         const inserted = yield* sql<{ readonly tag: string }>`
           INSERT INTO roster_members (roster_id, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
             war_preference, discord_user_id, discord_username, discord_avatar_url, last_online, position,
-            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at)
+            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at, member_group_id)
           SELECT ${change.toRosterId}::uuid, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
             war_preference, discord_user_id, discord_username, discord_avatar_url, last_online,
             COALESCE((SELECT max(position) + 1 FROM roster_members WHERE roster_id = ${change.toRosterId}::uuid), 0),
-            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at
+            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at, member_group_id
           FROM roster_members WHERE roster_id = ${change.fromRosterId}::uuid AND tag = ${change.playerTag} RETURNING tag
         `
         if (inserted.length !== 1) return yield* new RosterConflict({ message: "Approved move no longer matches roster state" })

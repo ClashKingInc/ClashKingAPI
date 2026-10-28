@@ -40,6 +40,7 @@ import { dispatchBotManualReminders } from "./bot-manual-reminders.js"
 import { dispatchGiveawayRuntime } from "./giveaway-dispatch.js"
 import { dispatchTicketRuntime } from "./persistent-runtime.js"
 import { dispatchBotRuntime } from "./bot-runtime.js"
+import { dispatchDashboardRosterConfiguration } from "./dashboard-roster-configuration.js"
 import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
 import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
 import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
@@ -388,6 +389,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (aiContextResponse !== undefined) return aiContextResponse
     const aiUsageResponse = yield* dispatchDashboardRosterAIUsage(request, bindings.AI_USAGE_SECRET)
     if (aiUsageResponse !== undefined) return aiUsageResponse
+    const rosterConfigurationResponse = yield* dispatchDashboardRosterConfiguration(request)
+    if (rosterConfigurationResponse !== undefined) return rosterConfigurationResponse
     const rosterResponse = yield* dispatchDashboardRoster(request, bindings)
     if (rosterResponse !== undefined) return rosterResponse
     const miscResponse = yield* dispatchDashboardMisc(request, bindings)

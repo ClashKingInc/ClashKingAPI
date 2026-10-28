@@ -127,9 +127,6 @@ for (const endpointMap of endpointMaps) {
     if (endpoint.path.startsWith("/v2/runtime/")) {
       throw new Error(`Deferred bot runtime cannot be advertised in OpenAPI: ${endpoint.operationId}`)
     }
-    if (/^\/v2\/server\/:[^/]+\/(?:roster-member-groups(?:\/:[^/]+)?|rosters\/:[^/]+\/member-groups)$/u.test(endpoint.path)) {
-      throw new Error(`Deferred roster configuration cannot be advertised in OpenAPI: ${endpoint.operationId}`)
-    }
     const key = `${endpoint.method} ${normalizedPath(endpoint.path)}`
     const existing = endpoints.get(key)
     if (existing !== undefined) {

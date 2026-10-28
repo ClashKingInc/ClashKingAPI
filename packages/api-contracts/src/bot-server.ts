@@ -121,6 +121,8 @@ const RosterSummary = Schema.Struct({
   updatedAt: Schema.String,
 })
 const RosterMember = Schema.Struct({
+  memberGroupId: Schema.NullOr(Schema.String),
+  memberGroupName: Schema.NullOr(Schema.String),
   playerTag: Schema.String,
   playerName: Schema.String,
   clanTag: Schema.NullOr(Schema.String),

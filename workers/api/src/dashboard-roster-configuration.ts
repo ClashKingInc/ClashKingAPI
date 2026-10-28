@@ -1,25 +1,22 @@
-// Reference-only: this new configuration dispatcher is not mounted by the API.
-// Preserved for the later Bot/configuration design and its isolated tests.
 import { DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEndpoint,
   DashboardUpdateRosterMemberGroupEndpoint, DashboardDeleteRosterMemberGroupEndpoint,
-  DashboardReplaceRosterMemberGroupsEndpoint } from "@clashking/api-contracts/deferred-runtime"
-import { DecimalSnowflake, requireEndpointSuccessStatus } from "@clashking/api-contracts"
+  DashboardAssignRosterMemberGroupEndpoint } from "@clashking/api-contracts"
+import { requireEndpointSuccessStatus } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import { Conflict, DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { Conflict, DatabaseFailure, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import { ServerAuthorization } from "./server-authorization.js"
-import { DiscordApi } from "./discord-api.js"
 import { readBoundedJson } from "./request-body.js"
-import { lockRosterMembership } from "./roster-interaction-membership.js"
+import { lockRosterMembership } from "./dashboard-roster-membership.js"
 
 const endpoints = [DashboardCreateRosterMemberGroupEndpoint, DashboardRosterMemberGroupsEndpoint,
-  DashboardUpdateRosterMemberGroupEndpoint, DashboardDeleteRosterMemberGroupEndpoint, DashboardReplaceRosterMemberGroupsEndpoint] as const
+  DashboardUpdateRosterMemberGroupEndpoint, DashboardDeleteRosterMemberGroupEndpoint, DashboardAssignRosterMemberGroupEndpoint] as const
 export const dashboardRosterConfigurationRoutes = [
+  { method: "PATCH", path: "/v2/server/:serverId/rosters/:rosterId/member-label" },
   { method: "GET", path: "/v2/server/:serverId/roster-member-groups" },
   { method: "POST", path: "/v2/server/:serverId/roster-member-groups" },
   { method: "PATCH", path: "/v2/server/:serverId/roster-member-groups/:memberGroupId" },
   { method: "DELETE", path: "/v2/server/:serverId/roster-member-groups/:memberGroupId" },
-  { method: "PUT", path: "/v2/server/:serverId/rosters/:rosterId/member-groups" },
 ] as const
 interface GroupRow { readonly id: string; readonly name: string; readonly position: number }
 const databaseFailure = (cause: unknown) => new DatabaseFailure({ cause, message: "Roster configuration operation failed" })
@@ -37,19 +34,8 @@ const lockServer = (sql: SqlClient.SqlClient, serverId: string) => Effect.gen(fu
 const listGroups = (sql: SqlClient.SqlClient, serverId: string) => sql<GroupRow>`SELECT id::text, name, position
   FROM roster_member_groups WHERE server_id = ${serverId} ORDER BY position, id`
 
-export const validateRosterRoleReferences = (serverId: string, roleIds: ReadonlyArray<string>) => Effect.gen(function* () {
-  if (roleIds.length === 0) return
-  const discord = yield* DiscordApi
-  const roles = yield* discord.request(`/guilds/${serverId}/roles`).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ id: DecimalSnowflake, managed: Schema.Boolean })))),
-    Effect.catchTag("SchemaError", (cause) => Effect.fail(new UpstreamUnavailable({ cause, message: "Discord role data failed validation" }))),
-  )
-  const assignable = new Set(roles.filter((role) => !role.managed && role.id !== serverId).map((role) => role.id))
-  if (roleIds.some((id) => !assignable.has(id))) return yield* new InvalidRequest({ message: "A roster role is missing, managed, or @everyone" })
-})
-
 export const dispatchDashboardRosterConfiguration = (request: Request): Effect.Effect<
-  Response | undefined, ApiFailure, SqlClient.SqlClient | ServerAuthorization | DiscordApi
+  Response | undefined, ApiFailure, SqlClient.SqlClient | ServerAuthorization
 > => Effect.gen(function* () {
   const parts = new URL(request.url).pathname.split("/")
   const endpoint = endpoints.find((candidate) => candidate.method === request.method
@@ -63,6 +49,31 @@ export const dispatchDashboardRosterConfiguration = (request: Request): Effect.E
   const sql = yield* SqlClient.SqlClient
   let result: unknown
   if (endpoint.operationId === DashboardRosterMemberGroupsEndpoint.operationId) result = { items: yield* listGroups(sql, serverId) }
+  else if (endpoint.operationId === DashboardAssignRosterMemberGroupEndpoint.operationId) {
+    const body = yield* readBody(request, DashboardAssignRosterMemberGroupEndpoint.body)
+    const rosterId = rawParams.rosterId!.toLowerCase()
+    const tags = [...new Set(body.playerTags)]
+    const groupId = body.memberGroupId?.toLowerCase() ?? null
+    result = yield* sql.withTransaction(Effect.gen(function* () {
+      // Use the same server-then-roster lock order as configuration changes.
+      // This prevents deleting a label between validation and assignment.
+      yield* lockServer(sql, serverId)
+      yield* lockRosterMembership(sql, serverId, [rosterId])
+      const members = yield* sql`SELECT tag FROM roster_members WHERE roster_id = ${rosterId}::uuid AND tag = ANY(${tags}::text[])`
+      if (members.length !== tags.length) return yield* new InvalidRequest({ message: "Every player must already belong to this roster" })
+      if (groupId !== null) {
+        const groups = yield* listGroups(sql, serverId)
+        if (!groups.some(group => group.id === groupId)) return yield* new InvalidRequest({ message: "The label does not belong to this server" })
+        // Manager assignment does not enable public signup or assign Discord roles.
+        yield* sql`INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id)
+          VALUES (${rosterId}::uuid, ${groupId}::uuid, ${serverId}) ON CONFLICT DO NOTHING`
+      }
+      yield* sql`UPDATE roster_members SET member_group_id = ${groupId}::uuid WHERE roster_id = ${rosterId}::uuid AND tag = ANY(${tags}::text[])`
+      yield* sql`UPDATE rosters SET revision = revision + 1, updated_at = now() WHERE id = ${rosterId}::uuid`
+      yield* sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${rosterId}::uuid`
+      return { updated: tags.length }
+    }))
+  }
   else if (request.method === "POST") {
     const body = yield* readBody(request, DashboardCreateRosterMemberGroupEndpoint.body)
     result = yield* sql.withTransaction(Effect.gen(function* () {
@@ -74,40 +85,6 @@ export const dispatchDashboardRosterConfiguration = (request: Request): Effect.E
       const rows = yield* sql<GroupRow>`INSERT INTO roster_member_groups (server_id, name, position)
         VALUES (${serverId}, ${name}, ${body.position ?? groups.length}) RETURNING id::text, name, position`
       return { group: rows[0]! }
-    }))
-  } else if (request.method === "PUT") {
-    const rosterId = rawParams.rosterId!.toLowerCase()
-    const body = yield* readBody(request, DashboardReplaceRosterMemberGroupsEndpoint.body)
-    const groups = body.groups.map((group) => ({ ...group, member_group_id: group.member_group_id.toLowerCase() }))
-    const ids = groups.map((group) => group.member_group_id)
-    if (new Set(ids).size !== ids.length) return yield* invalidInput()
-    yield* validateRosterRoleReferences(serverId, groups.flatMap((group) => group.role_id === null ? [] : [group.role_id]))
-    result = yield* sql.withTransaction(Effect.gen(function* () {
-      yield* lockServer(sql, serverId)
-      yield* lockRosterMembership(sql, serverId, [rosterId])
-      const available = new Set((yield* listGroups(sql, serverId)).map((group) => group.id))
-      if (ids.some((id) => !available.has(id))) return yield* new InvalidRequest({ message: "An account group does not belong to this server" })
-      // Omitted settings still referenced by a member are retained but no
-      // longer offered for signup. Never silently reassign those members.
-      yield* sql`UPDATE roster_member_group_settings SET signup_enabled = false
-        WHERE roster_id = ${rosterId}::uuid AND NOT (member_group_id = ANY(${ids}::uuid[]))`
-      yield* sql`DELETE FROM roster_member_group_settings setting WHERE roster_id = ${rosterId}::uuid
-        AND NOT (member_group_id = ANY(${ids}::uuid[])) AND NOT EXISTS
-        (SELECT 1 FROM roster_members member WHERE member.roster_id = setting.roster_id AND member.member_group_id = setting.member_group_id)`
-      for (const group of groups) {
-        yield* sql`INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id, signup_enabled, position, role_id)
-          VALUES (${rosterId}::uuid, ${group.member_group_id}::uuid, ${serverId}, ${group.signup_enabled}, ${group.position}, ${group.role_id})
-          ON CONFLICT (roster_id, member_group_id) DO UPDATE SET signup_enabled = EXCLUDED.signup_enabled,
-            position = EXCLUDED.position, role_id = EXCLUDED.role_id`
-      }
-      const settings = yield* sql<{ id: string; name: string; position: number; signup_enabled: boolean; role_id: string | null }>`
-        SELECT setting.member_group_id::text AS id, account_group.name, setting.position, setting.signup_enabled, setting.role_id
-        FROM roster_member_group_settings setting JOIN roster_member_groups account_group ON account_group.id = setting.member_group_id
-        WHERE setting.roster_id = ${rosterId}::uuid ORDER BY setting.position, setting.member_group_id`
-      if (settings.length > 25) return yield* new Conflict({ message: "Existing roster account group configuration exceeds the supported limit", reason: "invalid_configuration" })
-      const encoded = yield* Schema.encodeUnknownEffect(DashboardReplaceRosterMemberGroupsEndpoint.response)({ groups: settings }).pipe(Effect.mapError(databaseFailure))
-      yield* sql`UPDATE rosters SET revision = revision + 1, updated_at = now() WHERE id = ${rosterId}::uuid`
-      return encoded
     }))
   } else {
     const id = rawParams.memberGroupId!.toLowerCase()
@@ -121,7 +98,8 @@ export const dispatchDashboardRosterConfiguration = (request: Request): Effect.E
         WHERE server_id = ${serverId} AND member_group_id = ${id}::uuid ORDER BY roster_id`
       yield* lockRosterMembership(sql, serverId, attached.map((row) => row.roster_id))
       if (body === undefined) {
-        if (attached.length > 0) return yield* new Conflict({ message: "Disable or unassign this account group before deleting it" })
+        const used = yield* sql`SELECT 1 FROM roster_members WHERE member_group_id = ${id}::uuid LIMIT 1`
+        if (used.length > 0) return yield* new Conflict({ message: "Move this label's players to Main or another label before deleting it" })
         yield* sql`DELETE FROM roster_member_groups WHERE server_id = ${serverId} AND id = ${id}::uuid`
         return undefined
       }
@@ -131,6 +109,7 @@ export const dispatchDashboardRosterConfiguration = (request: Request): Effect.E
         WHERE server_id = ${serverId} AND id = ${id}::uuid RETURNING id::text, name, position`
       yield* sql`UPDATE rosters SET revision = revision + 1, updated_at = now()
         WHERE id = ANY(${attached.map((row) => row.roster_id)}::uuid[])`
+      yield* sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ANY(${attached.map((row) => row.roster_id)}::uuid[])`
       return { group: rows[0]! }
     }))
   }

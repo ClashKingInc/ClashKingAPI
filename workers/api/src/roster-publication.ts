@@ -1,7 +1,7 @@
 export interface RosterPublicationInput {
   color?: number;
   id: string; name: string; description?: string | null; image?: string | null;
-  members: readonly { townhall: number; name: string }[];
+  members: readonly { townhall: number; name: string; member_group_name?: string | null }[];
   emojis: readonly { id: string; name: string; animated?: boolean }[];
   dashboardUrl: string; joinLabel: string; leaveLabel: string; viewLabel: string; mode: string;
 }
@@ -11,7 +11,7 @@ const clean = (value: string, limit: number) => value.replace(/[\\`*_~|<>[\]\r\n
 export function rosterPublications(input: RosterPublicationInput) {
   const lines = input.members.map(member => {
     const emoji = input.emojis.find(e => [String(member.townhall), `th${member.townhall}`, `townhall${member.townhall}`].includes(e.name.toLowerCase().replaceAll("_", "")));
-    return `${emoji ? `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>` : `🏰 ${member.townhall}`} ${clean(member.name, 25)}`;
+    return `${emoji ? `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>` : `🏰 ${member.townhall}`} ${clean(member.name, 25)}${member.member_group_name ? ` · ${clean(member.member_group_name, 49)}` : ""}`;
   });
   const refreshEmoji = input.emojis.find(emoji => emoji.name.toLowerCase() === "refresh");
   const staticMode = input.mode === "static";

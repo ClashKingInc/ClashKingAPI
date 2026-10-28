@@ -14,11 +14,11 @@ export * from "./dashboard-roster.js"
 export * from "./dashboard-server.js"
 export * from "./dashboard-server-extra.js"
 export * from "./dashboard-roster-extra.js"
-// These value schemas are still embedded in retained roster responses. The
-// new configuration endpoints are reference-only in ./deferred-runtime.
-export { RosterCapacity, RosterMemberGroupSetting, RosterBuilderMemberGroupSetting } from "./roster-configuration.js"
+export * from "./roster-configuration.js"
+import { rosterConfigurationEndpoints } from "./roster-configuration.js"
 
 export const dashboardEndpoints = {
+  ...rosterConfigurationEndpoints,
   clanVerification: ClanVerificationEndpoint,
   startClanVerification: StartClanVerificationEndpoint,
   checkClanVerification: CheckClanVerificationEndpoint,

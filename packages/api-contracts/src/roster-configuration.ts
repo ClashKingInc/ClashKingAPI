@@ -13,9 +13,6 @@ export const RosterMemberGroupSetting = Schema.Struct({ id: RuntimeUUID, name: G
   signup_enabled: Schema.Boolean, role_id: Schema.NullOr(DecimalSnowflake) })
 export const RosterBuilderMemberGroupSetting = Schema.Struct({ id: RuntimeUUID, name: GroupName, position: Position,
   signupEnabled: Schema.Boolean, roleId: Schema.NullOr(DecimalSnowflake) })
-// The request and five endpoint descriptors below are deferred Bot/configuration
-// references, exported only from ./deferred-runtime. The value schemas above
-// remain dependencies of retained roster payloads, without enabling new routes.
 export const RosterMemberGroupSettingsRequest = Schema.Struct({ groups: Schema.Array(Schema.Struct({
   member_group_id: RuntimeUUID, signup_enabled: Schema.Boolean, position: Position, role_id: Schema.NullOr(DecimalSnowflake),
 })).check(Schema.isMaxLength(25), Schema.makeFilter(groups => {
@@ -49,6 +46,7 @@ export const DashboardDeleteRosterMemberGroupEndpoint = defineEndpoint({
   auth: "server-write", body: NoBody, bodyMode: "none", pathParams: GroupPath, query: NoQuery,
   response: NoContent, responseMode: "none", successStatus: 204, errors, summary: "Delete an unassigned server account group",
 })
+// Signup and role configuration stays deferred until its consumers are wired.
 export const DashboardReplaceRosterMemberGroupsEndpoint = defineEndpoint({
   operationId: "dashboardReplaceRosterMemberGroups", method: "PUT", path: "/v2/server/:serverId/rosters/:rosterId/member-groups",
   auth: "server-write", body: RosterMemberGroupSettingsRequest, bodyMode: "json",
@@ -56,10 +54,17 @@ export const DashboardReplaceRosterMemberGroupsEndpoint = defineEndpoint({
   response: Schema.Struct({ groups: Schema.Array(RosterMemberGroupSetting) }), responseMode: "json", successStatus: 200, errors,
   summary: "Configure account signup groups and roles while retaining referenced disabled groups",
 })
+export const DashboardAssignRosterMemberGroupEndpoint = defineEndpoint({
+  operationId: "dashboardAssignRosterMemberGroup", method: "PATCH", path: "/v2/server/:serverId/rosters/:rosterId/member-label",
+  auth: "server-write", body: Schema.Struct({ playerTags: Schema.Array(Schema.String.check(Schema.isPattern(/^#[A-Z0-9]+$/u))).check(Schema.isMinLength(1), Schema.isMaxLength(25)), memberGroupId: Schema.NullOr(RuntimeUUID) }), bodyMode: "json",
+  pathParams: Schema.Struct({ serverId: DecimalSnowflake, rosterId: RuntimeUUID }), query: NoQuery,
+  response: Schema.Struct({ updated: Schema.Number }), responseMode: "json", successStatus: 200, errors,
+  summary: "Assign roster players to a server label, or Main with null",
+})
 export const rosterConfigurationEndpoints = {
+  dashboardAssignRosterMemberGroup: DashboardAssignRosterMemberGroupEndpoint,
   dashboardRosterMemberGroups: DashboardRosterMemberGroupsEndpoint,
   dashboardCreateRosterMemberGroup: DashboardCreateRosterMemberGroupEndpoint,
   dashboardUpdateRosterMemberGroup: DashboardUpdateRosterMemberGroupEndpoint,
   dashboardDeleteRosterMemberGroup: DashboardDeleteRosterMemberGroupEndpoint,
-  dashboardReplaceRosterMemberGroups: DashboardReplaceRosterMemberGroupsEndpoint,
 } as const

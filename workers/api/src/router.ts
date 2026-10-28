@@ -1,3 +1,4 @@
+import { dispatchBotTaskProgress } from "./bot-task-progress.js"
 import { dispatchBotModerationMedia } from "./bot-moderation-media.js"
 import { dispatchAiNotice } from "./ai-notice.js"
 import {
@@ -229,6 +230,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     yield* guardDashboardScope(request)
+    const taskProgress=yield* dispatchBotTaskProgress(request)
+    if(taskProgress!==undefined)return taskProgress
     const moderationMedia=yield* dispatchBotModerationMedia(request,bindings)
     if(moderationMedia!==undefined)return moderationMedia
     const aiNoticeResponse=yield* dispatchAiNotice(request)

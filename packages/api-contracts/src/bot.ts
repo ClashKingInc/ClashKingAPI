@@ -1,3 +1,5 @@
+import { BotTaskProgressEndpoint } from "./bot-task-progress.js"
+export { BotTaskProgressEndpoint } from "./bot-task-progress.js"
 import { BotModerationImageEndpoint } from "./bot-moderation.js"
 export { BotModerationImageEndpoint } from "./bot-moderation.js"
 import { botAdjacentEndpoints } from "./bot-adjacent.js"
@@ -85,6 +87,7 @@ export const botEndpoints = {
   playerSeasonStats: BotPlayerSeasonEndpoint,
   playerIdentity: BotPlayerIdentityEndpoint,
   playerClanHistory: BotPlayerClanTimelineEndpoint,
+  taskProgress: BotTaskProgressEndpoint,
   clanSeasonStats: BotClanSeasonStatsEndpoint,
   clanGames: BotClanGamesEndpoint,
   accounts: BotAccountsEndpoint,

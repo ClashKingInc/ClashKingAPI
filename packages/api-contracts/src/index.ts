@@ -90,3 +90,5 @@ export const endpoints = {
 export * from "./clan-member-warning.js"
 
 export * from "./bot-graph-total.js"
+
+export * from "./bot-capital-trophy-history.js"

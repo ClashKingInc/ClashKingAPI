@@ -120,8 +120,10 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
       createServerLink: (serverId, tag, userId, apiToken) => createDashboardServerLink(bindings, serverId, tag, userId, apiToken).pipe(
         Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(DiscordApi, discord)),
       deleteServerLink: (_serverId, tag) => deleteDashboardServerLink(bindings, tag).pipe(Effect.provideService(SqlClient.SqlClient, sql)),
-      serverClans: (serverId) => db(sql<{ tag: string; name: string }>`SELECT sc.tag, clan.name
+      serverClans: (serverId) => db(sql<{ tag: string; name: string; category: string | null; categoryOrder: number | null }>`SELECT sc.tag, clan.name, category.name category, category.position "categoryOrder"
         FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag
+        -- Imported category references must not reveal another server's label.
+        LEFT JOIN server_clan_categories category ON category.id=sc.category_id AND category.server_id=sc.server_id
         WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
       upsertBaseVote: (baseId, voterId, direction) => Effect.gen(function* () {
         const vote = direction === "up" ? 1 : -1

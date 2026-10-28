@@ -184,7 +184,7 @@ export const ClanSettingsResponse = Schema.Struct({
   updated_fields: Schema.Number,
   category: Schema.NullOr(ClanCategory),
 })
-export const ClanReference = Schema.Struct({ tag: Schema.String, name: Schema.String })
+export const ClanReference = Schema.Struct({ tag: Schema.String, name: Schema.String, category: Schema.optionalKey(Schema.NullOr(Schema.String)), categoryOrder: Schema.optionalKey(Schema.NullOr(Schema.Number)) })
 export const ServerClanListItem = Schema.Struct({
   tag: Schema.String,
   name: Schema.String,

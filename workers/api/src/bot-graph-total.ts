@@ -29,6 +29,12 @@ export const dispatchBotGraphTotal=(request:Request)=>Effect.gen(function*(){
     (SELECT count(DISTINCT member->>'tag') FROM jsonb_array_elements(COALESCE(raid.data->'members','[]'::jsonb)) member WHERE COALESCE((member->>'attacks')::int,0)>0) participants
    FROM capital_raid_history raid WHERE raid.clan_tag=${tag} AND raid.start_time>=${window.start} AND raid.start_time<${window.end} AND raid.state='ended'
   ) weekends`
+ }else if(query.metric==="capitalTrophies"){
+  // Use the last actual snapshot within the season. Never project today's
+  // value backward into a season with no recorded ranking observation.
+  rows=yield* sql<{value:string|null}>`SELECT capital_points::text value FROM leaderboard_history_clan_capital
+    WHERE clan_tag=${tag} AND location_id='global' AND date>=${window.start.toISOString().slice(0,10)}::date AND date<${window.end.toISOString().slice(0,10)}::date ORDER BY date DESC LIMIT 1`
+  if(!rows.length)rows=[{value:null}]
  }else if(query.metric==="activity"){
   rows=yield* sql<{value:string}>`SELECT count(*)::text value FROM player_online_events WHERE clan_tag=${tag} AND seen_at>=${window.start} AND seen_at<${window.end}`
  }else if(query.metric==="troopLevels"||query.metric==="heroLevels"){

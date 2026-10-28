@@ -1,3 +1,4 @@
+import { requireAiNotice } from "./ai-notice.js"
 import { dashboardEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -38,6 +39,7 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   }
   if (promptBytes > limit) return yield* new PayloadTooLarge({ message: "AI roster prompt is too large" })
   const principal = yield* (yield* AuthIdentity).requireUser(request)
+  yield* requireAiNotice(principal.userId)
   yield* (yield* ServerAuthorization).require(request, body.serverId, { section: "rosters", write: true })
   const sql = yield* SqlClient.SqlClient
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {

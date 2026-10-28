@@ -1,3 +1,5 @@
+export * from "./ai-notice.js"
+import { AiNoticeGetEndpoint, AiNoticeAcceptEndpoint } from "./ai-notice.js"
 export * from "./app-config.js"
 export * from "./admin.js"
 export * from "./bot.js"
@@ -54,6 +56,8 @@ import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
 export const endpoints = {
+  aiNotice: AiNoticeGetEndpoint,
+  acknowledgeAiNotice: AiNoticeAcceptEndpoint,
   ...legacyPublicEndpoints,
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,

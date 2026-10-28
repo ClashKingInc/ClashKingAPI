@@ -1,3 +1,4 @@
+import { dispatchAiNotice } from "./ai-notice.js"
 import {
   AppConfigResponse,
   GroupedCountsResponse,
@@ -227,6 +228,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     yield* guardDashboardScope(request)
+    const aiNoticeResponse=yield* dispatchAiNotice(request)
+    if(aiNoticeResponse!==undefined)return aiNoticeResponse
     const dashboardAccessResponse=yield* dispatchDashboardAccess(request)
     if(dashboardAccessResponse!==undefined)return dashboardAccessResponse
     const staticSections = staticMetadataSectionsForPath(url.pathname)

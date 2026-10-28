@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { resolve } from 'node:path'
 import pg from 'pg'
 
 const dsn = new URL(process.env.TEST_DATABASE_URL ?? '')
@@ -85,6 +86,12 @@ try {
   const empty=await (await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${date(200)}&time[before]=${date(200)}`)).json()
   assert.equal(empty.periods[0].availableDays,0);assert.equal(empty.periods[0].offense.meanTrophies,null)
   assert.equal(empty.periods[0].offense.perfectDayRate,null);assert.equal(empty.items.length,0)
+  if(process.env.CLASHKING_E2E_APP_REPO) {
+    const appCheck=spawn(process.execPath,[resolve(process.env.CLASHKING_E2E_APP_REPO,'scripts/e2e/legend-performance.mjs')],{
+      stdio:'inherit',env:{...process.env,CLASHKING_E2E_API_REPO:process.cwd(),CLASHKING_E2E_BASE_URL:`http://127.0.0.1:${port}`,CLASHKING_E2E_FIRST_DAY:first,CLASHKING_E2E_LAST_DAY:last},
+    })
+    const [code]=await once(appCheck,'exit');assert.equal(code,0,'App data path failed')
+  }
   // Previously stored 05:10 summaries must disappear until recalculated;
   // otherwise changing the reader's date math would silently mix day definitions.
   await db.query("UPDATE legend_day_performance SET source_window_start=source_window_start+interval '10 minutes',source_window_end=source_window_end+interval '10 minutes' WHERE day=$1",[first])

@@ -15,6 +15,7 @@ if(!dashboard)throw Error('Set CLASHKING_E2E_DASHBOARD_REPO to the local Dashboa
 const require=createRequire(join(repo,'package.json'));
 const pg=require('pg'),{build}=require('esbuild');
 const {SignJWT}=await import(require.resolve('jose'));
+const {AI_NOTICE_VERSION}=await import('@clashking/api-contracts');
 const database=process.env.CLASHKING_E2E_DATABASE_URL??'postgres://clashking_local:clashking_local@127.0.0.1:54330/clashking_dev';
 const databaseUrl=new URL(database);
 if(databaseUrl.protocol!=='postgres:'||databaseUrl.hostname!=='127.0.0.1'||databaseUrl.pathname!=='/clashking_dev'||databaseUrl.username!=='clashking_local')throw Error('Use the owned loopback clashking_dev database');
@@ -23,7 +24,7 @@ if(!Number.isInteger(port)||port<1024||port>65535)throw Error('Invalid local por
 const occupied=await new Promise(resolve=>{const socket=createConnection({host:'127.0.0.1',port});socket.once('connect',()=>{socket.destroy();resolve(true)});socket.once('error',()=>resolve(false));});
 if(occupied)throw Error('The requested isolated API port is occupied; refusing to use another process');
 const db=new pg.Client({connectionString:database}); await db.connect();
-const app='999999999999995701',actor='999999999999995702',server='999999999999995703',other='999999999999995704';
+const app='999999999999995701',actor='999999999999995702',server='999999999999995703',other='999999999999995704',secondUser='999999999999995705';
 const clan='#PYLQRRJC',enemy='#PYLQRRJY',tags=['#PYLQRRJP','#PYLQRRJQ','#PYLQRRJG'];
 const keys=Object.fromEntries(['DATA_ENCRYPTION_KEY','JWT_ACCESS_SECRET','JWT_REFRESH_SECRET','API_BOT_TOKEN','AI_USAGE_SECRET','STRIPE_WEBHOOK_SECRET'].map(key=>[key,randomBytes(32).toString('base64url')]));
 const directory=mkdtempSync(join(tmpdir(),'ck-roster-feedback-'));
@@ -39,10 +40,10 @@ const request=async(path,body,expected=200,token=userToken,method=body===undefin
 const userToken=await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setSubject(actor).setAudience('clashking-web').setIssuedAt().setExpirationTime('10m').sign(new TextEncoder().encode(keys.JWT_ACCESS_SECRET));
 try {
  assert((await db.query('SELECT id FROM servers WHERE id=ANY($1::text[])',[[server,other]])).rowCount===0,'Synthetic servers already exist');
- assert((await db.query('SELECT user_id FROM auth_users WHERE user_id=$1',[actor])).rowCount===0,'Synthetic actor already exists');
+ assert((await db.query('SELECT user_id FROM auth_users WHERE user_id=ANY($1::text[])',[[actor,secondUser]])).rowCount===0,'Synthetic actors already exist');
  assert((await db.query('SELECT tag FROM basic_clan WHERE tag=$1',[clan])).rowCount===0,'Synthetic clan already exists');
  assert((await db.query('SELECT tag FROM basic_player WHERE tag=ANY($1::text[])',[tags])).rowCount===0,'Synthetic tags already exist');
- await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord')",[actor]);seeded=true;
+ await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord'),($2,'discord')",[actor,secondUser]);seeded=true;
  await db.query("INSERT INTO servers(id,name) VALUES($1,'Local roster E2E'),($2,'Other local E2E')",[server,other]);
  await db.query('INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received,members) VALUES($1,$2,true,0,3,\'local\',0,0,$3)',[clan,'Local Family',JSON.stringify(tags.map(member))]);
  await db.query('INSERT INTO server_clans(tag,server_id) VALUES($1,$2)',[clan,server]);
@@ -53,6 +54,31 @@ try {
  const env={...process.env,CLASHKING_PERSISTENT_LOCAL_API:'1',CLASHKING_LOCAL_DATABASE_URL:database,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:`http://127.0.0.1:${provider.address().port}`,CLASHKING_LOCAL_STORAGE_ROOT:directory,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve(repo,'../clashking_assets/assets/static_data'),...Object.fromEntries(Object.entries(keys).map(([key,value])=>[`CLASHKING_LOCAL_${key}`,value]))};
  child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{cwd:repo,env,stdio:['ignore','pipe','pipe']});child.stdout.on('data',data=>logs+=data);child.stderr.on('data',data=>logs+=data);
  for(let i=0;i<200;i++){try{if((await fetch(origin+'/v2/health')).ok)break}catch{}await new Promise(r=>setTimeout(r,100));if(i===199)throw Error(logs.slice(-2000))}
+ // Exercise the actual notice gate before the existing assistant flow. No
+ // provider request or usage admission may happen until this person accepts.
+ const aiRequest={serverId:server,rosterIds:[],messages:[{role:'user',content:'Find unassigned family members'}]};
+ const initialNotice=await request('/v2/users/me/ai-notice');
+ assert(!initialNotice.acknowledged&&initialNotice.version===AI_NOTICE_VERSION,'New user notice state invalid');
+ const deniedNotice=await request('/v2/roster/ai/context',aiRequest,403);
+ assert(deniedNotice.message?.includes('AI notice'),'AI admission not blocked by notice');
+ assert((await db.query('SELECT count(*)::int AS n FROM roster_ai_usage WHERE discord_user_id=$1',[actor])).rows[0].n===0,'Denied notice created usage admission');
+ await request('/v2/users/me/ai-notice',{version:'outdated'},400);
+ await db.query('INSERT INTO user_settings(user_id,app,data) VALUES($1,$2,$3)',[actor,JSON.stringify({private_mode:true}),JSON.stringify({retained:'value'})]);
+ const acceptedNotice=await request('/v2/users/me/ai-notice',{version:AI_NOTICE_VERSION});
+ assert(acceptedNotice.acknowledged,'Current notice not accepted');
+ const storedNotice=(await db.query('SELECT app,data FROM user_settings WHERE user_id=$1',[actor])).rows[0];
+ assert(storedNotice.app.private_mode&&storedNotice.data.retained==='value'&&storedNotice.data.ai_notice.version===AI_NOTICE_VERSION&&storedNotice.data.ai_notice.acknowledged_at,'Notice overwrote other preferences or lacked timestamp');
+ const secondToken=await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setSubject(secondUser).setAudience('clashking-web').setIssuedAt().setExpirationTime('10m').sign(new TextEncoder().encode(keys.JWT_ACCESS_SECRET));
+ const secondNotice=await request('/v2/users/me/ai-notice',undefined,200,secondToken);
+ assert(!secondNotice.acknowledged,'Notice acceptance leaked to another person');
+ await request('/v2/roster/ai/context',aiRequest,403,secondToken);
+ await request('/v2/users/me/ai-notice',undefined,401,keys.API_BOT_TOKEN);
+ // A later notice revision invalidates this person's old acknowledgement.
+ await db.query("UPDATE user_settings SET data=jsonb_set(data,'{ai_notice,version}','\"outdated\"'::jsonb) WHERE user_id=$1",[actor]);
+ assert(!(await request('/v2/users/me/ai-notice')).acknowledged,'Stale notice accepted');
+ await request('/v2/roster/ai/context',aiRequest,403);
+ await request('/v2/users/me/ai-notice',{version:AI_NOTICE_VERSION});
+ console.log(JSON.stringify({aiNotice:'passed',checks:['new-user denial before AI admission','no usage before acceptance','current version required','per-person isolation','other preferences preserved','timestamp persisted','bot token rejected','stale acknowledgement denied'],externalAIRequests:0}));
  const context=await request('/v2/roster/ai/context',{serverId:server,rosterIds:[],messages:[{role:'user',content:'Find unassigned family members'}]});assert(context.context.attachments.length===0,'Empty roster family context failed');
  await build({entryPoints:[dashboard+'/workers/roster-assistant/family-context.ts'],bundle:true,platform:'node',format:'esm',outfile:directory+'/family.mjs'});
  await build({stdin:{contents:`import {executeAssistantEndpoint} from './workers/roster-assistant/api-client'; import {DashboardCreateRosterEndpoint} from '@clashking/api-contracts'; export const create=(origin,token,serverId,body)=>executeAssistantEndpoint(origin,token,DashboardCreateRosterEndpoint,{path:{},query:{server_id:serverId,unassigned_only:true},body});`,resolveDir:dashboard},bundle:true,platform:'node',format:'esm',outfile:directory+'/create.mjs'});
@@ -169,7 +195,7 @@ try {
   if(cwlIds.length)await db.query('DELETE FROM cwl_groups WHERE cwl_id=ANY($1::text[])',[cwlIds]);
   await db.query('DELETE FROM player_war_history WHERE player_tag=ANY($1::text[])',[tags]);for(const id of [...extraWarIds,...(warId?[warId]:[])]){await db.query('DELETE FROM war_archive_pending WHERE war_id=$1',[id]);await db.query('DELETE FROM wars WHERE war_id=$1',[id]);}
   await db.query('DELETE FROM discord_cache.members WHERE guild_id=ANY($1::text[])',[[server,other]]);await db.query('DELETE FROM discord_cache.guilds WHERE id=ANY($1::text[])',[[server,other]]);await db.query('DELETE FROM discord_cache.gateway_shards WHERE application_id=$1',[app]);
-  await db.query('DELETE FROM servers WHERE id=ANY($1::text[])',[[server,other]]);await db.query('DELETE FROM basic_player WHERE tag=ANY($1::text[])',[tags]);await db.query('DELETE FROM basic_clan WHERE tag=$1',[clan]);await db.query('DELETE FROM auth_users WHERE user_id=$1',[actor]);
+  await db.query('DELETE FROM servers WHERE id=ANY($1::text[])',[[server,other]]);await db.query('DELETE FROM basic_player WHERE tag=ANY($1::text[])',[tags]);await db.query('DELETE FROM basic_clan WHERE tag=$1',[clan]);await db.query('DELETE FROM user_settings WHERE user_id=ANY($1::text[])',[[actor,secondUser]]);await db.query('DELETE FROM auth_users WHERE user_id=ANY($1::text[])',[[actor,secondUser]]);
  }
  await db.end();await new Promise(r=>provider.close(r));rmSync(directory,{recursive:true,force:true});
 }

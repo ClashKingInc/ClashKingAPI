@@ -1,3 +1,4 @@
+import { gatewayHeartbeatFreshnessSeconds } from "./server-authorization.js"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import { AuthIdentity } from "./auth.js"
@@ -7,7 +8,7 @@ import type { WorkerBindings } from "./environment.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 
-export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames"] as const
+export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure"] as const
 const idPattern = /^[0-9]{15,20}$/u
 const uuid = /^[0-9a-f-]{36}$/iu
 const Member = Schema.Struct({ user: Schema.Struct({ id: Schema.String, bot: Schema.optionalKey(Schema.Boolean) }), roles: Schema.Array(Schema.String) })
@@ -68,11 +69,37 @@ export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string,
   return { requestId, queued: users.length }
 })
 
-export const claimRefreshJobs = (requestId?: string, serverId?: string) => Effect.gen(function* () {
+export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A single lease per member serializes manual and automatic refreshes. Token
   // fencing prevents a crashed/expired attempt acknowledging a newer revision.
   return yield* sql.withTransaction(Effect.gen(function* () {
+    // Time passing is itself a tenure input. Schedule mismatched cached members
+    // without requiring a game event or the independent game-autoeval setting.
+    if (!requestId && includeTenure) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,categories)
+      SELECT 'tenure:'||server.id||':'||member.user_id,server.id,member.user_id,ARRAY['tenure']::text[]
+      FROM servers server JOIN discord_cache.members member ON member.guild_id=server.id
+      JOIN discord_cache.guilds guild ON guild.id=server.id
+      JOIN discord_cache.gateway_shards shard ON shard.application_id=guild.application_id AND shard.shard_id=guild.shard_id
+      CROSS JOIN LATERAL (SELECT CASE WHEN pg_input_is_valid(member.data->>'joined_at','timestamp with time zone')
+        THEN (member.data->>'joined_at')::timestamptz END joined_at) joined
+      LEFT JOIN LATERAL (SELECT rule.role_id FROM server_roles rule
+        WHERE rule.server_id=server.id AND rule.type='status' AND rule.option ~ '^[0-9]{1,4}$'
+          AND (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) BETWEEN 1 AND 1200
+          AND joined.joined_at+make_interval(months=>(CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END))<=now()
+        ORDER BY (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) DESC,rule.role_id LIMIT 1) earned ON true
+      WHERE server.left_at IS NULL AND (${serverId ?? null}::text IS NULL OR server.id=${serverId ?? null})
+        AND COALESCE(member.data->'user'->>'bot','false')<>'true' AND joined.joined_at IS NOT NULL
+        AND guild.available AND guild.metadata_complete AND guild.members_complete
+        AND guild.generation=shard.generation AND shard.healthy AND shard.heartbeat_at>now()-${gatewayHeartbeatFreshnessSeconds}*interval '1 second'
+        AND EXISTS (SELECT 1 FROM server_roles rule WHERE rule.server_id=server.id AND rule.type='status'
+          AND rule.option ~ '^[0-9]{1,4}$' AND (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) BETWEEN 1 AND 1200
+          AND (COALESCE(rule.role_id=earned.role_id,false) IS DISTINCT FROM (COALESCE(member.data->'roles','[]'::jsonb) ? rule.role_id)))
+        AND NOT EXISTS (SELECT 1 FROM role_refresh_jobs existing WHERE existing.id='tenure:'||server.id||':'||member.user_id
+          AND ((existing.completed_at IS NULL AND (existing.attempts<12 OR existing.updated_at>=now()-interval '1 hour')) OR existing.completed_at>=now()-interval '1 hour'))
+      ORDER BY server.id,member.user_id LIMIT 500
+      ON CONFLICT(id) DO UPDATE SET completed_at=NULL,result=NULL,attempts=0,due_at=now(),revision=role_refresh_jobs.revision+1,updated_at=now()
+      WHERE role_refresh_jobs.completed_at<now()-interval '1 hour' OR (role_refresh_jobs.attempts>=12 AND role_refresh_jobs.updated_at<now()-interval '1 hour')`
     yield* sql`DELETE FROM role_refresh_jobs WHERE id IN (SELECT id FROM role_refresh_jobs WHERE completed_at<now()-interval '7 days' ORDER BY completed_at LIMIT 100)`
     const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[] }>`
       SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories FROM role_refresh_jobs job
@@ -159,8 +186,8 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   yield* auth.requireBot(request)
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
-    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)))
-    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined))
+    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean"))
+    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true))
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/validate") {
     const body = object(yield* readBoundedJson(request, 8192))
@@ -171,7 +198,7 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
       JOIN role_refresh_leases lease ON lease.job_id=job.id AND lease.revision=job.revision
       JOIN servers server ON server.id=job.server_id
       WHERE job.id=${String(body.id)} AND lease.token=${String(body.token)}::uuid AND lease.expires_at>now()
-        AND (job.request_id IS NOT NULL OR server.autoeval_enabled)
+        AND (job.request_id IS NOT NULL OR server.autoeval_enabled OR job.categories=ARRAY['tenure']::text[])
         AND ARRAY(SELECT tag FROM player_links WHERE user_id=job.user_id AND hidden=false ORDER BY tag)
           = ARRAY(SELECT unnest(${body.accountTags as string[]}::text[]) ORDER BY 1)`
     return Response.json({ valid: rows.length > 0 })

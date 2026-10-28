@@ -10,11 +10,16 @@ export function validateLocalSchemaProfile(image, migrations, schemaRoot) {
   if (!Array.isArray(migrations) || migrations.length === 0) {
     throw new Error("Authoritative schema profile has no migrations")
   }
+  let previousVersion = 0
   for (const [index, file] of migrations.entries()) {
     const match = /^(\d{3,})_[a-z0-9_]+\.sql$/u.exec(file)
-    if (!match || Number(match[1]) !== index + 1) {
-      throw new Error(`Invalid or non-contiguous schema migration at position ${index + 1}: ${file}`)
+    // The authoritative inventory can reserve gaps for deferred features.
+    // Require a baseline and strictly increasing IDs, not consecutive numbers.
+    const version = match ? Number(match[1]) : 0
+    if (!match || !Number.isSafeInteger(version) || version <= previousVersion || (index === 0 && version !== 1)) {
+      throw new Error(`Invalid or unordered schema migration at position ${index + 1}: ${file}`)
     }
+    previousVersion = version
     let isFile = false
     try { isFile = statSync(join(schemaRoot, "database/timescale", file)).isFile() } catch {}
     if (!isFile) throw new Error(`Authoritative schema migration is missing: ${file}`)

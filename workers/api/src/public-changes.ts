@@ -20,12 +20,15 @@ export const playerChangeTypes = (raw: string | null) => Effect.try({ try: () =>
   return [id]
 }, catch: (cause) => new InvalidRequest({ message: cause instanceof Error ? cause.message : "Invalid type" }) })
 const catalog: Record<number, readonly [string, number]> = { 1: ["troops", 4_000_000], 2: ["troops", 4_000_000], 3: ["heroes", 28_000_000], 4: ["spells", 26_000_000], 5: ["pets", 73_000_000], 6: ["equipment", 90_000_000] }
+export const playerHistoryStaticItem = (changeType: number, itemId: number | null) => {
+  const mapping = catalog[changeType]
+  return mapping && itemId !== null ? lookupStaticItem(mapping[0], mapping[1] + itemId) : undefined
+}
 interface PlayerChangeRow { event_time: Date | string; townhall_level: number | null; change_type: number; item_id: number | null; previous_value: string; current_value: string }
 export const playerChangeFromRow = (row: PlayerChangeRow) => Effect.try({ try: () => {
   const type = types[row.change_type]
   if (!type) throw new Error("Unknown stored change type")
-  const mapping = catalog[row.change_type]
-  const item = mapping && row.item_id !== null ? lookupStaticItem(mapping[0], mapping[1] + row.item_id) : undefined
+  const item = playerHistoryStaticItem(row.change_type, row.item_id)
   const value = (raw: string) => {
     if (row.change_type === 12) return raw
     if (row.change_type === 11) { if (raw === "0") return "out"; if (raw === "1") return "in"; throw new Error("Invalid stored war preference") }

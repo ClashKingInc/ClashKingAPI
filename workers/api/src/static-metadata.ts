@@ -166,6 +166,7 @@ export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<s
   if (pathname === "/v2/runtime/tickets/open/prepare" || /^\/v2\/runtime\/ticket-operations\/[^/]+\/advance$/u.test(pathname)) return ["heroes"]
   const staticMatch = pathname.match(/^\/v2\/static\/([^/]+)\//u)
   if (staticMatch?.[1]) { try { return [decodeURIComponent(staticMatch[1])] } catch { return [] } }
+  if (pathname === "/v2/bot/players/upgrade-progress") return ["troops", "heroes", "spells", "pets", "equipment"]
   if (/^\/v2\/player\/[^/]+\/history\/changes$/u.test(pathname)) return ["troops", "heroes", "spells", "pets", "equipment"]
   if (pathname === "/v2/player/search" || /^\/v2\/player\/[^/]+\/(?:legend-history|ranked\/\d+\/|league\/history|leaderboard-history\/)/u.test(pathname)) return ["league_tiers"]
   if (/^\/v2\/(?:ranked\/|leaderboard\/|stats\/league\/)/u.test(pathname)) return ["league_tiers"]

@@ -1,3 +1,4 @@
+import { dispatchBotPlayerProgress } from "./bot-player-progress.js"
 import { dispatchBotTaskProgress } from "./bot-task-progress.js"
 import { dispatchBotModerationMedia } from "./bot-moderation-media.js"
 import { dispatchAiNotice } from "./ai-notice.js"
@@ -329,6 +330,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const botPlayerProgressResponse = yield* dispatchBotPlayerProgress(request)
+    if (botPlayerProgressResponse !== undefined) return botPlayerProgressResponse
     const botPlayerSeasonResponse = yield* dispatchBotPlayerSeason(request)
     if (botPlayerSeasonResponse !== undefined) return botPlayerSeasonResponse
     const botPlayerIdentityResponse = yield* dispatchBotPlayerIdentity(request,bindings)

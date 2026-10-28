@@ -377,27 +377,38 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
     const roles = rows.map(roleValue)
     return { server_id: serverId, roles, count: roles.length }
   }
-  const id = text(input.path.roleId)
-  if (operation !== "createServerRole") yield* validateUuid(id)
-  if (operation === "deleteServerRole") {
-    const rows = yield* sql.unsafe<RoleRow>(`DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id])
-    return { message: "Server role deleted.", role: roleValue(yield* requireRow(rows, "Server role not found")) }
-  }
-  let values: JsonRecord = record(input.body)
-  if (operation === "updateServerRole") {
-    const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND id = $2::uuid`, [serverId, id])
-    values = { ...(yield* requireRow(rows, "Server role not found")), ...values }
-  }
-  const type = text(values.type).trim(), option = text(values.option).trim(), roleId = text(values.role_id).trim()
-  const clanTag = text(values.clan_tag).trim() ? normalizeTag(values.clan_tag) : null
-  if (!option || !/^\d+$/u.test(roleId)) return yield* new InvalidRequest({ message: "option and a decimal-string role_id are required" })
-  if (clanTag !== null && type !== "clan_role") return yield* new InvalidRequest({ message: "Only clan_role can use clan_tag" })
-  if (type === "family" && !["family", "not_family"].includes(option)) return yield* new InvalidRequest({ message: "Family roles only support family and not_family options" })
-  if (type === "clan_role" && (!["member", "elder", "co_leader", "leader"].includes(option) || clanTag === null && option === "member")) return yield* new InvalidRequest({ message: "Invalid clan role option or scope" })
-  const rows = operation === "createServerRole"
-    ? yield* sql.unsafe<RoleRow>(`INSERT INTO server_roles (server_id, clan_tag, type, option, role_id) SELECT id, $2, $3, $4, $5 FROM servers WHERE id = $1 RETURNING ${roleColumns}`, [serverId, clanTag, type, option, roleId])
-    : yield* sql.unsafe<RoleRow>(`UPDATE server_roles SET clan_tag = $3, type = $4, option = $5, role_id = $6, updated_at = now() WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id, clanTag, type, option, roleId])
-  return { message: operation === "createServerRole" ? "Server role created." : "Server role updated.", role: roleValue(yield* requireRow(rows, "Server or role not found")) }
+  return yield* sql.withTransaction(Effect.gen(function* () {
+    const id = text(input.path.roleId)
+    if (operation !== "createServerRole") yield* validateUuid(id)
+    if (operation === "deleteServerRole") {
+      const rows = yield* sql.unsafe<RoleRow>(`DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id])
+      const removed = yield* requireRow(rows, "Server role not found")
+      // Removing a mapping relinquishes control; it does not revoke a role now
+      // outside the managed set. Reconcile remaining/shared rules normally.
+      yield* queueServerRoleRefresh(serverId)
+      return { message: "Server role deleted.", role: roleValue(removed) }
+    }
+    let values: JsonRecord = record(input.body)
+    let previous: RoleRow | undefined
+    if (operation === "updateServerRole") {
+      const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND id = $2::uuid`, [serverId, id])
+      previous = yield* requireRow(rows, "Server role not found")
+      values = { ...previous, ...values }
+    }
+    const type = text(values.type).trim(), option = text(values.option).trim(), roleId = text(values.role_id).trim()
+    const clanTag = text(values.clan_tag).trim() ? normalizeTag(values.clan_tag) : null
+    if (!option || !/^\d+$/u.test(roleId)) return yield* new InvalidRequest({ message: "option and a decimal-string role_id are required" })
+    if (clanTag !== null && type !== "clan_role") return yield* new InvalidRequest({ message: "Only clan_role can use clan_tag" })
+    if (type === "family" && !["family", "not_family"].includes(option)) return yield* new InvalidRequest({ message: "Family roles only support family and not_family options" })
+    if (type === "clan_role" && (!["member", "elder", "co_leader", "leader"].includes(option) || clanTag === null && option === "member")) return yield* new InvalidRequest({ message: "Invalid clan role option or scope" })
+    const rows = operation === "createServerRole"
+      ? yield* sql.unsafe<RoleRow>(`INSERT INTO server_roles (server_id, clan_tag, type, option, role_id) SELECT id, $2, $3, $4, $5 FROM servers WHERE id = $1 RETURNING ${roleColumns}`, [serverId, clanTag, type, option, roleId])
+      : yield* sql.unsafe<RoleRow>(`UPDATE server_roles SET clan_tag = $3, type = $4, option = $5, role_id = $6, updated_at = now() WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id, clanTag, type, option, roleId])
+    const saved = yield* requireRow(rows, "Server or role not found")
+    if (!previous || previous.clan_tag !== saved.clan_tag || previous.type !== saved.type
+      || previous.option !== saved.option || previous.role_id !== saved.role_id) yield* queueServerRoleRefresh(serverId)
+    return { message: operation === "createServerRole" ? "Server role created." : "Server role updated.", role: roleValue(saved) }
+  }))
 }))
 
 const settingsFields: Readonly<Record<string, string>> = { role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }

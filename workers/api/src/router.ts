@@ -1,3 +1,4 @@
+import { dispatchBotWarStatus } from "./bot-war-status.js"
 import { dispatchBotSeasonSummary } from "./bot-season-summary.js"
 import { dispatchBotPlayerProgress } from "./bot-player-progress.js"
 import { dispatchBotTaskProgress } from "./bot-task-progress.js"
@@ -331,6 +332,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const botWarStatusResponse = yield* dispatchBotWarStatus(request)
+    if (botWarStatusResponse !== undefined) return botWarStatusResponse
     const botSeasonSummaryResponse = yield* dispatchBotSeasonSummary(request)
     if (botSeasonSummaryResponse !== undefined) return botSeasonSummaryResponse
     const botPlayerProgressResponse = yield* dispatchBotPlayerProgress(request)

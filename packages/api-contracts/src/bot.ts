@@ -1,3 +1,5 @@
+import { BotWarStatusEndpoint } from "./bot-war-status.js"
+export { BotWarStatusEndpoint } from "./bot-war-status.js"
 import { BotSeasonSummaryEndpoint } from "./bot-season-summary.js"
 export { BotSeasonSummaryEndpoint } from "./bot-season-summary.js"
 import { BotPlayerProgressEndpoint } from "./bot-player-progress.js"
@@ -94,6 +96,7 @@ export const botEndpoints = {
   taskProgress: BotTaskProgressEndpoint,
   playerUpgradeProgress: BotPlayerProgressEndpoint,
   playerSeasonSummary: BotSeasonSummaryEndpoint,
+  playerWarStatus: BotWarStatusEndpoint,
   clanSeasonStats: BotClanSeasonStatsEndpoint,
   clanGames: BotClanGamesEndpoint,
   clanCapitalContributions: BotClanCapitalContributionsEndpoint,

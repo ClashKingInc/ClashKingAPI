@@ -1,3 +1,4 @@
+import { dispatchBotStatus } from "./bot-status.js"
 import { dispatchBotDailyGraph } from "./bot-daily-graph.js"
 import { dispatchBotRoleMembers } from "./bot-role-members.js"
 import { dispatchBotWarStatistics } from "./bot-war-statistics.js"
@@ -352,6 +353,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botPlayerIdentityResponse !== undefined) return botPlayerIdentityResponse
     const botPlayerHistoryResponse = yield* dispatchBotPlayerHistory(request)
     if (botPlayerHistoryResponse !== undefined) return botPlayerHistoryResponse
+    const botStatusResponse = yield* dispatchBotStatus(request,bindings)
+    if (botStatusResponse !== undefined) return botStatusResponse
     const dailyGraphResponse = yield* dispatchBotDailyGraph(request)
     if (dailyGraphResponse !== undefined) return dailyGraphResponse
     const botClanStatsResponse = yield* dispatchBotClanStats(request)

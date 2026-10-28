@@ -1,3 +1,5 @@
+import { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
+export { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
 import { BotUserRostersEndpoint } from "./bot-user-rosters.js"
 export { BotUserRostersEndpoint } from "./bot-user-rosters.js"
 import { BotStatusEndpoint } from "./bot-status.js"
@@ -97,6 +99,8 @@ export * from "./bot-player-identity.js"
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
+  userPreferences: BotUserPreferencesEndpoint,
+  updateUserPreferences: BotUpdateUserPreferencesEndpoint,
   userRosters: BotUserRostersEndpoint,
   status: BotStatusEndpoint,
   dailyGraph: BotDailyGraphEndpoint,

@@ -43,6 +43,7 @@ import { dispatchBotPlayerIdentity } from "./bot-player-identity.js"
 import { dispatchBotPlayerHistory } from "./bot-player-history.js"
 import { dispatchBotActivity } from "./bot-activity.js"
 import { dispatchBotClanStats } from "./bot-clan-stats.js"
+import { dispatchBotUserPreferences } from "./bot-user-preferences.js"
 import { dispatchBotRoleRefresh } from "./bot-role-refresh.js"
 import { dispatchBotManualReminders } from "./bot-manual-reminders.js"
 import { dispatchGiveawayRuntime } from "./giveaway-dispatch.js"
@@ -377,6 +378,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if(activityResponse!==undefined)return activityResponse
     const botClanStatsResponse = yield* dispatchBotClanStats(request)
     if (botClanStatsResponse !== undefined) return botClanStatsResponse
+    const preferenceResponse = yield* dispatchBotUserPreferences(request)
+    if (preferenceResponse) return preferenceResponse
     const roleRefreshResponse = yield* dispatchBotRoleRefresh(request, bindings)
     if (roleRefreshResponse !== undefined) return roleRefreshResponse
     const botManualReminderResponse = yield* dispatchBotManualReminders(request)

@@ -150,8 +150,13 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   yield* validateUuid(id)
   if (operation === "renameClanCategory") {
     const name = yield* categoryName(body.name)
-    const rows = yield* sql.unsafe<CategoryRow>(`UPDATE server_clan_categories category SET name = $3 WHERE server_id = $1 AND id = $2::uuid RETURNING ${categoryColumns}`, [serverId, id, name])
-    return { category: categoryValue(yield* requireRow(rows, "Category not found")) }
+    return yield* sql.withTransaction(Effect.gen(function* () {
+      const previous = yield* sql<{ name: string }>`SELECT name FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid FOR UPDATE`
+      const current = yield* requireRow(previous, "Category not found")
+      const rows = yield* sql.unsafe<CategoryRow>(`UPDATE server_clan_categories category SET name = $3 WHERE server_id = $1 AND id = $2::uuid RETURNING ${categoryColumns}`, [serverId, id, name])
+      if (current.name !== name) yield* queueServerRoleRefresh(serverId)
+      return { category: categoryValue(yield* requireRow(rows, "Category not found")) }
+    }))
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
     const rows = yield* sql.unsafe<CategoryRow>(`SELECT ${categoryColumns} FROM server_clan_categories category WHERE category.server_id = $1 AND category.id = $2::uuid FOR UPDATE`, [serverId, id])
@@ -159,6 +164,7 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
     if (operation === "previewClanCategoryDelete") return { category: categoryValue(row), affectedClanCount: row.clan_count }
     yield* sql`DELETE FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid`
     yield* sql`UPDATE server_clan_categories SET position = position - 1 WHERE server_id = ${serverId} AND position > ${row.position}`
+    if (row.clan_count > 0) yield* queueServerRoleRefresh(serverId)
     return { categoryId: row.id, name: row.name, deleted: true, uncategorizedClanCount: row.clan_count }
   }))
 }))
@@ -500,8 +506,11 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   const tag = normalizeTag(input.path.clanTag)
   if (input.path.clanTag !== undefined && !/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid" })
   if (operation === "removeServerClan") {
-    const rows = yield* sql<{ tag: string }>`DELETE FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
-    return { message: "Clan removed successfully", server_id: serverId, clan_tag: tag, deleted_count: rows.length }
+    return yield* sql.withTransaction(Effect.gen(function* () {
+      const rows = yield* sql<{ tag: string }>`DELETE FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
+      if (rows.length) yield* queueServerRoleRefresh(serverId)
+      return { message: "Clan removed successfully", server_id: serverId, clan_tag: tag, deleted_count: rows.length }
+    }))
   }
   if (operation === "serverClansBasic") return (yield* clanSettingsRows(serverId)).map(({ tag, name }) => ({ tag, name }))
   if (operation === "serverClans") {
@@ -521,8 +530,9 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
   let category: ReturnType<typeof categoryValue> | null = null
   yield* sql.withTransaction(Effect.gen(function* () {
-    const rows = yield* sql<{ tag: string }>`UPDATE server_clans SET updated_at = now() WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
-    yield* requireRow(rows, "Server or clan not found")
+    const rows = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} FOR UPDATE`
+    const previous = yield* requireRow(rows, "Server or clan not found")
+    yield* sql`UPDATE server_clans SET updated_at = now() WHERE server_id = ${serverId} AND tag = ${tag}`
     if (body.abbreviation !== undefined) yield* sql`UPDATE server_clans SET abbreviation = ${body.abbreviation} WHERE server_id = ${serverId} AND tag = ${tag}`
     if (body.category !== undefined) {
       if (body.category === null || text(body.category).trim() === "") yield* sql`UPDATE server_clans SET category_id = NULL WHERE server_id = ${serverId} AND tag = ${tag}`
@@ -537,6 +547,10 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
         category = categoryValue(yield* requireRow(refreshed, "Category not found"))
       }
     }
+    const saved = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`
+    // These are refresh inputs even without a player update. Compare persisted
+    // values so duplicate saves and category ordering do not enqueue extra work.
+    if (saved[0]?.abbreviation !== previous.abbreviation || saved[0]?.category_id !== previous.category_id) yield* queueServerRoleRefresh(serverId)
   }))
   return { message: "Clan settings updated successfully", server_id: serverId, clan_tag: tag, updated_fields: Object.keys(body).length, category }
 }))
@@ -561,7 +575,9 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
     yield* sql`INSERT INTO basic_clan (tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id, public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token, troops_donated, troops_received, members, last_active)
       VALUES (${clan.tag}, ${clan.name}, ${clan.description}, ${clan.clanLevel}, ${clan.locationId}, ${clan.warLeagueId}, ${clan.capitalLeagueId}, ${clan.publicWarLog}, ${clan.warWins}, ${clan.warWinStreak}, ${clan.clanPoints}, ${clan.memberCount}, ${clan.badgeToken}, ${clan.donated}, ${clan.received}, ${JSON.stringify(clan.members)}::jsonb, now())
       ON CONFLICT (tag) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, clan_level = EXCLUDED.clan_level, location_id = EXCLUDED.location_id, cwl_league_id = EXCLUDED.cwl_league_id, capital_league_id = EXCLUDED.capital_league_id, public_war_log = EXCLUDED.public_war_log, war_wins = EXCLUDED.war_wins, war_win_streak = EXCLUDED.war_win_streak, clan_points = EXCLUDED.clan_points, member_count = EXCLUDED.member_count, badge_token = EXCLUDED.badge_token, troops_donated = EXCLUDED.troops_donated, troops_received = EXCLUDED.troops_received, members = EXCLUDED.members, last_active = now()`
-    yield* sql`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO UPDATE SET updated_at = now()`
+    const added = yield* sql<{ tag: string }>`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO NOTHING RETURNING tag`
+    if (added.length) yield* queueServerRoleRefresh(serverId)
+    else yield* sql`UPDATE server_clans SET updated_at = now() WHERE tag = ${clan.tag} AND server_id = ${serverId}`
   }))
   return { message: "Clan added successfully", server_id: serverId, clan_tag: clan.tag, clan_name: clan.name }
 }))

@@ -11,6 +11,7 @@ const original = new Map(source.operations.map(([method, path, tags]) => [
 // previously undocumented handlers and intentionally new retained features.
 // This only assigns navigation; it never adds paths or changes authorization.
 const additions = new Map([
+  ["POST /v2/bot/moderation/images", "Server Bans"],
   ["GET /v2/users/me/ai-notice", "App Authentication"],
   ["POST /v2/users/me/ai-notice", "App Authentication"],
   ["GET /v2/clan/{}/donations/summary", "Clan"],

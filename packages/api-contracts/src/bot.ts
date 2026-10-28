@@ -1,3 +1,5 @@
+import { BotModerationImageEndpoint } from "./bot-moderation.js"
+export { BotModerationImageEndpoint } from "./bot-moderation.js"
 import { botAdjacentEndpoints } from "./bot-adjacent.js"
 import { BotLegendStatsEndpoint } from "./bot-legend-stats.js"
 import { BotPlayerSeasonEndpoint } from "./bot-player-season.js"
@@ -77,6 +79,7 @@ export * from "./bot-player-identity.js"
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
+  moderationImage: BotModerationImageEndpoint,
   ...botAdjacentEndpoints,
   legendStats: BotLegendStatsEndpoint,
   playerSeasonStats: BotPlayerSeasonEndpoint,

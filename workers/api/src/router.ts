@@ -1,3 +1,4 @@
+import { dispatchBotModerationMedia } from "./bot-moderation-media.js"
 import { dispatchAiNotice } from "./ai-notice.js"
 import {
   AppConfigResponse,
@@ -228,6 +229,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       return browserPreflight(request, bindings)
     }
     yield* guardDashboardScope(request)
+    const moderationMedia=yield* dispatchBotModerationMedia(request,bindings)
+    if(moderationMedia!==undefined)return moderationMedia
     const aiNoticeResponse=yield* dispatchAiNotice(request)
     if(aiNoticeResponse!==undefined)return aiNoticeResponse
     const dashboardAccessResponse=yield* dispatchDashboardAccess(request)

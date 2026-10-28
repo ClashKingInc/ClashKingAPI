@@ -17,7 +17,7 @@ const databaseFailure = (cause?: unknown) => new DatabaseFailure({ cause, messag
 
 /** Must run inside the caller's giveaway row transaction (also used by reroll). */
 export const enqueueGiveawayPublication = (giveawayId: string, kind: Kind,
-  reroll?: { readonly operationId: string; readonly winnerIds: readonly string[]; readonly replacedIds: readonly string[]; readonly actorLabel: string; readonly occurredAt: string },
+  reroll?: { readonly operationId: string; readonly winnerIds: readonly string[]; readonly replacedIds: readonly string[]; readonly actorLabel: string; readonly reason?: string; readonly occurredAt: string },
   mediaOrigin = "https://api.clashk.ing",
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
@@ -47,7 +47,7 @@ export const enqueueGiveawayPublication = (giveawayId: string, kind: Kind,
       'winner_ids',CASE WHEN ${kind}='reroll' THEN ${JSON.stringify(reroll?.winnerIds ?? [])}::jsonb
         WHEN ${kind}='end' THEN COALESCE((SELECT jsonb_agg(winner->>'user_id') FROM jsonb_array_elements(winners_list) winner
           WHERE COALESCE(winner->>'status','winner')='winner'),'[]'::jsonb) ELSE '[]'::jsonb END,
-      'replaced_user_ids',${JSON.stringify(reroll?.replacedIds ?? [])}::jsonb,'reason',${kind === "reroll" ? "dashboard_reroll" : ""}::text,
+      'replaced_user_ids',${JSON.stringify(reroll?.replacedIds ?? [])}::jsonb,'reason',${kind === "reroll" ? reroll?.reason ?? "No reason provided" : ""}::text,
       'actor_label',${reroll?.actorLabel ?? ""}::text) AS value FROM giveaways WHERE id=${giveawayId}
     ) SELECT CASE WHEN octet_length(value::text)<=262144 THEN value ELSE NULL END AS payload,
       octet_length(value::text) AS bytes FROM snapshot`)[0]

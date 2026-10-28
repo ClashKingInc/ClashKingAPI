@@ -6,6 +6,7 @@ import { uploadMediaFile, mediaFileUrl } from "./dashboard-upload.js"
 import { DiscordApi } from "./discord-api.js"
 import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
 import { lockServerDiscordResources } from "./discord-managed-resources.js"
+import { giveawayRaceScore } from "./giveaway-outcomes.js"
 import { enqueueGiveawayPublication } from "./giveaway-publications.js"
 import { DatabaseFailure, InvalidRequest, NotFound, UpstreamUnavailable, RateLimited, Forbidden, Unauthenticated, PayloadTooLarge, type ApiFailure } from "./errors.js"
 
@@ -20,17 +21,6 @@ const stored = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknow
 const requestValue = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid giveaway request" })))
 const field = (form: FormData, key: string): string => typeof form.get(key) === "string" ? form.get(key) as string : ""
 const bool = (value: string) => ["true", "1", "yes", "on"].includes(value.trim().toLowerCase())
-const secureShuffle = <A>(values: A[]) => {
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const range = index + 1, limit = 0x1_0000_0000 - 0x1_0000_0000 % range
-    let random: number
-    do random = crypto.getRandomValues(new Uint32Array(1))[0]!
-    while (random >= limit)
-    const other = random % range, value = values[index]!
-    values[index] = values[other]!
-    values[other] = value
-  }
-}
 const isoDate = (value: string, name: string) => Effect.gen(function* () {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/u.test(value)) return yield* new InvalidRequest({ message: `${name} must use ISO 8601` })
   const year = Number(value.slice(0,4)), month = Number(value.slice(5,7)), day = Number(value.slice(8,10))
@@ -115,7 +105,7 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
     }
     if (operation === "rerollGiveaway") {
       const body = yield* requestValue(GiveawayRerollRequest, input.body)
-      if (existing?.status !== "ended" || body.user_ids_to_replace.length === 0) return yield* new InvalidRequest({ message: "Select current winners from an ended giveaway" })
+      if (existing?.status !== "ended" || existing.disabled || body.user_ids_to_replace.length === 0) return yield* new InvalidRequest({ message: "Select current winners from an ended giveaway" })
       if (existing.message_id) {
         const published = (yield* sql<{ published: boolean }>`SELECT EXISTS(SELECT 1 FROM giveaway_publication_effects
           WHERE giveaway_id=${id} AND kind='end' AND state='succeeded') AS published`)[0]?.published
@@ -123,19 +113,35 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
       }
       for (const userId of body.user_ids_to_replace) yield* requestValue(DecimalSnowflake, userId)
       const winners = yield* stored(Schema.Array(StoredWinner), existing.winners_list), entries = yield* stored(Schema.Array(GiveawayEntry), existing.entries)
-      const current = new Set(winners.filter((winner) => winner.status === "winner").map((winner) => winner.user_id))
+      const current = new Set(winners.filter((winner) => (winner.status ?? "winner") === "winner").map((winner) => winner.user_id))
       if (body.user_ids_to_replace.some((userId) => !current.has(userId))) return yield* new InvalidRequest({ message: "Replacement target is not a current winner" })
-      // Shuffle weighted slots first, then take distinct people. Extra slots
-      // still increase the chance of winning, but cannot win a second prize.
-      const eligible = entries.map((entry) => typeof entry === "string" ? entry : entry.user_id).filter((userId) => !current.has(userId))
       if (new Set(body.user_ids_to_replace).size !== body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Replacement targets must be unique" })
-      if (new Set(eligible).size < body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Not enough eligible participants" })
-      secureShuffle(eligible)
-      const newWinners = [...new Set(eligible)].slice(0, body.user_ids_to_replace.length), now = new Date().toISOString().replace(/\.\d{3}Z$/u, "Z"), replace = new Set(body.user_ids_to_replace)
-      const updated = [...winners.map((winner) => replace.has(winner.user_id) ? { ...winner, status: "rerolled", timestamp: now, reason: "dashboard_reroll" } : winner), ...newWinners.map((user_id) => ({ user_id, status: "winner", timestamp: now }))]
+      // A reroll preserves the original draw's recorded role weights. Re-reading
+      // current roles would let changes after closing alter participants' odds.
+      const run = (yield* sql<{ id: string }>`SELECT id::text FROM giveaway_outcome_runs
+        WHERE giveaway_id=${id} AND server_id=${serverId} AND state='completed'`)[0]
+      let weighted: Array<{user_id: string; weight: number}>
+      if (run) {
+        weighted = [...yield* sql<{ user_id: string; weight: number }>`SELECT user_id,weight FROM giveaway_outcome_entries
+          WHERE run_id=${run.id}::uuid AND weight > 0 ORDER BY ordinal`]
+      } else {
+        const boosters = yield* stored(Schema.Array(GiveawayBooster), existing.boosters)
+        if (boosters.length > 0) return yield* new InvalidRequest({ message: "This imported giveaway has no recorded booster weights, so it cannot be rerolled fairly" })
+        const counts = new Map<string,number>()
+        for (const entry of entries) { const userId=typeof entry === "string" ? entry : entry.user_id; counts.set(userId,(counts.get(userId) ?? 0)+1) }
+        weighted = [...counts].map(([user_id,weight])=>({user_id,weight}))
+      }
+      const eligible = weighted.filter(entry=>!current.has(entry.user_id))
+      if (eligible.length < body.user_ids_to_replace.length) return yield* new InvalidRequest({ message: "Not enough eligible participants" })
+      const newWinners = eligible.map(entry=>({...entry,score:giveawayRaceScore(entry.weight)}))
+        .sort((a,b)=>a.score-b.score || a.user_id.localeCompare(b.user_id)).slice(0,body.user_ids_to_replace.length).map(entry=>entry.user_id)
+      const now = new Date().toISOString().replace(/\.\d{3}Z$/u, "Z"), replace = new Set(body.user_ids_to_replace)
+      const reason = body.reason?.trim() || "No reason provided"
+      const updated = [...winners.map((winner) => replace.has(winner.user_id) && (winner.status ?? "winner") === "winner"
+        ? { ...winner, status: "rerolled", timestamp: now, reason } : winner), ...newWinners.map((user_id) => ({ user_id, status: "winner", timestamp: now }))]
       yield* sql`UPDATE giveaways SET winners_list=${JSON.stringify(updated)}::jsonb,updated_at=now() WHERE server_id=${serverId} AND id=${id}`
       if (existing.message_id) yield* enqueueGiveawayPublication(id, "reroll", { operationId: crypto.randomUUID(), winnerIds: newWinners,
-        replacedIds: body.user_ids_to_replace, actorLabel: "Dashboard", occurredAt: now }, input.bindings.GIVEAWAY_MEDIA_ORIGIN)
+        replacedIds: body.user_ids_to_replace, actorLabel: input.principal.kind === "bot" ? "Discord" : "Dashboard", reason, occurredAt: now }, input.bindings.GIVEAWAY_MEDIA_ORIGIN)
       return { message: "Winners rerolled successfully", giveawayId: id, serverId, newWinners }
     }
     if (existing?.closed) return yield* new InvalidRequest({ message: "Ended giveaways cannot be edited or restarted. Duplicate the giveaway to create a new one." })

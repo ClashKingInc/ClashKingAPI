@@ -596,7 +596,8 @@ export const GiveawayEntriesResponse = Schema.Struct({
   entrants: Schema.Array(GiveawayEntrant),
 })
 export const GiveawayRerollRequest = Schema.Struct({
-  user_ids_to_replace: Schema.Array(Schema.String),
+  user_ids_to_replace: Schema.Array(DecimalSnowflake).check(Schema.isMinLength(1)),
+  reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1000))),
 })
 export const GiveawayRerollResponse = Schema.Struct({
   message: Schema.String,

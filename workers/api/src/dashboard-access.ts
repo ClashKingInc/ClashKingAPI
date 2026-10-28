@@ -24,8 +24,6 @@ export const guardDashboardScope=(request:Request)=>Effect.gen(function*(){
  const url=new URL(request.url),path=url.pathname
  if(!id)return yield* new Forbidden({message:"Invalid server scope"})
  if(path.startsWith(`/v2/server/${id}/`)||path===`/v2/guild/${id}`||path==="/v2/auth/server-dashboard/logout")return
- if(path.startsWith(`/v2/competitive/servers/${id}/`))return
- if(request.method==="GET"&&/^\/v2\/competitive\/(tournaments|clans|teams)(\/|$)/u.test(path))return
  // Game data is public. Keep the allowlist read-only and do not include any
  // general user, OAuth, billing, or refresh endpoint here.
  if(request.method==="GET"&&/^\/proxy\/v1\/(clans|players|locations|leagues)(\/|$)/u.test(path))return

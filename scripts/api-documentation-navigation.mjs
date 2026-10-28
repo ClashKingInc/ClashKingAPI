@@ -73,7 +73,6 @@ const additions = new Map([
   ["GET /v2/server/{}/tickets/records/{}/actions/{}", "Server Tickets"],
 ])
 const additionalTag = (method, path) => additions.get(key(method, path))
-  ?? (path.startsWith("/v2/competitive/") ? "Competitive" : undefined)
   ?? (path.startsWith("/v2/esports/ccn/") ? "Esports" : undefined)
   ?? (path.startsWith("/v2/auth/server-dashboard/") ? "App Authentication" : undefined)
   ?? (path.startsWith("/v2/bot/") ? "Bot" : undefined)

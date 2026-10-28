@@ -1,5 +1,4 @@
 import { runClanVerificationChecks } from "./dashboard-clan-verification.js"
-import { runCompetitiveWarSync } from "./competitive-war.js"
 import { Effect, Layer } from "effect"
 import * as Sentry from "@sentry/cloudflare"
 
@@ -64,7 +63,6 @@ const armyCacheRequest = (request: Request): Request | undefined => {
 const handler = {
   async scheduled(_controller: ScheduledController, bindings: WorkerBindings, context: ExecutionContext): Promise<void> {
     context.waitUntil(Effect.runPromise(runClanVerificationChecks(bindings).pipe(Effect.provide(databaseLayer(bindings)), Effect.scoped)));
-    context.waitUntil(Effect.runPromise(runCompetitiveWarSync().pipe(Effect.provide(databaseLayer(bindings)),Effect.scoped)));
   },
   async fetch(request: Request, bindings: WorkerBindings, context: ExecutionContext): Promise<Response> {
     // A transcript URL is a bearer credential. Keep the entire invocation out

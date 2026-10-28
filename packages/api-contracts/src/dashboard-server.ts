@@ -122,7 +122,8 @@ export const ServerSettingsUpdate = Schema.Struct({
   auto_eval_nickname: OptionalBoolean,
   autoeval_log: OptionalString,
   autoeval: OptionalBoolean,
-  full_whitelist_role: OptionalString,
+  // Omission preserves the selected role; null explicitly revokes it.
+  full_whitelist_role: OptionalNullableString,
   autoboard_limit: OptionalNumber,
   tied: OptionalBoolean,
   family_label: OptionalString,

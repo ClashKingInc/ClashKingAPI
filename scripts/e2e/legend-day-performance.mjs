@@ -107,6 +107,62 @@ try {
   await db.query("UPDATE legend_day_performance SET source_window_start=source_window_start-interval '10 minutes',source_window_end=source_window_end-interval '10 minutes' WHERE day=$1",[first])
   assert.equal((await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}T05:10:00Z&time[before]=${last}T05:10:00Z`)).status,400)
   assert.equal((await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}T05:00:00Z&time[before]=${last}T05:00:00Z`)).status,200)
+  // Raw Legend observations work without ranking snapshots. Finished days
+  // require exactly eight battles; current-day observations stay separate.
+  const rawTags = ['#P0Q', '#P0R', '#P0Y']
+  const addBattles = async (tag, day, count, direction=1, tripleCount=count) => {
+    for (let index=0; index<count; index++) {
+      await db.query(`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,direction,battle_mode,player_town_hall,opponent_town_hall,stars,destruction_percentage,duration_seconds,looted_resources)
+        VALUES($1,'#QQQ',$2::date+interval '6 hours'+$3::integer*interval '1 minute'+$4::integer*interval '1 second',$4,2,18,18,$5,$6,120,CASE WHEN $4=1 THEN '{}'::jsonb ELSE NULL END)`,
+        [tag,day,index,direction,index<tripleCount?3:2,index<tripleCount?100:80])
+    }
+  }
+  await addBattles(rawTags[0],first,8)
+  await addBattles(rawTags[1],first,7)
+  await addBattles(rawTags[2],first,9)
+  await addBattles(rawTags[0],first,8,2)
+  await addBattles(rawTags[0],date(4),8)
+  const currentStart=new Date(Math.floor((Date.now()-5*3600000)/86400000)*86400000+5*3600000)
+  // Use times after the game-day boundary and before now even just after 05:00.
+  for(let index=0;index<3;index++) await db.query(`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,direction,battle_mode,player_town_hall,opponent_town_hall,stars,destruction_percentage,duration_seconds,looted_resources)
+    VALUES($1,'#QQQ',$2::timestamptz+$3::integer*interval '1 millisecond',1,2,18,18,$4,$5,120,'{}')`,
+    [rawTags[0],currentStart.toISOString(),index,index<2?3:2,index<2?100:80])
+  const observedResponse=await fetch(endpoint('&cohort=observed'))
+  const observed=await observedResponse.json()
+  assert.equal(observedResponse.status,200,JSON.stringify(observed))
+  assert.equal(observed.cohort,'observed')
+  assert.deepEqual(observed.availability,{firstDay:first,lastDay:date(4)})
+  const observedPeriod=observed.periods[0]
+  assert.equal(observedPeriod.availableDays,2)
+  assert.equal(observedPeriod.offense.eligiblePlayerDays,4)
+  assert.equal(observedPeriod.offense.completePlayerDays,2)
+  assert.equal(observedPeriod.offense.partialPlayerDays,1)
+  assert.equal(observedPeriod.offense.invalidPlayerDays,1)
+  assert.equal(observedPeriod.offense.observedBattles,23,'More than eight observations cannot inflate the valid battle denominator')
+  assert.equal(observedPeriod.offense.perfectPlayerDays,2)
+  assert.equal(observedPeriod.perfectOffensePlayers,1)
+  assert.equal(observedPeriod.offense.buckets[15].playerDays,2)
+  assert.equal(observedPeriod.defense.completePlayerDays,1)
+  assert.equal(observedPeriod.defense.missingPlayerDays,3)
+  assert.deepEqual(observed.perfectDayContributions,[],'Unranked observations must not invent rank bands')
+  assert.equal(observed.items.length,2,'The unfinished day stays out of complete-day distributions')
+  assert.equal(observed.currentDay,undefined,'Historical selections must not include today in client totals')
+  const currentObserved=await(await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?cohort=observed&time[after]=${first}&time[before]=${currentStart.toISOString().slice(0,10)}`)).json()
+  assert.equal(currentObserved.currentDay.day,currentStart.toISOString().slice(0,10))
+  assert.equal(currentObserved.currentDay.offense.battles,3)
+  assert.equal(currentObserved.currentDay.offense.triples,2)
+  assert.equal(currentObserved.currentDay.offense.tripleRate,2/3)
+  assert.equal(currentObserved.currentDay.defense.battles,0)
+  assert.equal((await(await fetch(endpoint('&cohort=top_200'))).json()).periods[0].offense.completePlayerDays,1,'Raw data never changes the genuine ranked cohort')
+  assert.equal((await fetch(endpoint('&cohort=observed&cohort=observed'))).status,400)
+  assert.equal((await fetch(`http://127.0.0.1:${port}/v2/stats/legend/performance?cohort=observed&time[after]=${date(100)}&time[before]=${last}`)).status,400)
+  if(process.env.CLASHKING_E2E_APP_REPO) {
+    const appCheck=spawn(process.execPath,[resolve(process.env.CLASHKING_E2E_APP_REPO,'scripts/e2e/legend-performance.mjs')],{
+      stdio:'inherit',env:{...process.env,CLASHKING_E2E_OBSERVED:'1',CLASHKING_E2E_API_REPO:process.cwd(),CLASHKING_E2E_BASE_URL:`http://127.0.0.1:${port}`,CLASHKING_E2E_FIRST_DAY:first,CLASHKING_E2E_LAST_DAY:last},
+    })
+    const [code]=await once(appCheck,'exit');assert.equal(code,0,'App observed data path failed')
+  }
+  await db.query('DELETE FROM battles_ranked WHERE player_tag=ANY($1::text[])',[rawTags])
   for(const timestamp of [`${first}T04:59:59Z`,`${first}T05:00:00Z`,`${first}T05:09:59Z`,`${date(4)}T05:00:00Z`]) {
     await db.query(`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,direction,battle_mode,player_town_hall,opponent_town_hall,stars,destruction_percentage,duration_seconds,looted_resources)
       VALUES('#PYP','#QQQ',$1,1,2,18,18,3,100,120,'{}')`,[timestamp])
@@ -125,7 +181,7 @@ try {
   await db.query('UPDATE legend_rankings_history SET observed_attack_triples=0 WHERE tag=$1',['#PYP'])
   const mismatch=await(await fetch(endpoint())).json()
   assert.equal(mismatch.periods[0].perfectOffensePlayers,null)
-  console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation')
+  console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation, unranked observed cohorts and partial current day')
 } finally {
   if(api&&api.exitCode===null){api.kill('SIGTERM');await Promise.race([once(api,'exit'),new Promise(r=>setTimeout(r,5000))]);if(api.exitCode===null)api.kill('SIGKILL')}
   await db.end()

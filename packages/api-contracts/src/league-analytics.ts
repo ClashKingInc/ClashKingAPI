@@ -287,8 +287,17 @@ export const LegendDayPerformanceSide = Schema.Struct({
     minimum: Schema.Int, maximum: Schema.Int, playerDays: Schema.Int, share: Schema.NullOr(Schema.Number),
   })),
 })
+export const LegendPerformanceCohort = Schema.Literals(["observed", "legend_i", "top_1000", "top_200"])
+export const LegendDayPerformanceQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendPerformanceCohort) })
 export const LegendDayPerformanceResponse = Schema.Struct({
-  cohort: LegendCohort,
+  cohort: LegendPerformanceCohort,
+  currentDay: Schema.optionalKey(Schema.Struct({
+    day: Schema.String,
+    asOf: Schema.String,
+    sourceWindowStart: Schema.String,
+    offense: Schema.Struct({ players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+    defense: Schema.Struct({ players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+  })),
   // Availability is independent of the requested window. Clients may offer an
   // explicit jump to real data without silently replacing a selected period.
   availability: Schema.optional(Schema.Struct({ firstDay: Schema.String, lastDay: Schema.String })),
@@ -345,7 +354,7 @@ export const LegendDaysEndpoint = publicGet("getLegendDays", "/v2/stats/legend/d
   NoPathParams, LegendDaysQuery, LegendDaysResponse, "Get detailed Legend-day statistics")
 
 export const LegendDayPerformanceEndpoint = publicGet("getLegendDayPerformance", "/v2/stats/legend/performance",
-  NoPathParams, LegendDaysQuery, LegendDayPerformanceResponse, "Get recorded Legend-day trophy distributions and perfect-day rates")
+  NoPathParams, LegendDayPerformanceQuery, LegendDayPerformanceResponse, "Get recorded Legend-day trophy distributions and perfect-day rates")
 
 export const leagueAnalyticsEndpoints = {
   legendDayPerformance: LegendDayPerformanceEndpoint,

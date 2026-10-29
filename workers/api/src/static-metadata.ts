@@ -171,7 +171,7 @@ export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<s
   if (pathname === "/v2/player/search" || /^\/v2\/player\/[^/]+\/(?:legend-history|ranked\/\d+\/|league\/history|leaderboard-history\/)/u.test(pathname)) return ["league_tiers"]
   if (/^\/v2\/(?:ranked\/|leaderboard\/|stats\/league\/)/u.test(pathname)) return ["league_tiers"]
   if (pathname === "/v2/stats/legend/days") return ["league_tiers", "heroes", "pets", "equipment", "troops", "spells"]
-  if (pathname === "/v2/stats/ranked") return ["troops"]
+  if (pathname === "/v2/stats/ranked" || pathname === "/v2/stats/legend/performance") return ["troops"]
   // CWL history resolves league names by ID. Load metadata for this route family
   // even on a cold worker; another clan request must not be a prerequisite.
   if (pathname.startsWith("/v2/cwl/")) return ["war_leagues"]

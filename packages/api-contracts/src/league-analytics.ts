@@ -270,7 +270,15 @@ export const LegendDaysQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort:
 export const LegendDaysResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(LegendDay) })
 
 // Ratios use 0..1. A missing period is not a zero-performance period.
+export const LegendObservedBattleMetrics = {
+  starCounts: Schema.optionalKey(Schema.Array(Schema.Int)),
+  averageStars: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  averageDestruction: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  averageDuration: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  attackTypes: Schema.optionalKey(Schema.Struct({ air: Schema.Int, ground: Schema.Int, mixed: Schema.Int, unknown: Schema.Int })),
+}
 export const LegendDayPerformanceSide = Schema.Struct({
+  ...LegendObservedBattleMetrics,
   eligiblePlayerDays: Schema.Int,
   observedPlayerDays: Schema.Int,
   completePlayerDays: Schema.Int,
@@ -288,15 +296,15 @@ export const LegendDayPerformanceSide = Schema.Struct({
   })),
 })
 export const LegendPerformanceCohort = Schema.Literals(["observed", "legend_i", "top_1000", "top_200"])
-export const LegendDayPerformanceQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendPerformanceCohort) })
+export const LegendDayPerformanceQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendPerformanceCohort), compare: Schema.optionalKey(Schema.Literals(["true", "false"])), armyTypes: Schema.optionalKey(Schema.Literals(["true", "false"])) })
 export const LegendDayPerformanceResponse = Schema.Struct({
   cohort: LegendPerformanceCohort,
   currentDay: Schema.optionalKey(Schema.Struct({
     day: Schema.String,
     asOf: Schema.String,
     sourceWindowStart: Schema.String,
-    offense: Schema.Struct({ players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
-    defense: Schema.Struct({ players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+    offense: Schema.Struct({ ...LegendObservedBattleMetrics, players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+    defense: Schema.Struct({ ...LegendObservedBattleMetrics, players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
   })),
   // Availability is independent of the requested window. Clients may offer an
   // explicit jump to real data without silently replacing a selected period.

@@ -9,7 +9,10 @@ import { queryObservedLegendDayPerformance } from "./legend-performance-observed
 
 export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date()) => Effect.gen(function* () {
   if (query.get("cohort") === "observed") return yield* queryObservedLegendDayPerformance(query, now)
-  const options = yield* parseLegendDaysQuery(query, now)
+  if (query.getAll("compare").length>1 || (query.has("compare")&&!['true','false'].includes(query.get("compare")!))) return yield* Effect.fail(new InvalidRequest({message:"Invalid compare"}))
+  if (query.getAll("armyTypes").length>1 || (query.has("armyTypes")&&!['true','false'].includes(query.get("armyTypes")!))) return yield* Effect.fail(new InvalidRequest({message:"Invalid armyTypes"}))
+  const base=new URLSearchParams(query); base.delete("compare"); base.delete("armyTypes")
+  const options = yield* parseLegendDaysQuery(base, now)
   const sql = yield* SqlClient.SqlClient
   const priorEnd = new Date(`${options.window.firstDay}T00:00:00Z`).valueOf() - millisecondsPerDay
   const periods: Period[] = [
@@ -92,7 +95,7 @@ export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date
       return defense ? [{ day: date(offense.day), sourceWindowStart: new Date(offense.source_window_start).toISOString(),
         sourceWindowEnd: new Date(offense.source_window_end).toISOString(), offense: summarize([offense]), defense: summarize([defense]) }] : []
     })
-    return { cohort: options.cohort, ...(availability ? { availability } : {}), periods: periodResults,
+    return { cohort: options.cohort, ...(availability ? { availability } : {}), periods: query.get("compare")==="false"?periodResults.slice(0,1):periodResults,
       perfectDayContributions: (["1_200", "201_1000", "1001_plus"] as const).map((rankBand) => {
         const row = bands.find((value) => value.rank_band === rankBand)
         return { rankBand, offensePlayerDays: number(row?.offense ?? 0), defensePlayerDays: number(row?.defense ?? 0) }

@@ -289,6 +289,9 @@ export const LegendDayPerformanceSide = Schema.Struct({
 })
 export const LegendDayPerformanceResponse = Schema.Struct({
   cohort: LegendCohort,
+  // Availability is independent of the requested window. Clients may offer an
+  // explicit jump to real data without silently replacing a selected period.
+  availability: Schema.optional(Schema.Struct({ firstDay: Schema.String, lastDay: Schema.String })),
   periods: Schema.Array(Schema.Struct({
     kind: Schema.Literals(["selected", "previous_30", "previous_90"]),
     firstDay: Schema.String, lastDay: Schema.String,

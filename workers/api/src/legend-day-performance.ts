@@ -65,6 +65,21 @@ export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date
         AND source_window_end=source_window_start + interval '24 hours'
       ORDER BY day`,
     [options.cohort, periods[2]!.firstDay, options.window.lastDay])
+    // Advertise only completed, matching offense/defense summaries for this
+    // cohort. Historic 05:10 rows and empty cohort placeholders are not data a
+    // "latest available" action should navigate to.
+    const availabilityRows = yield* sql.unsafe<{ first_day: Date | string | null; last_day: Date | string | null }>(`
+      SELECT min(day) first_day,max(day) last_day FROM (
+        SELECT day FROM legend_day_performance
+        WHERE cohort=$1
+          AND source_window_start=(day::timestamp AT TIME ZONE 'UTC') + interval '5 hours'
+          AND source_window_end=source_window_start + interval '24 hours'
+          AND source_window_end<=$2::timestamptz
+        GROUP BY day HAVING count(*)=2 AND min(eligible_player_count)>0
+      ) valid_days`, [options.cohort, now.toISOString()])
+    const availability = availabilityRows[0]?.first_day && availabilityRows[0]?.last_day
+      ? { firstDay: date(availabilityRows[0].first_day), lastDay: date(availabilityRows[0].last_day) }
+      : undefined
     const unique = yield* sql.unsafe<{ kind: PeriodKind; direction: number; players: number | string; player_days: number | string }>(`
       WITH valid_days AS (
         SELECT day FROM legend_day_performance WHERE cohort=$1
@@ -113,7 +128,7 @@ export const queryLegendDayPerformance = (query: URLSearchParams, now = new Date
       return defense ? [{ day: date(offense.day), sourceWindowStart: new Date(offense.source_window_start).toISOString(),
         sourceWindowEnd: new Date(offense.source_window_end).toISOString(), offense: summarize([offense]), defense: summarize([defense]) }] : []
     })
-    return { cohort: options.cohort, periods: periodResults,
+    return { cohort: options.cohort, ...(availability ? { availability } : {}), periods: periodResults,
       perfectDayContributions: (["1_200", "201_1000", "1001_plus"] as const).map((rankBand) => {
         const row = bands.find((value) => value.rank_band === rankBand)
         return { rankBand, offensePlayerDays: number(row?.offense ?? 0), defensePlayerDays: number(row?.defense ?? 0) }

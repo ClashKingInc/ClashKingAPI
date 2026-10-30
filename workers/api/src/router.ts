@@ -91,6 +91,7 @@ import {
   parseStatsWarQuery,
 } from "./stats.js"
 import { dispatchLeagueAnalytics } from "./league-analytics.js"
+import { dispatchEsports } from "./esports.js"
 import { dispatchLegends } from "./legends.js"
 import { dispatchStatsHistory } from "./stats-history.js"
 import { queryCwlParticipation } from "./cwl-participation.js"
@@ -288,6 +289,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       return yield* encodeJson(ArmySetupRankHistoryResponse, yield* queryArmySetupRankHistory(url.searchParams))
     const analyticsResponse = yield* dispatchLeagueAnalytics(request)
     if (analyticsResponse !== undefined) return analyticsResponse
+    const esportsResponse = yield* dispatchEsports(request)
+    if (esportsResponse !== undefined) return esportsResponse
     const legendResponse = yield* dispatchLegends(request)
     if (legendResponse !== undefined) return legendResponse
     const statsHistoryResponse = yield* dispatchStatsHistory(request)

@@ -22,6 +22,7 @@ export * from "./stats-history.js"
 export * from "./league-analytics.js"
 export * from "./army-setups.js"
 export * from "./legends.js"
+export * from "./esports.js"
 export * from "./personal-bases.js"
 export * from "./personal-armies.js"
 export * from "./bot-clash.js"
@@ -46,6 +47,7 @@ import {
 } from "./stats.js"
 import { leagueAnalyticsEndpoints } from "./league-analytics.js"
 import { armySetupEndpoints } from "./army-setups.js"
+import { esportsEndpoints } from "./esports.js"
 import { legendEndpoints } from "./legends.js"
 import { personalBaseEndpoints } from "./personal-bases.js"
 import { personalArmyEndpoints } from "./personal-armies.js"
@@ -65,6 +67,7 @@ const coreEndpoints = {
   ...leagueAnalyticsEndpoints,
   ...armySetupEndpoints,
   ...legendEndpoints,
+  ...esportsEndpoints,
   ...personalBaseEndpoints,
   ...personalArmyEndpoints,
   ...botClashEndpoints,

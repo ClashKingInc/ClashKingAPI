@@ -73,7 +73,20 @@ export const LegendHistoricalTrophyBucketsEndpoint = defineEndpoint({
   response: LegendTrophyBucketsResponse, responseMode: "json", successStatus: 200, errors,
 })
 
+export const LegendRankCurveResponse = Schema.Struct({
+  day: Schema.NullOr(Schema.String),
+  items: Schema.Array(Schema.Struct({ rank: Schema.Int, trophies: Schema.Int })),
+})
+export const LegendRankCurveEndpoint = defineEndpoint({
+  operationId: "getLegendRankCurve", method: "GET", path: "/v2/legends/rank-curve", auth: "public",
+  summary: "Get bounded exact rank samples from the latest snapshot on or before a day",
+  body: NoBody, bodyMode: "none", pathParams: NoPathParams,
+  query: Schema.Struct({ day: Schema.String }), response: LegendRankCurveResponse,
+  responseMode: "json", successStatus: 200, errors,
+})
+
 export const legendEndpoints = {
+  legendRankCurve: LegendRankCurveEndpoint,
   legendRanks: LegendRanksEndpoint,
   historicalLegendRanks: LegendHistoricalRanksEndpoint,
   legendDaySummaries: LegendDaySummariesEndpoint,

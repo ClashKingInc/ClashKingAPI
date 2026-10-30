@@ -1,4 +1,6 @@
 import {
+  LegendRankCurveEndpoint,
+  LegendRankCurveResponse,
   LegendDaySummariesEndpoint,
   LegendDaySummariesResponse,
   LegendHistoricalRankRequest,
@@ -153,8 +155,27 @@ const response = <A>(schema: Schema.Codec<A, unknown, never, never>, value: A) =
   Effect.mapError(failure),
 )
 
+const rankCurve = (requestedDay: string) => Effect.gen(function* () {
+  const day = yield* date(requestedDay)
+  const sql = yield* SqlClient.SqlClient
+  const latest = yield* sql.unsafe<{ snapshot_day: string | null }>(`SELECT max(day)::text AS snapshot_day FROM legend_rankings_history WHERE day<=$1::date`,[day])
+  const snapshot = latest[0]?.snapshot_day
+  if (!snapshot) return { day: null, items: [] }
+  const maximum = yield* sql.unsafe<{ rank: number }>(`SELECT max(global_rank)::int rank FROM legend_rankings_history WHERE day=$1::date`,[snapshot])
+  const last=Number(maximum[0]?.rank ?? 0), ranks=new Set<number>([1,last])
+  // Sample logarithmically but return actual saved ranks and trophies. No
+  // interpolation or current-rank inference is stored in this endpoint.
+  for(let step=0;step<=240;step++){const rank=Math.round(10**(step/40));if(rank<=last)ranks.add(rank)}
+  const items=yield* sql.unsafe<{rank:number;trophies:number}>(`SELECT global_rank::int rank,trophies::int trophies FROM legend_rankings_history WHERE day=$1::date AND global_rank=ANY($2::integer[]) ORDER BY global_rank`,[snapshot,[...ranks]])
+  return {day:snapshot,items}
+}).pipe(Effect.mapError(cause=>cause instanceof InvalidRequest?cause:failure(cause)))
+
 export const dispatchLegends = (request: Request) => Effect.gen(function* () {
   const url = new URL(request.url)
+  if (request.method === "GET" && url.pathname === LegendRankCurveEndpoint.path) {
+    if ([...url.searchParams.keys()].some(key=>key!=="day") || url.searchParams.getAll("day").length!==1) return yield* new InvalidRequest({message:"A single day is required"})
+    return yield* response(LegendRankCurveResponse,yield* rankCurve(url.searchParams.get("day")!))
+  }
   if (request.method === "POST" && url.pathname === LegendRanksEndpoint.path) {
     return yield* response(LegendRanksResponse, yield* currentRanks(yield* readBoundedJson(request)))
   }
@@ -177,6 +198,7 @@ export const dispatchLegends = (request: Request) => Effect.gen(function* () {
 })
 
 export const legendRuntimeRoutes = [
+  {method:"GET",path:LegendRankCurveEndpoint.path},
   { method: "POST", path: LegendRanksEndpoint.path },
   { method: "POST", path: LegendHistoricalRanksEndpoint.path },
   { method: "POST", path: LegendDaySummariesEndpoint.path },

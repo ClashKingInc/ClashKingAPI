@@ -7,14 +7,16 @@ import { randomUUID } from "node:crypto"
 import { pipeline } from "node:stream/promises"
 import { parseEnv } from "node:util"
 import pg from "pg"
-import { loadLocalApiSecrets, loadLocalDiscordCredentials } from "./local-api-keychain.mjs"
+import { loadLocalApiSecrets, loadLocalBetaDiscordCredentials } from "./local-api-keychain.mjs"
+import { validateLocalSchemaProfile } from "./local-schema-profile.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const schema = process.env.CLASHKING_LOCAL_SCHEMA_ROOT ?? fileURLToPath(new URL("../../clashking_schemas/", import.meta.url))
 const name = process.env.CLASHKING_LOCAL_DB_CONTAINER ?? "clashking-rewrite-api-dev"
 const port = Number(process.env.CLASHKING_LOCAL_DB_PORT ?? "54329")
-if (!/^clashking-rewrite-api-[a-z0-9-]+$/u.test(name) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local database name/port")
-const volume = `${name}-data`
+if (!(name === 'clashking-timescale' || /^clashking-rewrite-api-[a-z0-9-]+$/u.test(name)) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid local database name/port")
+const volume = process.env.CLASHKING_LOCAL_DB_VOLUME ?? `${name}-data`
+if (!/^clashking-[a-z0-9-]+-data$/u.test(volume)) throw new Error('Invalid local database volume')
 const label = "io.clashking.local=retained-api-persistent-v1"
 const databaseName = "clashking_dev"
 const importName = "clashking_import_pending"
@@ -28,26 +30,7 @@ if (!endpoint.startsWith("unix://") || process.env.DOCKER_HOST && process.env.DO
 process.env.DOCKER_HOST = endpoint
 delete process.env.DOCKER_CONTEXT
 const [image, ...migrations] = output("bash", ["-ec", 'source "$1"; printf "%s\\n" "$fixture_image" "${fixture_sources[@]}"', "local-profile", join(schema, "scripts/retained-api-profile.sh")]).split("\n")
-if (!image?.includes("@sha256:") || migrations.join(",") !== [
-  "001_initial_stats.sql",
-  "002_initial_settings.sql",
-  "003_tracking_observability.sql",
-  "004_developer_link_grants.sql",
-  "005_remove_legacy_admin_auth.sql",
-  "006_simplify_developer_applications.sql",
-  "007_worker_api.sql",
-  "008_ranked_battle_history.sql",
-  "009_league_army_analytics.sql",
-  "010_cwl_season_statistics.sql",
-  "011_active_verified_players.sql",
-  "012_legend_only_army_compositions.sql",
-  "013_battle_player_time_identity.sql",
-  "014_ranked_defense_loot_nullable.sql",
-  "015_army_code_family_compatibility.sql",
-  "016_remove_cwl_season_statistics.sql",
-  "017_final_operational_contract.sql",
-  "018_personal_base_library.sql",
-].join(",")) throw new Error("Unexpected authoritative retained API profile")
+validateLocalSchemaProfile(image, migrations, schema)
 
 function inspect() {
   const ids = docker("ps", "-aq", "--filter", `name=^/${name}$`)
@@ -156,17 +139,19 @@ async function runApi() {
   if (!(await exists())) throw new Error("Local API database does not exist; run the explicit migrate or copy-from action first")
   if (await exists(importName)) throw new Error("An unfinished local import exists; inspect it before starting the API")
   const secrets = loadLocalApiSecrets()
-  const discord = loadLocalDiscordCredentials()
-  const infrastructureSecretsPath = process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env")
-  const infrastructure = parseEnv(readFileSync(infrastructureSecretsPath, "utf8"))
+  const discord = loadLocalBetaDiscordCredentials()
+  const archiveBridge = process.env.CLASHKING_LOCAL_ARCHIVE_BRIDGE !== "0"
+  const infrastructure = archiveBridge
+    ? parseEnv(readFileSync(process.env.CLASHKING_LOCAL_INFRA_ENV ?? join(schema, "local/.env"), "utf8")) : {}
   const r2AccessKeyId = infrastructure.R2_ACCESS_KEY_ID ?? ""
   const r2SecretAccessKey = infrastructure.R2_SECRET_ACCESS_KEY ?? ""
-  if (r2AccessKeyId.length < 8 || r2SecretAccessKey.length < 16) throw new Error("Shared local R2 bridge credentials are missing")
+  if (archiveBridge && (r2AccessKeyId.length < 8 || r2SecretAccessKey.length < 16)) throw new Error("Shared local R2 bridge credentials are missing")
   const environment = { ...process.env, CLASHKING_PERSISTENT_LOCAL_API: "1", CLASHKING_LOCAL_DATABASE_URL: connection(),
     R2_ACCESS_KEY_ID: r2AccessKeyId, R2_SECRET_ACCESS_KEY: r2SecretAccessKey,
     CLASHKING_LOCAL_DISCORD_CLIENT_ID: discord.clientId,
     CLASHKING_LOCAL_DISCORD_CLIENT_SECRET: discord.clientSecret,
     CLASHKING_LOCAL_DISCORD_BOT_TOKEN: discord.botToken,
+    CLASHKING_LOCAL_ARCHIVE_BRIDGE: archiveBridge ? "1" : "0",
     ...Object.fromEntries(Object.entries(secrets).map(([key, value]) => [`CLASHKING_LOCAL_${key}`, value])) }
   delete environment.CLASHKING_DISPOSABLE_TIMESCALE
   delete environment.TEST_DATABASE_URL

@@ -1,11 +1,6 @@
 import { InvalidRequest } from "./errors.js"
-
-export const ticketApprovalTokens = [
-  "ticket_count", "ticket_status", "ticket_emoji_status", "ticket_channel_mention", "user_name", "user_mention",
-  "server_name", "server_member_count", "account_name", "account_th", "account_heroes", "clan_name", "clan_level",
-  "clan_badge_emoji", "clan_link", "clan_location", "clan_member_count", "clan_leader", "clan_leader_mention",
-  "clan_tag", "clan_war_league", "clan_capital_league",
-] as const
+import { ticketApprovalTokens } from "@clashking/api-contracts"
+export { ticketApprovalTokens }
 export type TicketApprovalToken = typeof ticketApprovalTokens[number]
 const known = new Set<string>(ticketApprovalTokens)
 const tokens = /\{([^{}\r\n]+)\}/gu

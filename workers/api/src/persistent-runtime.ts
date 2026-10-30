@@ -4,17 +4,64 @@ import { GiveawayEnterEndpoint, GiveawayPublicationClaimEndpoint, GiveawayPublic
   TicketPanelPublicationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
 import { AuthIdentity } from "./auth.js"
+import { SqlClient } from "effect/sql"
 import type { DeferredRuntimeBindings } from "./environment.js"
-import { Forbidden, InvalidRequest, UpstreamUnavailable } from "./errors.js"
+import { DatabaseFailure, InvalidRequest, UpstreamUnavailable } from "./errors.js"
+import { DiscordApi } from "./discord-api.js"
 import { advanceTicketStaff, prepareTicketStaff } from "./ticket-staff-runtime.js"
 import { enterGiveaway } from "./giveaway-runtime.js"
 import { readBoundedJson } from "./request-body.js"
 import { verifyRuntimeInteraction } from "./runtime-interaction.js"
 import { claimGiveawayPublication, completeGiveawayPublication, pendingGiveawayPublications, prepareGiveawayPublication } from "./giveaway-publications.js"
+import { enqueueTicketButtonClick } from "./ticket-button-click-logs.js"
+import { adoptLegacyTicketPanel } from "./ticket-legacy-adoption.js"
 import { advanceTicketOperation, prepareTicketOpen, ticketOperationStatus, wakeTicketOperation } from "./ticket-runtime.js"
 import { prepareTicketPanelPublication,ticketPanelPublicationStatus } from "./ticket-panel-publications.js"
 import { ticketAccountInteraction } from "./ticket-account-runtime.js"
+import { advanceTicketApproval, prepareTicketApproval, TicketApprovalResolver } from "./ticket-approval-runtime.js"
+import { resolveTicketApproval, TicketApprovalGuildCounts } from "./ticket-approval-resolver.js"
+// Mount only tickets. Other reference runtime routes remain disabled.
+export const dispatchTicketRuntime = (request: Request, bindings: DeferredRuntimeBindings) => {
+  const path = new URL(request.url).pathname
+  const panels = /^\/v2\/bot\/server\/([1-9][0-9]{0,19})\/ticket-panels$/u.exec(path)
+  if (request.method === "GET" && panels) return Effect.gen(function* () {
+    yield* (yield* AuthIdentity).requireBot(request)
+    const sql = yield* SqlClient.SqlClient
+    const items = yield* sql<{ id: string; name: string }>`SELECT id::text,name FROM ticket_panels
+      WHERE server_id=${panels[1]!} AND archived_at IS NULL ORDER BY name`
+    return Response.json({ items }, { headers: { "cache-control": "no-store" } })
+  }).pipe(Effect.catchTag("SqlError", cause => Effect.fail(new DatabaseFailure({ cause, message: "Ticket panels are unavailable" }))))
+  if (!/^\/v2\/runtime\/(tickets\/|ticket-operations\/|ticket-panel-publications\/)/u.test(path)) {
+    return Effect.succeed(undefined)
+  }
+  return dispatchPersistentRuntime(request, bindings)
+}
 
+const withApprovalResolver = <A, E>(program: Effect.Effect<A, E, TicketApprovalResolver | SqlClient.SqlClient | DiscordApi>,
+  bindings: DeferredRuntimeBindings) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient, discord = yield* DiscordApi
+  return yield* program.pipe(Effect.provideService(TicketApprovalResolver, {
+    resolve: (ticket, template) => resolveTicketApproval(ticket, template, bindings).pipe(
+      Effect.provideService(TicketApprovalGuildCounts, {
+        exact: (applicationId, guildId) => sql<{ count: number }>`SELECT (
+          SELECT count(*)::int FROM discord_cache.members member WHERE member.guild_id=guild.id
+        ) AS count FROM discord_cache.guilds guild
+          JOIN discord_cache.gateway_shards shard
+            ON (shard.application_id,shard.shard_id)=(guild.application_id,guild.shard_id)
+          WHERE guild.id=${guildId} AND guild.application_id=${applicationId}
+            AND guild.generation=shard.generation AND guild.available AND guild.metadata_complete
+            AND guild.members_complete AND shard.healthy
+            AND shard.heartbeat_at>clock_timestamp()-interval '45 seconds'`.pipe(
+          Effect.flatMap(rows => rows[0] ? Effect.succeed(rows[0].count) : Effect.fail(new UpstreamUnavailable({
+            cause: "exact_count_unavailable", message: "Exact guild member count is unavailable",
+          }))),
+          Effect.catchTag("SqlError", cause => Effect.fail(new DatabaseFailure({ cause, message: "Guild count lookup failed" }))),
+        ),
+      }),
+      Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(DiscordApi, discord),
+    ),
+  }))
+})
 export const persistentRuntimeRoutes = [
   { method: "POST", path: "/v2/runtime/giveaways/:giveawayId/entries", operation: "giveawayEnter" },
   { method: "POST", path: "/v2/runtime/giveaways/:giveawayId/publications/prepare", operation: "giveawayPublicationPrepare" },
@@ -55,15 +102,18 @@ export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRu
     const proof = yield* Schema.decodeUnknownEffect(RuntimeInteractionProof)(raw).pipe(
       Effect.mapError(() => new InvalidRequest({ message:"Invalid Discord interaction proof" })),
     )
-    const interaction = yield* verifyRuntimeInteraction(proof,bindings)
+    const verified = yield* verifyRuntimeInteraction(proof,bindings)
+    const interaction = ticketPrepare ? yield* adoptLegacyTicketPanel(verified,bindings.DISCORD_APPLICATION_ID) : verified
     if (ticketAccounts) return Response.json(yield* ticketAccountInteraction(interaction), { headers: { "cache-control":"no-store" } })
-    if (ticketApprove) return yield* new Forbidden({ message:"Ticket approval template runtime is not ready" })
-    if (ticketAction) {
-      const result = yield* prepareTicketStaff(interaction)
+    if (ticketAction || ticketApprove) {
+      const approval = ticketApprove || ("custom_id" in interaction.data && interaction.data.custom_id.startsWith("ck:ticket:approve:"))
+      const result = yield* (approval ? prepareTicketApproval(interaction) : prepareTicketStaff(interaction))
       if (result.outcome === "accepted") yield* wakeTicketOperation(bindings,result.operationId,interaction.guildId,result.ticketId)
       return Response.json(result,{headers:{"cache-control":"no-store"}})
     }
     if (ticketPrepare) {
+      const click = yield* enqueueTicketButtonClick(interaction)
+      if (click) yield* wakeTicketOperation(bindings,`click:${click.id}`,interaction.guildId,`panel:${click.panelId}`)
       const result = yield* prepareTicketOpen(interaction)
       if (result.outcome === "accepted") yield* wakeTicketOperation(bindings,result.operationId,interaction.guildId,result.ticketId)
       return Response.json(result,{ headers:{ "cache-control":"no-store" } })
@@ -73,7 +123,8 @@ export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRu
       yield* Schema.decodeUnknownEffect(TicketOperationAdvanceEndpoint.body)(raw).pipe(
         Effect.mapError(() => new InvalidRequest({ message:"Invalid ticket operation advance" })),
       )
-      const staffResult = yield* advanceTicketStaff(operationId,interaction)
+      const approvalResult = yield* withApprovalResolver(advanceTicketApproval(operationId,interaction), bindings)
+      const staffResult = approvalResult ?? (yield* advanceTicketStaff(operationId,interaction))
       const result = staffResult ?? (yield* advanceTicketOperation(operationId,interaction))
       if (result.outcome === "accepted") yield* wakeTicketOperation(bindings,result.operationId,interaction.guildId,result.ticketId)
       return Response.json(result,{ headers:{ "cache-control":"no-store" } })

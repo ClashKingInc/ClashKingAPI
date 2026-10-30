@@ -1,7 +1,7 @@
-import { TicketButtonSettings, DiscordEmbed } from "@clashking/api-contracts"
+import { TicketButtonSettings, TicketPanelMessage, DiscordEmbed } from "@clashking/api-contracts"
 import { RuntimeUUID, TicketOperationAdvanceEndpoint, TicketOpenPrepareEndpoint, TicketOperationStatusEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DeferredRuntimeBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
@@ -9,6 +9,8 @@ import { loadTicketPanelSource } from "./ticket-panel-source.js"
 import { prepareTicketLink, replayTicketLinkPreparation } from "./ticket-link-preparation.js"
 import { ticketChannelName } from "./ticket-channel-name.js"
 import { ticketOpeningEmbedPages, ticketWelcomeEmbeds, type TicketEmbed } from "./ticket-opening-message.js"
+import { ticketApplicationPages, ticketModalAnswers, decodeTicketApplicationPages } from "./ticket-application-form.js"
+import { ticketAccountEligible as accountEligible } from "./ticket-account-eligibility.js"
 
 type Ready = Extract<typeof TicketOpenPrepareEndpoint.response.Type, { readonly outcome: "ready" }>
 type Accepted = Extract<typeof TicketOperationAdvanceEndpoint.response.Type, { readonly outcome: "accepted" | "complete" }>
@@ -42,7 +44,6 @@ interface AccountRow {
   readonly name: string | null
   readonly townhall_level: number | null
   readonly heroes: unknown
-  readonly achievements: unknown
 }
 interface RuntimeContext {
   readonly panelName: string
@@ -50,11 +51,14 @@ interface RuntimeContext {
   readonly settings: typeof TicketButtonSettings.Type
   readonly questions: ReadonlyArray<string>
   readonly pages: ReadonlyArray<ReadonlyArray<FormField>>
-  readonly eligibleAccounts: ReadonlyArray<{ readonly tag: string; readonly label: string }>
+  readonly eligibleAccounts: ReadonlyArray<{ readonly tag: string; readonly label: string; readonly townhall?: number }>
   readonly welcomeEmbeds: ReadonlyArray<TicketEmbed>
+  readonly openingMessage?: typeof TicketPanelMessage.Type
   readonly openCategoryId?: string
+  readonly buttonClickLogChannelId?: string
 }
 interface Progress {
+  readonly applicationAccounts?: ReadonlyArray<{ readonly tag: string; readonly name: string | null; readonly townhall_level: number | null }>
   readonly page: number
   readonly stage: "account" | "modal" | "continue"
   readonly answers: Readonly<Record<string, string>>
@@ -69,49 +73,18 @@ const uuid = (value: string) => Schema.decodeUnknownEffect(RuntimeUUID)(value).p
 )
 const stored = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown, message: string) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message })))
-const heroNames: Readonly<Record<string, string>> = {
-  BK: "Barbarian King", AQ: "Archer Queen", GW: "Grand Warden", RC: "Royal Champion",
-}
-const accountEligible = (account: AccountRow, settings: typeof TicketButtonSettings.Type): boolean => {
-  if (account.townhall_level === null || account.townhall_level < settings.th_min) return false
-  const requirements = settings.townhall_requirements[String(account.townhall_level)]
-  if (requirements === undefined) return true
-  const heroes = Array.isArray(account.heroes) ? account.heroes : []
-  const achievements = Array.isArray(account.achievements) ? account.achievements : []
-  for (const [key, required] of Object.entries(requirements)) {
-    if (!Number.isFinite(required) || required < 0) return false
-    if (key === "WARST") {
-      const warHero = achievements.find((item) => jsonObject(item)?.name === "War Hero")
-      if (typeof jsonObject(warHero)?.value !== "number" || Number(jsonObject(warHero)?.value) < required) return false
-      continue
-    }
-    const name = heroNames[key]
-    if (name === undefined) return false
-    const hero = heroes.find((item) => jsonObject(item)?.name === name && jsonObject(item)?.village === "home")
-    if (typeof jsonObject(hero)?.level !== "number" || Number(jsonObject(hero)?.level) < required) return false
-  }
-  return true
-}
-
-const formPages = (questions: readonly string[]) => {
-  const fields: Array<FormField> = []
-  for (const [index, question] of questions.entries()) fields.push({
-    customId: `q:${index}`, label: question.slice(0, 45), required: true,
-    style: "paragraph", maxLength: 500,
-  })
-  return Array.from({ length: Math.ceil(fields.length / 5) }, (_, index) => fields.slice(index * 5, index * 5 + 5))
-}
 
 const decodeContext = (row: OperationRow) => stored(Schema.Struct({
   panelName: Schema.String, actorLabel: Schema.String, settings: TicketButtonSettings,
-  questions: Schema.Array(Schema.String), pages: Schema.Array(Schema.Array(Schema.Struct({
-    customId: Schema.String, label: Schema.String, required: Schema.Boolean,
-    style: Schema.Literals(["short", "paragraph"]), maxLength: Schema.Number,
-  }))), eligibleAccounts: Schema.Array(Schema.Struct({ tag:Schema.String,label:Schema.String })),
+  questions: Schema.Array(Schema.String), pages: decodeTicketApplicationPages,
+  eligibleAccounts: Schema.Array(Schema.Struct({ tag:Schema.String,label:Schema.String,townhall:Schema.optionalKey(Schema.Number) })),
   welcomeEmbeds: Schema.Array(DiscordEmbed),
+  openingMessage: Schema.optionalKey(TicketPanelMessage),
   openCategoryId: Schema.optionalKey(Schema.String),
+  buttonClickLogChannelId: Schema.optionalKey(Schema.String),
 }), row.context, "Stored ticket operation context is invalid") as Effect.Effect<RuntimeContext, DatabaseFailure>
 const decodeProgress = (row: OperationRow) => stored(Schema.Struct({
+  applicationAccounts: Schema.optionalKey(Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.NullOr(Schema.String), townhall_level: Schema.NullOr(Schema.Number) }))),
   page: Schema.Number, stage:Schema.Literals(["account","modal","continue"]),
   answers: Schema.Record(Schema.String, Schema.String), accounts: Schema.Array(Schema.String),
 }), row.progress, "Stored ticket operation progress is invalid") as Effect.Effect<Progress, DatabaseFailure>
@@ -121,8 +94,9 @@ const ready = (row: OperationRow, context: RuntimeContext, progress: Progress): 
   expiresAt: new Date(row.expires_at).toISOString(),
   form: progress.stage === "account" ? {
     kind:"account_select",customId:`ck:ticket:accounts:${row.id}`,content:"Select the account(s) to include in this ticket.",
-    placeholder:"Select account(s)",minValues:1,maxValues:Math.max(1,Math.min(25,context.settings.num_apply,context.eligibleAccounts.length)),
-    options:context.eligibleAccounts.map((account) => ({ value:account.tag,label:account.label })),
+    placeholder:"Select account",minValues:1,maxValues:1,
+    options:context.eligibleAccounts.map((account) => ({ value:account.tag,label:account.label,description:account.tag,
+      ...(account.townhall === undefined ? {} : {townhall:account.townhall}) })),
   } : progress.stage === "continue" ? {
     kind:"continue",customId:`ck:ticket:continue:${row.id}:${progress.page}`,
     content:"Continue to the next questionnaire page.",label:"Continue",
@@ -132,6 +106,8 @@ const ready = (row: OperationRow, context: RuntimeContext, progress: Progress): 
 const accepted = (row: OperationRow): Accepted => ({
   outcome: row.state === "completed" ? "complete" : "accepted", operationId: row.id,
   ticketId: row.ticket_id, state: row.state,
+  ...(row.state === "completed" && row.action === "open" && typeof jsonObject(row.result)?.channelId === "string"
+    ? {channelId:String(jsonObject(row.result)!.channelId)} : {}),
 })
 const assertOperationIdentity = (row: OperationRow, interaction: VerifiedRuntimeInteraction) =>
   row.interaction_id === interaction.id && row.server_id === interaction.guildId && row.actor_user_id === interaction.actorId
@@ -176,7 +152,9 @@ const enqueueOpenEffects = (row: OperationRow, context: RuntimeContext, progress
       moderatorRoleIds:[...new Set([...context.settings.mod_role,...context.settings.no_ping_mod_role])] },
   }]
   const answers=context.questions.map((_,index)=>progress.answers[`q:${index}`] ?? "")
-  const channelPages=yield* Effect.try({try:()=>ticketOpeningEmbedPages(context.welcomeEmbeds,context.questions,answers,progress.accounts),
+  if (context.openingMessage) effects.push({ key:"opening-message",type:"send_message",request:{ target:"channel",
+    nonce:`t:${number}:welcome`,message:context.openingMessage } })
+  const channelPages=yield* Effect.try({try:()=>ticketOpeningEmbedPages(context.openingMessage ? [] : context.welcomeEmbeds,context.questions,answers,progress.accounts),
     catch:()=>new Conflict({message:"Ticket application exceeds Discord message limits"})})
   for (const [page,embeds] of channelPages.entries()) effects.push({
     key:`application:${page}`,type:"send_message",request:{ target:"channel",nonce:`t:${number}:a:${page}`,
@@ -208,36 +186,41 @@ const finalizeOpen = (row: OperationRow, interaction: VerifiedRuntimeInteraction
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   if (bytes(progress)>30_000) return yield* new Conflict({message:"Ticket answers exceed the durable snapshot limit"})
+  let applicationAccounts: AccountRow[] = []
   if (context.settings.account_apply) {
-    if (!progress.accounts.length) return yield* new Conflict({message:"Ticket application requires a selected account"})
+    if (progress.accounts.length !== 1) return yield* new Conflict({message:"Ticket application requires exactly one selected account"})
     // Lock the subject and then re-read its current link rows. A form's earlier
     // account list is not current ownership proof.
-    const current=yield* sql<AccountRow>`SELECT links.tag,player.name,player.townhall_level,details.heroes,details.achievements
+    const current=yield* sql<AccountRow>`SELECT links.tag,player.name,player.townhall_level,details.heroes
       FROM player_links links LEFT JOIN basic_player player ON player.tag=links.tag
       LEFT JOIN player_profile_details details ON details.player_tag=links.tag
-      WHERE links.user_id=${row.actor_user_id} AND links.hidden=false AND links.tag=ANY(${progress.accounts}::text[])
+      WHERE links.user_id=${row.actor_user_id} AND links.tag=ANY(${progress.accounts}::text[])
       FOR SHARE OF links`
     if (current.length !== progress.accounts.length || current.some(account=>!accountEligible(account,context.settings))) {
       return yield* new Forbidden({message:"A selected account is no longer linked or eligible for this ticket",reason:"linked_account"})
     }
+    applicationAccounts = [...current]
   }
+  const submittedProgress = { ...progress, applicationAccounts: applicationAccounts.map(({ tag, name, townhall_level }) => ({ tag, name, townhall_level })) }
   const number = (yield* sql<{ number: number }>`SELECT nextval('tickets_number_seq')::integer AS number`)[0]?.number
   if (number === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Ticket number allocation failed" })
   yield* sql`UPDATE ticket_runtime_operations SET ticket_number=${number},submission_interaction_id=${interaction.id},
     submitted_request=${JSON.stringify(submittedRequest)}::jsonb,submitted_request_hash=${interaction.requestHash},
-    progress=${JSON.stringify(progress)}::jsonb,state='submitted',updated_at=clock_timestamp() WHERE id=${row.id}::uuid`
+    progress=${JSON.stringify(submittedProgress)}::jsonb,state='submitted',updated_at=clock_timestamp() WHERE id=${row.id}::uuid`
   const submitted = { ...row, ticket_number:number,submission_interaction_id:interaction.id,
-    submitted_request_hash:interaction.requestHash,progress,state:"submitted" as const }
+    submitted_request_hash:interaction.requestHash,progress:submittedProgress,state:"submitted" as const }
   yield* enqueueOpenEffects(submitted,context,progress,number)
   return submitted
 })
 
 const prepareTicketOpenTransaction = (interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
-  if (interaction.type !== 3 || interaction.data.component_type !== 2 || interaction.messageId === undefined ||
+  if (interaction.type !== 3 || ![2,3].includes(interaction.data.component_type ?? 0) || interaction.messageId === undefined ||
     interaction.data.custom_id === undefined) {
     return yield* new Forbidden({ message: "A canonical ticket panel button is required", reason: "wrong_message" })
   }
-  const match = /^ck:ticket:open:([0-9a-f-]{36}):([0-9a-f-]{36})$/iu.exec(interaction.data.custom_id)
+  const isMenu = interaction.data.component_type === 3
+  const selected = isMenu && interaction.data.values?.length === 1 ? interaction.data.values[0] : interaction.data.custom_id
+  const match = /^ck:ticket:open:([0-9a-f-]{36}):([0-9a-f-]{36})$/iu.exec(selected ?? "")
   if (!match) return yield* new Forbidden({ message: "A canonical ticket panel button is required", reason: "wrong_message" })
   const panelId = yield* uuid(match[1]!), buttonId = yield* uuid(match[2]!)
   const sql = yield* SqlClient.SqlClient
@@ -252,39 +235,42 @@ const prepareTicketOpenTransaction = (interaction: VerifiedRuntimeInteraction) =
   if (linkReplay !== undefined) return linkReplay
   yield* requireFreshInteraction(interaction)
   const panel = yield* loadTicketPanelSource({ guildId: interaction.guildId, channelId: interaction.channelId,
-    messageId: interaction.messageId, panelId, buttonId })
+    messageId: interaction.messageId, panelId, buttonId, ...(isMenu ? { menuId: interaction.data.custom_id } : {}) })
   const data = jsonObject(panel.data)
   const settings = panel.settings
   if ([...settings.mod_role,...settings.no_ping_mod_role].includes(interaction.guildId)) {
     return yield* new Conflict({message:"The everyone role cannot be configured as ticket staff"})
   }
-  const questions = settings.questions.map((question) => question.trim()).filter((question) => question !== "")
-  if (questions.length > 100) return yield* new Conflict({ message: "Ticket questionnaire exceeds 100 supported questions" })
   const accounts = settings.account_apply ? yield* sql<AccountRow>`SELECT links.tag,player.name,player.townhall_level,
-    details.heroes,details.achievements FROM player_links links LEFT JOIN basic_player player ON player.tag=links.tag
+    details.heroes FROM player_links links LEFT JOIN basic_player player ON player.tag=links.tag
     LEFT JOIN player_profile_details details ON details.player_tag=links.tag
-    WHERE links.user_id=${interaction.actorId} AND links.hidden=false ORDER BY links.order_index,links.added_at` : []
+    WHERE links.user_id=${interaction.actorId} ORDER BY links.order_index,links.added_at` : []
   const eligible = accounts.filter((account) => accountEligible(account,settings)).slice(0,25)
   if (settings.account_apply && accounts.length === 0) return yield* prepareTicketLink(interaction,panel)
   if (settings.account_apply && eligible.length === 0) return yield* new Forbidden({ message: "No linked account meets this ticket's requirements", reason:"linked_account" })
-  const operationId = crypto.randomUUID(), ticketId = crypto.randomUUID(), pages = formPages(questions)
+  const eligibleAccounts = eligible.map(account => ({ tag:account.tag,label:(account.name ?? account.tag).slice(0,100),
+    ...(account.townhall_level === null ? {} : { townhall:account.townhall_level }) }))
+  const { questions, pages } = yield* Effect.try({ try:() => ticketApplicationPages(settings,eligibleAccounts),
+    catch:() => new Conflict({message:"Ticket application form is invalid"}) })
+  const operationId = crypto.randomUUID(), ticketId = crypto.randomUUID()
   const pingLength = settings.mod_role.map((roleId) => `<@&${roleId}>`).join(" ").length + interaction.actorId.length + 4
   const staffPingLength = settings.private_thread ? [...new Set([...settings.mod_role,...settings.no_ping_mod_role])].map(roleId=>`<@&${roleId}>`).join(" ").length : 0
   if (pingLength > 2000 || staffPingLength > 2000) return yield* new Conflict({ message:"Ticket configuration exceeds Discord message limits" })
-  const configuredWelcome=settings.new_message ? (yield* sql<{data:unknown}>`SELECT data FROM server_custom_embeds
+  const configuredWelcome=!settings.opening_message && settings.new_message ? (yield* sql<{data:unknown}>`SELECT data FROM server_custom_embeds
     WHERE server_id=${interaction.guildId} AND name=${settings.new_message}`)[0] : undefined
-  if (settings.new_message && !configuredWelcome) return yield* new Conflict({message:"Configured ticket welcome embed no longer exists"})
+  if (!settings.opening_message && settings.new_message && !configuredWelcome) return yield* new Conflict({message:"Configured ticket welcome embed no longer exists"})
   const welcomeEmbeds=yield* Effect.try({try:()=>ticketWelcomeEmbeds(configuredWelcome?.data),
     catch:()=>new Conflict({message:"Configured ticket welcome embeds cannot be published"})})
   const context: RuntimeContext = { panelName:panel.name,actorLabel:interaction.actorLabel,settings,questions,pages,welcomeEmbeds,
-    eligibleAccounts:eligible.map((account) => ({ tag:account.tag,label:(account.name ?? account.tag).slice(0,100) })),
+    ...(settings.opening_message ? { openingMessage:settings.opening_message } : {}),eligibleAccounts,
+    ...(typeof data?.ticket_button_click_log === "string" ? {buttonClickLogChannelId:data.ticket_button_click_log} : {}),
     ...(typeof data?.["open-category"] === "string" ? { openCategoryId:data["open-category"] } : {}) }
   if (bytes(context) > 60_000) return yield* new Conflict({ message: "Ticket configuration exceeds the runtime snapshot limit" })
   const worstProgress: Progress = { page:pages.length,stage:"modal",
     answers:Object.fromEntries(questions.map((_,index) => [`q:${index}`,"x".repeat(500)])),
     accounts:eligible.map((account) => account.tag) }
   if (bytes(worstProgress) > 30_000) return yield* new Conflict({ message:"Ticket questionnaire exceeds the durable answer limit" })
-  const progress: Progress = { page:0,stage:settings.account_apply ? "account" : "modal",answers:{},accounts:[] }
+  const progress: Progress = { page:0,stage:"modal",answers:{},accounts:[] }
   const request = { customId:interaction.data.custom_id,type:interaction.type }
   const inserted = (yield* sql<OperationRow>`INSERT INTO ticket_runtime_operations(id,interaction_id,action,ticket_id,server_id,
     actor_user_id,panel_id,button_id,origin_channel_id,origin_message_id,context,request,request_hash,progress)
@@ -351,7 +337,7 @@ export const advanceTicketOperation = (operationId: string, interaction: Verifie
         return yield* new Forbidden({ message:"Unexpected ticket account selection",reason:"wrong_message" })
       }
       const selected = [...new Set(interaction.data.values ?? [])]
-      const maximum = Math.max(1,Math.min(25,context.settings.num_apply,context.eligibleAccounts.length))
+      const maximum = 1
       if (selected.length < 1 || selected.length > maximum ||
         selected.some((tag) => !context.eligibleAccounts.some((account) => account.tag === tag))) {
         return yield* new InvalidRequest({ message:"Ticket account selection is invalid" })
@@ -373,16 +359,10 @@ export const advanceTicketOperation = (operationId: string, interaction: Verifie
       if (!page) return yield* new Conflict({ message:"Ticket form page is no longer available" })
       const submitted = yield* Effect.try({ try:() => findValues(interaction.data.components),
         catch:(cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message:"Ticket form is invalid" }) })
-      for (const field of page) {
-        const answer = submitted.get(field.customId)?.value
-        if (answer === undefined || answer.length > field.maxLength || field.required && answer.trim() === "") {
-          return yield* new InvalidRequest({ message:`Ticket answer ${field.customId} is invalid` })
-        }
-        answers[field.customId] = answer
-      }
-      if ([...submitted.keys()].some((key) => !page.some((field) => field.customId === key))) {
-        return yield* new InvalidRequest({ message:"Ticket form contains unexpected fields" })
-      }
+      const result = yield* Effect.try({ try:() => ticketModalAnswers(page,submitted),
+        catch:() => new InvalidRequest({message:"Ticket form answers are invalid"}) })
+      Object.assign(answers,result.answers)
+      if (result.accounts) accounts = [...result.accounts]
       const questionPage = progress.page + 1
       final = questionPage >= context.pages.length
       next = { page:questionPage,stage:final ? "modal" : "continue",answers,accounts }

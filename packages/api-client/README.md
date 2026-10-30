@@ -1,5 +1,8 @@
 # `@clashking/api-client`
 
+Requires exactly Effect `4.0.0`. The API package versions remain independent
+release candidates; stable Effect does not change their release channel.
+
 The shared Effect v4 client executes `@clashking/api-contracts` descriptors over
 HTTP or a Cloudflare Service Binding. It owns URL interpolation, path/query/body
 encoding, multipart boundaries, binary and empty responses, auth headers,
@@ -15,10 +18,10 @@ const client = createApiClient({
   auth: { botToken: env.CLASHKING_API_TOKEN },
 })
 
-const program = client.execute(endpoints.statsArmies, {
+const program = client.execute(endpoints.armySetups, {
   path: {},
-  query: {},
-  body: { start_date: "2026-08-01", end_date: "2026-09-01" },
+  query: { "time[after]": "2026-08-01", "time[before]": "2026-08-31" },
+  body: {},
 })
 ```
 

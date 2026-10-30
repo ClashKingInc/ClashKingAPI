@@ -24,6 +24,14 @@ Some routes are public. Routes that read or change account and server data requi
 
 The interactive reference shows the available routes, what to send, what comes back, and whether you need to sign in.
 
+### Manual reminder requests
+
+`POST /v2/server/:serverId/reminders/:reminderId/send` requires a signed-in user with reminder-management access. It accepts no actor override. The authenticated bot route `/v2/bot/server/:serverId/reminders/manual` accepts `{ "clanTag": "#PYLQRRJC", "type": "War" }`. The signed Discord command checks Manage Server permission before calling that route; the API separately requires bot authentication. No caller-supplied actor ID is needed.
+
+Both return HTTP202 with `{ "accepted": 1 }` for accepted requests, not delivered messages. The API reads enabled reminders belonging to that server and emits one PostgreSQL notification per reminder through `clashking_tracking_wake_v1`, containing only `kind`, `serverId`, and `reminderId`. Tracking rechecks configuration and uses the existing sender. War, Clan Capital, Clan Games and roster reminders are supported. A disabled, missing or unsupported destination is not accepted.
+
+This path is deliberately best-effort: there is no request table, delivery lease, durable retry queue or exactly-once guarantee. A notification can be missed if the worker is disconnected, and repeated requests can produce repeated sends.
+
 ## Project layout
 
 - `workers/api` contains the Effect v4 / TypeScript Cloudflare Worker API.
@@ -46,18 +54,17 @@ Use Node 26 and npm 12, with the pinned Effect/TypeScript versions:
 ```sh
 npm ci
 npm run typecheck
-npm test
-npm run test:scripts
-npm run test:archive-runtime
+npm run e2e:roster-assistant
 npm run lint
 npm run openapi:check
 npm run build
 ```
 
-Build and Worker dry-run scripts do not deploy. The retained database test lane
-requires the authoritative schema copy's disposable Goose/Timescale harness:
-`npm run test:postgres:all -- /path/to/clashking_schemas`. It never uses an
-inherited production connection. Deferred Bot tests are not active API acceptance.
+Build and Worker dry-run scripts do not deploy. Real database/service checks use
+the authoritative schema copy's disposable Goose/Timescale harness and the
+retained scripts documented in `clashking_bot/tooling/e2e/README.md`. Unit and
+isolated-helper suites are not retained. Never inherit a production connection
+for mutating verification.
 
 For interactive Dashboard/App development, use `npm run dev`. It generates the
 contracts and API documentation before starting the persistent local database;
@@ -93,32 +100,27 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE).
 
 This project is not affiliated with, endorsed, sponsored, or specifically approved by Supercell. Clash of Clans and its related assets belong to Supercell. Use this API in line with Supercell's [Fan Content Policy](https://supercell.com/en/fan-content-policy/) and Terms of Service.
 
-### Army families and battle history (next release)
+### Army setups and battle history (next release)
 
-Army statistics identify permanent families with decimal-string `familyId`, a
-nullable manually assigned `name`, and their fixed representative `shareCode`.
-Detail/timeline requests accept `armyLink` (full Clash link or canonical code).
-Hero/equipment filters match the representative, not individual attacks. Usage
-is `attacks / totalLegendAttacks`; the denominator includes uncoded attacks.
-Known duration averages divide by the number of non-null durations.
+Current army statistics use `/v2/stats/army-setups` and its `/timeline` and
+`/rank-history` routes. Daily observations identify troop groups and supported
+variants with `groupKey` and `variantKey`. The retired `/v2/stats/armies`,
+`/detail`, and `/timeline` family routes return an explicit404. No numeric family
+ID is mapped to a new group key. Player Legend comparisons return overall
+cohort results only, not stale legacy-family comparisons. Supported current
+cohorts are all Legend I, top1,000, and top200.
 
 Aggregate date-only `time[after]` and `time[before]` select inclusive Legend day
 labels. Day `2026-09-08` covers `[2026-09-08T05:10:00Z,
 2026-09-09T05:10:00Z)`. Timestamp ranges must align to those boundaries and use
-an exclusive `time[before]`; partial-day aggregate requests return 400. Public
-search defaults to 30 completed days (one-day limit 250; multi-day limit 10).
-Admin defaults to the latest completed day; timelines support 365 day labels.
+an exclusive `time[before]`; partial-day aggregate requests return 400.
 Unrelated raw history keeps its existing inclusive UTC time filters.
 
-Daily player counts are exact for the collected daily population. Multi-day
-`players` is a distinct union from retained raw attacks only when every selected
-completed day has a global closeout row and matching raw attack count, including
-zero-attack days and uncoded attacks. Otherwise `players` is null and an active
-`minimumPlayers` filter returns 400. This checks preservation of the closeout
-population, not whether every real game attack was collected. Raw coverage and
-player unions share one bounded scan; no permanent player set is stored.
+Current setup responses expose completed days, total observed attacks, and
+classified attacks. Missing observations stay missing rather than becoming
+zero usage. Usage denominators include attacks without a classified army.
 
-Admin family browsing supports search by name/ID/code/link, named/unnamed,
+Historical admin family browsing supports search by name/ID/code/link, named/unnamed,
 representative filters, sorting, and `page`/`limit`/`hasMore`. Inactive families
 remain discoverable. PATCH `/v2/admin/stats/armies/:familyId` accepts a manual
 name or null to clear it. GET `/:familyId/members` lists codes and similarity
@@ -135,10 +137,21 @@ extra loot a second time. Opponent data is not invented for farming records.
 Unix-second tournament membership period. This corrects the old `battlelogs`
 query's obsolete YYYYMM join; it is an explicit population correction, not
 unchanged mixed-mode behavior. Legend daily statistics have no tier/TH grouping.
+Ranked `metrics` and each UTC `daily` point now include `airCount`, `groundCount`,
+`mixedCount`, `unknownCount`, `classifiedCount`, and `classificationCoverage`
+(a fraction from 0 to 1). Main-army troop housing determines type: at least
+70% air or ground is that type, and the middle is mixed. Missing compositions,
+empty armies, and armies with unmapped troop IDs are unknown. The four type
+counts sum to `sampleSize`; castle troops, spells, and heroes do not affect type.
 
-Deployment requires DevKit migrations 014 and 015, with the separately approved
-bounded defense-loot cleanup between them and old writers paused through the
-cutover. This API reads the final `army_family_daily_stats` and
-`legend_daily_stats` tables, preserving the old aggregates separately. Do not merge into the auto-deployed branch before the
-coordinated production schema gate is satisfied. Local tests and candidate
-package archives do not imply production readiness or publication.
+Current closeout writes `legend_daily_stats` and `army_setup_daily_stats`
+atomically. Historical family aggregates remain available only to historical
+admin tooling; no current family writer runs. Do not merge into the auto-deployed
+branch before the coordinated production schema gate is satisfied. Local
+verification and candidate archives do not imply deployment or publication.
+
+### Server clan verification
+
+Dashboard clan creation can open verification immediately, and clan settings can start it later. The API issues a description marker from 20 rotating familiar five- or six-letter words suffixed with `ck` (for example, `appleck`) after checking that it is absent from the current Clash description. Progress is stored in `server_clan_verifications` (Goose migrations 058–059): the first check is due after two minutes, subsequent checks are leased for one minute, and challenges expire after 30 minutes. The API Worker's one-minute cron checks bounded batches; the open dashboard also checks due challenges so local development works without a cron emulator.
+
+Verification belongs to a configured `(server_id, clan_tag)` pair and is deleted when that clan is removed. Only the verified server's clan-roster Links response reveals hidden link identities; unverified clans retain the Hidden label without revealing ownership. Changing ordinary clan settings cannot grant verification. Active verification words are distinct for the same clan across servers. Production needs migrations 058–059 and the updated Worker/cron; local migration or tests do not deploy these changes.

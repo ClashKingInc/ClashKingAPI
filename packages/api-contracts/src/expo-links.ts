@@ -26,6 +26,8 @@ export const AccountConflictErrorResponse = Schema.Struct({
   account: LinkedPlayer,
 })
 export const LinkedAccount = Schema.Struct({
+  player_name: Schema.optionalKey(Schema.String),
+  town_hall: Schema.optionalKey(Schema.Number),
   user_id: Schema.String,
   player_tag: Schema.String,
   order_index: Schema.Number,
@@ -119,7 +121,7 @@ export const LinksAddEndpoint = defineEndpoint({
   path: "/v2/links/:userId",
   auth: "user-or-bot",
   summary: "Link a Clash account to a user",
-  body: Schema.Struct({ player_tag: Schema.String, api_token: Schema.optionalKey(Schema.String) }),
+  body: Schema.Struct({ player_tag: Schema.String, api_token: Schema.String }),
   bodyMode: "json",
   pathParams: UserPath,
   query: NoQuery,

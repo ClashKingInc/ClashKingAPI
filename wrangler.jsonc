@@ -11,8 +11,13 @@
   },
   "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
   "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
   "preview_urls": true,
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "durable_objects": {
+    "bindings": [{ "name": "TICKET_RUNTIME", "class_name": "TicketRuntimeCoordinator" }]
+  },
+  "migrations": [{ "tag": "ticket-runtime-v1", "new_sqlite_classes": ["TicketRuntimeCoordinator"] }],
   "analytics_engine_datasets": [
     { "binding": "API_REQUEST_TIMINGS", "dataset": "clashking_api_request_timings" }
   ],

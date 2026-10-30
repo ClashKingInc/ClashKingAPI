@@ -8,10 +8,56 @@ import * as SchemaRepresentation from "effect/SchemaRepresentation"
 const outputPath = resolve(process.argv[2] ?? "dist/openapi.json")
 const schemaComponents = {}
 
+// JSON Schema has no portable equivalent for JavaScript's /i flag. Preserve
+// the UUID constraint with explicit ASCII case ranges instead of dropping it.
+const uuidPattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+const retainPortablePatterns = (value) => {
+  if (value === null || typeof value !== "object") return
+  const check = value.representation
+  if (value._tag === "Filter" && check?.id === "effect/schema/isPattern" &&
+    check.payload.source === uuidPattern && check.payload.flags === "iu") {
+    const pattern = uuidPattern.replaceAll("[0-9a-f]", "[0-9a-fA-F]").replaceAll("[89ab]", "[89abAB]")
+    value.annotations = { ...value.annotations, toJsonSchema: () => ({ pattern }) }
+  }
+  for (const child of Object.values(value)) retainPortablePatterns(child)
+}
+
+// Stable groups the special JSON number encodings into one enum and describes
+// empty structs as any non-null value. Keep their established public projection.
+const retainJsonSchemaProjection = (value) => {
+  if (Array.isArray(value)) return value.map(retainJsonSchemaProjection)
+  if (value === null || typeof value !== "object") return value
+  if (Object.keys(value).length === 1 && value.not?.type === "null" && Object.keys(value.not).length === 1) {
+    return { anyOf: [{ type: "object" }, { type: "array" }] }
+  }
+  const output = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, retainJsonSchemaProjection(child)]))
+  if (output.anyOf?.length === 2 && output.anyOf[0].type === "number" &&
+    Object.keys(output.anyOf[0]).length === 1 && output.anyOf[1].type === "string" &&
+    Object.keys(output.anyOf[1]).length === 2 &&
+    JSON.stringify(output.anyOf[1].enum) === JSON.stringify(["NaN", "Infinity", "-Infinity"])) {
+    output.anyOf = [{ type: "number" }, ...output.anyOf[1].enum.map(value => ({ type: "string", enum: [value] }))]
+  }
+  if (output.type === "object" && !Object.hasOwn(output, "additionalProperties") && Array.isArray(output.allOf)) {
+    const remaining = output.allOf.filter(part => {
+      if (part?.type !== "object" || Object.keys(part).length !== 2 ||
+        part.additionalProperties === null || typeof part.additionalProperties !== "object" ||
+        Object.keys(part.additionalProperties).length !== 0) return true
+      output.additionalProperties = true
+      return false
+    })
+    if (remaining.length) output.allOf = remaining
+    else delete output.allOf
+  }
+  return output
+}
+
 const jsonSchema = (schema) => {
-  const document = SchemaRepresentation.toJsonSchemaDocument(
-    SchemaRepresentation.toRepresentation(schema.ast),
-  )
+  const representation = SchemaRepresentation.toRepresentation(schema.ast)
+  retainPortablePatterns(representation)
+  const document = retainJsonSchemaProjection(SchemaRepresentation.toJsonSchemaDocument(
+    representation,
+    { onExcessProperty: "error" },
+  ))
   const prefix = createHash("sha256").update(JSON.stringify(document)).digest("hex").slice(0, 16)
   const names = new Map(Object.keys(document.definitions).map((name, index) => [name, `Schema_${prefix}_${index}`]))
   const rewrite = (value) => {
@@ -80,9 +126,6 @@ for (const endpointMap of endpointMaps) {
     if (endpoint.path.startsWith("/proxy/v1/")) continue
     if (endpoint.path.startsWith("/v2/runtime/")) {
       throw new Error(`Deferred bot runtime cannot be advertised in OpenAPI: ${endpoint.operationId}`)
-    }
-    if (/^\/v2\/server\/:[^/]+\/(?:roster-member-groups(?:\/:[^/]+)?|rosters\/:[^/]+\/member-groups)$/u.test(endpoint.path)) {
-      throw new Error(`Deferred roster configuration cannot be advertised in OpenAPI: ${endpoint.operationId}`)
     }
     const key = `${endpoint.method} ${normalizedPath(endpoint.path)}`
     const existing = endpoints.get(key)

@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 
+import { strictObject } from "./strict-object.js"
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ErrorResponse } from "./errors.js"
 
@@ -28,7 +30,7 @@ const LeagueBattleFields = {
   familyId: Schema.NullOr(ArmyFamilyId),
   trophies: Schema.Int,
 } as const
-export const LeagueBattle = Schema.Struct(LeagueBattleFields).annotate({ parseOptions: { onExcessProperty: "error" } })
+export const LeagueBattle = strictObject(Schema.Struct(LeagueBattleFields))
 export const LeagueDefense = LeagueBattle
 export const AutomaticLeagueDefense = Schema.Struct({ trophies: Schema.Int, automatic: Schema.Literal(true) })
 const BattlelogTotals = {
@@ -48,14 +50,50 @@ export const RankedBattlelogResponse = Schema.Struct({
   registeredDefenses: Schema.Int,
   ...BattlelogTotals,
 })
-export const LegendBattlelogResponse = Schema.Struct({ tag: Schema.String, day: Schema.String, ...BattlelogTotals })
+const LegendArmyGroup = Schema.Struct({ name: Schema.String, attacks: Schema.Int, triples: Schema.Int })
+export const LegendBattlelogResponse = Schema.Struct({ tag: Schema.String, day: Schema.String, ...BattlelogTotals,
+  topArmy: Schema.optionalKey(LegendArmyGroup),
+})
 export const LegendPlayerDay = Schema.Struct({
   day: Schema.String,
+  attacks: Schema.optionalKey(Schema.Int),
+  defenses: Schema.optionalKey(Schema.Int),
+  recordedDefenses: Schema.optionalKey(Schema.Int),
+  automaticDefenses: Schema.optionalKey(Schema.Int),
+  closingTrophies: Schema.optionalKey(Schema.NullOr(Schema.Int)),
+  globalRank: Schema.optionalKey(Schema.NullOr(Schema.Int)),
   attackTrophies: Schema.Int,
   defenseTrophies: Schema.Int,
   trophies: Schema.Int,
 })
 export const LegendPlayerDailySeriesResponse = Schema.Struct({ tag: Schema.String, items: Schema.Array(LegendPlayerDay) })
+export const LegendPlayerSeasonResponse = Schema.Struct({
+  seasonStart: Schema.String,
+  seasonEnd: Schema.String,
+  armyShareCodes: Schema.Array(Schema.String),
+  rankPopulation: Schema.optionalKey(Schema.Int),
+  favorites: Schema.optionalKey(Schema.Array(Schema.Struct({
+    category: Schema.Literals(["troop", "spell", "hero", "equipment", "pet", "siege"]),
+    id: Schema.Int, name: Schema.String, attacks: Schema.Int,
+  }))),
+  favoriteTroops: Schema.optionalKey(Schema.Array(Schema.Struct({
+    id: Schema.Int, name: Schema.String, attacks: Schema.Int, triples: Schema.Int,
+  }))),
+  armyGroups: Schema.optionalKey(Schema.Array(LegendArmyGroup)),
+  stats: Schema.Struct({
+    attacks: Schema.Int, defenses: Schema.Int, attackTriples: Schema.Int, defenseTriples: Schema.Int,
+    averageOffense: Schema.NullOr(Schema.Number), averageDefense: Schema.NullOr(Schema.Number),
+    offenseStars: Schema.optionalKey(Schema.Struct({ zero: Schema.Int, one: Schema.Int, two: Schema.Int, three: Schema.Int })),
+    defenseStars: Schema.optionalKey(Schema.Struct({ zero: Schema.Int, one: Schema.Int, two: Schema.Int, three: Schema.Int })),
+  }),
+})
+export const LegendPerformanceComparison = Schema.Struct({
+  cohort: Schema.Literals(["legend_i", "top_1000", "top_200"]), days: Schema.Int,
+  attacks: Schema.Int, triples: Schema.Int, playerAttacks: Schema.Int, playerTriples: Schema.Int,
+})
+export const LegendPlayerComparisonsResponse = Schema.Struct({
+  items: Schema.Array(LegendPerformanceComparison),
+})
 
 export const PlayerBattlelogHistoryItem = Schema.Struct({
   battleMode: Schema.Literals(["farming", "ranked", "legend"]),
@@ -106,6 +144,7 @@ export const LegendLeagueHistoryItem = Schema.Struct({
   attackWins: Schema.Int,
   defenseWins: Schema.Int,
   rank: Schema.Int,
+  population: Schema.optionalKey(Schema.Int),
 })
 export const PlayerLeagueHistoryResponse = Schema.Struct({
   items: Schema.Array(Schema.Union([RankedLeagueHistoryItem, LegendLeagueHistoryItem])),
@@ -193,6 +232,17 @@ export const LeagueTierStatisticsResponse = Schema.Struct({
 
 export const ItemUse = Schema.Struct({ id: Schema.Int, uses: Schema.Int, triples: Schema.Int })
 export const PetAssignmentUse = Schema.Struct({ petId: Schema.Int, heroId: Schema.Int, uses: Schema.Int, triples: Schema.Int })
+export const EquipmentPairUse = Schema.Struct({
+  heroId: Schema.Int,
+  equipmentIds: Schema.Tuple([Schema.Int, Schema.Int]),
+  uses: Schema.Int,
+  triples: Schema.Int,
+})
+export const PetComboUse = Schema.Struct({
+  petIds: Schema.Array(Schema.Int),
+  uses: Schema.Int,
+  triples: Schema.Int,
+})
 export const LegendDay = Schema.Struct({
   day: Schema.String,
   attacks: Schema.Int,
@@ -204,9 +254,81 @@ export const LegendDay = Schema.Struct({
   pets: Schema.Array(ItemUse),
   equipment: Schema.Array(ItemUse),
   petAssignments: Schema.Array(PetAssignmentUse),
+  troops: Schema.optionalKey(Schema.Array(ItemUse)),
+  spells: Schema.optionalKey(Schema.Array(ItemUse)),
+  sieges: Schema.optionalKey(Schema.Array(ItemUse)),
+  equipmentPairs: Schema.optionalKey(Schema.Array(EquipmentPairUse)),
+  petCombos: Schema.optionalKey(Schema.Array(PetComboUse)),
+  attackTypes: Schema.optionalKey(Schema.Struct({
+    air: Schema.Int,
+    ground: Schema.Int,
+    mixed: Schema.Int,
+    unknown: Schema.Int,
+  })),
 })
 export const LegendDaysQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendCohort) })
 export const LegendDaysResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(LegendDay) })
+
+// Ratios use 0..1. A missing period is not a zero-performance period.
+export const LegendObservedBattleMetrics = {
+  starCounts: Schema.optionalKey(Schema.Array(Schema.Int)),
+  averageStars: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  averageDestruction: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  averageDuration: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  attackTypes: Schema.optionalKey(Schema.Struct({ air: Schema.Int, ground: Schema.Int, mixed: Schema.Int, unknown: Schema.Int })),
+}
+export const LegendDayPerformanceSide = Schema.Struct({
+  ...LegendObservedBattleMetrics,
+  eligiblePlayerDays: Schema.Int,
+  observedPlayerDays: Schema.Int,
+  completePlayerDays: Schema.Int,
+  partialPlayerDays: Schema.Int,
+  missingPlayerDays: Schema.Int,
+  invalidPlayerDays: Schema.Int,
+  observedBattles: Schema.Int,
+  observedTriples: Schema.Int,
+  perfectPlayerDays: Schema.Int,
+  tripleRate: Schema.NullOr(Schema.Number),
+  perfectDayRate: Schema.NullOr(Schema.Number),
+  meanTrophies: Schema.NullOr(Schema.Number),
+  buckets: Schema.Array(Schema.Struct({
+    minimum: Schema.Int, maximum: Schema.Int, playerDays: Schema.Int, share: Schema.NullOr(Schema.Number),
+  })),
+})
+export const LegendPerformanceCohort = Schema.Literals(["observed", "legend_i", "top_1000", "top_200"])
+export const LegendDayPerformanceQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendPerformanceCohort), compare: Schema.optionalKey(Schema.Literals(["true", "false"])), armyTypes: Schema.optionalKey(Schema.Literals(["true", "false"])) })
+export const LegendDayPerformanceResponse = Schema.Struct({
+  cohort: LegendPerformanceCohort,
+  currentDay: Schema.optionalKey(Schema.Struct({
+    day: Schema.String,
+    asOf: Schema.String,
+    sourceWindowStart: Schema.String,
+    offense: Schema.Struct({ ...LegendObservedBattleMetrics, players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+    defense: Schema.Struct({ ...LegendObservedBattleMetrics, players: Schema.Int, battles: Schema.Int, triples: Schema.Int, tripleRate: Schema.NullOr(Schema.Number) }),
+  })),
+  // Availability is independent of the requested window. Clients may offer an
+  // explicit jump to real data without silently replacing a selected period.
+  availability: Schema.optional(Schema.Struct({ firstDay: Schema.String, lastDay: Schema.String })),
+  periods: Schema.Array(Schema.Struct({
+    kind: Schema.Literals(["selected", "previous_30", "previous_90"]),
+    firstDay: Schema.String, lastDay: Schema.String,
+    expectedDays: Schema.Int, availableDays: Schema.Int,
+    offense: LegendDayPerformanceSide,
+    defense: LegendDayPerformanceSide,
+    // Null signals that retained player observations do not reconcile with
+    // the rollup. Never present player-days as distinct people.
+    perfectOffensePlayers: Schema.NullOr(Schema.Int),
+    perfectedDefensePlayers: Schema.NullOr(Schema.Int),
+  })),
+  perfectDayContributions: Schema.Array(Schema.Struct({
+    rankBand: Schema.Literals(["1_200", "201_1000", "1001_plus"]),
+    offensePlayerDays: Schema.Int, defensePlayerDays: Schema.Int,
+  })).annotate({ description: "Selected-period perfect days across all saved Legend ranks, independent of the selected overlapping cohort." }),
+  items: Schema.Array(Schema.Struct({
+    day: Schema.String, sourceWindowStart: Schema.String, sourceWindowEnd: Schema.String,
+    offense: LegendDayPerformanceSide, defense: LegendDayPerformanceSide,
+  })),
+})
 
 const PublicErrors = [{ status: 400, body: ErrorResponse }, { status: 404, body: ErrorResponse }] as const
 const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q extends Schema.Codec<unknown, unknown, never, never>, R extends Schema.Codec<unknown, unknown, never, never>>(
@@ -224,16 +346,14 @@ export const LegendBattlelogEndpoint = publicGet("getLegendBattlelog", "/v2/play
   Schema.Struct({ playerTag: Schema.String, day: Schema.String }), NoQuery, LegendBattlelogResponse, "Get one player's Legend-day battles")
 export const LegendPlayerDailySeriesEndpoint = publicGet("getLegendPlayerDailySeries", "/v2/player/:playerTag/legend/series",
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, LegendPlayerDailySeriesResponse, "Get one player's daily Legend trophy series")
+export const LegendPlayerSeasonEndpoint = publicGet("getLegendPlayerSeason", "/v2/player/:playerTag/legend/season",
+  Schema.Struct({ playerTag: Schema.String }), NoQuery, LegendPlayerSeasonResponse, "Get current Legend season totals and recorded attack armies")
+export const LegendPlayerComparisonsEndpoint = publicGet("getLegendPlayerComparisons", "/v2/player/:playerTag/legend/comparisons",
+  Schema.Struct({ playerTag: Schema.String }), NoQuery, LegendPlayerComparisonsResponse, "Compare real attack results on matching finalized Legend days")
 export const RankedGroupEndpoint = publicGet("getRankedLeagueGroup", "/v2/ranked/:seasonId/groups/:leagueGroupId",
   Schema.Struct({ seasonId: Schema.String, leagueGroupId: Schema.String }), NoQuery, RankedGroupResponse, "Get one Ranked league group")
 export const PlayerLeagueHistoryEndpoint = publicGet("getPlayerLeagueHistory", "/v2/player/:playerTag/league/history",
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerLeagueHistoryResponse, "Get a player's Ranked and completed Legend history")
-export const ArmySearchEndpoint = publicGet("searchLeagueArmies", "/v2/stats/armies",
-  NoPathParams, ArmySearchQuery, ArmySearchResponse, "Discover similar Legend army families")
-export const ArmyDetailEndpoint = publicGet("getArmyFamily", "/v2/stats/armies/detail",
-  NoPathParams, ArmyLinkQuery, ArmyDetailResponse, "Get a Legend army family")
-export const ArmyTimelineEndpoint = publicGet("getArmyFamilyTimeline", "/v2/stats/armies/timeline",
-  NoPathParams, ArmyLinkQuery, ArmyTimelineResponse, "Get a Legend army family's daily timeline")
 export const LeagueHitRateHistoryEndpoint = publicGet("getLeagueHitRateHistory", "/v2/stats/league/hit-rates",
   NoPathParams, LeagueHitRateQuery, LeagueHitRateHistoryResponse, "Get Ranked-season and Legend-day hit rates")
 export const LeagueTierStatisticsEndpoint = publicGet("getLeagueTierStatistics", "/v2/stats/league/tournaments/:seasonId/tiers/:leagueTierId",
@@ -241,16 +361,19 @@ export const LeagueTierStatisticsEndpoint = publicGet("getLeagueTierStatistics",
 export const LegendDaysEndpoint = publicGet("getLegendDays", "/v2/stats/legend/days",
   NoPathParams, LegendDaysQuery, LegendDaysResponse, "Get detailed Legend-day statistics")
 
+export const LegendDayPerformanceEndpoint = publicGet("getLegendDayPerformance", "/v2/stats/legend/performance",
+  NoPathParams, LegendDayPerformanceQuery, LegendDayPerformanceResponse, "Get recorded Legend-day trophy distributions and perfect-day rates")
+
 export const leagueAnalyticsEndpoints = {
+  legendDayPerformance: LegendDayPerformanceEndpoint,
   playerBattlelogHistory: PlayerBattlelogHistoryEndpoint,
   rankedBattlelog: RankedBattlelogEndpoint,
   legendBattlelog: LegendBattlelogEndpoint,
   legendPlayerDailySeries: LegendPlayerDailySeriesEndpoint,
+  legendPlayerSeason: LegendPlayerSeasonEndpoint,
+  legendPlayerComparisons: LegendPlayerComparisonsEndpoint,
   rankedGroup: RankedGroupEndpoint,
   playerLeagueHistory: PlayerLeagueHistoryEndpoint,
-  armySearch: ArmySearchEndpoint,
-  armyDetail: ArmyDetailEndpoint,
-  armyTimeline: ArmyTimelineEndpoint,
   leagueHitRateHistory: LeagueHitRateHistoryEndpoint,
   leagueTierStatistics: LeagueTierStatisticsEndpoint,
   legendDays: LegendDaysEndpoint,

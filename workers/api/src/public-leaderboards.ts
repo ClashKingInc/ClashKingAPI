@@ -1,6 +1,6 @@
 import { PlayerLeaderboardResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { InvalidRequest, DatabaseFailure, UpstreamUnavailable } from "./errors.js"
 import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls } from "./war-archive-model.js"
@@ -70,15 +70,30 @@ export const queryPlayerLeaderboard = (_bindings: unknown, family: "townhall" | 
 interface ClanLeaderboardRow {
   tag: string; name: string; location_id: number | null; badge_token: string; value: string; war_win_streak: number; rank: string | null;
 }
+export const queryWarTripleStreaks = (rawTownhall: string, query: URLSearchParams) => Effect.gen(function* () {
+  const townhall = Number(rawTownhall)
+  if (!/^\d+$/u.test(rawTownhall) || townhall < 1 || townhall > 99) return yield* new InvalidRequest({ message: "Invalid Town Hall" })
+  const sql = yield* SqlClient.SqlClient
+  const items = yield* sql<{ tag: string; name: string; townhall_level: number; streak: number; last_attack_time: string; clan_tag: string; rank: number }>`
+    SELECT player_tag AS tag,player_name AS name,townhall_level,streak,
+      to_char(last_attack_time AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_attack_time,clan_tag,
+      (row_number() OVER (ORDER BY streak DESC,last_attack_time DESC,player_tag))::integer AS rank
+    FROM war_triple_streaks WHERE townhall_level=${townhall} AND streak>0
+    ORDER BY streak DESC,last_attack_time DESC,player_tag LIMIT ${leaderboardLimit(query)}`.pipe(
+    Effect.mapError((cause) => new DatabaseFailure({ cause, message: "War triple streak query failed" })),
+  )
+  return { townhall_level: townhall, items, count: items.length }
+})
 export const queryClanLeaderboard = (kind: "donations" | "war_wins" | "win_streak", rawLocation: string, query: URLSearchParams) => Effect.gen(function* () {
   const location = Number(rawLocation)
-  if (kind !== "win_streak" && (!/^-?\d+$/u.test(rawLocation) || !Number.isSafeInteger(location))) return yield* new InvalidRequest({ message: "Invalid location identifier" })
+  const global = rawLocation === "global"
+  if (kind !== "win_streak" && !global && (!/^\d+$/u.test(rawLocation) || !Number.isSafeInteger(location))) return yield* new InvalidRequest({ message: "Invalid location identifier" })
   const sql = yield* SqlClient.SqlClient
-  const rank = kind === "win_streak" ? sql`l.war_win_streak_rank` : kind === "war_wins" ? sql`l.location_war_wins_rank` : sql`l.location_donated_rank`
+  const rank = kind === "win_streak" ? sql`l.war_win_streak_rank` : kind === "war_wins" ? (global ? sql`l.war_wins_rank` : sql`l.location_war_wins_rank`) : (global ? sql`l.donated_rank` : sql`l.location_donated_rank`)
   const value = kind === "donations" ? sql`c.troops_donated` : sql`c.war_wins`
   const rows = yield* sql<ClanLeaderboardRow>`SELECT c.tag, c.name, c.location_id, c.badge_token, ${value}::text AS value,
     c.war_win_streak, ${rank}::text AS rank FROM clan_leaderboards l JOIN basic_clan c ON c.tag = l.tag
-    WHERE ${kind === "win_streak" ? sql`l.war_win_streak_rank IS NOT NULL` : sql`c.location_id = ${location}`}
+    WHERE ${kind === "win_streak" ? sql`l.war_win_streak_rank IS NOT NULL` : global ? sql`TRUE` : sql`c.location_id = ${location}`}
     ORDER BY ${rank} LIMIT ${leaderboardLimit(query)}`.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Clan leaderboard query failed" })))
   const items = rows.map((row) => {
     const badge = badgeUrls(row.badge_token)
@@ -88,5 +103,5 @@ export const queryClanLeaderboard = (kind: "donations" | "war_wins" | "win_strea
       ...(row.rank === null ? {} : { rank: Number(row.rank) }),
     }
   })
-  return { items, count: items.length, ...(kind === "win_streak" ? {} : { location_id: location, kind }) }
+  return { items, count: items.length, ...(kind === "win_streak" ? {} : { ...(!global ? { location_id: location } : {}), kind }) }
 })

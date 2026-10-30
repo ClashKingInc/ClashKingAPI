@@ -26,6 +26,7 @@ export const AutoBoardSchedule = Schema.Struct({
 })
 export const AutoBoardWrite = Schema.Struct({
   boardType: Schema.String,
+  rowLimit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({minimum:1,maximum:50}))),
   targetScope: Schema.Literals(["family", "custom"]),
   targets: Schema.Array(Schema.String),
   deliveryMode: Schema.Literals(["refresh", "send"]),
@@ -33,10 +34,16 @@ export const AutoBoardWrite = Schema.Struct({
   threadId: Schema.optionalKey(NullableString),
   enabled: Schema.Boolean,
   intervalMinutes: OptionalNullableNumber,
+  intervalSeconds: OptionalNullableNumber,
+  farming: Schema.optionalKey(Schema.NullOr(Schema.Struct({
+    window: Schema.Literals(["since_start", "calendar_month", "game_season"]),
+    timezone: Schema.String,
+  }))),
   schedule: Schema.optionalKey(Schema.NullOr(AutoBoardSchedule)),
 })
 export const AutoBoardConfig = Schema.Struct({
   id: Schema.String,
+  rowLimit: Schema.Int,
   boardType: Schema.String,
   targetKind: Schema.String,
   targetScope: Schema.Literals(["family", "custom"]),
@@ -48,6 +55,12 @@ export const AutoBoardConfig = Schema.Struct({
   messageId: NullableString,
   enabled: Schema.Boolean,
   intervalMinutes: Schema.NullOr(Schema.Number),
+  intervalSeconds: OptionalNullableNumber,
+  farming: Schema.optionalKey(Schema.NullOr(Schema.Struct({
+    window: Schema.Literals(["since_start", "calendar_month", "game_season"]),
+    timezone: Schema.String,
+    countingFrom: NullableString,
+  }))),
   schedule: Schema.NullOr(AutoBoardSchedule),
   nextRunAt: NullableString,
   lastRunAt: NullableString,
@@ -66,6 +79,11 @@ export const AutoBoardCapability = Schema.Struct({
     minMinutes: Schema.Number,
     maxMinutes: Schema.Number,
     defaultMinutes: Schema.Number,
+  })),
+  refreshSeconds: Schema.optionalKey(Schema.Struct({
+    min: Schema.Number,
+    max: Schema.Number,
+    default: Schema.Number,
   })),
   uiCapabilities: Schema.Array(Schema.String),
 })

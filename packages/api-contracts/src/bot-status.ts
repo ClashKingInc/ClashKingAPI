@@ -1,0 +1,4 @@
+import { Schema } from "effect"
+import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
+export const BotStatusEndpoint=defineEndpoint({operationId:"botStatus",method:"GET",path:"/v2/bot/status",auth:"bot",body:NoBody,bodyMode:"none",pathParams:NoPathParams,query:NoQuery,responseMode:"json",successStatus:200,
+ response:Schema.Struct({configuredServers:Schema.Number,familyClans:Schema.Number,cachedGuilds:Schema.Number,readyGuilds:Schema.Number,expectedShards:Schema.Number,healthyShards:Schema.Number,serverMembers:Schema.optional(Schema.Number),tickets:Schema.optional(Schema.Number),players:Schema.Number,clans:Schema.Number,wars:Schema.Number,countsRefreshedAt:Schema.String,observedAt:Schema.String}),summary:"Get aggregate bot and gateway status without internal configuration"})

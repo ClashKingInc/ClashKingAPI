@@ -1,4 +1,4 @@
-import { ApproveMessages } from "@clashking/api-contracts"
+import { TicketPanelMessage } from "@clashking/api-contracts"
 import { TicketApplicationForm } from "@clashking/api-contracts/deferred-runtime"
 import { Schema } from "effect"
 import { Conflict, InvalidRequest } from "./errors.js"
@@ -8,7 +8,9 @@ import { approvalCustomFields, approvalFieldPages } from "./ticket-approval-temp
 export const ApprovalProgress = Schema.Struct({
   stage: Schema.Literals(["select", "modal", "continue", "complete"]),
   page: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-  template: Schema.String.check(Schema.isMaxLength(2000)),
+  template: Schema.String.check(Schema.isMaxLength(20000)),
+  rich_message: Schema.optionalKey(TicketPanelMessage),
+  question_labels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   templateIndex: Schema.NullOr(Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 24 }))),
   answers: Schema.Array(Schema.String.check(Schema.isMaxLength(75))),
 })
@@ -29,7 +31,7 @@ export const approvalForm = (id: string, names: readonly string[], progress: App
   const page = approvalFieldPages(progress.template)[progress.page]
   if (progress.stage !== "modal" || !page) throw new Conflict({ message: "Ticket approval form is no longer available" })
   return { kind: "modal", customId: `ck:ticket:answers:${id}:${progress.page}`, title: "Custom message fields",
-    fields: page.map(({ token: _token, ...field }) => field) }
+    fields: page.map(({ token, ...field }) => ({ ...field, label: progress.question_labels?.[token] ?? field.label })) }
 }
 
 const modalValues = (components: readonly unknown[] | undefined): Map<string, string> => {
@@ -54,7 +56,7 @@ const modalValues = (components: readonly unknown[] | undefined): Map<string, st
 /** SQL callers must first establish actor/guild/channel, freshness and current panel revision. */
 export const advanceApprovalForm = (
   id: string, progress: ApprovalProgress, interaction: VerifiedRuntimeInteraction,
-  templates: typeof ApproveMessages.Type,
+  templates: readonly { readonly name: string; readonly message: string; readonly rich_message?: typeof TicketPanelMessage.Type; readonly question_labels?: Readonly<Record<string, string>> }[],
 ): ApprovalProgress => {
   if (progress.stage === "select") {
     const selected = interaction.data.values
@@ -64,7 +66,10 @@ export const advanceApprovalForm = (
     }
     const index = Number(selected[0]), template = templates[index]?.message
     if (template === undefined) throw new InvalidRequest({ message: "Selected approval template is not available" })
-    return { stage: approvalCustomFields(template).length ? "modal" : "complete", page: 0, template, templateIndex: index, answers: [] }
+    return { stage: approvalCustomFields(template).length ? "modal" : "complete", page: 0, template, templateIndex: index, answers: [],
+      ...(templates[index]?.rich_message ? { rich_message: templates[index]!.rich_message } : {}),
+      ...(templates[index]?.question_labels ? { question_labels: templates[index]!.question_labels } : {}),
+    }
   }
   if (progress.stage === "continue") {
     if (interaction.type !== 3 || interaction.data.component_type !== 2 || interaction.data.custom_id !== `ck:ticket:continue:${id}:${progress.page}`) {

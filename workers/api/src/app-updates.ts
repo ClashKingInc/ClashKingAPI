@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure, InvalidRequest, UpstreamUnavailable } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"

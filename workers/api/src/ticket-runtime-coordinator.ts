@@ -3,8 +3,10 @@ import { Effect, Layer } from "effect"
 import { DiscordApi } from "./discord-api.js"
 import type { WorkerBindings } from "./environment.js"
 import { WorkerEnvironment } from "./environment.js"
+import { runTicketButtonClickLog } from "./ticket-button-click-logs.js"
 import { runTicketOperation } from "./ticket-effects.js"
 import { runTicketPanelPublication } from "./ticket-panel-publications.js"
+import { runTicketDashboardJob } from "./ticket-dashboard-jobs.js"
 
 interface QueueRow { readonly [key:string]: SqlStorageValue; readonly operation_id:string }
 
@@ -22,7 +24,7 @@ export class TicketRuntimeCoordinator extends DurableObject<WorkerBindings> {
   }
 
   async wake(operationId: string): Promise<void> {
-    if (!/^(?:[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/iu.test(operationId)) {
+    if (!/^(?:[0-9a-f]{64}|(?:(?:dashboard|click):)?[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/iu.test(operationId)) {
       throw new TypeError("Invalid ticket runtime job ID")
     }
     operationId = operationId.toLowerCase()
@@ -48,6 +50,8 @@ export class TicketRuntimeCoordinator extends DurableObject<WorkerBindings> {
     const environment = WorkerEnvironment.layer(this.env)
     const discord = DiscordApi.layer.pipe(Layer.provideMerge(environment))
     const layer = Layer.mergeAll(databaseLayer(this.env),discord)
+    if (operationId.startsWith("click:")) return Effect.runPromise(runTicketButtonClickLog(operationId.slice(6)).pipe(Effect.provide(layer),Effect.scoped))
+    if (operationId.startsWith("dashboard:")) return Effect.runPromise(runTicketDashboardJob(operationId.slice(10)).pipe(Effect.provide(layer),Effect.scoped))
     if (/^[0-9a-f]{64}$/u.test(operationId)) {
       const outcome = await Effect.runPromise(runTicketPanelPublication(operationId).pipe(Effect.provide(layer),Effect.scoped))
       return outcome.state === "succeeded" || outcome.state === "failed"

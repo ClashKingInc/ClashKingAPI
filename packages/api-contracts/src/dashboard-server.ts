@@ -1,8 +1,21 @@
 import { Schema } from "effect"
 
+import { strictObject } from "./strict-object.js"
+
+/** Built-in substitutions supported by ticket message templates. */
+export const ticketApprovalTokens = [
+  "ticket_count", "ticket_status", "ticket_emoji_status", "ticket_channel_mention", "user_name", "user_mention",
+  "server_name", "server_member_count", "account_name", "account_th", "account_heroes", "clan_name", "clan_level",
+  "clan_badge_emoji", "clan_link", "clan_location", "clan_member_count", "clan_leader", "clan_leader_mention",
+  "clan_tag", "clan_war_league", "clan_capital_league",
+] as const
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
+import { ticketMessageComponentsError } from "./ticket-message-components.js"
 import { JsonValue } from "./expo-common.js"
 import { ErrorCode, ErrorResponse } from "./errors.js"
+import { DecimalSnowflake } from "./discord.js"
+import { DashboardRosterQuestion } from "./dashboard-roster-extra.js"
 
 const OptionalBoolean = Schema.optionalKey(Schema.Boolean)
 const OptionalNumber = Schema.optionalKey(Schema.Number)
@@ -100,17 +113,17 @@ export const LinkParseSettings = Schema.Struct({
   show: OptionalBoolean,
 })
 export const ServerSettingsUpdate = Schema.Struct({
-  require_api_token_when_linking: Schema.optionalKey(Schema.Boolean),
   embed_color: OptionalNumber,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,
   change_nickname: OptionalBoolean,
   flair_non_family: OptionalBoolean,
+  role_leave_delay_minutes: Schema.optionalKey(Schema.Number),
   auto_eval_nickname: OptionalBoolean,
-  autoeval_triggers: Schema.optionalKey(Schema.Array(Schema.String)),
   autoeval_log: OptionalString,
   autoeval: OptionalBoolean,
-  full_whitelist_role: OptionalString,
+  // Omission preserves the selected role; null explicitly revokes it.
+  full_whitelist_role: OptionalNullableString,
   autoboard_limit: OptionalNumber,
   tied: OptionalBoolean,
   family_label: OptionalString,
@@ -172,7 +185,7 @@ export const ClanSettingsResponse = Schema.Struct({
   updated_fields: Schema.Number,
   category: Schema.NullOr(ClanCategory),
 })
-export const ClanReference = Schema.Struct({ tag: Schema.String, name: Schema.String })
+export const ClanReference = Schema.Struct({ tag: Schema.String, name: Schema.String, category: Schema.optionalKey(Schema.NullOr(Schema.String)), categoryOrder: Schema.optionalKey(Schema.NullOr(Schema.Number)) })
 export const ServerClanListItem = Schema.Struct({
   tag: Schema.String,
   name: Schema.String,
@@ -207,7 +220,6 @@ export const ServerRoleType = Schema.Literals([
   "achievement",
   "status",
 ])
-export const ServerRoleMode = Schema.Literals(["both", "add", "remove"])
 export const DiscordRole = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -228,7 +240,6 @@ export const ServerRole = Schema.Struct({
   type: ServerRoleType,
   option: Schema.String,
   role_id: Schema.String,
-  mode: ServerRoleMode,
   created_at: Schema.String,
   updated_at: Schema.String,
 })
@@ -237,14 +248,12 @@ export const ServerRoleCreate = Schema.Struct({
   type: ServerRoleType,
   option: Schema.String,
   role_id: Schema.String,
-  mode: Schema.optionalKey(ServerRoleMode),
 })
 export const ServerRoleUpdate = Schema.Struct({
   clan_tag: OptionalString,
   type: Schema.optionalKey(ServerRoleType),
   option: OptionalString,
   role_id: OptionalString,
-  mode: Schema.optionalKey(ServerRoleMode),
 })
 export const ServerRolesResponse = Schema.Struct({
   server_id: Schema.String,
@@ -254,15 +263,29 @@ export const ServerRolesResponse = Schema.Struct({
 export const ServerRoleResponse = Schema.Struct({ message: Schema.String, role: ServerRole })
 export const RoleSettings = Schema.Struct({
   server_id: Schema.String,
+  change_nickname: OptionalBoolean,
+  nickname_rule: OptionalString,
+  non_family_nickname_rule: OptionalString,
+  flair_non_family: OptionalBoolean,
   auto_eval_status: OptionalBoolean,
+  auto_eval_triggers: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.Literals(["member_join", "member_leave", "townhall_change", "league_change", "role_change"])))),
+  auto_eval_role_treatment: Schema.optionalKey(Schema.Literals(["add", "remove", "both"])),
+  auto_eval_blacklist_roles: Schema.optionalKey(Schema.Array(Schema.String)) ,
+  role_leave_delay_minutes: Schema.optionalKey(Schema.Number),
   auto_eval_nickname: OptionalBoolean,
-  autoeval_triggers: Schema.optionalKey(Schema.Array(Schema.String)),
   autoeval_log: OptionalString,
 })
 export const RoleSettingsUpdate = Schema.Struct({
+  change_nickname: OptionalBoolean,
+  nickname_rule: OptionalString,
+  non_family_nickname_rule: OptionalString,
+  flair_non_family: OptionalBoolean,
   auto_eval_status: OptionalBoolean,
+  auto_eval_triggers: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.Literals(["member_join", "member_leave", "townhall_change", "league_change", "role_change"])))),
+  auto_eval_role_treatment: Schema.optionalKey(Schema.Literals(["add", "remove", "both"])),
+  auto_eval_blacklist_roles: Schema.optionalKey(Schema.Array(Schema.String)) ,
+  role_leave_delay_minutes: Schema.optionalKey(Schema.Number),
   auto_eval_nickname: OptionalBoolean,
-  autoeval_triggers: Schema.optionalKey(Schema.Array(Schema.String)),
   autoeval_log: OptionalString,
 })
 export const RoleSettingsMutationResponse = Schema.Struct({
@@ -361,9 +384,11 @@ export const DiscordThread = Schema.Struct({
   archived: Schema.Boolean,
 })
 
+export const ReminderType = Schema.Literals(["War", "Clan Capital", "Clan Games", "roster"])
+
 export const Reminder = Schema.Struct({
   id: Schema.String,
-  type: Schema.String,
+  type: ReminderType,
   clan_tag: OptionalString,
   channel_id: OptionalString,
   thread_id: OptionalNullableString,
@@ -383,11 +408,10 @@ export const RemindersResponse = Schema.Struct({
   war_reminders: Schema.Array(Reminder),
   capital_reminders: Schema.Array(Reminder),
   clan_games_reminders: Schema.Array(Reminder),
-  inactivity_reminders: Schema.Array(Reminder),
   roster_reminders: Schema.Array(Reminder),
 })
 export const CreateReminderRequest = Schema.Struct({
-  type: Schema.String,
+  type: ReminderType,
   clan_tag: OptionalString,
   channel_id: Schema.String,
   thread_id: OptionalNullableString,
@@ -579,7 +603,8 @@ export const GiveawayEntriesResponse = Schema.Struct({
   entrants: Schema.Array(GiveawayEntrant),
 })
 export const GiveawayRerollRequest = Schema.Struct({
-  user_ids_to_replace: Schema.Array(Schema.String),
+  user_ids_to_replace: Schema.Array(DecimalSnowflake).check(Schema.isMinLength(1)),
+  reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1000))),
 })
 export const GiveawayRerollResponse = Schema.Struct({
   message: Schema.String,
@@ -606,6 +631,7 @@ export const TicketButtonSettings = Schema.Struct({
   no_ping_mod_role: Schema.Array(Schema.String),
   private_thread: Schema.Boolean,
   th_min: Schema.Number,
+  hero_min_percent: Schema.optionalKey(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   num_apply: Schema.Number,
   naming: Schema.String,
   account_apply: Schema.Boolean,
@@ -615,6 +641,8 @@ export const TicketButtonSettings = Schema.Struct({
   roles_to_remove: Schema.Array(Schema.String),
   townhall_requirements: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Number)),
   new_message: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  opening_message: Schema.optionalKey(Schema.NullOr(Schema.suspend(() => TicketPanelMessage))),
+  application_questions: Schema.optionalKey(Schema.Array(DashboardRosterQuestion)),
 })
 export const ApproveMessage = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100), Schema.makeFilter(value => value.trim() !== "" ? undefined : "Template name must not be blank")),
@@ -622,62 +650,6 @@ export const ApproveMessage = Schema.Struct({
 })
 export const ApproveMessages = Schema.Array(ApproveMessage).check(Schema.isMaxLength(25), Schema.makeFilter(messages =>
   new Set(messages.map(message => message.name.trim())).size === messages.length ? undefined : "Template names must be unique after trimming"))
-export const TicketPanel = Schema.Struct({
-  name: Schema.String,
-  server_id: Schema.String,
-  embed_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  components: Schema.Array(TicketButton),
-  button_settings: Schema.Record(Schema.String, TicketButtonSettings),
-  open_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  sleep_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  closed_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  status_change_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  ticket_button_click_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  ticket_close_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  approve_messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
-})
-export const TicketPanelsResponse = Schema.Struct({
-  items: Schema.Array(TicketPanel),
-  total: Schema.Number,
-  available_embeds: Schema.Array(Schema.String),
-  townhall_requirement_fields: Schema.Array(Schema.String),
-})
-export const CreateTicketPanelRequest = Schema.Struct({ name: Schema.String })
-export const UpdateTicketPanelRequest = Schema.Struct({
-  open_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  sleep_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  closed_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  status_change_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  ticket_button_click_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  ticket_close_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  embed_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
-})
-export const CreateTicketButtonRequest = Schema.Struct({
-  label: Schema.String,
-  style: Schema.Number,
-  emoji: Schema.optionalKey(Schema.NullOr(DiscordEmoji)),
-})
-export const UpdateTicketButtonAppearanceRequest = CreateTicketButtonRequest
-export const UpdateTicketButtonSettingsRequest = Schema.Struct({
-  questions: Schema.Array(Schema.String),
-  mod_role: Schema.Array(Schema.String),
-  no_ping_mod_role: Schema.Array(Schema.String),
-  private_thread: Schema.Boolean,
-  th_min: Schema.Number,
-  num_apply: Schema.Number,
-  naming: Schema.String,
-  account_apply: Schema.Boolean,
-  player_info: Schema.Boolean,
-  apply_clans: Schema.Array(Schema.String),
-  roles_to_add: Schema.Array(Schema.String),
-  roles_to_remove: Schema.Array(Schema.String),
-  townhall_requirements: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Number)),
-  new_message: Schema.NullOr(Schema.String),
-})
-export const UpdateApproveMessagesRequest = Schema.Struct({
-  messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
-})
-
 export const DiscordEmbedFooter = Schema.Struct({
   text: Schema.String,
   icon_url: OptionalString,
@@ -705,6 +677,143 @@ export const DiscordEmbed = Schema.Struct({
   author: Schema.optionalKey(DiscordEmbedAuthor),
   fields: Schema.optionalKey(Schema.Array(DiscordEmbedField)),
 })
+
+/** A single bot-owned message; button IDs and mention policy belong to the runtime. */
+export const TicketPanelMessage = Schema.Struct({
+  content: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
+  embeds: Schema.optionalKey(Schema.Array(DiscordEmbed).check(Schema.isMaxLength(10))),
+  flags: Schema.optionalKey(Schema.Literal(32768)),
+  components: Schema.optionalKey(Schema.Array(Schema.JsonObject).check(Schema.isMaxLength(40))),
+}).check(Schema.makeFilter(message => {
+  if (message.flags === 32768 && (message.content !== undefined || message.embeds !== undefined)) return "Components v2 cannot contain classic content or embeds";
+  const componentError = ticketMessageComponentsError(message.components ?? [], message.flags === 32768);
+  if (componentError) return componentError;
+  let total = 0;
+  for (const embed of message.embeds ?? []) {
+    const size = (embed.title?.length ?? 0) + (embed.description?.length ?? 0)
+      + (embed.author?.name.length ?? 0) + (embed.footer?.text.length ?? 0)
+      + (embed.fields ?? []).reduce((sum, field) => sum + field.name.length + field.value.length, 0);
+    total += size;
+    if ((embed.title?.length ?? 0) > 256 || (embed.description?.length ?? 0) > 4096
+      || (embed.author?.name.length ?? 0) > 256 || (embed.footer?.text.length ?? 0) > 2048
+      || (embed.fields?.length ?? 0) > 25 || embed.fields?.some(field => !field.name.trim() || !field.value.trim()
+        || field.name.length > 256 || field.value.length > 1024)) return "Panel embeds exceed Discord limits";
+    if (!size && !embed.image && !embed.thumbnail) return "Panel embeds must have content";
+    if (embed.color !== undefined && (!Number.isInteger(embed.color) || embed.color < 0 || embed.color > 0xffffff)) return "Invalid embed color";
+    if (embed.timestamp !== undefined && !Number.isFinite(Date.parse(embed.timestamp))) return "Invalid embed timestamp";
+    for (const value of [embed.url, embed.image?.url, embed.thumbnail?.url, embed.author?.url, embed.author?.icon_url, embed.footer?.icon_url]) {
+      if (value === undefined) continue;
+      try {
+        const url = new URL(value);
+        if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return "Invalid embed URL";
+      } catch { return "Invalid embed URL"; }
+    }
+  }
+  if (total > 6000) return "Panel embeds exceed the combined Discord text limit";
+  return message.content?.trim() || message.embeds?.length || message.components?.length ? undefined : "Panel message cannot be empty";
+}));
+export const TicketTemplateQuestion = Schema.Struct({
+  key: Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/u)),
+  label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(45)),
+});
+export const TicketMessageTemplate = Schema.Struct({
+  id: Schema.String,
+  name: ApproveMessage.fields.name,
+  message: TicketPanelMessage,
+  questions: Schema.Array(TicketTemplateQuestion).check(Schema.isMaxLength(25)),
+}).check(Schema.makeFilter(template => new Set(template.questions.map(question => question.key)).size === template.questions.length ? undefined : "Question keys must be unique"));
+export const TicketMessageTemplates = Schema.Array(TicketMessageTemplate).check(Schema.isMaxLength(25), Schema.makeFilter(templates =>
+  new Set(templates.map(template => template.id)).size === templates.length && new Set(templates.map(template => template.name.trim().toLowerCase())).size === templates.length ? undefined : "Template identities and names must be unique"));
+export const DashboardTicketRecord = Schema.Struct({
+  id: Schema.String, number: Schema.Number, status: Schema.Literals(["open", "sleep", "closed", "delete"]),
+  channel_id: Schema.String, applicant_user_id: Schema.NullOr(Schema.String),
+  applicant_username: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  applicant_avatar_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  created_at: Schema.String, closed_at: Schema.NullOr(Schema.String), assigned_clan_tag: Schema.NullOr(Schema.String),
+  accounts: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.NullOr(Schema.String), townhall_level: Schema.NullOr(Schema.Number) })),
+  transcript_path: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  active_job_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+const TicketJobUUID = Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u));
+export const TicketDashboardJob = Schema.Struct({ id: TicketJobUUID,
+  state: Schema.Literals(["pending", "running", "completed", "failed"]),
+  action: Schema.Literals(["set_status", "capture_transcript", "delete_ticket"]), result: Schema.JsonObject,
+  last_error: Schema.NullOr(Schema.String),
+});
+export const TicketPanelActivity = Schema.Struct({
+  total: Schema.Number, open: Schema.Number, sleeping: Schema.Number, closed: Schema.Number, deleted: Schema.Number,
+  applicants: Schema.Number, accounts: Schema.Number,
+  townhalls: Schema.Array(Schema.Struct({ level: Schema.NullOr(Schema.Number), count: Schema.Number })),
+  recent: Schema.Array(DashboardTicketRecord),
+});
+export const TicketPanel = Schema.Struct({
+  transcripts_enabled: Schema.optionalKey(Schema.Boolean),
+  applicant_can_close: Schema.optionalKey(Schema.Boolean),
+  draftUpdatedAt: Schema.optionalKey(Schema.String),
+  publication: Schema.optionalKey(Schema.NullOr(Schema.Struct({ channelId: DecimalSnowflake, messageId: DecimalSnowflake, sourceUpdatedAt: Schema.String }))),
+  panel_message: Schema.optionalKey(Schema.NullOr(TicketPanelMessage)),
+  activity: Schema.optionalKey(TicketPanelActivity),
+  name: Schema.String,
+  server_id: Schema.String,
+  embed_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  components: Schema.Array(TicketButton),
+  button_settings: Schema.Record(Schema.String, TicketButtonSettings),
+  open_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  sleep_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  closed_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  status_change_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  ticket_button_click_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  ticket_close_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  approve_messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
+})
+export const TicketPanelsResponse = Schema.Struct({
+  items: Schema.Array(TicketPanel),
+  total: Schema.Number,
+  available_embeds: Schema.Array(Schema.String),
+  townhall_requirement_fields: Schema.Array(Schema.String),
+})
+export const CreateTicketPanelRequest = Schema.Struct({ name: Schema.String })
+export const UpdateTicketPanelRequest = Schema.Struct({
+  transcripts_enabled: Schema.optionalKey(Schema.Boolean),
+  applicant_can_close: Schema.optionalKey(Schema.Boolean),
+  panel_message: Schema.optionalKey(Schema.NullOr(TicketPanelMessage)),
+  open_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  sleep_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  closed_category: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  status_change_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  ticket_button_click_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  ticket_close_log: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  embed_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
+})
+export const CreateTicketButtonRequest = Schema.Struct({
+  label: Schema.String,
+  style: Schema.Number,
+  emoji: Schema.optionalKey(Schema.NullOr(DiscordEmoji)),
+})
+export const UpdateTicketButtonAppearanceRequest = CreateTicketButtonRequest
+export const UpdateTicketButtonSettingsRequest = Schema.Struct({
+  questions: Schema.Array(Schema.String),
+  mod_role: Schema.Array(Schema.String),
+  no_ping_mod_role: Schema.Array(Schema.String),
+  private_thread: Schema.Boolean,
+  th_min: Schema.Number,
+  hero_min_percent: Schema.optionalKey(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
+  num_apply: Schema.Number,
+  naming: Schema.String,
+  account_apply: Schema.Boolean,
+  player_info: Schema.Boolean,
+  apply_clans: Schema.Array(Schema.String),
+  roles_to_add: Schema.Array(Schema.String),
+  roles_to_remove: Schema.Array(Schema.String),
+  townhall_requirements: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Number)),
+  new_message: Schema.NullOr(Schema.String),
+  opening_message: Schema.optionalKey(Schema.NullOr(TicketPanelMessage)),
+  application_questions: Schema.optionalKey(Schema.Array(DashboardRosterQuestion)),
+})
+export const UpdateApproveMessagesRequest = Schema.Struct({
+  messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
+})
+
 const DiscordWebhookMessage = Schema.StructWithRest(Schema.Struct({
   content: Schema.optionalKey(Schema.NullOr(Schema.String)),
   username: Schema.optionalKey(Schema.String),
@@ -778,11 +887,11 @@ export const CreateBaseRequest = Schema.Struct({
   images: Schema.Array(Schema.String),
   description: Schema.String,
 })
-export const UpdateBaseRequest = Schema.Struct({
-  baseLink: Schema.String,
-  images: Schema.Array(Schema.String),
+export const UpdateBaseRequest = strictObject(Schema.Struct({
+  baseLink: Schema.String.annotate({ description: "Existing layout link; cannot be changed." }),
+  images: Schema.Array(Schema.String).annotate({ description: "Existing images in their original order. Only removal is allowed, and at least one image must remain if the base has images." }),
   description: Schema.String,
-}).annotate({ parseOptions: { onExcessProperty: "error" } })
+}))
 export const BaseDownloader = Schema.Struct({
   userId: Schema.String,
   displayName: Schema.NullOr(Schema.String),
@@ -863,14 +972,13 @@ export const ServerSettings = Schema.Struct({
   server_id: Schema.String,
   server: Schema.String,
   name: Schema.String,
-  require_api_token_when_linking: Schema.Boolean,
   embed_color: OptionalString,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,
   change_nickname: OptionalBoolean,
   flair_non_family: OptionalBoolean,
+  role_leave_delay_minutes: Schema.optionalKey(Schema.Number),
   auto_eval_nickname: OptionalBoolean,
-  autoeval_triggers: Schema.optionalKey(Schema.Array(Schema.String)),
   autoeval_log: OptionalString,
   autoeval: OptionalBoolean,
   full_whitelist_role: OptionalString,
@@ -1226,6 +1334,13 @@ export const DeleteServerReminderEndpoint = defineEndpoint({
   responseMode: "json", successStatus: 200, summary: "Delete a server reminder",
 })
 
+export const SendServerReminderEndpoint = defineEndpoint({
+  auth: "server-write", errors: [], body: NoBody, bodyMode: "none", method: "POST",
+  operationId: "sendServerReminder", path: "/v2/server/:serverId/reminders/:reminderId/send",
+  pathParams: ServerReminderPath, query: NoQuery, response: Schema.Struct({ accepted: Schema.Number }),
+  responseMode: "json", successStatus: 202, summary: "Request a best-effort reminder send",
+})
+
 export const ServerGiveawaysEndpoint = defineEndpoint({
   auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
   operationId: "serverGiveaways", path: "/v2/server/:serverId/giveaways",
@@ -1271,6 +1386,32 @@ export const TicketPanelsEndpoint = defineEndpoint({
   operationId: "ticketPanels", path: "/v2/server/:serverId/tickets",
   pathParams: DashboardServerPath, query: NoQuery, response: TicketPanelsResponse,
   responseMode: "json", successStatus: 200, summary: "List server ticket panels",
+})
+export const TicketMessageLibraryEndpoint = defineEndpoint({
+  auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
+  operationId: "ticketMessageLibrary", path: "/v2/server/:serverId/tickets/message-library/templates",
+  pathParams: DashboardServerPath, query: NoQuery, response: Schema.Struct({ items: TicketMessageTemplates, revision: Schema.NullOr(Schema.String) }),
+  responseMode: "json", successStatus: 200, summary: "List shared ticket message templates",
+})
+export const TicketDashboardActionEndpoint = defineEndpoint({
+  auth: "server-write", errors: [], bodyMode: "json", method: "POST",
+  operationId: "ticketDashboardAction", path: "/v2/server/:serverId/tickets/records/:ticketId/actions",
+  pathParams: Schema.Struct({ serverId: DecimalSnowflake, ticketId: Schema.String }), query: NoQuery,
+  body: Schema.Struct({ id: TicketJobUUID, action: Schema.Literals(["set_status", "capture_transcript", "delete_ticket"]),
+    status: Schema.optionalKey(Schema.Literals(["open", "sleep", "closed"])) }),
+  response: TicketDashboardJob, responseMode: "json", successStatus: 200, summary: "Queue a dashboard ticket action",
+})
+export const TicketDashboardJobEndpoint = defineEndpoint({
+  auth: "server-read", errors: [], bodyMode: "none", body: NoBody, method: "GET",
+  operationId: "ticketDashboardJob", path: "/v2/server/:serverId/tickets/records/:ticketId/actions/:jobId",
+  pathParams: Schema.Struct({ serverId: DecimalSnowflake, ticketId: Schema.String, jobId: TicketJobUUID }), query: NoQuery,
+  response: TicketDashboardJob, responseMode: "json", successStatus: 200, summary: "Read a dashboard ticket action",
+})
+export const UpdateTicketMessageLibraryEndpoint = defineEndpoint({
+  auth: "server-write", errors: [], body: Schema.Struct({ items: TicketMessageTemplates, expected_revision: Schema.NullOr(Schema.String) }), bodyMode: "json", method: "PUT",
+  operationId: "updateTicketMessageLibrary", path: "/v2/server/:serverId/tickets/message-library/templates",
+  pathParams: DashboardServerPath, query: NoQuery, response: MessageResponse,
+  responseMode: "json", successStatus: 200, summary: "Save shared ticket message templates",
 })
 export const CreateTicketPanelEndpoint = defineEndpoint({
   auth: "server-write", errors: [], body: CreateTicketPanelRequest, bodyMode: "json",
@@ -1468,4 +1609,12 @@ export const ServerLinksEndpoint = defineEndpoint({
   }),
   response: ServerLinksResponse, responseMode: "json", successStatus: 200,
   summary: "List linked accounts for Discord server members",
+})
+
+export const PublishTicketPanelEndpoint = defineEndpoint({
+  auth: "server-write", errors: [], method: "POST", operationId: "publishTicketPanel",
+  path: "/v2/server/:serverId/tickets/:panelName/publish", pathParams: ServerTicketPanelPath, query: NoQuery,
+  body: Schema.Struct({ nonce: DecimalSnowflake, expectedUpdatedAt: Schema.String, channelId: Schema.optionalKey(DecimalSnowflake) }), bodyMode: "json",
+  response: Schema.Struct({ effectId: Schema.String, panelId: Schema.String, state: Schema.Literals(["pending", "executing", "uncertain", "succeeded", "failed"]), statusCustomId: Schema.String, messageId: Schema.optionalKey(DecimalSnowflake) }),
+  responseMode: "json", successStatus: 200, summary: "Publish a saved panel draft or edit its active Discord message",
 })

@@ -1,0 +1,4 @@
+import { Schema } from "effect"
+import { defineEndpoint, NoBody } from "./endpoint.js"
+export const GraphTotalMetric=Schema.Literals(["gold","elixir","darkElixir","attackWins","activity","troopLevels","heroLevels","warStars","warsWon","warsSpun","capitalRaided","raidParticipants","capitalTrophies"])
+export const BotGraphTotalEndpoint=defineEndpoint({operationId:"botGraphTotal",method:"GET",path:"/v2/bot/clans/:clanTag/graph-total",auth:"bot",body:NoBody,bodyMode:"none",pathParams:Schema.Struct({clanTag:Schema.String}),query:Schema.Struct({metric:GraphTotalMetric,season:Schema.optionalKey(Schema.String)}),response:Schema.Struct({season:Schema.String,value:Schema.NullOr(Schema.Number),basis:Schema.Literals(["recorded_clan","latest_stored_members"])}),responseMode:"json",successStatus:200,summary:"Read a recorded clan graph total with explicit attribution basis"})

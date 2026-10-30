@@ -1,3 +1,4 @@
+import { runClanVerificationChecks } from "./dashboard-clan-verification.js"
 import { Effect, Layer } from "effect"
 import * as Sentry from "@sentry/cloudflare"
 
@@ -23,9 +24,10 @@ import { DashboardServerOperations } from "./dashboard-server-runtime.js"
 import { DashboardMiscReads, DashboardPersonalLinks } from "./dashboard-misc-runtime.js"
 import { dashboardMiscExternalLayer } from "./dashboard-misc-external.js"
 import { observeProxySearch } from "./proxy-search-observer.js"
-import { isJsonTranscriptRequest, readJsonTicketTranscript } from "./ticket-json-transcript.js"
+import { isJsonTranscriptRequest, readJsonTicketTranscript, transcriptBrowserCors } from "./ticket-json-transcript.js"
 import { isApiDocumentationRequest, serveApiDocumentation } from "./api-documentation.js"
 import { captureWorkerError, recordRequestTiming, requestRouteTemplate, sentryOptions } from "./observability.js"
+export { TicketRuntimeCoordinator } from "./ticket-runtime-coordinator.js"
 
 const liveLayer = (bindings: WorkerBindings) => {
   const environment = WorkerEnvironment.layer(bindings)
@@ -59,11 +61,15 @@ const armyCacheRequest = (request: Request): Request | undefined => {
 }
 
 const handler = {
+  async scheduled(_controller: ScheduledController, bindings: WorkerBindings, context: ExecutionContext): Promise<void> {
+    context.waitUntil(Effect.runPromise(runClanVerificationChecks(bindings).pipe(Effect.provide(databaseLayer(bindings)), Effect.scoped)));
+  },
   async fetch(request: Request, bindings: WorkerBindings, context: ExecutionContext): Promise<Response> {
     // A transcript URL is a bearer credential. Keep the entire invocation out
-    // of request/defect logging, SQL layers, CORS and caller request-ID echoing.
+    // of request/defect logging, SQL layers and caller request-ID echoing.
     // Wrangler invocation logs/traces must also remain disabled for this Worker.
-    if (isJsonTranscriptRequest(request)) return readJsonTicketTranscript(request, bindings.TICKETING)
+    if (isJsonTranscriptRequest(request)) return transcriptBrowserCors(request,
+      await readJsonTicketTranscript(request, bindings.TICKETING), bindings.WEB_ALLOWED_ORIGINS)
     const routeTemplate = requestRouteTemplate(request) ?? "/unmatched"
     const startedAt = Date.now()
     if (isApiDocumentationRequest(request)) return serveApiDocumentation(request, bindings.API_DOCUMENTATION).then((response) => {

@@ -1,7 +1,10 @@
+export * from "./ai-notice.js"
+import { AiNoticeGetEndpoint, AiNoticeAcceptEndpoint } from "./ai-notice.js"
 export * from "./app-config.js"
 export * from "./admin.js"
 export * from "./bot.js"
 export * from "./dashboard.js"
+export * from "./dashboard-analytics.js"
 export * from "./discord.js"
 export * from "./endpoint.js"
 export * from "./errors.js"
@@ -14,10 +17,15 @@ export * from "./current-war-summary.js"
 export * from "./initialization.js"
 export * from "./app-announcements.js"
 export * from "./stats.js"
+export * from "./cwl-participation.js"
 export * from "./stats-history.js"
 export * from "./league-analytics.js"
+export * from "./army-setups.js"
 export * from "./legends.js"
+export * from "./esports.js"
 export * from "./personal-bases.js"
+export * from "./personal-armies.js"
+export * from "./bot-clash.js"
 export * from "./billing-webhook.js"
 export * from "./media.js"
 export * from "./legacy-public.js"
@@ -37,38 +45,59 @@ import {
   StatsRankedEndpoint,
   StatsWarEndpoint,
 } from "./stats.js"
-import { ArmySearchEndpoint, leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { leagueAnalyticsEndpoints } from "./league-analytics.js"
+import { armySetupEndpoints } from "./army-setups.js"
+import { esportsEndpoints } from "./esports.js"
 import { legendEndpoints } from "./legends.js"
 import { personalBaseEndpoints } from "./personal-bases.js"
+import { personalArmyEndpoints } from "./personal-armies.js"
+import { botClashEndpoints } from "./bot-clash.js"
 import { statsHistoryEndpoints } from "./stats-history.js"
 import { BillingStripeWebhookEndpoint } from "./billing-webhook.js"
 import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
-export const endpoints = {
+const coreEndpoints = {
+  aiNotice: AiNoticeGetEndpoint,
+  acknowledgeAiNotice: AiNoticeAcceptEndpoint,
   ...legacyPublicEndpoints,
   ...ticketTranscriptEndpoints,
   ...publicMetadataEndpoints,
   ...publicPlayerExtraEndpoints,
   ...leagueAnalyticsEndpoints,
+  ...armySetupEndpoints,
   ...legendEndpoints,
+  ...esportsEndpoints,
   ...personalBaseEndpoints,
+  ...personalArmyEndpoints,
+  ...botClashEndpoints,
   ...statsHistoryEndpoints,
   initialization: InitializationEndpoint,
   appAnnouncements: AppAnnouncementsEndpoint,
   createAppAnnouncement: AppAnnouncementCreateEndpoint,
   updateAppAnnouncement: AppAnnouncementUpdateEndpoint,
   archiveAppAnnouncement: AppAnnouncementArchiveEndpoint,
-  ...botEndpoints,
-  ...dashboardEndpoints,
-  ...expoEndpoints,
+
   appConfig: AppConfigEndpoint,
   homeActivity: HomeActivityEndpoint,
   health: HealthEndpoint,
-  statsArmies: ArmySearchEndpoint,
   statsCwl: StatsCwlEndpoint,
   statsRanked: StatsRankedEndpoint,
   statsWar: StatsWarEndpoint,
   billingStripeWebhook: BillingStripeWebhookEndpoint,
   mediaFile: MediaFileEndpoint,
 } as const
+
+// Keep each contract group named in declarations rather than serializing the
+// whole expanded schema tree, which exceeds TypeScript's declaration limit.
+type EndpointMap = Omit<typeof coreEndpoints, keyof typeof botEndpoints | keyof typeof dashboardEndpoints | keyof typeof expoEndpoints>
+  & Omit<typeof botEndpoints, keyof typeof dashboardEndpoints | keyof typeof expoEndpoints>
+  & Omit<typeof dashboardEndpoints, keyof typeof expoEndpoints>
+  & typeof expoEndpoints
+export const endpoints: EndpointMap = { ...coreEndpoints, ...botEndpoints, ...dashboardEndpoints, ...expoEndpoints }
+
+export * from "./clan-war-events.js"
+
+export * from "./bot-graph-total.js"
+
+export * from "./bot-capital-trophy-history.js"

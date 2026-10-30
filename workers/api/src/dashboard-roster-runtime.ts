@@ -1,13 +1,18 @@
+import { rosterRoleInputs, queueRosterRoleRefresh } from "./roster-role-refresh.js"
+import { rosterWebhook } from "./roster-webhook.js"
+import { normalizeRosterQuestions, validRosterQuestionId } from "./roster-questionnaire.js"
+import { rosterPublication, rosterPublications } from "./roster-publication.js"
+import { readDashboardMultipart, uploadMediaFile } from "./dashboard-upload.js"
 import { Context, Data, Effect, Layer, Schema } from "effect"
 import {
-  botEndpoints, dashboardEndpoints, DashboardRosterMetricQueryRequest, DashboardRosterViewPreviewRequest, RosterCapacity,
+  botEndpoints, dashboardEndpoints, DashboardRosterMetricQueryRequest, DashboardFamilyWarMetricQueryRequest, DashboardRosterViewPreviewRequest, RosterCapacity,
   type DashboardRosterViewSpec, type DashboardRosterViewResultRow, type AnyEndpoint,
 } from "@clashking/api-contracts"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
-import { ServerAuthorization } from "./server-authorization.js"
+import { ServerAuthorization, gatewayHeartbeatFreshnessSeconds } from "./server-authorization.js"
 import {
   Conflict,
   DatabaseFailure,
@@ -19,11 +24,11 @@ import {
   type ApiFailure,
 } from "./errors.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
-import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
+import { normalizeRosterMetricParameters, presentRosterView, queryDynamicRosterMetric, queryPlayerWarMetric, rosterSnapshotMetricKeys, validateRosterViewSpec } from "./dashboard-roster-metrics.js"
 import { readBoundedJson } from "./request-body.js"
 import { hydrateRosterMember, loadRosterClashPlayer, rosterPlayerSnapshot } from "./dashboard-roster-refresh.js"
-import { prepareStaticMetadata } from "./static-metadata.js"
-import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership } from "./dashboard-roster-membership.js"
+import { prepareStaticMetadata, rosterHeroNames, maxLevelAtTownHall } from "./static-metadata.js"
+import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership, requireRosterServerClans } from "./dashboard-roster-membership.js"
 
 type RosterAuth = "bot" | "public" | "user-or-bot"
 
@@ -35,6 +40,11 @@ interface RosterRoute {
 }
 
 const routes = [
+  { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/refresh-publication", operation: "refreshPublication", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/image", operation: "uploadRosterImage", auth: "user-or-bot" },
+  { method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/accounts", operation: "signupAccounts", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/withdraw", operation: "withdrawSignup", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/post", operation: "postRoster", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/members/query", operation: "membersQuery", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/account-groups/query", operation: "accountGroupsQuery", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/membership-changes/validate", operation: "validateMembershipChanges", auth: "user-or-bot" },
@@ -44,6 +54,7 @@ const routes = [
   { method: "GET", path: "/v2/roster/missing-members", operation: "missingMembers", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/metrics", operation: "listMetrics", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/metrics/query", operation: "queryMetric", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/roster/family/war-metrics/query", operation: "queryFamilyWarMetric", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views/preview", operation: "previewView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views", operation: "listViews", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views", operation: "createView", auth: "user-or-bot" },
@@ -74,6 +85,7 @@ const routes = [
   { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/discord-identity/refresh", operation: "refreshDiscordIdentity", auth: "user-or-bot" },
   { method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/signup-form", operation: "signupForm", auth: "user-or-bot" },
   { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/submissions", operation: "submitSignup", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/submissions/batch", operation: "submitBatchSignup", auth: "user-or-bot" },
   { method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/missing-members", operation: "builderMissingMembers", auth: "user-or-bot" },
   { method: "GET", path: "/v2/server/:serverId/rosters/:rosterId", operation: "getBuilderRoster", auth: "user-or-bot" },
   { method: "GET", path: "/v2/server/:serverId/rosters", operation: "listBuilderRosters", auth: "user-or-bot" },
@@ -81,6 +93,11 @@ const routes = [
 ] as const satisfies ReadonlyArray<RosterRoute>
 
 export const dashboardRosterRuntimeRoutes = routes.map(({ method, path }) => ({ method, path }))
+
+const heroRosterOperations = new Set([
+  "getRoster", "listRosters", "getGroup", "createRoster", "updateRoster", "deleteRoster", "cloneRoster",
+  "manageMembers", "updateMember", "removeMember", "refreshRosters", "refreshMember",
+])
 
 interface RouteMatch {
   readonly route: (typeof routes)[number]
@@ -162,6 +179,12 @@ const requireRosterBatch = (body: Record<string, unknown>) => Effect.gen(functio
 })
 
 interface RosterRow {
+  readonly roster_role_id: string | null
+  readonly max_signups: number | null
+  readonly require_verified: boolean
+  readonly hero_red_percent: number
+  readonly hero_yellow_percent: number
+  readonly hero_green_percent: number
   readonly alias: string
   readonly clan_tag: string | null
   readonly created_at: Date | string
@@ -170,6 +193,7 @@ interface RosterRow {
   readonly event_start_time: number | string | null
   readonly group_id: string | null
   readonly id: string
+  readonly embed_color: number | null
   readonly image_url: string | null
   readonly max_accounts_per_user: number | null
   readonly max_townhall: number | null
@@ -184,13 +208,18 @@ interface RosterRow {
   readonly roster_type: "clan" | "family"
   readonly server_id: string
   readonly signup_questions: unknown
-  readonly signup_scope: "clan-only" | "family-wide"
+  readonly signup_scope: "clan-only" | "family-only" | "anyone"
   readonly sort_configuration: unknown
   readonly updated_at: Date | string
   readonly webhook_id: string | null
 }
 
 interface RosterMemberRow {
+  readonly member_group_id: string | null
+  readonly member_group_name: string | null
+  readonly cached_discord?: { user?: { username?: string; global_name?: string; avatar?: string | null }; nick?: string; avatar?: string | null } | null
+  readonly discord_cache_ready?: boolean
+  readonly discord_guild_id: string
   readonly discord_avatar_url: string | null
   readonly discord_user_id: string | null
   readonly discord_username: string | null
@@ -215,11 +244,20 @@ const optional = <K extends string>(key: K, value: unknown) => value === null ||
   ? {}
   : { [key]: value } as Record<K, unknown>
 
+export const rosterMemberAvatar = (guildId: string, userId: string, cached: NonNullable<RosterMemberRow["cached_discord"]>): string => {
+  const guildHash = cached.avatar
+  const userHash = cached.user?.avatar
+  if (guildHash) return `https://cdn.discordapp.com/guilds/${guildId}/users/${userId}/avatars/${guildHash}.${guildHash.startsWith("a_") ? "gif" : "png"}`
+  if (userHash) return `https://cdn.discordapp.com/avatars/${userId}/${userHash}.${userHash.startsWith("a_") ? "gif" : "png"}`
+  return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(userId) >> 22n) % 6n)}.png`
+}
+
 const memberJson = (row: RosterMemberRow) => ({
   tag: row.tag,
   name: row.name,
   townhall: row.townhall,
   hero_level_sum: row.hero_level_sum,
+  hero_max_level_sum: rosterHeroNames().reduce((total, name) => total + maxLevelAtTownHall("heroes", name, row.townhall), 0),
   answers: row.signup_answers ?? {},
   ...optional("trophies", row.trophies),
   ...optional("current_clan", row.current_clan_name),
@@ -229,13 +267,17 @@ const memberJson = (row: RosterMemberRow) => ({
   ...optional("max_percent", row.max_percent === null ? null : Number(row.max_percent)),
   ...optional("war_pref", row.war_preference),
   ...optional("discord", row.discord_user_id),
-  ...optional("discord_username", row.discord_username),
-  ...optional("discord_avatar_url", row.discord_avatar_url),
+  ...optional("discord_username", row.cached_discord?.nick ?? row.cached_discord?.user?.global_name ?? row.cached_discord?.user?.username),
+  ...optional("discord_avatar_url", row.discord_user_id && row.cached_discord
+    ? rosterMemberAvatar(row.discord_guild_id, row.discord_user_id, row.cached_discord) : null),
+  ...optional("discord_cache_ready", row.discord_cache_ready),
   ...optional("last_online", row.last_online === null ? null : iso(row.last_online)),
   ...optional("refreshed_at", row.refreshed_at === null ? null : iso(row.refreshed_at)),
 })
 
 const builderMemberJson = (row: RosterMemberRow) => ({
+  memberGroupId: row.member_group_id,
+  memberGroupName: row.member_group_name,
   playerTag: row.tag,
   playerName: row.name,
   clanTag: row.current_clan_tag,
@@ -258,13 +300,21 @@ const builderMemberJson = (row: RosterMemberRow) => ({
 const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
   "Unable to load roster members",
   sql<RosterMemberRow>`
-    SELECT tag, name, townhall, trophies, current_clan_name, current_clan_tag,
-           league_id, league_name, hero_level_sum, max_percent, war_preference,
-           discord_user_id, discord_username, discord_avatar_url, last_online,
-           refreshed_at, signup_answers
-    FROM roster_members
-    WHERE roster_id = ${rosterId}::uuid
-    ORDER BY position, tag
+    SELECT member.member_group_id::text, member_label.name AS member_group_name, member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
+           member.league_id, member.league_name, member.hero_level_sum, member.max_percent, member.war_preference,
+           link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url,
+           GREATEST(member.last_online, (SELECT max(seen_at) FROM player_online_events activity WHERE activity.tag = member.tag)) AS last_online,
+           member.refreshed_at, member.signup_answers, roster.server_id AS discord_guild_id, cached.data AS cached_discord,
+           shard.application_id IS NOT NULL AS discord_cache_ready
+    FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
+    LEFT JOIN roster_member_groups member_label ON member_label.id = member.member_group_id
+    LEFT JOIN player_links link ON link.tag = member.tag
+    LEFT JOIN discord_cache.guilds guild ON guild.id = roster.server_id AND guild.available AND guild.members_complete AND guild.metadata_complete
+    LEFT JOIN discord_cache.gateway_shards shard ON shard.application_id = guild.application_id AND shard.shard_id = guild.shard_id
+      AND shard.generation = guild.generation AND shard.healthy AND shard.heartbeat_at > clock_timestamp() - ${gatewayHeartbeatFreshnessSeconds} * interval '1 second'
+    LEFT JOIN discord_cache.members cached ON cached.guild_id = guild.id AND cached.user_id = link.user_id AND shard.application_id IS NOT NULL
+    WHERE member.roster_id = ${rosterId}::uuid
+    ORDER BY member.position, member.tag
   `,
 )
 
@@ -276,11 +326,12 @@ const loadRosters = (
     return yield* new InvalidRequest({ message: "invalid roster_id" })
   }
   return yield* database("Unable to load rosters", sql<RosterRow>`
-  SELECT id::text, server_id, group_id, clan_tag, alias, description,
+  SELECT id::text, server_id, group_id, clan_tag, alias, description, embed_color, roster_role_id,
          roster_type, signup_scope, min_townhall, max_townhall, min_signups,
          max_accounts_per_user, display_column_ids, sort_configuration,
          webhook_id, message_id, image_url, event_start_time, recurrence_days,
-         recurrence_day_of_month, signup_questions, public_share_id, last_refreshed_at, created_at, updated_at, revision
+         recurrence_day_of_month, signup_questions, public_share_id, last_refreshed_at, created_at, updated_at, revision,
+         max_signups, require_verified, hero_red_percent, hero_yellow_percent, hero_green_percent
   FROM rosters
   WHERE (${filters.serverId ?? null}::text IS NULL OR server_id = ${filters.serverId ?? null})
     AND (${filters.rosterId ?? null}::uuid IS NULL OR id = ${filters.rosterId ?? null}::uuid)
@@ -291,6 +342,12 @@ const loadRosters = (
 })
 
 const rosterJson = (row: RosterRow, members: ReadonlyArray<RosterMemberRow>) => ({
+  embed_color: row.embed_color,
+  max_signups: row.max_signups,
+  require_verified: row.require_verified,
+  hero_red_percent: row.hero_red_percent,
+  hero_yellow_percent: row.hero_yellow_percent,
+  hero_green_percent: row.hero_green_percent,
   id: row.id,
   server_id: row.server_id,
   alias: row.alias,
@@ -349,16 +406,26 @@ export const rosterMetrics = [
   { id: "player.heroes", label: "Heroes", valueType: "number", kind: "snapshot", description: "Sum of current home-village hero levels", cacheTtlSeconds: 0 },
   { id: "player.max_percent", label: "Maxed", valueType: "number", kind: "snapshot", description: "Upgrade completion percentage", cacheTtlSeconds: 0 },
   { id: "player.war_preference", label: "War preference", valueType: "boolean", kind: "snapshot", description: "Current war preference", cacheTtlSeconds: 0 },
-  { id: "player.last_online", label: "Last online", valueType: "time", kind: "snapshot", description: "Last observed activity", cacheTtlSeconds: 0 },
+  { id: "player.last_online", label: "Last observed activity", valueType: "time", kind: "historical", description: "Last observed activity", cacheTtlSeconds: 0 },
   { id: "discord.username", label: "Discord", valueType: "string", kind: "snapshot", description: "Stored Discord username", cacheTtlSeconds: 0 },
   { id: "signup.answer", label: "Signup answer", valueType: "json", kind: "snapshot", description: "Answer selected by a roster-scoped questionId parameter", cacheTtlSeconds: 0 },
   { id: "roster.name", label: "Roster", valueType: "string", kind: "presentation", description: "Roster alias", cacheTtlSeconds: 0 },
   { id: "view.rank", label: "Rank", valueType: "number", kind: "presentation", description: "Rank after sorting", cacheTtlSeconds: 0 },
   { id: "view.computed", label: "Computed value", valueType: "json", kind: "presentation", description: "A value computed transiently by the roster assistant from authorized tool data; the saved replay prompt is its authoritative recipe", cacheTtlSeconds: 0 },
+  { id: "player.hero_percent", label: "Hero completion", valueType: "number", kind: "derived", description: "Home-village hero levels / released maxima at Town Hall, from profile details or a refreshed roster snapshot; unknown without either source", cacheTtlSeconds: 0 },
+  { id: "player.hero_rushed_percent", label: "Hero rushed", valueType: "number", kind: "derived", description: "100 minus hero-only completion percentage; not troop or building progress", cacheTtlSeconds: 0 },
+  { id: "cwl.league_history", label: "CWL league history", valueType: "json", kind: "historical", description: "CWL season, clan and league from registered squads; registration does not prove attacks", cacheTtlSeconds: 0 },
+  { id: "cwl.performance_history", label: "CWL participation performance", valueType: "json", kind: "historical", description: "Last seasonCount (default 6, max 24) participated CWL seasons, proven by completed war lineups. Per-season and summary attack/defense averages, triples, misses and completion. Zero-attack lineup counts; bench registration does not. Observed coverage only. No late-attack timestamps.", cacheTtlSeconds: 0 },
+  { id: "war.regular_hit_rate", label: "Regular war hit rate", valueType: "number", kind: "historical", description: "Three-star percentage in completed regular wars only; excludes CWL/friendly. windowDays (default 30) or per-player latest warCount (1..500). Returns attackCount", cacheTtlSeconds: 0 },
+  { id: "war.missed_attacks", label: "Missed war attacks", valueType: "number", kind: "historical", description: "Unused attack slots in observed completed wars. Uses war attacksPerMember, or one for CWL. Null if no wars or unknown allowance. windowDays default 30, optional warCount and warType.", cacheTtlSeconds: 0 },
+  { id: "war.participation", label: "War participation evidence", valueType: "json", kind: "historical", description: "Observed completedWars, attacks, expectedAttacks, missedAttacks and completionPercent = 100*attacks/expectedAttacks. Null when unobserved; unknown allowances stay null. Supports windowDays, warCount, warType.", cacheTtlSeconds: 0 },
+  { id: "war.hit_rate_confidence", label: "Hit rate confidence interval", valueType: "json", kind: "historical", description: "Actual attacks, triples, completedWars, ratePercent and Wilson 95% low/high percentages (z=1.96). This is a sampling interval, not a skill/confidence score. No attacks gives null rate and bounds. Supports windowDays, warCount, warType.", cacheTtlSeconds: 0 },
+  { id: "war.cwl_hit_rate", label: "CWL hit rate", valueType: "number", kind: "historical", description: "Three-star percentage in completed CWL wars only; windowDays (default 30) or per-player latest warCount (1..500). Returns attackCount", cacheTtlSeconds: 0 },
+  { id: "benchmark.th_hit_rate", label: "Global TH hit rate", valueType: "number", kind: "historical", description: "Attack-weighted regular-war three-star percentage across all tracked wars for each player's current Town Hall; windowDays default 30. Returns global attackCount", cacheTtlSeconds: 0 },
   { id: "war.hit_rate", label: "Hit rate", valueType: "number", kind: "historical", description: "War hit rate with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "cwl.stars", label: "CWL stars", valueType: "number", kind: "historical", description: "CWL stars with a replayable seasonOffset parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "trophies.delta", label: "Trophy delta", valueType: "number", kind: "historical", description: "Trophy delta with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
-  { id: "benchmark.th_hit_rate_delta", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Hit-rate difference from the Town Hall benchmark with a replayable windowDays parameter", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate", "player.townhall"] },
+  { id: "benchmark.th_hit_rate_delta", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Regular-war hit rate minus the global baseline for current Town Hall in percentage points, over the same windowDays", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate", "player.townhall"] },
   { id: "war.hit_rate.30d", label: "Hit rate (30d)", valueType: "number", kind: "historical", description: "Trailing 30-day war hit rate", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "cwl.stars.current", label: "CWL stars", valueType: "number", kind: "historical", description: "Current-season CWL stars", cacheTtlSeconds: 900, dependsOn: ["player.tag"] },
   { id: "benchmark.th_hit_rate_delta.30d", label: "TH benchmark delta", valueType: "number", kind: "derived", description: "Hit-rate difference from the Town Hall benchmark", cacheTtlSeconds: 900, dependsOn: ["war.hit_rate.30d", "player.townhall"] },
@@ -388,7 +455,8 @@ export class DashboardRosterOperations extends Context.Service<
         if (operation === "manageMembers") input = yield* prepareMemberSnapshots(input)
         const signupIdentity = operation === "submitSignup"
           ? yield* prepareSignupIdentity(sql, input).pipe(Effect.provideService(DiscordApi, discord)) : undefined
-        const effect = executeRosterOperation(sql, operation, input, signupIdentity).pipe(Effect.provideService(DiscordApi, discord))
+        const batch = operation === "submitBatchSignup" ? yield* prepareBatchSignup(sql, input).pipe(Effect.provideService(DiscordApi, discord)) : undefined
+        const effect = (batch ? submitBatchSignup(sql, input, batch) : executeRosterOperation(sql, operation, input, signupIdentity)).pipe(Effect.provideService(DiscordApi, discord))
         if (!transactionalOperations.has(operation)) return yield* effect
         const serialized = Effect.gen(function* () {
           if (destinationOperations.has(operation)) {
@@ -396,14 +464,33 @@ export class DashboardRosterOperations extends Context.Service<
             const locked = yield* database("Unable to lock roster destinations", sql<{ readonly id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`)
             if (locked.length !== 1) return yield* new NotFound({ message: "Server not found" })
           }
-          return yield* effect
+          const roleServerId = ["updateRoster","deleteRoster","cloneRoster","manageMembers","updateMember","removeMember","submitSignup","submitBatchSignup","withdrawSignup"].includes(operation) ? yield* requireServerId(input) : undefined
+          const oldRoleInputs = roleServerId ? yield* rosterRoleInputs(sql,roleServerId) : undefined
+          const response = yield* effect
+          if (response.ok && roleServerId && oldRoleInputs) yield* queueRosterRoleRefresh(sql,roleServerId,oldRoleInputs)
+          if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup", "manageMembers", "updateMember", "removeMember", "refreshMember"].includes(operation)) {
+            yield* database("Unable to mark roster publication pending", sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${input.params.rosterId ?? ""}::uuid`)
+          }
+          return response
         })
-        return yield* sql.withTransaction(serialized).pipe(Effect.mapError((cause) =>
+        const response = yield* sql.withTransaction(serialized).pipe(Effect.mapError((cause) =>
           cause instanceof Conflict || cause instanceof DatabaseFailure || cause instanceof Forbidden || cause instanceof InvalidRequest
             || cause instanceof NotFound || cause instanceof UpstreamUnavailable || cause instanceof PayloadTooLarge
             ? cause
             : new DatabaseFailure({ cause, message: "Roster transaction failed" }),
         ))
+        if (["updateRoster", "submitSignup", "submitBatchSignup", "withdrawSignup", "manageMembers", "updateMember", "removeMember", "refreshMember"].includes(operation)) {
+          yield* syncRosterPublication(sql, input, input.params.rosterId ?? "").pipe(Effect.provideService(DiscordApi, discord))
+        }
+        if (operation === "refreshRosters") {
+          const serverId = yield* requireServerId(input)
+          const pending = yield* database("Unable to find refreshed publications", sql<{ readonly roster_id: string }>`
+            SELECT publication.roster_id::text FROM roster_discord_publications publication
+            JOIN rosters roster ON roster.id = publication.roster_id
+            WHERE roster.server_id = ${serverId} AND publication.needs_sync ORDER BY publication.roster_id`)
+          for (const row of pending) yield* syncRosterPublication(sql, input, row.roster_id).pipe(Effect.provideService(DiscordApi, discord))
+        }
+        return response
       })
       return DashboardRosterOperations.of({ execute })
     }),
@@ -418,9 +505,10 @@ const destinationOperations = new Set([
 ])
 
 const transactionalOperations = new Set([
+  "withdrawSignup",
   "createRoster", "updateRoster", "deleteRoster", "cloneRoster", "manageMembers", "updateMember", "removeMember",
   "createGroup", "updateGroup", "deleteGroup", "createAutomation", "updateAutomation", "deleteAutomation",
-  "createView", "updateView", "deleteView", "putQuestionnaire", "submitSignup",
+  "createView", "updateView", "deleteView", "putQuestionnaire", "submitSignup", "submitBatchSignup",
   "refreshRosters", "refreshMember",
 ])
 
@@ -431,10 +519,25 @@ const executeRosterOperation = (
   signupIdentity?: PreparedSignupIdentity,
 ): Effect.Effect<Response, ApiFailure, DiscordApi> => Effect.gen(function* () {
   switch (operation) {
+    case "uploadRosterImage": {
+      const serverId = yield* requireServerId(input)
+      if (!(yield* loadRosters(sql, { serverId, rosterId: input.params.rosterId ?? "" })).length) return yield* new NotFound({ message: "Roster not found" })
+      const form = yield* readDashboardMultipart(input.request)
+      const file = form.get("file")
+      const extensions: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" }
+      if (!(file instanceof File) || !extensions[file.type] || file.size === 0) return yield* new InvalidRequest({ message: "Choose a PNG, JPEG, WebP or GIF image" })
+      return json(yield* uploadMediaFile(input.bindings, `roster_${crypto.randomUUID()}.${extensions[file.type]}`, file, input.url.origin))
+    }
+    case "refreshPublication": return json({ updated: yield* syncRosterPublication(sql, input, input.params.rosterId ?? "") })
+    case "signupAccounts": return yield* signupAccounts(sql, input)
+    case "withdrawSignup": return yield* withdrawSignup(sql, input)
+    case "postRoster": return yield* postRoster(sql, input)
     case "listMetrics":
       return json({ items: rosterMetrics })
     case "queryMetric":
       return yield* queryMetric(sql, input)
+    case "queryFamilyWarMetric":
+      return yield* queryFamilyWarMetric(sql, input)
     case "previewView":
       return yield* previewView(sql, input)
     case "getRoster": {
@@ -578,21 +681,43 @@ const createRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   const serverId = yield* requireServerId(input, body)
   const alias = yield* requireString(body.alias, "alias")
   const rosterType = body.roster_type === "family" ? "family" : "clan"
-  const signupScope = body.signup_scope === "family-wide" ? "family-wide" : "clan-only"
+  const signupScope = body.signup_scope ?? "anyone"
+  if (signupScope !== "clan-only" && signupScope !== "family-only" && signupScope !== "anyone") {
+    return yield* new InvalidRequest({ message: "Invalid roster signup scope" })
+  }
+  const clanTag = body.clan_tag ? normalizeTag(String(body.clan_tag)) : null
+  yield* requireRosterServerClans(sql, serverId, clanTag)
   const members = Array.isArray(body.members)
     ? body.members.filter((item): item is Record<string, unknown> => isRecord(item))
     : []
+  if (input.url.searchParams.get("unassigned_only") === "true") {
+    // createRoster runs under the existing destination server FOR UPDATE lock.
+    // Keep this check and all inserts in that transaction: another Apply must
+    // observe this transaction's membership before it can claim the same tags.
+    const tags = [...new Set(members.map(member => normalizeTag(String(member.tag ?? ""))))]
+    if (tags.length === 0) return yield* new InvalidRequest({ message: "An unassigned-family roster requires at least one player" })
+    const assigned = yield* database("Unable to check unassigned family members", sql`
+      SELECT member.tag FROM roster_members member JOIN rosters roster ON roster.id = member.roster_id
+      WHERE roster.server_id = ${serverId} AND member.tag = ANY(${tags}::text[]) LIMIT 1
+    `)
+    if (assigned.length > 0) return yield* new Conflict({ message: "A proposed player is already assigned to a roster. Request an updated proposal." })
+    const family = yield* database("Unable to check configured family membership", sql<{ tag: string }>`
+      SELECT player.tag FROM basic_player player JOIN server_clans clan ON clan.tag = player.clan_tag AND clan.server_id = ${serverId}
+      WHERE player.tag = ANY(${tags}::text[]) AND (${rosterType !== "clan"} OR player.clan_tag = ${clanTag})
+    `)
+    if (family.length !== tags.length) return yield* new Conflict({ message: "A proposed player is no longer in the configured family. Request an updated proposal." })
+  }
   const owners = yield* lockRosterAdmissionOwners(sql, members.map((member) => normalizeTag(String(member.tag ?? ""))))
   const id = crypto.randomUUID()
   yield* database("Unable to create roster", sql`
     INSERT INTO rosters (
       id, server_id, group_id, clan_tag, alias, description, roster_type, signup_scope, max_accounts_per_user,
-      display_column_ids, sort_configuration, signup_questions, created_at, updated_at
+      display_column_ids, sort_configuration, signup_questions, created_at, updated_at, max_signups
     ) VALUES (
       ${id}::uuid, ${serverId}, NULLIF(${String(body.group_id ?? "")}, ''),
-      NULLIF(${String(body.clan_tag ?? "")}, ''), ${alias}, NULLIF(${String(body.description ?? "")}, ''),
+      ${clanTag}, ${alias}, NULLIF(${String(body.description ?? "")}, ''),
       ${rosterType}, ${signupScope}, ${body.max_accounts_per_user ?? null},
-      ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb, now(), now()
+      ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb, now(), now(), ${body.max_signups === undefined ? 50 : body.max_signups}
     )
   `)
   yield* lockRosterMembership(sql, serverId, [id])
@@ -614,6 +739,19 @@ const updateRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   const current = yield* loadRosters(sql, { rosterId: id, serverId })
   const row = current[0]
   if (row === undefined) return yield* new NotFound({ message: "Roster not found" })
+  const questions = body.signup_questions === undefined ? questionsFrom(row.signup_questions) : yield* normalizeRosterQuestions(body.signup_questions)
+  if (body.signup_questions !== undefined) yield* resetQuestionnaireAnswers(sql, input, id, questionsFrom(row.signup_questions), questions, body.reset_answers === true)
+  const embedColor = body.embed_color === undefined ? row.embed_color : body.embed_color
+  if (embedColor !== null && (typeof embedColor !== "number" || !Number.isInteger(embedColor) || embedColor < 0 || embedColor > 16777215)) {
+    return yield* new InvalidRequest({ message: "Embed color must be an integer from 0 to 16777215, or null to inherit" })
+  }
+  const red = body.hero_red_percent ?? row.hero_red_percent
+  const yellow = body.hero_yellow_percent ?? row.hero_yellow_percent
+  const green = body.hero_green_percent ?? row.hero_green_percent
+  if (![red, yellow, green].every(value => typeof value === "number" && Number.isInteger(value))
+    || !(Number(red) >= 0 && Number(red) < Number(yellow) && Number(yellow) < Number(green) && Number(green) <= 100)) {
+    return yield* new InvalidRequest({ message: "Hero gradient anchors must increase from 0 to 100" })
+  }
   const webhookId = body.webhook_id === undefined ? row.webhook_id : stringValue(body.webhook_id) ?? null
   const messageId = body.message_id === undefined ? row.message_id : stringValue(body.message_id) ?? null
   if ((webhookId === null) !== (messageId === null)) {
@@ -624,6 +762,10 @@ const updateRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   }
   yield* database("Unable to update roster", sql`
     UPDATE rosters SET
+      embed_color = ${embedColor},
+      max_signups = ${body.max_signups === undefined ? row.max_signups : body.max_signups},
+      require_verified = ${body.require_verified ?? row.require_verified},
+      hero_red_percent = ${red}, hero_yellow_percent = ${yellow}, hero_green_percent = ${green},
       alias = ${String(body.alias ?? row.alias)},
       description = ${body.description === undefined ? row.description : body.description},
       roster_type = ${String(body.roster_type ?? row.roster_type)},
@@ -641,11 +783,11 @@ const updateRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
       event_start_time = ${body.event_start_time === undefined ? row.event_start_time : body.event_start_time},
       recurrence_days = ${body.recurrence_days === undefined ? row.recurrence_days : body.recurrence_days},
       recurrence_day_of_month = ${body.recurrence_day_of_month === undefined ? row.recurrence_day_of_month : body.recurrence_day_of_month},
-      signup_questions = ${JSON.stringify(body.signup_questions === undefined ? row.signup_questions ?? [] : body.signup_questions)}::jsonb,
+      signup_questions = ${JSON.stringify(questions)}::jsonb,
       revision = revision + 1, updated_at = now()
     WHERE id = ${id}::uuid AND server_id = ${serverId}
   `)
-  if (body.max_accounts_per_user !== undefined) yield* assertRosterMembershipLimits(sql, [id])
+  if (body.max_accounts_per_user !== undefined || body.max_signups !== undefined) yield* assertRosterMembershipLimits(sql, [id])
   return json({ message: "Roster updated", roster: yield* loadRosterJson(sql, id, serverId) })
 })
 
@@ -679,6 +821,7 @@ const deleteRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
 const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* decodeJson(input.request)
   const targetServerId = yield* requireServerId(input)
+  yield* requireRosterServerClans(sql, targetServerId)
   const source = yield* loadRosters(sql, { rosterId: input.params.rosterId ?? "" })
   const scope = source[0]
   if (scope === undefined) return yield* new NotFound({ message: "Source roster not found" })
@@ -700,28 +843,36 @@ const cloneRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
       min_townhall, max_townhall, min_signups, max_accounts_per_user,
       display_column_ids, sort_configuration, webhook_id, message_id, image_url,
       event_start_time, recurrence_days, recurrence_day_of_month, signup_questions,
-      created_at, updated_at
+      created_at, updated_at, max_signups, require_verified, hero_red_percent, hero_yellow_percent, hero_green_percent, embed_color, roster_role_id
     ) VALUES (
       ${id}::uuid, ${targetServerId}, ${sameServer ? row.group_id : null}, ${row.clan_tag}, ${alias}, ${row.description},
       ${row.roster_type}, ${row.signup_scope}, ${row.min_townhall}, ${row.max_townhall},
       ${row.min_signups}, ${row.max_accounts_per_user}, ${row.display_column_ids ?? []},
       ${JSON.stringify(row.sort_configuration ?? [])}::jsonb, NULL, NULL,
       ${row.image_url}, ${row.event_start_time}, ${row.recurrence_days}, ${row.recurrence_day_of_month},
-      ${JSON.stringify(row.signup_questions ?? [])}::jsonb, now(), now()
+      ${JSON.stringify(row.signup_questions ?? [])}::jsonb, now(), now(), ${row.max_signups}, ${row.require_verified},
+      ${row.hero_red_percent}, ${row.hero_yellow_percent}, ${row.hero_green_percent}, ${row.embed_color}, ${sameServer ? row.roster_role_id : null}
     )
   `)
   yield* lockRosterMembership(sql, targetServerId, [id])
+  // Labels belong to a server. Same-server copies retain their label settings;
+  // cross-server copies start in Main rather than leaking foreign configuration.
+  if (sameServer) yield* database("Unable to copy roster labels", sql`
+    INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id, signup_enabled, position, role_id)
+    SELECT ${id}::uuid, member_group_id, server_id, signup_enabled, position, role_id
+    FROM roster_member_group_settings WHERE roster_id = ${row.id}::uuid
+  `)
   if (members.length > 0) {
     yield* database("Unable to clone roster members", sql`
       INSERT INTO roster_members (
         roster_id, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
         league_id, league_name, hero_level_sum, max_percent, war_preference,
         discord_user_id, discord_username, discord_avatar_url, last_online,
-        refreshed_at, signup_answers, position
+        refreshed_at, signup_answers, position, member_group_id
       ) SELECT ${id}::uuid, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
                league_id, league_name, hero_level_sum, max_percent, war_preference,
                discord_user_id, discord_username, discord_avatar_url, last_online,
-               refreshed_at, signup_answers, position
+               refreshed_at, signup_answers, position, CASE WHEN ${sameServer} THEN member_group_id ELSE NULL END
         FROM roster_members WHERE roster_id = ${row.id}::uuid
     `)
   }
@@ -781,14 +932,24 @@ const updateMember = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   const serverId = yield* requireServerId(input)
   const rosterId = input.params.rosterId ?? ""
   yield* lockRosterMembership(sql, serverId, [rosterId])
-  yield* loadRosterJson(sql, rosterId, serverId)
+  const roster = yield* loadRosterJson(sql, rosterId, serverId)
   const tag = normalizeTag(input.params.memberTag ?? "")
+  const answers = isRecord(body.answers) ? body.answers : {}
+  const questions = questionsFrom(roster.signup_questions)
+  for (const [key, value] of Object.entries(answers)) {
+    const question = questions.find(question => question.id === key)
+    if (!question || (question.type === "boolean" ? typeof value !== "boolean" : typeof value !== "string" || value.length > 1000
+      || question.type === "single_select" && !question.options.includes(value))) return yield* new InvalidRequest({ message: "Invalid roster answer" })
+  }
+  const before = yield* database("Unable to read previous roster answers", sql<{ signup_answers: unknown }>`SELECT signup_answers FROM roster_members WHERE roster_id = ${rosterId}::uuid AND tag = ${tag}`)
   const rows = yield* database("Unable to update roster member", sql<{ readonly tag: string }>`
-    UPDATE roster_members SET signup_answers = ${JSON.stringify(body.answers ?? {})}::jsonb
+    UPDATE roster_members SET signup_answers = ${JSON.stringify(answers)}::jsonb
     WHERE roster_id = ${rosterId}::uuid AND tag = ${tag}
     RETURNING tag
   `)
   if (rows.length === 0) return yield* new NotFound({ message: "Member not found in roster" })
+  if (JSON.stringify(before[0]?.signup_answers ?? {}) !== JSON.stringify(answers)) yield* database("Unable to audit roster answers", sql`INSERT INTO audit_history (resource_id, resource_type, description, user_id)
+    VALUES (${rosterId}::uuid, 'roster', ${`Edited answers for ${tag}: ${JSON.stringify(before[0]?.signup_answers ?? {})} → ${JSON.stringify(answers)}`}, ${input.principal?.kind === "user" ? input.principal.userId : "bot"})`)
   return json({ message: "Member updated" })
 })
 
@@ -830,6 +991,7 @@ const refreshRosters = (sql: SqlClient.SqlClient, input: DashboardRosterOperatio
       yield* persistMember(sql, row.id, hydrated, position)
     }
     yield* database("Unable to revise refreshed roster", sql`UPDATE rosters SET revision = revision + 1, updated_at = now() WHERE id = ${row.id}::uuid`)
+    yield* database("Unable to mark refreshed publication pending", sql`UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ${row.id}::uuid`)
     rosters.push(yield* loadRosterJson(sql, row.id, serverId))
   }
   return json({ message: `Refreshed ${rosters.length} roster(s)`, refreshed_rosters: rosters })
@@ -908,8 +1070,8 @@ const metricRosterRows = (sql: SqlClient.SqlClient, serverId: string, rosterIds:
   return selected
 })
 
-const dynamicMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, rosterId: string, metricId: string, parameters: Readonly<Record<string, typeof Schema.Json.Type>> = {}) =>
-  queryDynamicRosterMetric(rosterId, metricId, parameters).pipe(
+const dynamicMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, rosterId: string, metricId: string, parameters: Readonly<Record<string, typeof Schema.Json.Type>> = {}, attackCounts?: Map<string, number>) =>
+  queryDynamicRosterMetric(rosterId, metricId, parameters, new Date(), attackCounts).pipe(
     Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(WorkerEnvironment, input.bindings),
   )
 
@@ -920,9 +1082,9 @@ const queryMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
   const serverId = yield* requireServerId(input)
   if (!rosterMetrics.some((metric) => metric.id === body.metricId)) return yield* new InvalidRequest({ message: `Unknown roster metric: ${body.metricId}` })
   const rosters = yield* metricRosterRows(sql, serverId, body.rosterIds)
-  const rows: Array<{ rosterId: string; playerTag: string; value: typeof Schema.Json.Type }> = []
+  const rows: Array<{ rosterId: string; playerTag: string; value: typeof Schema.Json.Type; attackCount?: number }> = []
   const questionId = body.parameters?.questionId
-  if (body.metricId === "signup.answer" && (typeof questionId !== "string" || !/^[a-z][a-z0-9_]{0,47}$/u.test(questionId))) {
+  if (body.metricId === "signup.answer" && (typeof questionId !== "string" || !validRosterQuestionId(questionId))) {
     return yield* new InvalidRequest({ message: "signup.answer requires a valid questionId parameter" })
   }
   for (const roster of rosters) {
@@ -934,11 +1096,39 @@ const queryMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
         rows.push({ rosterId: roster.id, playerTag: member.tag, value: yield* jsonMetricValue(value) })
       }
     } else {
-      const values = yield* dynamicMetric(sql, input, roster.id, body.metricId, body.parameters)
-      for (const [playerTag, value] of [...values].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) rows.push({ rosterId: roster.id, playerTag, value })
+      const counts = new Map<string, number>()
+      const values = yield* dynamicMetric(sql, input, roster.id, body.metricId, body.parameters, counts)
+      for (const [playerTag, value] of [...values].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) rows.push({ rosterId: roster.id, playerTag, value, ...(counts.has(playerTag) ? { attackCount: counts.get(playerTag)! } : {}) })
     }
   }
   return json({ metricId: body.metricId, parameters: normalizeRosterMetricParameters(body.metricId, body.parameters), rows, cached: false, evaluatedAt: new Date().toISOString() })
+})
+
+const queryFamilyWarMetric = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const body = yield* Schema.decodeUnknownEffect(DashboardFamilyWarMetricQueryRequest)(yield* decodeJson(input.request)).pipe(
+    Effect.mapError(() => new InvalidRequest({ message: "Invalid family war metric query" })),
+  )
+  const serverId = yield* requireServerId(input)
+  const tags = [...new Set(body.playerTags.map(normalizeTag))]
+  if (tags.length < 1 || tags.length > 500) return yield* new InvalidRequest({ message: "Choose between 1 and 500 current family players" })
+  const parameters = yield* Effect.try({ try: () => normalizeRosterMetricParameters(body.metricId, body.parameters),
+    catch: () => new InvalidRequest({ message: "Invalid family war metric parameters" }) })
+  const clans = yield* database("Unable to load server clans", sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId}`)
+  // Authorize against current clan membership, not model-supplied tags or a
+  // possibly stale basic_player clan pointer. Any failed snapshot fails closed.
+  const snapshots = yield* Effect.forEach(clans, clan => loadClanSnapshot(input.bindings, clan.tag).pipe(
+    Effect.flatMap(snapshot => snapshot.tag === clan.tag ? Effect.succeed(snapshot)
+      : Effect.fail(new UpstreamUnavailable({ cause: "Clan tag mismatch", message: "Clash clan response did not match the requested clan" }))),
+  ), { concurrency: 4 })
+  const current = new Map(snapshots.flatMap(clan => clan.memberList.map(member => [member.tag, { tag: member.tag, townhall: member.townHallLevel }] as const)))
+  if (tags.some(tag => !current.has(tag))) return yield* new Forbidden({ message: "War metrics are limited to current members of this server's configured clans" })
+  const counts = new Map<string, number>()
+  const evaluatedAt = new Date()
+  const values = yield* queryPlayerWarMetric(tags.map(tag => current.get(tag)!), body.metricId, parameters, evaluatedAt, counts).pipe(
+    Effect.provideService(SqlClient.SqlClient, sql), Effect.provideService(WorkerEnvironment, input.bindings),
+  )
+  return json({ metricId: body.metricId, parameters, evaluatedAt: evaluatedAt.toISOString(),
+    rows: tags.map(playerTag => ({ playerTag, value: values.get(playerTag) ?? null, attackCount: counts.get(playerTag) ?? 0 })) })
 })
 
 const previewView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
@@ -962,8 +1152,8 @@ const previewView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
     }
   } else {
     for (const roster of rosters) {
-      const dynamic = new Map<string, ReadonlyMap<string, number | null>>()
-      const recipes = new Map<string, ReadonlyMap<string, number | null>>()
+      const dynamic = new Map<string, ReadonlyMap<string, typeof Schema.Json.Type>>()
+      const recipes = new Map<string, ReadonlyMap<string, typeof Schema.Json.Type>>()
       for (const column of spec.columns) {
         const metric = rosterMetrics.find((item) => item.id === column.metricId)
         if (metric?.kind === "historical" || metric?.kind === "derived") {
@@ -1107,6 +1297,7 @@ const deleteGroup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
 })
 
 interface AutomationRow {
+  readonly event_offset_days: number | null
   readonly action_type: string
   readonly active: boolean
   readonly automation_id: string
@@ -1127,6 +1318,7 @@ interface AutomationRow {
 }
 
 const automationJson = (row: AutomationRow) => ({
+  event_offset_days: row.event_offset_days,
   automation_id: row.automation_id, server_id: row.server_id, action_type: row.action_type,
   trigger_type: row.trigger_type, scheduled_at: iso(row.scheduled_at), active: row.active,
   executed: row.executed, created_at: iso(row.created_at), updated_at: iso(row.updated_at),
@@ -1145,7 +1337,7 @@ const loadAutomations = (
   filters: { readonly activeOnly?: boolean; readonly automationId?: string; readonly groupId?: string; readonly rosterId?: string },
 ) => database("Unable to load roster automation", sql<AutomationRow>`
   SELECT automation_id, server_id, roster_id::text, group_id, action_type,
-    trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
+    event_offset_days, trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
     executed_at, last_triggered_at, execution_status, last_missed_at, created_at, updated_at
   FROM roster_automation_rules
   WHERE server_id = ${serverId}
@@ -1180,27 +1372,36 @@ const lockAutomationTargets = (sql: SqlClient.SqlClient, serverId: string, rawRo
   return { rosterId, groupId }
 })
 
+const relativeAutomationTime = (sql: SqlClient.SqlClient, serverId: string, rosterId: unknown, groupId: unknown, offset: unknown) => Effect.gen(function* () {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || Math.abs(offset) > 365) return yield* new InvalidRequest({ message: "Event offset must be a whole number of days between -365 and 365" })
+  const rows = yield* database("Unable to resolve automation event", sql<{ start: string | null }>`SELECT min(event_start_time)::text AS start FROM rosters
+    WHERE server_id = ${serverId} AND (id = ${rosterId}::uuid OR (${rosterId}::uuid IS NULL AND group_id = ${groupId}))`)
+  if (rows[0]?.start == null) return yield* new InvalidRequest({ message: "Set an event start time on the target roster before adding an automation" })
+  return new Date((Number(rows[0].start) + offset * 86400) * 1000).toISOString()
+})
+
 const createAutomation = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* decodeJson(input.request)
   const serverId = yield* requireServerId(input, body)
   const actionType = yield* requireString(body.action_type, "action_type")
-  const scheduledAt = yield* requireString(body.scheduled_at, "scheduled_at")
+  const targets = yield* lockAutomationTargets(sql, serverId, body.roster_id, body.group_id)
+  const scheduledAt = body.event_offset_days === undefined ? yield* requireString(body.scheduled_at, "scheduled_at")
+    : yield* relativeAutomationTime(sql, serverId, targets.rosterId, targets.groupId, body.event_offset_days)
   if (!validScheduledAt(scheduledAt)) {
     return yield* new InvalidRequest({ message: "scheduled_at must be an RFC3339 timestamp" })
   }
-  const targets = yield* lockAutomationTargets(sql, serverId, body.roster_id, body.group_id)
   const id = crypto.randomUUID().replaceAll("-", "").slice(0, 12)
   const rows = yield* database("Unable to create roster automation", sql<AutomationRow>`
     INSERT INTO roster_automation_rules (
       automation_id, server_id, roster_id, group_id, action_type, trigger_type,
-      scheduled_at, discord_channel_id, ping_type, enabled, executed, created_at, updated_at
+      scheduled_at, discord_channel_id, ping_type, enabled, executed, created_at, updated_at, event_offset_days
     ) VALUES (
       ${id}, ${serverId}, ${targets.rosterId}::uuid, ${targets.groupId},
       ${actionType}, ${String(body.trigger_type ?? "")}, ${scheduledAt}::timestamptz,
       ${body.discord_channel_id ?? null}, ${isRecord(body.options) ? body.options.ping_type ?? null : null},
-      true, false, now(), now()
+      true, false, now(), now(), ${body.event_offset_days ?? null}
     ) RETURNING automation_id, server_id, roster_id::text, group_id, action_type,
-      trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
+      event_offset_days, trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
       executed_at, last_triggered_at, execution_status, last_missed_at, created_at, updated_at
   `)
   const row = rows[0]
@@ -1237,20 +1438,26 @@ const updateAutomation = (sql: SqlClient.SqlClient, input: DashboardRosterOperat
   const targets = yield* lockAutomationTargets(sql, serverId,
     body.roster_id === undefined ? current.roster_id : body.roster_id,
     body.group_id === undefined ? current.group_id : body.group_id)
+  const offset = body.event_offset_days !== undefined ? body.event_offset_days
+    : body.scheduled_at !== undefined ? null : current.event_offset_days
+  if (offset === null && current.event_offset_days !== null && body.scheduled_at === undefined) {
+    return yield* new InvalidRequest({ message: "scheduled_at is required when clearing an event offset" })
+  }
+  const scheduledAt = offset === null ? body.scheduled_at ?? current.scheduled_at : yield* relativeAutomationTime(sql, serverId, targets.rosterId, targets.groupId, offset)
   const rows = yield* database("Unable to update roster automation", sql<AutomationRow>`
     UPDATE roster_automation_rules SET
       roster_id = ${targets.rosterId}::uuid,
       group_id = ${targets.groupId},
       action_type = ${String(body.action_type ?? current.action_type)},
       trigger_type = ${String(body.trigger_type ?? current.trigger_type)},
-      scheduled_at = ${body.scheduled_at === undefined ? current.scheduled_at : body.scheduled_at}::timestamptz,
+      event_offset_days = ${offset}, scheduled_at = ${scheduledAt}::timestamptz,
       discord_channel_id = ${body.discord_channel_id === undefined ? current.discord_channel_id : body.discord_channel_id},
       ping_type = ${body.options === undefined ? current.ping_type : isRecord(body.options) ? body.options.ping_type ?? null : null},
       enabled = ${body.active === undefined ? current.active : body.active},
       updated_at = now()
     WHERE automation_id = ${id} AND server_id = ${serverId}
     RETURNING automation_id, server_id, roster_id::text, group_id, action_type,
-      trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
+      event_offset_days, trigger_type, scheduled_at, discord_channel_id, ping_type, enabled AS active, executed,
       executed_at, last_triggered_at, execution_status, last_missed_at, created_at, updated_at
   `)
   return json({ message: "Automation updated", rule: automationJson(rows[0] ?? current) })
@@ -1399,37 +1606,32 @@ const questionnaire = (questions: ReadonlyArray<Question>) => ({
   accountSelector: { id: "account", type: "account", required: true }, questions,
 })
 
+const resetQuestionnaireAnswers = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, rosterId: string,
+  previous: ReadonlyArray<Question>, next: ReadonlyArray<Question>, confirmed: boolean) => Effect.gen(function* () {
+  const fingerprint = (questions: ReadonlyArray<Question>) => JSON.stringify(questions.map(question => [question.id, question.label, question.type, question.required, question.order, question.options]))
+  if (fingerprint(previous) === fingerprint(next)) return 0
+  const answers = yield* database("Unable to check roster answers", sql`SELECT tag FROM roster_members WHERE roster_id = ${rosterId}::uuid AND signup_answers <> '{}'::jsonb`)
+  if (answers.length > 0 && !confirmed) return yield* new Conflict({ message: "Changing questions clears all answers for this roster. Confirm with reset_answers=true." })
+  yield* database("Unable to reset roster answers", sql`UPDATE roster_members SET signup_answers = '{}'::jsonb WHERE roster_id = ${rosterId}::uuid`)
+  yield* database("Unable to audit question changes", sql`INSERT INTO audit_history (resource_id, resource_type, description, user_id)
+    VALUES (${rosterId}::uuid, 'roster', ${`Changed signup questions; cleared answers for ${answers.length} members.`}, ${input.principal?.kind === "user" ? input.principal.userId : "bot"})`)
+  return answers.length
+})
+
 const putQuestionnaire = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* decodeJson(input.request)
   const serverId = yield* requireServerId(input)
   const rosterId = input.url.searchParams.get("roster_id") ?? ""
-  const questions = questionsFrom(body.questions).map((question, order) => ({ ...question, order }))
-  if (!Array.isArray(body.questions) || questions.length !== body.questions.length || questions.length > 4
-    || new Set(questions.map((question) => question.id)).size !== questions.length
-    || questions.some((question) => !/^[a-z][a-z0-9_]{0,47}$/u.test(question.id)
-      || question.id === "account" || question.label.trim().length === 0 || new TextEncoder().encode(question.label).length > 160
-      || question.type === "single_select" && (question.options.length < 1 || question.options.length > 20)
-      || question.type !== "single_select" && question.options.length !== 0)) {
-    return yield* new InvalidRequest({ message: "A questionnaire requires up to four valid unique questions" })
-  }
+  const questions = yield* normalizeRosterQuestions(body.questions)
   yield* database("Unable to lock roster questionnaire", sql`SELECT id FROM rosters WHERE id = ${rosterId}::uuid AND server_id = ${serverId} FOR UPDATE`)
   const roster = (yield* loadRosters(sql, { serverId, rosterId }))[0]
   if (roster === undefined) return yield* new NotFound({ message: "Roster not found" })
-  const previous = questionsFrom(roster.signup_questions)
-  const incompatible = previous.filter((old) => {
-    const next = questions.find((question) => question.id === old.id)
-    return next === undefined || next.type !== old.type
-  }).map((question) => question.id)
-  const affected = incompatible.length === 0 ? [] : yield* database("Unable to clear incompatible roster answers", sql<{ readonly tag: string }>`
-    UPDATE roster_members SET signup_answers = signup_answers - ${incompatible}::text[]
-    WHERE roster_id = ${rosterId}::uuid AND signup_answers ?| ${incompatible}::text[]
-    RETURNING tag
-  `)
+  const affected = yield* resetQuestionnaireAnswers(sql, input, rosterId, questionsFrom(roster.signup_questions), questions, body.reset_answers === true)
   yield* database("Unable to update roster questionnaire", sql`
     UPDATE rosters SET signup_questions = ${JSON.stringify(questions)}::jsonb, updated_at = now()
     WHERE id = ${rosterId}::uuid AND server_id = ${serverId}
   `)
-  return json({ questionnaire: questionnaire(questions), affectedMemberCount: affected.length })
+  return json({ questionnaire: questionnaire(questions), affectedMemberCount: affected })
 })
 
 const signupForm = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
@@ -1477,6 +1679,43 @@ const prepareSignupIdentity = (sql: SqlClient.SqlClient, input: DashboardRosterO
   return { ownerId, username, avatarUrl, ...(player === undefined ? {} : { player }) }
 })
 
+const signupActor = (input: DashboardRosterOperationInput, supplied: unknown) => {
+  const actor = input.principal?.kind === "user" ? input.principal.userId : supplied
+  return typeof actor === "string" && discordSnowflakePattern.test(actor)
+    ? Effect.succeed(actor) : Effect.fail(new Forbidden({ message: "A signed Discord actor is required" }))
+}
+const signupAccounts = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const serverId = yield* requireServerId(input), rosterId = input.params.rosterId ?? ""
+  const actor = yield* signupActor(input, input.url.searchParams.get("discordUserId"))
+  const roster = (yield* loadRosters(sql, { serverId, rosterId }))[0]
+  if (!roster) return yield* new NotFound({ message: "Roster not found" })
+  const items = yield* database("Unable to load signup accounts", sql`
+    SELECT links.tag, COALESCE(player.name, links.tag) AS name, COALESCE(player.townhall_level, 0) AS townhall,
+      links.is_verified AS "isVerified", member.tag IS NOT NULL AS "signedUp"
+    FROM player_links links LEFT JOIN basic_player player ON player.tag = links.tag
+    LEFT JOIN roster_members member ON member.tag = links.tag AND member.roster_id = ${rosterId}::uuid
+    WHERE links.user_id = ${actor} ORDER BY links.order_index, links.tag
+  `)
+  const counts = yield* database("Unable to count signup capacity", sql<{ total: number; owned: number }>`
+    SELECT count(*)::integer AS total, count(*) FILTER (WHERE links.user_id = ${actor})::integer AS owned
+    FROM roster_members member LEFT JOIN player_links links ON links.tag = member.tag WHERE member.roster_id = ${rosterId}::uuid`)
+  const limits = [roster.max_signups == null ? Infinity : roster.max_signups - (counts[0]?.total ?? 0),
+    roster.max_accounts_per_user == null ? Infinity : roster.max_accounts_per_user - (counts[0]?.owned ?? 0)]
+  const remaining = Math.max(0, Math.min(...limits))
+  return json({ items, remainingSlots: Number.isFinite(remaining) ? remaining : null })
+})
+const withdrawSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const body = yield* decodeJson(input.request), serverId = yield* requireServerId(input), rosterId = input.params.rosterId ?? ""
+  const actor = yield* signupActor(input, body.discordUserId)
+  const tag = normalizeTag(yield* requireString(body.playerTag, "playerTag"))
+  const owners = yield* lockRosterAdmissionOwners(sql, [tag])
+  if (owners.get(tag) !== actor) return yield* new Forbidden({ message: "You do not own this account" })
+  yield* lockRosterMembership(sql, serverId, [rosterId])
+  const removed = yield* database("Unable to withdraw roster signup", sql`DELETE FROM roster_members WHERE roster_id = ${rosterId}::uuid AND tag = ${tag} RETURNING tag`)
+  if (removed.length) yield* database("Unable to revise roster", sql`UPDATE rosters SET revision = revision + 1, updated_at = now() WHERE id = ${rosterId}::uuid`)
+  return json({ removed: removed.length > 0 })
+})
+
 export const assertSignupEligibility = (sql: SqlClient.SqlClient,
   roster: Pick<RosterRow, "min_townhall" | "max_townhall" | "signup_scope" | "clan_tag" | "server_id">,
   player: ReturnType<typeof rosterPlayerSnapshot>) => Effect.gen(function* () {
@@ -1493,11 +1732,40 @@ export const assertSignupEligibility = (sql: SqlClient.SqlClient,
   if (roster.signup_scope === "clan-only") {
     if (roster.clan_tag === null || roster.clan_tag === "") return yield* new Conflict({ message: "Roster clan must be configured before signup", reason: "invalid_configuration" })
     if (player.current_clan_tag !== roster.clan_tag) return yield* new Forbidden({ message: "Selected account must belong to the roster clan" })
-  } else if (roster.signup_scope === "family-wide") {
+  } else if (roster.signup_scope === "family-only") {
     const clan = yield* database("Unable to check roster family membership", sql`SELECT tag FROM server_clans
       WHERE server_id = ${roster.server_id} AND tag = ${player.current_clan_tag}`)
     if (clan.length === 0) return yield* new Forbidden({ message: "Selected account must belong to a server family clan" })
-  } else return yield* new Conflict({ message: "Roster signup scope is invalid", reason: "invalid_configuration" })
+  } else if (roster.signup_scope !== "anyone") return yield* new Conflict({ message: "Roster signup scope is invalid", reason: "invalid_configuration" })
+})
+
+const prepareBatchSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const body = yield* decodeJson(input.request.clone())
+  const actor = yield* signupActor(input, body.discordUserId)
+  if (!Array.isArray(body.playerTags) || body.playerTags.length < 1 || body.playerTags.length > 25 || body.playerTags.some(tag => typeof tag !== "string")) {
+    return yield* new InvalidRequest({ message: "Choose between 1 and 25 accounts" })
+  }
+  const tags = body.playerTags.map(tag => normalizeTag(String(tag))).sort()
+  if (new Set(tags).size !== tags.length) return yield* new InvalidRequest({ message: "Choose each account only once" })
+  return yield* Effect.forEach(tags, tag => Effect.gen(function* () {
+    const request = new Request(input.request.url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ playerTag: tag, answers: {}, discordUserId: actor }) })
+    const memberInput = { ...input, request }
+    const identity = yield* prepareSignupIdentity(sql, memberInput)
+    return { tag, input: memberInput, identity }
+  }), { concurrency: 4 })
+})
+
+const submitBatchSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput,
+  batch: readonly { tag: string; input: DashboardRosterOperationInput; identity: PreparedSignupIdentity }[]) => Effect.gen(function* () {
+  const serverId = yield* requireServerId(input), rosterId = input.params.rosterId ?? ""
+  // Acquire every ownership lock in canonical order before any membership lock.
+  yield* lockRosterAdmissionOwners(sql, batch.map(member => member.tag), input.principal?.kind === "user" ? [input.principal.userId] : [])
+  yield* lockRosterMembership(sql, serverId, [rosterId])
+  const roster = (yield* loadRosters(sql, { serverId, rosterId }))[0]
+  if (!roster) return yield* new NotFound({ message: "Roster not found" })
+  if (questionsFrom(roster.signup_questions).length > 0) return yield* new Conflict({ message: "This roster has questions. Sign up one account at a time." })
+  for (const member of batch) yield* submitSignup(sql, member.input, member.identity)
+  return json({ signedUpCount: batch.length }, 201)
 })
 
 const submitSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, identity: PreparedSignupIdentity | undefined) => Effect.gen(function* () {
@@ -1515,6 +1783,10 @@ const submitSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   yield* lockRosterMembership(sql, serverId, [rosterId])
   const roster = (yield* loadRosters(sql, { serverId, rosterId }))[0]
   if (roster === undefined) return yield* new NotFound({ message: "Roster not found" })
+  if (roster.require_verified) {
+    const verified = yield* database("Unable to verify roster account", sql`SELECT tag FROM player_links WHERE tag = ${tag} AND is_verified`)
+    if (verified.length === 0) return yield* new Forbidden({ message: "This roster requires a verified account" })
+  }
   const questions = questionsFrom(roster.signup_questions)
   const answers = isRecord(body.answers) ? body.answers : {}
   if (Object.keys(answers).some((key) => !questions.some((question) => question.id === key))) {
@@ -1544,11 +1816,11 @@ const submitSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   `) : yield* database("Unable to submit roster signup", sql<{ readonly signup_answers: unknown }>`
     INSERT INTO roster_members (
       roster_id, tag, name, townhall, trophies, current_clan_tag, current_clan_name,
-      signup_answers, discord_user_id, discord_username, discord_avatar_url, refreshed_at, hero_level_sum, max_percent, league_id, league_name
+      signup_answers, discord_user_id, discord_username, discord_avatar_url, refreshed_at, hero_level_sum, max_percent, league_id, league_name, war_preference
     ) VALUES (${rosterId}::uuid, ${tag}, ${player?.name}, ${player?.townhall},
       ${player?.trophies}, NULLIF(${player?.current_clan_tag}, ''), NULLIF(${player?.current_clan}, ''), ${JSON.stringify(answers)}::jsonb,
       ${ownerId}, NULLIF(${identity.username}, ''), NULLIF(${identity.avatarUrl}, ''), ${player?.refreshed_at}::timestamptz,
-      ${player?.hero_level_sum}, ${player?.max_percent}, ${player?.league_id ?? null}, ${player?.league_name ?? null})
+      ${player?.hero_level_sum}, ${player?.max_percent}, ${player?.league_id ?? null}, ${player?.league_name ?? null}, ${player?.war_pref ?? null})
     RETURNING signup_answers
   `)
   if (rows.length === 0) return yield* new NotFound({ message: "Selected account snapshot is unavailable" })
@@ -1573,6 +1845,7 @@ const builderMissingMembers = (sql: SqlClient.SqlClient, input: DashboardRosterO
 })
 
 const builderRosterJson = (row: RosterRow, members: ReadonlyArray<RosterMemberRow>) => ({
+  requireVerified: row.require_verified,
   minTownhall: row.min_townhall, maxTownhall: row.max_townhall,
   id: row.id, serverId: row.server_id, alias: row.alias, description: row.description,
   clanTag: row.clan_tag, displayColumnIds: row.display_column_ids ?? [],
@@ -1603,9 +1876,11 @@ const publicRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
     readonly description: string | null; readonly clan_name: string | null;
     readonly min_townhall: number | null; readonly max_townhall: number | null;
     readonly clan_tag: string | null; readonly badge_token: string | null; readonly updated_at: Date | string;
+    readonly require_verified: boolean;
   }>`
     SELECT roster.id::text, roster.public_share_id, roster.alias, NULLIF(roster.description, '') AS description,
-      clan.name AS clan_name, roster.clan_tag, clan.badge_token, roster.updated_at, roster.min_townhall, roster.max_townhall
+      clan.name AS clan_name, roster.clan_tag, clan.badge_token, roster.updated_at, roster.min_townhall, roster.max_townhall,
+      roster.require_verified
     FROM rosters roster LEFT JOIN basic_clan clan ON clan.tag = roster.clan_tag
     WHERE roster.public_share_id = ${input.params.publicShareId ?? ""} AND roster.public_enabled
   `)
@@ -1618,7 +1893,7 @@ const publicRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationI
   }))
   return Response.json({
     id: row.public_share_id, name: row.alias, updatedAt: iso(row.updated_at), members,
-    minTownhall: row.min_townhall, maxTownhall: row.max_townhall,
+    minTownhall: row.min_townhall, maxTownhall: row.max_townhall, requireVerified: row.require_verified,
     ...optional("description", row.description), ...optional("clanName", row.clan_name),
     ...optional("clanTag", row.clan_tag),
     ...optional("clanBadgeUrl", row.badge_token === null ? null : `https://badges.clashk.ing/512/${row.badge_token.replace(/\.png$/u, "")}.png`),
@@ -1720,13 +1995,14 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
   if (rows.some((row) => Number(row.revision) !== expected[row.id])) {
     return json({ code: "conflict", message: "Roster data has changed since this proposal was created" }, 409)
   }
-  return yield* sql.withTransaction(Effect.gen(function* () {
+  const response = yield* sql.withTransaction(Effect.gen(function* () {
     const admissions = changes.filter((change) => change.action !== "remove")
     const owners = yield* lockRosterAdmissionOwners(sql, admissions.map((change) => change.playerTag))
     const locked = yield* lockRosterMembership(sql, serverId, rosterIds)
     if (locked.length !== rosterIds.length || locked.some((row) => Number(row.revision) !== expected[row.id])) {
       return yield* new RosterConflict({ message: "Roster data has changed since this proposal was created" })
     }
+    const oldRoleInputs = yield* rosterRoleInputs(sql,serverId)
     for (const change of changes) {
       if (change.action === "add") {
         const inserted = yield* sql<{ readonly tag: string }>`
@@ -1737,14 +2013,20 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
         `
         if (inserted.length !== 1) return yield* new RosterConflict({ message: "Approved add account snapshot is unavailable" })
       } else if (change.action === "move") {
+        // Preserve the player's label without enabling destination signup or
+        // copying a source roster's Discord role configuration.
+        yield* sql`INSERT INTO roster_member_group_settings (roster_id, member_group_id, server_id)
+          SELECT ${change.toRosterId}::uuid, member_group_id, ${serverId} FROM roster_members
+          WHERE roster_id = ${change.fromRosterId}::uuid AND tag = ${change.playerTag} AND member_group_id IS NOT NULL
+          ON CONFLICT DO NOTHING`
         const inserted = yield* sql<{ readonly tag: string }>`
           INSERT INTO roster_members (roster_id, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
             war_preference, discord_user_id, discord_username, discord_avatar_url, last_online, position,
-            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at)
+            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at, member_group_id)
           SELECT ${change.toRosterId}::uuid, tag, name, townhall, trophies, current_clan_name, current_clan_tag,
             war_preference, discord_user_id, discord_username, discord_avatar_url, last_online,
             COALESCE((SELECT max(position) + 1 FROM roster_members WHERE roster_id = ${change.toRosterId}::uuid), 0),
-            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at
+            is_in_family, member_status, signup_answers, league_id, league_name, hero_level_sum, max_percent, refreshed_at, member_group_id
           FROM roster_members WHERE roster_id = ${change.fromRosterId}::uuid AND tag = ${change.playerTag} RETURNING tag
         `
         if (inserted.length !== 1) return yield* new RosterConflict({ message: "Approved move no longer matches roster state" })
@@ -1761,10 +2043,14 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
       })
       yield* assertRosterMembershipLimits(sql, [destination], affectedOwners)
     }
+    yield* queueRosterRoleRefresh(sql,serverId,oldRoleInputs)
     const revised = yield* sql<{ readonly id: string; readonly revision: number | string }>`
       UPDATE rosters SET revision = revision + 1, updated_at = now()
       WHERE id = ANY(${rosterIds}::uuid[]) RETURNING id::text, revision
     `
+    yield* database("Unable to mark changed roster publications pending", sql`
+      UPDATE roster_discord_publications SET needs_sync = true WHERE roster_id = ANY(${rosterIds}::uuid[])
+    `)
     return json({ applied: true, changeCount: changes.length, revisions: Object.fromEntries(revised.map((row) => [row.id, Number(row.revision)])) })
   })).pipe(
     Effect.catchTag("RosterConflict", (conflict) => Effect.succeed(json({ code: "conflict", message: conflict.message }, 409))),
@@ -1772,6 +2058,10 @@ const applyMembershipChanges = (sql: SqlClient.SqlClient, input: DashboardRoster
     Effect.mapError((cause) => cause instanceof NotFound || cause instanceof InvalidRequest || cause instanceof DatabaseFailure
       ? cause : new DatabaseFailure({ cause, message: "Unable to apply roster membership changes" })),
   )
+  if (response.ok) {
+    for (const id of rosterIds) yield* syncRosterPublication(sql, input, id, serverId)
+  }
+  return response
 })
 
 
@@ -1780,6 +2070,128 @@ const DiscordMember = Schema.Struct({
   avatar: Schema.optionalKey(Schema.NullOr(Schema.String)),
   user: Schema.Struct({ id: Schema.String, username: Schema.String, avatar: Schema.NullOr(Schema.String) }),
 })
+
+const rosterEmbedColor = (sql: SqlClient.SqlClient, serverId: string, override: number | null) => Effect.gen(function* () {
+  if (override !== null) return override
+  const rows = yield* database("Unable to load server embed color", sql<{ embed_color: string | null }>`SELECT embed_color FROM servers WHERE id = ${serverId}`)
+  const raw = rows[0]?.embed_color
+  const value = raw?.startsWith("#") ? Number.parseInt(raw.slice(1), 16) : raw == null || raw.trim() === "" ? NaN : Number(raw)
+  return Number.isInteger(value) && value >= 0 && value <= 16777215 ? value : 14223113
+})
+
+const postRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const body = yield* decodeJson(input.request)
+  const serverId = yield* requireServerId(input)
+  const id = input.params.rosterId ?? ""
+  const roster = (yield* loadRosters(sql, { serverId, rosterId: id }))[0]
+  if (!roster) return yield* new NotFound({ message: "Roster not found" })
+  if (typeof body.channelId !== "string" || !discordSnowflakePattern.test(body.channelId)
+    || typeof body.nonce !== "string" || !/^[a-zA-Z0-9_-]{1,25}$/u.test(body.nonce)
+    || !["signup", "post", "static"].includes(String(body.mode))
+    || [body.joinLabel, body.leaveLabel, body.viewLabel].some(label => typeof label !== "string" || label.length < 1 || label.length > 80)) {
+    return yield* new InvalidRequest({ message: "Invalid roster publication options" })
+  }
+  const discord = yield* DiscordApi
+  const channel = yield* discord.request(`/channels/${body.channelId}`)
+  if (!isRecord(channel) || channel.guild_id !== serverId || ![0, 5, 10, 11, 12].includes(Number(channel.type))) {
+    return yield* new Forbidden({ message: "Select a text channel in this server" })
+  }
+  const members = yield* loadMembers(sql, id)
+  const dashboard = yield* Effect.try({ try: () => new URL(String(body.dashboardUrl)),
+    catch: () => new InvalidRequest({ message: "Invalid Dashboard URL" }) })
+  const origins = input.bindings.WEB_ALLOWED_ORIGINS.split(",").map(value => value.trim())
+  if (!origins.includes(dashboard.origin) || dashboard.pathname !== "/dashboard/rosters/detail"
+    || dashboard.searchParams.get("guildId") !== serverId || dashboard.searchParams.get("rosterId") !== id) {
+    return yield* new InvalidRequest({ message: "Dashboard URL must point to this roster on an allowed Dashboard origin" })
+  }
+  const rawEmojis = yield* discord.request(`/applications/${input.bindings.DISCORD_CLIENT_ID}/emojis`)
+  const emojis = isRecord(rawEmojis) && Array.isArray(rawEmojis.items) ? rawEmojis.items.filter(
+    (e): e is { id: string; name: string; animated?: boolean } => isRecord(e) && typeof e.id === "string" && typeof e.name === "string") : []
+  const color = yield* rosterEmbedColor(sql, serverId, roster.embed_color)
+  const publications = rosterPublications({ color, id, name: roster.alias, description: roster.description, image: roster.image_url, members, emojis,
+    dashboardUrl: dashboard.toString(), joinLabel: String(body.joinLabel), leaveLabel: String(body.leaveLabel),
+    viewLabel: String(body.viewLabel), mode: String(body.mode) })
+  const requestPayload = JSON.stringify({ channelId: body.channelId, mode: body.mode, joinLabel: body.joinLabel,
+    leaveLabel: body.leaveLabel, viewLabel: body.viewLabel, dashboardUrl: dashboard.toString() })
+  const reserved = yield* database("Unable to reserve roster publication", sql<{ readonly message_id: string | null }>`
+    INSERT INTO roster_publication_requests (roster_id, nonce, payload)
+    VALUES (${id}::uuid, ${body.nonce}, ${requestPayload}::jsonb)
+    ON CONFLICT (roster_id, nonce) DO NOTHING RETURNING message_id
+  `)
+  if (reserved.length === 0) {
+    const prior = (yield* database("Unable to inspect roster publication retry", sql<{ readonly same: boolean; readonly message_id: string | null }>`
+      SELECT payload = ${requestPayload}::jsonb AS same, message_id FROM roster_publication_requests
+      WHERE roster_id = ${id}::uuid AND nonce = ${body.nonce}
+    `))[0]
+    if (prior === undefined) return yield* new DatabaseFailure({ cause: "missing reservation", message: "Unable to inspect roster publication retry" })
+    if (!prior.same) return yield* new InvalidRequest({ message: "Publication nonce was already used for different options" })
+    if (prior.message_id !== null) return json({ messageId: prior.message_id })
+    return yield* new Conflict({ reason: "publication_pending", message: "Publication status is uncertain. Inspect the destination channel and reconcile the existing post before starting another publication." })
+  }
+  const hook = yield* rosterWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, String(body.channelId))
+  const ids: string[] = []
+  for (const publication of publications) {
+    const message = yield* discord.request(`${hook.path}?wait=true&${hook.query}`, { method: "POST", body: { ...publication, ...hook.identity } })
+    if (!isRecord(message) || typeof message.id !== "string" || !discordSnowflakePattern.test(message.id)) return yield* new UpstreamUnavailable({ cause: message, message: "Discord returned an invalid message" })
+    ids.push(message.id)
+  }
+  yield* sql.withTransaction(Effect.gen(function* () {
+    yield* database("Unable to complete roster publication request", sql`
+      UPDATE roster_publication_requests SET message_id = ${ids[0]!}, updated_at = now()
+      WHERE roster_id = ${id}::uuid AND nonce = ${body.nonce}
+    `)
+    if (body.mode === "static") return
+    // Discord snowflakes order actual creation, so a slow older request cannot
+    // replace a newer publication when its database write finally completes.
+    yield* database("Unable to save roster publication", sql`
+      WITH saved AS (INSERT INTO roster_discord_publications (roster_id, channel_id, message_id, mode, dashboard_url, join_label, remove_label, view_label, needs_sync, webhook_id)
+      VALUES (${id}::uuid, ${body.channelId}, ${ids[0]!}, ${String(body.mode)}, ${dashboard.toString()}, ${String(body.joinLabel)}, ${String(body.leaveLabel)}, ${String(body.viewLabel)}, true, ${hook.id})
+      ON CONFLICT (roster_id) DO UPDATE SET channel_id = EXCLUDED.channel_id, message_id = EXCLUDED.message_id, webhook_id = EXCLUDED.webhook_id,
+        mode = EXCLUDED.mode, dashboard_url = EXCLUDED.dashboard_url, join_label = EXCLUDED.join_label,
+        remove_label = EXCLUDED.remove_label, view_label = EXCLUDED.view_label, needs_sync = true, updated_at = now()
+      WHERE EXCLUDED.message_id::numeric >= roster_discord_publications.message_id::numeric
+      RETURNING roster_id, webhook_id, message_id)
+      UPDATE rosters SET webhook_id = saved.webhook_id, message_id = saved.message_id FROM saved WHERE rosters.id = saved.roster_id
+    `)
+  })).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(new DatabaseFailure({ cause, message: "Unable to complete roster publication" }))))
+  if (body.mode !== "static") yield* syncRosterPublication(sql, input, id)
+  return json({ messageId: ids[0]! })
+})
+
+interface RosterPublicationTarget {
+  webhook_id: string | null; channel_id: string; message_id: string; mode: string; dashboard_url: string;
+  join_label: string; remove_label: string; view_label: string;
+}
+const syncRosterPublication = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput, id: string, serverIdOverride?: string) => {
+  const sync = Effect.gen(function* () {
+    const serverId = serverIdOverride ?? (yield* requireServerId(input))
+    // Serialize only publication delivery, never a membership/roster row across Discord I/O.
+    const targets = yield* database("Unable to load roster publication", sql<RosterPublicationTarget>`
+      SELECT publication.* FROM roster_discord_publications publication JOIN rosters roster ON roster.id = publication.roster_id
+      WHERE publication.roster_id = ${id}::uuid AND roster.server_id = ${serverId} FOR UPDATE OF publication`)
+    const target = targets[0]
+    if (!target) return false
+    const roster = (yield* loadRosters(sql, { serverId, rosterId: id }))[0]
+    if (!roster) return yield* new NotFound({ message: "Roster not found" })
+    const members = yield* loadMembers(sql, id), discord = yield* DiscordApi
+    const raw = yield* discord.request(`/applications/${input.bindings.DISCORD_CLIENT_ID}/emojis`)
+    const emojis = isRecord(raw) && Array.isArray(raw.items) ? raw.items.filter(
+      (e): e is { id: string; name: string; animated?: boolean } => isRecord(e) && typeof e.id === "string" && typeof e.name === "string") : []
+    const hook = target.webhook_id ? yield* rosterWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, target.channel_id, target.webhook_id) : undefined
+    // Existing bot-authored posts remain editable until replaced by a webhook publication.
+    const color = yield* rosterEmbedColor(sql, serverId, roster.embed_color)
+    const path = hook ? `${hook.path}/messages/${target.message_id}?${hook.query}` : `/channels/${target.channel_id}/messages/${target.message_id}`
+    yield* discord.request(path, { method: "PATCH", body: {
+      content: "", ...rosterPublication({ color, id, name: roster.alias, description: roster.description, image: roster.image_url, members, emojis,
+        dashboardUrl: target.dashboard_url, joinLabel: target.join_label, leaveLabel: target.remove_label, viewLabel: target.view_label, mode: target.mode }),
+    } })
+    yield* database("Unable to mark roster publication synchronized", sql`UPDATE roster_discord_publications SET needs_sync = false, updated_at = now() WHERE roster_id = ${id}::uuid`)
+    return true
+  })
+  return sql.withTransaction(sync).pipe(Effect.mapError(cause => cause instanceof DatabaseFailure || cause instanceof NotFound
+    || cause instanceof Forbidden || cause instanceof InvalidRequest || cause instanceof UpstreamUnavailable
+    ? cause : new UpstreamUnavailable({ cause, message: "Roster saved, but its Discord message could not be updated. Use Refresh to retry." })))
+}
 
 export const loadDiscordIdentity = (serverId: string, userId: string) => Effect.gen(function* () {
   const discord = yield* DiscordApi
@@ -1821,6 +2233,7 @@ const ClanSnapshot = Schema.Struct({
   tag: Schema.String, name: Schema.String,
   memberList: Schema.Array(Schema.Struct({
     tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number, role: Schema.String, trophies: Schema.Number,
+    leagueTier: Schema.optionalKey(Schema.Struct({ id: Schema.Number, name: Schema.String })),
   })),
 })
 
@@ -1857,22 +2270,29 @@ const missingMembers = (sql: SqlClient.SqlClient, input: DashboardRosterOperatio
   if (rosters.length === 0) return yield* new NotFound({ message: "No rosters found" })
   const results: Array<Record<string, unknown>> = []
   for (const roster of rosters) {
-    if (roster.clan_tag === null) {
+    const family = roster.signup_scope === "family-only" || roster.roster_type === "family"
+    const tags = family
+      ? (yield* database("Unable to load roster family clans", sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId} ORDER BY tag`)).map(clan => clan.tag)
+      : roster.clan_tag ? [roster.clan_tag] : []
+    if (tags.length === 0) {
       results.push({ state: "error", missing_members: [], error_message: "Roster clan is not configured" })
       continue
     }
-    const clan = yield* loadClanSnapshot(input.bindings, roster.clan_tag)
     const registered = new Set((yield* loadMembers(sql, roster.id)).map((member) => member.tag))
+    for (const tag of tags) {
+    const clan = yield* loadClanSnapshot(input.bindings, tag)
     const missing = clan.memberList.filter((member) => !registered.has(member.tag)).map((member) => ({
       tag: member.tag, name: member.name, townhall: member.townHallLevel, role: member.role, trophies: member.trophies,
+      clan_tag: clan.tag, clan_name: clan.name, ...optional("league_name", member.leagueTier?.name),
     }))
     results.push({
       state: "ok", roster_info: { roster_id: roster.id, alias: roster.alias, clan_tag: clan.tag, clan_name: clan.name, registered_count: registered.size },
       missing_members: missing, summary: { total_missing: missing.length, total_clan_members: clan.memberList.length,
         coverage_percentage: clan.memberList.length === 0 ? 0 : (clan.memberList.length - missing.length) / clan.memberList.length * 100 },
     })
+    }
   }
-  return json({ query_type: rosterId.length > 0 ? "roster" : "group", query_value: rosterId || groupId, results, total_rosters_checked: results.length })
+  return json({ query_type: rosterId.length > 0 ? "roster" : "group", query_value: rosterId || groupId, results, total_rosters_checked: rosters.length })
 })
 
 const matchRoute = (request: Request): RouteMatch | undefined => {
@@ -1969,7 +2389,7 @@ export const dispatchDashboardRoster = (
     }
     let principal: ApiPrincipal | undefined
     if (match.route.auth !== "public") {
-      if (match.route.operation === "signupForm" || match.route.operation === "submitSignup") {
+      if (["signupForm", "submitSignup", "submitBatchSignup", "signupAccounts", "withdrawSignup"].includes(match.route.operation)) {
         const auth = yield* AuthIdentity
         principal = yield* auth.requireUserOrBot(request)
       } else {
@@ -1987,7 +2407,7 @@ export const dispatchDashboardRoster = (
         if (body?.serverId !== undefined && body.serverId !== serverId) {
           return yield* new InvalidRequest({ message: "serverId must match the authorized server_id" })
         }
-        const readOnlyPost = (match.route.operation === "queryMetric" || match.route.operation === "previewView"
+        const readOnlyPost = (match.route.operation === "queryMetric" || match.route.operation === "queryFamilyWarMetric" || match.route.operation === "previewView"
           || match.route.operation === "membersQuery" || match.route.operation === "accountGroupsQuery"
           || match.route.operation === "validateMembershipChanges")
           && descriptor?.auth === "server-read"
@@ -2003,8 +2423,10 @@ export const dispatchDashboardRoster = (
         }
       }
     }
-    if (["manageMembers", "refreshRosters", "refreshMember", "submitSignup"].includes(match.route.operation)) {
+    if (["manageMembers", "refreshRosters", "refreshMember", "submitSignup", "submitBatchSignup"].includes(match.route.operation)) {
       yield* prepareStaticMetadata(bindings, ["troops", "spells", "heroes"])
+    } else if (heroRosterOperations.has(match.route.operation)) {
+      yield* prepareStaticMetadata(bindings, ["heroes"])
     }
     const operations = yield* DashboardRosterOperations
     const response = yield* operations.execute(match.route.operation, {

@@ -1,6 +1,6 @@
 import { RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, type ApiFailure } from "./errors.js"
 import { enqueueRosterEffects } from "./roster-interaction-effects.js"
 

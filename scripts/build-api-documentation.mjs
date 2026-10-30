@@ -16,12 +16,13 @@ export function jsonToYaml(value, indent = 0) {
   }).join("\n")
 }
 
-// Admin application routes are private and are excluded from public docs.
+// Admin and bot application routes are private and excluded from public docs.
 // Keep the full internal artifact for tooling, but publish only the public
 // two service health reads and remove components used solely by private routes.
 export function publicApiDocument(document) {
   const publicTracking = new Set(["/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries"])
   const paths = Object.fromEntries(Object.entries(document.paths).flatMap(([path, methods]) => {
+    if (path.startsWith("/v2/bot/")) return []
     if (!path.startsWith("/v2/admin/")) return [[path, methods]]
     return publicTracking.has(path) && methods.get ? [[path, { get: methods.get }]] : []
   }))

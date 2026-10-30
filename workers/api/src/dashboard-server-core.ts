@@ -1,6 +1,8 @@
+import { executeClanVerification } from "./dashboard-clan-verification.js"
+import { executeClanLinks } from "./dashboard-clan-links.js"
 import { dashboardEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
@@ -18,12 +20,16 @@ import { dashboardGiveawayOperationIds, executeDashboardGiveaways } from "./dash
 import { dashboardServerBaseOperationIds, executeDashboardServerBases } from "./dashboard-server-bases.js"
 import { dashboardServerActivityOperationIds, executeDashboardServerActivity } from "./dashboard-server-activity.js"
 import { dashboardServerReadOperationIds, executeDashboardServerReads } from "./dashboard-server-reads.js"
+import { readServerAnalytics } from "./dashboard-server-analytics.js"
 import { ServerAuthorization, discordGuildManager, gatewayHeartbeatFreshnessSeconds, resolveListedGuildAccess } from "./server-authorization.js"
+import { queueServerRoleRefresh } from "./role-refresh-queue.js"
 import { notifyTracking } from "./tracking-wake.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited, Unauthenticated, UnprocessableEntity, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { ClashClanProfile, normalizeClashClanProfile } from "./clash-clan-profile.js"
 
 export const dashboardServerCoreOperationIds = [
+  "clanVerification", "startClanVerification", "checkClanVerification",
+  "serverAnalytics",
   "dashboardCapabilities", "dashboardAccess", "updateDashboardAccess", "dashboardGuilds", "dashboardGuild",
   "reactivateServer", "serverDiscordTest", "serverChannels", "serverThreads", "discordRoles",
   "botGuildProfile", "updateBotGuildProfile", "serverPanel", "updateServerPanel",
@@ -48,7 +54,7 @@ export const dashboardServerCoreOperationIds = [
 type CoreEnvironment = SqlClient.SqlClient | DiscordApi | DiscordCredentials | ServerAuthorization
 type JsonRecord = Readonly<Record<string, unknown>>
 
-const sections = ["settings", "family_settings", "logs", "clans", "rosters", "links", "moderation", "roles", "reminders", "autoboards", "giveaways", "panels", "tickets", "embeds", "wars", "leaderboards"] as const
+const sections = ["settings", "logs", "clans", "rosters", "links", "moderation", "roles", "reminders", "autoboards", "giveaways", "panels", "tickets", "embeds", "wars", "leaderboards"] as const
 const optionalText = Schema.optionalKey(Schema.NullOr(Schema.String))
 const RawGuild = Schema.Struct({
   id: DecimalSnowflake, name: Schema.String, icon: optionalText,
@@ -114,6 +120,7 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   const id = text(input.path.categoryId)
   const body = record(input.body)
   const operation = input.endpoint.operationId
+  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "clanCategories") {
     const items = yield* queryCategories(serverId)
     return { items, total: items.length }
@@ -143,8 +150,13 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   yield* validateUuid(id)
   if (operation === "renameClanCategory") {
     const name = yield* categoryName(body.name)
-    const rows = yield* sql.unsafe<CategoryRow>(`UPDATE server_clan_categories category SET name = $3 WHERE server_id = $1 AND id = $2::uuid RETURNING ${categoryColumns}`, [serverId, id, name])
-    return { category: categoryValue(yield* requireRow(rows, "Category not found")) }
+    return yield* sql.withTransaction(Effect.gen(function* () {
+      const previous = yield* sql<{ name: string }>`SELECT name FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid FOR UPDATE`
+      const current = yield* requireRow(previous, "Category not found")
+      const rows = yield* sql.unsafe<CategoryRow>(`UPDATE server_clan_categories category SET name = $3 WHERE server_id = $1 AND id = $2::uuid RETURNING ${categoryColumns}`, [serverId, id, name])
+      if (current.name !== name) yield* queueServerRoleRefresh(serverId)
+      return { category: categoryValue(yield* requireRow(rows, "Category not found")) }
+    }))
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
     const rows = yield* sql.unsafe<CategoryRow>(`SELECT ${categoryColumns} FROM server_clan_categories category WHERE category.server_id = $1 AND category.id = $2::uuid FOR UPDATE`, [serverId, id])
@@ -152,6 +164,7 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
     if (operation === "previewClanCategoryDelete") return { category: categoryValue(row), affectedClanCount: row.clan_count }
     yield* sql`DELETE FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid`
     yield* sql`UPDATE server_clan_categories SET position = position - 1 WHERE server_id = ${serverId} AND position > ${row.position}`
+    if (row.clan_count > 0) yield* queueServerRoleRefresh(serverId)
     return { categoryId: row.id, name: row.name, deleted: true, uncategorizedClanCount: row.clan_count }
   }))
 }))
@@ -262,8 +275,8 @@ const guildOperation = (input: DashboardServerOperationInput) => database("Guild
     SELECT cache.id, stored.last_command_at
     FROM discord_cache.guilds cache
     LEFT JOIN servers stored ON stored.id = cache.id
-    WHERE cache.id = ANY($1::text[])
-  `, [guilds.map((guild) => guild.id)])
+    WHERE cache.id = ANY($1::text[]) AND cache.application_id = $2
+  `, [guilds.map((guild) => guild.id), input.bindings.DISCORD_CLIENT_ID])
   const activityByGuild = new Map(cached.map((row) => [row.id, row.last_command_at]))
   const selected = guilds.filter((guild) => activityByGuild.has(guild.id))
   const accessByGuild = yield* resolveListedGuildAccess(input.principal, input.bindings.DISCORD_CLIENT_ID, selected.map((guild) => ({
@@ -277,13 +290,26 @@ const guildOperation = (input: DashboardServerOperationInput) => database("Guild
     const role = guild.owner === true ? "Owner" : (BigInt(permissions) & 8n) !== 0n ? "Administrator" : manager ? "Manager" : "Member"
     return [{ guild, manager, permissions, role }]
   })
-  return visible.map(({ guild, manager, permissions, role }) => {
+  const installed = visible.map(({ guild, manager, permissions, role }) => {
     const last = activityByGuild.get(guild.id) ?? null
     return { id: guild.id, name: guild.name, icon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null,
       owner: guild.owner ?? false, permissions, role, features: guild.features ?? [], has_bot: true,
       ...optional("member_count", guild.approximate_member_count), delegated: !manager,
       ...optional("last_command_at", last === null ? null : iso(last)), inactive: last === null || new Date(last).getTime() < Date.now() - 90 * 86_400_000 }
   })
+  // Invite candidates come from the caller's OAuth membership and Manage Server
+  // permission, not delegated Dashboard grants. They grant no Dashboard access.
+  const installable = guilds.filter((guild) => !activityByGuild.has(guild.id) &&
+    discordGuildManager({ owner: guild.owner ?? false, permissions: guild.permissions ?? "0" }))
+    .map((guild) => ({
+      id: guild.id, name: guild.name,
+      icon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null,
+      owner: guild.owner ?? false, permissions: guild.permissions ?? "0",
+      role: guild.owner === true ? "Owner" : (BigInt(guild.permissions ?? "0") & 8n) !== 0n ? "Administrator" : "Manager",
+      features: guild.features ?? [], has_bot: false,
+      ...optional("member_count", guild.approximate_member_count), delegated: false, inactive: false,
+    }))
+  return [...installed, ...installable]
 }))
 
 const profileOperation = (input: DashboardServerOperationInput) => database("Bot profile operation failed", Effect.gen(function* () {
@@ -344,75 +370,99 @@ const panelOperation = (input: DashboardServerOperationInput) => database("Welco
   return { ...optional("embed_name", row?.embed_name), buttons: buttons.map((button) => button.button_name), button_color: row?.button_color ?? "Grey", welcome_channel: row?.welcome_channel_id ?? null }
 }))
 
-interface RoleRow { readonly id: string; readonly server_id: string; readonly clan_tag: string | null; readonly type: string; readonly option: string; readonly role_id: string; readonly mode: string; readonly created_at: Date | string; readonly updated_at: Date | string }
-const roleValue = (row: RoleRow) => ({ id: row.id, server_id: row.server_id, ...optional("clan_tag", row.clan_tag), type: row.type, option: row.option, role_id: row.role_id, mode: row.mode, created_at: iso(row.created_at), updated_at: iso(row.updated_at) })
-const roleColumns = "id::text, server_id, clan_tag, type, option, role_id, mode, created_at, updated_at"
+interface RoleRow { readonly id: string; readonly server_id: string; readonly clan_tag: string | null; readonly type: string; readonly option: string; readonly role_id: string; readonly created_at: Date | string; readonly updated_at: Date | string }
+const roleValue = (row: RoleRow) => ({ id: row.id, server_id: row.server_id, ...optional("clan_tag", row.clan_tag), type: row.type, option: row.option, role_id: row.role_id, created_at: iso(row.created_at), updated_at: iso(row.updated_at) })
+const roleColumns = "id::text, server_id, clan_tag, type, option, role_id, created_at, updated_at"
 const roleOperation = (input: DashboardServerOperationInput) => database("Server role operation failed", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const serverId = serverIdFor(input)
   const operation = input.endpoint.operationId
+  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "serverRoles") {
     const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND ($2 = '' OR type = $2) AND ($3 = '' OR clan_tag = $3) ORDER BY type, option, clan_tag NULLS FIRST, role_id`, [serverId, text(input.query.type), text(input.query.clan_tag)])
     const roles = rows.map(roleValue)
     return { server_id: serverId, roles, count: roles.length }
   }
-  const id = text(input.path.roleId)
-  if (operation !== "createServerRole") yield* validateUuid(id)
-  if (operation === "deleteServerRole") {
-    const rows = yield* sql.unsafe<RoleRow>(`DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id])
-    return { message: "Server role deleted.", role: roleValue(yield* requireRow(rows, "Server role not found")) }
-  }
-  let values: JsonRecord = record(input.body)
-  if (operation === "updateServerRole") {
-    const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND id = $2::uuid`, [serverId, id])
-    values = { ...(yield* requireRow(rows, "Server role not found")), ...values }
-  }
-  const type = text(values.type).trim(), option = text(values.option).trim(), roleId = text(values.role_id).trim(), mode = text(values.mode).trim() || "both"
-  const clanTag = text(values.clan_tag).trim() ? normalizeTag(values.clan_tag) : null
-  if (!option || !/^\d+$/u.test(roleId)) return yield* new InvalidRequest({ message: "option and a decimal-string role_id are required" })
-  if (clanTag !== null && type !== "clan_role") return yield* new InvalidRequest({ message: "Only clan_role can use clan_tag" })
-  if (type === "family" && !["family", "not_family"].includes(option)) return yield* new InvalidRequest({ message: "Family roles only support family and not_family options" })
-  if (type === "clan_role" && (!["member", "elder", "co_leader", "leader"].includes(option) || clanTag === null && option === "member")) return yield* new InvalidRequest({ message: "Invalid clan role option or scope" })
-  const rows = operation === "createServerRole"
-    ? yield* sql.unsafe<RoleRow>(`INSERT INTO server_roles (server_id, clan_tag, type, option, role_id, mode) SELECT id, $2, $3, $4, $5, $6 FROM servers WHERE id = $1 RETURNING ${roleColumns}`, [serverId, clanTag, type, option, roleId, mode])
-    : yield* sql.unsafe<RoleRow>(`UPDATE server_roles SET clan_tag = $3, type = $4, option = $5, role_id = $6, mode = $7, updated_at = now() WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id, clanTag, type, option, roleId, mode])
-  return { message: operation === "createServerRole" ? "Server role created." : "Server role updated.", role: roleValue(yield* requireRow(rows, "Server or role not found")) }
+  return yield* sql.withTransaction(Effect.gen(function* () {
+    const id = text(input.path.roleId)
+    if (operation !== "createServerRole") yield* validateUuid(id)
+    if (operation === "deleteServerRole") {
+      const rows = yield* sql.unsafe<RoleRow>(`DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id])
+      const removed = yield* requireRow(rows, "Server role not found")
+      // Removing a mapping relinquishes control; it does not revoke a role now
+      // outside the managed set. Reconcile remaining/shared rules normally.
+      yield* queueServerRoleRefresh(serverId)
+      return { message: "Server role deleted.", role: roleValue(removed) }
+    }
+    let values: JsonRecord = record(input.body)
+    let previous: RoleRow | undefined
+    if (operation === "updateServerRole") {
+      const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND id = $2::uuid`, [serverId, id])
+      previous = yield* requireRow(rows, "Server role not found")
+      values = { ...previous, ...values }
+    }
+    const type = text(values.type).trim(), option = text(values.option).trim(), roleId = text(values.role_id).trim()
+    const clanTag = text(values.clan_tag).trim() ? normalizeTag(values.clan_tag) : null
+    if (!option || !/^\d+$/u.test(roleId)) return yield* new InvalidRequest({ message: "option and a decimal-string role_id are required" })
+    if (clanTag !== null && type !== "clan_role") return yield* new InvalidRequest({ message: "Only clan_role can use clan_tag" })
+    if (type === "family" && !["family", "not_family"].includes(option)) return yield* new InvalidRequest({ message: "Family roles only support family and not_family options" })
+    if (type === "clan_role" && (!["member", "elder", "co_leader", "leader"].includes(option) || clanTag === null && option === "member")) return yield* new InvalidRequest({ message: "Invalid clan role option or scope" })
+    const rows = operation === "createServerRole"
+      ? yield* sql.unsafe<RoleRow>(`INSERT INTO server_roles (server_id, clan_tag, type, option, role_id) SELECT id, $2, $3, $4, $5 FROM servers WHERE id = $1 RETURNING ${roleColumns}`, [serverId, clanTag, type, option, roleId])
+      : yield* sql.unsafe<RoleRow>(`UPDATE server_roles SET clan_tag = $3, type = $4, option = $5, role_id = $6, updated_at = now() WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id, clanTag, type, option, roleId])
+    const saved = yield* requireRow(rows, "Server or role not found")
+    if (!previous || previous.clan_tag !== saved.clan_tag || previous.type !== saved.type
+      || previous.option !== saved.option || previous.role_id !== saved.role_id) yield* queueServerRoleRefresh(serverId)
+    return { message: operation === "createServerRole" ? "Server role created." : "Server role updated.", role: roleValue(saved) }
+  }))
 }))
 
-const settingsFields: Readonly<Record<string, string>> = { require_api_token_when_linking: "require_api_token_when_linking", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
+const settingsFields: Readonly<Record<string, string>> = { auto_eval_triggers: "auto_role_triggers", auto_eval_role_treatment: "auto_role_treatment", auto_eval_blacklist_roles: "auto_role_blacklist_ids", role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", autoboard_limit: "autoboard_limit", tied: "tied_stats_only", family_label: "family_label" }
+const roleRefreshSettings = new Set(["auto_eval_triggers","auto_eval_role_treatment", "auto_eval_blacklist_roles","role_leave_delay_minutes", "nickname_rule", "non_family_nickname_rule", "change_nickname", "flair_non_family", "auto_eval_nickname", "autoeval"])
 const loadSettings = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, auto_eval_nickname, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
-    require_api_token_when_linking,
+  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, auto_role_triggers AS auto_eval_triggers, auto_role_treatment AS auto_eval_role_treatment, auto_role_blacklist_ids AS auto_eval_blacklist_roles, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
     jsonb_build_object('clan', link_parse_clan, 'army', link_parse_army, 'player', link_parse_player, 'base', link_parse_base, 'show', link_parse_show) AS link_parse FROM servers WHERE id = ${serverId}`
   const row = yield* requireRow(rows, "Server not found")
-  const triggers = yield* sql<{ trigger: string }>`SELECT trigger FROM server_autoeval_triggers WHERE server_id = ${serverId} ORDER BY position, trigger`
   const countdowns = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NULL ORDER BY type`
   const roles = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 ORDER BY type, option, clan_tag NULLS FIRST, role_id`, [serverId])
   const fields: JsonRecord = Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null))
-  return { ...fields, autoeval: row.autoeval, auto_eval_nickname: row.auto_eval_nickname, ...optional("autoeval_log", row.autoeval_log), autoeval_triggers: triggers.map((item) => item.trigger), countdowns: Object.fromEntries(countdowns.map((item) => [item.type, item.channel_id])), server_roles: roles.map(roleValue) }
+  return { ...fields, auto_eval_triggers: row.auto_eval_triggers, autoeval: row.autoeval, auto_eval_nickname: row.auto_eval_nickname, ...optional("autoeval_log", row.autoeval_log), countdowns: Object.fromEntries(countdowns.map((item) => [item.type, item.channel_id])), server_roles: roles.map(roleValue) }
 })
 
 const updateSettings = (serverId: string, body: JsonRecord) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
-  if (body.require_api_token_when_linking !== undefined && typeof body.require_api_token_when_linking !== "boolean") {
-    return yield* new InvalidRequest({ message: "require_api_token_when_linking must be a boolean" })
+  if (body.role_leave_delay_minutes !== undefined && (!Number.isInteger(body.role_leave_delay_minutes) || Number(body.role_leave_delay_minutes) < 5 || Number(body.role_leave_delay_minutes) > 60)) return yield* new InvalidRequest({ message: "Leave delay must be an integer from 5 to 60 minutes" })
+  if (body.auto_eval_triggers !== undefined && body.auto_eval_triggers !== null) {
+    const triggers = body.auto_eval_triggers
+    if (!Array.isArray(triggers) || triggers.length > 5 || triggers.some(value => typeof value !== "string" || !["member_join","member_leave","townhall_change","league_change","role_change"].includes(value))) {
+      return yield* new InvalidRequest({message:"Invalid automatic refresh triggers"})
+    }
+    body = {...body, auto_eval_triggers:[...new Set(triggers)].sort()}
   }
+  if (body.auto_eval_role_treatment !== undefined && (typeof body.auto_eval_role_treatment !== "string" || !["add","remove","both"].includes(body.auto_eval_role_treatment))) return yield* new InvalidRequest({message:"Invalid automatic role treatment"})
+  if (body.auto_eval_blacklist_roles !== undefined) {
+    if (!Array.isArray(body.auto_eval_blacklist_roles) || body.auto_eval_blacklist_roles.length > 250) return yield* new InvalidRequest({message:"Invalid automatic refresh exclusion roles"})
+    for (const id of body.auto_eval_blacklist_roles) yield* discordDestinationId(id,"auto_eval_blacklist_roles")
+    body = {...body,auto_eval_blacklist_roles:[...new Set(body.auto_eval_blacklist_roles as string[])].sort()}
+  }
+  if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
   for (const field of ["autoeval_log", "full_whitelist_role"]) if (body[field] !== undefined && body[field] !== null) yield* discordDestinationId(body[field], field)
   yield* sql.withTransaction(Effect.gen(function* () {
     const existing = yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`
     yield* requireRow(existing, "Server not found")
+    let refreshRoles = false
     for (const [field, column] of Object.entries(settingsFields)) if (body[field] !== undefined) {
       const value = field === "embed_color" ? String(body[field]) : body[field]
-      yield* sql.unsafe(`UPDATE servers SET ${column} = $2, updated_at = now() WHERE id = $1`, [serverId, value])
+      const changed = yield* sql.unsafe(`UPDATE servers SET ${column} = $2, updated_at = now() WHERE id = $1 AND ${column} IS DISTINCT FROM $2 RETURNING id`, [serverId, value])
+      if (changed.length > 0 && roleRefreshSettings.has(field)) refreshRoles = true
     }
+    // Queue inside the same transaction, only for changed evaluation inputs.
+    // Enabling auto-evaluation reconciles members without waiting for game activity.
+    if (refreshRoles) yield* queueServerRoleRefresh(serverId)
     const linkParse = record(body.link_parse)
     for (const field of ["clan", "army", "player", "base", "show"]) if (linkParse[field] !== undefined) yield* sql.unsafe(`UPDATE servers SET link_parse_${field} = $2, updated_at = now() WHERE id = $1`, [serverId, linkParse[field]])
-    if (Array.isArray(body.autoeval_triggers)) {
-      yield* sql`DELETE FROM server_autoeval_triggers WHERE server_id = ${serverId}`
-      for (const [position, trigger] of body.autoeval_triggers.entries()) yield* sql`INSERT INTO server_autoeval_triggers (server_id, trigger, position) VALUES (${serverId}, ${trigger}, ${position})`
-    }
+
   }))
 })
 
@@ -451,7 +501,7 @@ const settingsOperation = (input: DashboardServerOperationInput) => database("Se
     return operation === "updateRoleSettings" ? { message: "Role settings updated.", server_id: serverId } : { message: "Server settings updated successfully", server_id: serverId, updated_fields: Object.keys(body).length }
   }
   const settings = yield* loadSettings(serverId)
-  if (operation === "roleSettings") return { server_id: serverId, auto_eval_status: settings.autoeval, auto_eval_nickname: settings.auto_eval_nickname, autoeval_triggers: settings.autoeval_triggers, ...optional("autoeval_log", record(settings).autoeval_log) }
+  if (operation === "roleSettings") return { server_id: serverId, change_nickname: record(settings).change_nickname, ...optional("nickname_rule", record(settings).nickname_rule), ...optional("non_family_nickname_rule", record(settings).non_family_nickname_rule), flair_non_family: record(settings).flair_non_family, auto_eval_status: settings.autoeval, auto_eval_triggers: record(settings).auto_eval_triggers, auto_eval_role_treatment: record(settings).auto_eval_role_treatment, auto_eval_blacklist_roles: record(settings).auto_eval_blacklist_roles, role_leave_delay_minutes: record(settings).role_leave_delay_minutes, auto_eval_nickname: settings.auto_eval_nickname, ...optional("autoeval_log", record(settings).autoeval_log) }
   if (input.query.clan_settings === true) return { ...settings, clans: yield* clanSettingsRows(serverId) }
   return settings
 }))
@@ -469,8 +519,11 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   const tag = normalizeTag(input.path.clanTag)
   if (input.path.clanTag !== undefined && !/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid" })
   if (operation === "removeServerClan") {
-    const rows = yield* sql<{ tag: string }>`DELETE FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
-    return { message: "Clan removed successfully", server_id: serverId, clan_tag: tag, deleted_count: rows.length }
+    return yield* sql.withTransaction(Effect.gen(function* () {
+      const rows = yield* sql<{ tag: string }>`DELETE FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
+      if (rows.length) yield* queueServerRoleRefresh(serverId)
+      return { message: "Clan removed successfully", server_id: serverId, clan_tag: tag, deleted_count: rows.length }
+    }))
   }
   if (operation === "serverClansBasic") return (yield* clanSettingsRows(serverId)).map(({ tag, name }) => ({ tag, name }))
   if (operation === "serverClans") {
@@ -486,11 +539,13 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
     return yield* requireRow(rows.filter((row) => row.tag === tag), "Server or clan not found")
   }
   const body = record(input.body)
+  if (body.role_leave_delay_minutes !== undefined && (!Number.isInteger(body.role_leave_delay_minutes) || Number(body.role_leave_delay_minutes) < 5 || Number(body.role_leave_delay_minutes) > 60)) return yield* new InvalidRequest({ message: "Leave delay must be an integer from 5 to 60 minutes" })
   if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
   let category: ReturnType<typeof categoryValue> | null = null
   yield* sql.withTransaction(Effect.gen(function* () {
-    const rows = yield* sql<{ tag: string }>`UPDATE server_clans SET updated_at = now() WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
-    yield* requireRow(rows, "Server or clan not found")
+    const rows = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} FOR UPDATE`
+    const previous = yield* requireRow(rows, "Server or clan not found")
+    yield* sql`UPDATE server_clans SET updated_at = now() WHERE server_id = ${serverId} AND tag = ${tag}`
     if (body.abbreviation !== undefined) yield* sql`UPDATE server_clans SET abbreviation = ${body.abbreviation} WHERE server_id = ${serverId} AND tag = ${tag}`
     if (body.category !== undefined) {
       if (body.category === null || text(body.category).trim() === "") yield* sql`UPDATE server_clans SET category_id = NULL WHERE server_id = ${serverId} AND tag = ${tag}`
@@ -505,6 +560,10 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
         category = categoryValue(yield* requireRow(refreshed, "Category not found"))
       }
     }
+    const saved = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`
+    // These are refresh inputs even without a player update. Compare persisted
+    // values so duplicate saves and category ordering do not enqueue extra work.
+    if (saved[0]?.abbreviation !== previous.abbreviation || saved[0]?.category_id !== previous.category_id) yield* queueServerRoleRefresh(serverId)
   }))
   return { message: "Clan settings updated successfully", server_id: serverId, clan_tag: tag, updated_fields: Object.keys(body).length, category }
 }))
@@ -529,7 +588,9 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
     yield* sql`INSERT INTO basic_clan (tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id, public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token, troops_donated, troops_received, members, last_active)
       VALUES (${clan.tag}, ${clan.name}, ${clan.description}, ${clan.clanLevel}, ${clan.locationId}, ${clan.warLeagueId}, ${clan.capitalLeagueId}, ${clan.publicWarLog}, ${clan.warWins}, ${clan.warWinStreak}, ${clan.clanPoints}, ${clan.memberCount}, ${clan.badgeToken}, ${clan.donated}, ${clan.received}, ${JSON.stringify(clan.members)}::jsonb, now())
       ON CONFLICT (tag) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, clan_level = EXCLUDED.clan_level, location_id = EXCLUDED.location_id, cwl_league_id = EXCLUDED.cwl_league_id, capital_league_id = EXCLUDED.capital_league_id, public_war_log = EXCLUDED.public_war_log, war_wins = EXCLUDED.war_wins, war_win_streak = EXCLUDED.war_win_streak, clan_points = EXCLUDED.clan_points, member_count = EXCLUDED.member_count, badge_token = EXCLUDED.badge_token, troops_donated = EXCLUDED.troops_donated, troops_received = EXCLUDED.troops_received, members = EXCLUDED.members, last_active = now()`
-    yield* sql`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO UPDATE SET updated_at = now()`
+    const added = yield* sql<{ tag: string }>`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO NOTHING RETURNING tag`
+    if (added.length) yield* queueServerRoleRefresh(serverId)
+    else yield* sql`UPDATE server_clans SET updated_at = now() WHERE tag = ${clan.tag} AND server_id = ${serverId}`
   }))
   return { message: "Clan added successfully", server_id: serverId, clan_tag: clan.tag, clan_name: clan.name }
 }))
@@ -582,7 +643,7 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }))
 
-const logTypes = new Set(["join_log", "leave_log", "donation_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
+const logTypes = new Set(["join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
 const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
 interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
@@ -596,6 +657,7 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
   const body = record(input.body)
   const selected = [...new Set((Array.isArray(body.log_types) ? body.log_types : []).map((value) => text(value).trim()).filter(Boolean))]
   if (selected.length === 0) return yield* new InvalidRequest({ message: "No log types provided" })
+  if (selected.includes("donation_log")) return yield* new InvalidRequest({ message: "Donation logs were replaced by donation autoboards" })
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
@@ -615,6 +677,7 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
   const raw = operation === "deleteServerLogs" ? text(body.log_types).split(",") : Array.isArray(body.log_types) ? body.log_types : []
   const selected = [...new Set(raw.map((value) => text(value).trim()).filter(Boolean))]
   if (selected.length === 0) return yield* new InvalidRequest({ message: "No log types provided" })
+  if (selected.includes("donation_log") && operation !== "deleteServerLogs") return yield* new InvalidRequest({ message: "Donation logs were replaced by donation autoboards" })
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
@@ -691,11 +754,14 @@ export const executeDashboardServerCore = (
   input: DashboardServerOperationInput,
 ): Effect.Effect<unknown | undefined, ApiFailure, CoreEnvironment> => {
   const operation = input.endpoint.operationId
+  if (["clanVerification", "startClanVerification", "checkClanVerification"].includes(operation)) return executeClanVerification(input)
+  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (dashboardServerActivityOperationIds.some((id) => id === operation)) return executeDashboardServerActivity(input)
   if (dashboardServerBaseOperationIds.some((id) => id === operation)) return executeDashboardServerBases(input)
   if (dashboardGiveawayOperationIds.some((id) => id === operation)) return executeDashboardGiveaways(input)
   if (dashboardReminderOperationIds.some((id) => id === operation)) return executeDashboardReminders(input)
   if (dashboardServerReadOperationIds.some((id) => id === operation)) return executeDashboardServerReads(input)
+  if (operation === "serverAnalytics") return readServerAnalytics(input)
   if (dashboardAutoboardOperationIds.some((id) => id === operation)) return executeDashboardAutoboards(input, profileOperation({ ...input, endpoint: dashboardEndpoints.botGuildProfile, body: {} }))
   if (dashboardTicketOperationIds.some((id) => id === operation)) return executeDashboardTickets(input)
   if (["enableCountdown", "disableCountdown"].includes(operation)) return countdownMutationOperation(input)

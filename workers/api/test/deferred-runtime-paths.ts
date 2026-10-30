@@ -3,24 +3,10 @@
 // Deliberately distinct from the bearer transcript capability used by the
 // entrypoint privacy test: ordinary operation IDs are expected in request logs.
 const operationId = "80000000-0000-4000-8000-000000000002"
-const effectId = "0".repeat(64)
 
 // Status calls also used POST: their signed bodies could wake deferred work.
 // Keep methods explicit so a route is tested with its original dispatch method.
 export const deferredRuntimeRoutes: ReadonlyArray<{ readonly method: "GET" | "POST"; readonly path: string }> = [
-  { method: "POST", path: "/v2/runtime/giveaways/runtime-test/entries" },
-  { method: "POST", path: "/v2/runtime/giveaways/runtime-test/publications/prepare" },
-  { method: "POST", path: `/v2/runtime/giveaways/runtime-test/publications/${effectId}/claim` },
-  { method: "POST", path: `/v2/runtime/giveaways/runtime-test/publications/${effectId}/complete` },
-  { method: "POST", path: "/v2/runtime/giveaway-publications/pending" },
-  { method: "POST", path: "/v2/runtime/tickets/open/prepare" },
-  { method: "POST", path: "/v2/runtime/tickets/approve/prepare" },
-  { method: "POST", path: `/v2/runtime/ticket-operations/${operationId}/advance` },
-  { method: "POST", path: "/v2/runtime/tickets/actions" },
-  { method: "POST", path: "/v2/runtime/tickets/accounts" },
-  { method: "POST", path: `/v2/runtime/ticket-operations/${operationId}/status` },
-  { method: "POST", path: "/v2/runtime/ticket-panel-publications/prepare" },
-  { method: "POST", path: `/v2/runtime/ticket-panel-publications/${effectId}/status` },
   { method: "POST", path: "/v2/runtime/tickets/message-events" },
   { method: "POST", path: "/v2/runtime/rosters/actions" },
   { method: "POST", path: `/v2/runtime/roster-operations/${operationId}/advance` },

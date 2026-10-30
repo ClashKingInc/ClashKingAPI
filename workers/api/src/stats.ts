@@ -1,12 +1,12 @@
 import { rankedPeriodPredicate } from "./ranked-period.js"
 import type { StatsPerformanceResponse } from "@clashking/api-contracts"
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
-import { queryRegularArchiveDaily } from "./stats-archive.js"
-import { queryCwlArchiveDaily } from "./stats-cwl-archive.js"
-import type { StatsCwlRequest, StatsRankedRequest, StatsWarRequest } from "./stats-internal.js"
+import { queryRegularArchiveStats } from "./stats-archive.js"
+import type { StatsRankedRequest, StatsWarRequest } from "./stats-internal.js"
+import { rankedTroopWeights } from "./static-metadata.js"
 
 interface DateWindow {
   readonly end: Date
@@ -26,6 +26,10 @@ interface MetricRow {
 
 interface DailyMetricRow extends MetricRow {
   readonly date: Date | string
+  readonly air_count?: number | string
+  readonly ground_count?: number | string
+  readonly mixed_count?: number | string
+  readonly unknown_count?: number | string
   readonly usage_rate?: number | string
   readonly use_count?: number | string
 }
@@ -75,11 +79,6 @@ export const parseStatsWarQuery = (query: URLSearchParams): StatsWarRequest => {
     ...(opponentTownHallLevel === undefined ? {} : { opponent_townhall_level: opponentTownHallLevel }),
     ...(equalTownHalls === undefined ? {} : { equal_townhalls: equalTownHalls }) }
 }
-export const parseStatsCwlQuery = (query: URLSearchParams): StatsCwlRequest => {
-  known(query, new Set([...warQueryNames, "cwlLeagueId", "seasons"]))
-  const base = parseStatsWarQuery(new URLSearchParams([...query].filter(([key]) => warQueryNames.has(key))))
-  return { ...base, ...(integer(query, "cwlLeagueId") === undefined ? {} : { cwl_league_id: integer(query, "cwlLeagueId")! }), seasons: query.getAll("seasons") }
-}
 
 const parseDay = (name: string, value: string): Effect.Effect<Date, InvalidRequest> => {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
@@ -94,6 +93,7 @@ const parseDay = (name: string, value: string): Effect.Effect<Date, InvalidReque
 export const statsDateWindow = (
   dates: { readonly end_date?: string; readonly start_date?: string },
   now = new Date(),
+  maximumDays = 90,
 ): Effect.Effect<DateWindow, InvalidRequest> => Effect.gen(function* () {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const end = dates.end_date === undefined ? today : yield* parseDay("end_date", dates.end_date)
@@ -105,8 +105,8 @@ export const statsDateWindow = (
   if (start >= endExclusive) {
     return yield* new InvalidRequest({ message: "start_date must be on or before end_date" })
   }
-  if (endExclusive.valueOf() - start.valueOf() > 90 * 24 * 60 * 60 * 1000) {
-    return yield* new InvalidRequest({ message: "date range cannot exceed 90 days" })
+  if (endExclusive.valueOf() - start.valueOf() > maximumDays * 24 * 60 * 60 * 1000) {
+    return yield* new InvalidRequest({ message: `date range cannot exceed ${maximumDays} days` })
   }
   return { start, end, endExclusive }
 })
@@ -117,6 +117,14 @@ const dateRange = (window: DateWindow) => ({
 })
 
 const n = (value: number | string): number => Number(value)
+
+const attackTypes = (row: DailyMetricRow) => {
+  if (row.air_count === undefined || row.ground_count === undefined || row.mixed_count === undefined || row.unknown_count === undefined) return {}
+  const airCount = n(row.air_count), groundCount = n(row.ground_count), mixedCount = n(row.mixed_count), unknownCount = n(row.unknown_count)
+  const classifiedCount = airCount + groundCount + mixedCount
+  return { airCount, groundCount, mixedCount, unknownCount, classifiedCount,
+    classificationCoverage: n(row.sample_size) === 0 ? 0 : classifiedCount / n(row.sample_size) }
+}
 
 const metric = (row: MetricRow, daily: ReadonlyArray<DailyMetricRow> = []) => ({
   available: n(row.sample_size) > 0,
@@ -132,6 +140,7 @@ const metric = (row: MetricRow, daily: ReadonlyArray<DailyMetricRow> = []) => ({
     sampleSize: n(point.sample_size),
     ...(point.use_count === undefined ? {} : { useCount: n(point.use_count) }),
     ...(point.usage_rate === undefined ? {} : { usageRate: n(point.usage_rate) }),
+    ...attackTypes(point),
     averageStars: n(point.average_stars),
     averageDestruction: n(point.average_destruction),
     zeroStarRate: n(point.zero_star_rate),
@@ -185,7 +194,7 @@ export const queryRankedStats = (
     const sql = yield* SqlClient.SqlClient
     const params = [window.start, window.endExclusive, request.townhall_level, request.ranked_league_tier_id]
     const source = `FROM (
-      SELECT b.battle_time AS event_time,b.stars::int stars,b.destruction_percentage::float8 destruction_percentage
+      SELECT b.battle_time AS event_time,b.stars::int stars,b.destruction_percentage::float8 destruction_percentage,b.share_code
       FROM battles_ranked b
       WHERE b.direction=1 AND b.battle_mode=1
         AND b.battle_time >= $1 AND b.battle_time < $2 AND b.player_town_hall=$3
@@ -194,36 +203,56 @@ export const queryRankedStats = (
             AND ${rankedPeriodPredicate("b.battle_time", "membership.season_id")})
     ) source`
     const rows = yield* sql.unsafe<MetricRow>(`SELECT ${metricColumns} ${source}`, params)
-    const daily = yield* sql.unsafe<DailyMetricRow>(
-      `SELECT to_char(event_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, ${metricColumns} ${source}
-       GROUP BY to_char(event_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') ORDER BY date`,
-      params,
+    // Classify the main army by occupied troop housing. A few cleanup troops
+    // do not turn a predominantly air or ground attack into Mixed.
+    const daily = yield* sql.unsafe<DailyMetricRow>(`
+      WITH source AS MATERIALIZED (SELECT * ${source}),
+      weights AS MATERIALIZED (SELECT id,flying,housing FROM jsonb_to_recordset($5::jsonb)
+        AS weight(id integer,flying boolean,housing integer)),
+      army_types AS (
+        SELECT codes.share_code,CASE
+          WHEN composition.share_code IS NULL OR totals.troops=0 OR totals.troops<>totals.mapped THEN 'unknown'
+          WHEN totals.air_space*10 >= (totals.air_space+totals.ground_space)*7 THEN 'air'
+          WHEN totals.ground_space*10 >= (totals.air_space+totals.ground_space)*7 THEN 'ground'
+          ELSE 'mixed' END AS attack_type
+        FROM (SELECT DISTINCT share_code FROM source WHERE share_code IS NOT NULL) codes
+        LEFT JOIN army_compositions composition ON composition.share_code=codes.share_code
+        LEFT JOIN LATERAL (
+          SELECT count(*) troops,count(weight.id) mapped,
+            COALESCE(sum((troop.item->>'quantity')::integer*weight.housing) FILTER (WHERE weight.flying),0) air_space,
+            COALESCE(sum((troop.item->>'quantity')::integer*weight.housing) FILTER (WHERE NOT weight.flying),0) ground_space
+          FROM jsonb_array_elements(composition.main_troops) AS troop(item)
+          LEFT JOIN weights weight ON weight.id=(troop.item->>'id')::integer
+        ) totals ON true
+      )
+      SELECT to_char(source.event_time AT TIME ZONE 'UTC','YYYY-MM-DD') AS date,${metricColumns},
+        count(*) FILTER (WHERE army_types.attack_type='air')::bigint air_count,
+        count(*) FILTER (WHERE army_types.attack_type='ground')::bigint ground_count,
+        count(*) FILTER (WHERE army_types.attack_type='mixed')::bigint mixed_count,
+        count(*) FILTER (WHERE army_types.attack_type IS NULL OR army_types.attack_type='unknown')::bigint unknown_count
+      FROM source LEFT JOIN army_types ON army_types.share_code=source.share_code
+      GROUP BY to_char(source.event_time AT TIME ZONE 'UTC','YYYY-MM-DD') ORDER BY date`,
+      [...params, JSON.stringify(rankedTroopWeights())],
     )
     const row = rows[0]
     if (row === undefined) throw new Error("Ranked aggregate returned no row")
-    return { dateRange: dateRange(window), metrics: metric(row, daily) }
+    const counts = daily.reduce((sum, point) => ({
+      air_count: sum.air_count + n(point.air_count ?? 0), ground_count: sum.ground_count + n(point.ground_count ?? 0),
+      mixed_count: sum.mixed_count + n(point.mixed_count ?? 0), unknown_count: sum.unknown_count + n(point.unknown_count ?? 0),
+    }), { air_count: 0, ground_count: 0, mixed_count: 0, unknown_count: 0 })
+    return { dateRange: dateRange(window), metrics: { ...metric(row, daily), ...attackTypes({ ...row, date: window.start, ...counts }) } }
   }),
 )
 
 export const queryWarStats = (request: StatsWarRequest) => Effect.gen(function* () {
   yield* positive("townhall_level", request.townhall_level)
   yield* positive("opponent_townhall_level", request.opponent_townhall_level)
-  const window = yield* statsDateWindow(request.dates)
-  const daily = yield* queryRegularArchiveDaily(window.start, window.endExclusive, request)
+  // Archive aggregates support the full game lifetime; raw ranked queries retain their 90-day cap.
+  const window = yield* statsDateWindow(request.dates, new Date(), 20000)
+  const { daily, townHalls } = yield* queryRegularArchiveStats(window.start, window.endExclusive, request)
   const metrics = metricFromDaily(daily)
-  return { dateRange: dateRange(window), metrics: metric(metrics, daily) }
-})
-export const queryCwlStats = (request: StatsCwlRequest) => Effect.gen(function* () {
-  yield* positive("townhall_level", request.townhall_level)
-  yield* positive("opponent_townhall_level", request.opponent_townhall_level)
-  yield* positive("cwl_league_id", request.cwl_league_id)
-  for (const season of request.seasons ?? []) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) return yield* new InvalidRequest({ message: "seasons must use YYYY-MM" })
-  }
-  const window = yield* statsDateWindow(request.dates)
-  const daily = yield* queryCwlArchiveDaily(window.start, window.endExclusive, request)
-  return { dateRange: dateRange(window), metrics: metric(metricFromDaily(daily), daily),
-    breakdowns: [...Map.groupBy(daily, (point) => point.date.slice(0, 7))].map(([key, points]) => ({ key, metrics: metric(metricFromDaily(points)) })),
+  return { dateRange: dateRange(window), metrics: metric(metrics, daily),
+    breakdowns: townHalls.map((row) => ({ key: `TH${row.town_hall}`, metrics: metric(row) })),
   }
 })
 
@@ -283,3 +312,15 @@ export const queryGroupedCounts = (dimension: GroupedCountDimension) => database
     return { items, count: items.length }
   }),
 )
+
+interface ClanMemberBinRow { min_members: number; max_members: number; count: number | string }
+export const queryClanMemberBins = database("Stats.counts.clan_member_bins", Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql.unsafe<ClanMemberBinRow>(`SELECT
+    CASE WHEN member_count BETWEEN 1 AND 50 THEN 1 + ((member_count - 1) / 5) * 5 ELSE member_count END AS min_members,
+    CASE WHEN member_count BETWEEN 1 AND 50 THEN 5 + ((member_count - 1) / 5) * 5 ELSE member_count END AS max_members,
+    count(*)::bigint AS count
+    FROM basic_clan GROUP BY 1,2 ORDER BY 1`)
+  const items = rows.map(row => ({ minMembers: Number(row.min_members), maxMembers: Number(row.max_members), count: n(row.count) }))
+  return { totalClans: items.reduce((sum, item) => sum + item.count, 0), items }
+}))

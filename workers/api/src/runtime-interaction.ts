@@ -15,7 +15,12 @@ const InteractionCommon = {
   guild_id: DecimalSnowflake,
   channel_id: DecimalSnowflake,
   member: InteractionMember,
-  message: Schema.optionalKey(Schema.Struct({ id: DecimalSnowflake })),
+  message: Schema.optionalKey(Schema.Struct({ id: DecimalSnowflake,
+    author: Schema.optionalKey(Schema.Struct({ id: DecimalSnowflake })),
+    content: Schema.optionalKey(Schema.String),
+    embeds: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+    components: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+  })),
 } as const
 const Interaction = Schema.Union([
   Schema.Struct({ ...InteractionCommon,type:Schema.Literal(2),data:Schema.Struct({
@@ -50,6 +55,8 @@ export interface VerifiedRuntimeInteraction {
   readonly guildId: string
   readonly channelId: string
   readonly messageId: string | undefined
+  readonly messageAuthorId?: string | undefined
+  readonly messageSnapshot?: { readonly content?: string; readonly embeds?: readonly unknown[]; readonly components?: readonly unknown[] } | undefined
   readonly type: 2 | 3 | 5
   readonly data: VerifiedInteractionData
   readonly permissions: string
@@ -91,6 +98,8 @@ export const verifyRuntimeInteraction = (
     actorLabel: interaction.member.user.global_name ?? interaction.member.user.username ?? interaction.member.user.id,
     actorRoleIds: interaction.member.roles ?? [], guildId: interaction.guild_id,
     channelId: interaction.channel_id, messageId: interaction.message?.id, type: interaction.type,
+    messageAuthorId: interaction.message?.author?.id,
+    messageSnapshot: interaction.message,
     data: interaction.data,permissions:interaction.member.permissions ?? "0",requestHash, signedAt: Number(timestamp) * 1000,
   } satisfies VerifiedRuntimeInteraction
 })

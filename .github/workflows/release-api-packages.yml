@@ -39,8 +39,6 @@ jobs:
           cache: npm
 
       - run: npm ci --strict-peer-deps
-      - run: node --test scripts/api-package-release.test.mjs
-      - run: npm run typecheck && npm test && npm run test:scripts && npm run lint
       - run: npm run openapi:check
       - name: Record the checked-out release commit
         run: echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

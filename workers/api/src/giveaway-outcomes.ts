@@ -1,6 +1,6 @@
 import { DecimalSnowflake, GiveawayBooster } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict, DatabaseFailure, NotFound, UpstreamUnavailable } from "./errors.js"
 
@@ -26,7 +26,7 @@ export const resolveEndingGiveaway = (giveawayId: string) => Effect.gen(function
   const sql = yield* SqlClient.SqlClient
   const initialized = yield* sql.withTransaction(Effect.gen(function* () {
     const rows = yield* sql<{ id: string; ended: boolean; winner_count: number; existing_winners: number; channel_id: string | null }>`
-      SELECT id,status='ended' AND end_time <= clock_timestamp() AS ended,winners AS winner_count,
+      SELECT id,NOT disabled AND status='ended' AND end_time <= clock_timestamp() AS ended,winners AS winner_count,
         jsonb_array_length(winners_list) AS existing_winners,channel_id FROM giveaways WHERE id=${giveawayId} FOR UPDATE`
     const giveaway = rows[0]
     if (giveaway === undefined) return yield* new NotFound({ message: "Giveaway not found" })

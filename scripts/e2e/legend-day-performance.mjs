@@ -1,8 +1,13 @@
+import { startBotCustomizationProvider } from "./bot-customization-provider.mjs"
+import { verifyManualLimits } from "./manual-limits.mjs"
+import { verifyScopedDashboardAccess } from "./scoped-dashboard-access.mjs"
 // Real local workerd -> API -> canonical disposable Timescale. Fixtures are
 // stored observations, never mocked HTTP responses or production writes.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { randomBytes, randomUUID } from 'node:crypto'
+import { SignJWT } from 'jose'
 import { resolve } from 'node:path'
 import pg from 'pg'
 
@@ -14,6 +19,10 @@ const db = new pg.Client({ connectionString: dsn.href })
 await db.connect()
 const port = 8803
 let api, logs = ''
+const profileProvider=await startBotCustomizationProvider()
+const signingKey = randomBytes(32).toString('base64url')
+const meteringKey = randomBytes(32).toString('base64url')
+const botKey = randomBytes(32).toString('base64url')
 const date = offset => new Date(Date.now() - offset * 86400000).toISOString().slice(0,10)
 const first = date(5), last = date(3), prior = date(6)
 const days = [
@@ -46,14 +55,14 @@ try {
     }
   }
   api=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{
-    env:{...process.env,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
+    env:{...process.env,CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_BOT_TOKEN:"local-discord-token",CLASHKING_LOCAL_ADMIN_IDENTITY:"1",CLASHKING_LOCAL_ADMIN_PORT:"8804",CLASHKING_E2E_AI_USAGE_SECRET:meteringKey,CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_API_BOT_TOKEN:botKey,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
       CLASHKING_LOCAL_DISCORD_CLIENT_ID:'999999999999999999',CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',
       CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve('../clashking_assets/assets/static_data')},stdio:['ignore','pipe','pipe']})
   api.stdout.on('data',d=>logs+=d);api.stderr.on('data',d=>logs+=d)
   let ready=false
   for(let i=0;i<120;i++) {
     if(api.exitCode!==null)throw Error(`Local API exited: ${logs.slice(-2000)}`)
-    try {ready=(await fetch(`http://127.0.0.1:${port}/v2/health`)).ok}catch{}
+    try {ready=(await fetch(`http://127.0.0.1:${port}/v2/health`, { signal: AbortSignal.timeout(2000) })).ok}catch{}
     ready=ready&&logs.includes('isolated_api_ready')
     if(ready)break
     await new Promise(r=>setTimeout(r,500))
@@ -130,6 +139,17 @@ try {
     [rawTags[0],currentStart.toISOString(),index,index<2?3:2,index<2?100:80])
   for(let index=0;index<9;index++) await db.query(`INSERT INTO battles_ranked(player_tag,opponent_tag,battle_time,direction,battle_mode,player_town_hall,opponent_town_hall,stars,destruction_percentage,duration_seconds,looted_resources)
     VALUES($1,'#QQQ',$2::timestamptz+$3::integer*interval '1 millisecond',1,2,18,18,3,100,120,'{}')`,[rawTags[2],currentStart.toISOString(),index])
+  // Completed-day fixtures exercise the real stored-summary API contract.
+  // Raw battle edits must not change published days until Tracking rebuilds them.
+  const bucket = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]
+  for (const [day,direction,population,observedCount,complete,invalid,battles] of [
+    [first,1,3,3,1,1,15], [first,2,3,1,1,0,8], [date(4),1,1,1,1,0,8], [date(4),2,1,0,0,0,0],
+  ]) await db.query(`INSERT INTO legend_observed_daily_stats
+    (day,direction,source_window_start,source_window_end,eligible_player_count,observed_player_count,
+     complete_player_count,invalid_player_count,observed_battle_count,observed_triple_count,
+     perfect_player_count,complete_trophy_sum,trophy_buckets,star_counts,destruction_sum,duration_sum,attack_types)
+    VALUES ($1,$2,$1::date+interval '5 hours',$1::date+interval '29 hours',$3,$4,$5,$6,$7::bigint,$7::bigint,$5,$5*320,$8,$9,$7::bigint*100,$7::bigint*120,$9)`,
+    [day,direction,population,observedCount,complete,invalid,battles,complete?bucket:Array(16).fill(0),[0,0,0,battles]])
   const observedResponse=await fetch(endpoint('&cohort=observed'))
   const observed=await observedResponse.json()
   assert.equal(observedResponse.status,200,JSON.stringify(observed))
@@ -157,6 +177,9 @@ try {
     await db.query(`UPDATE battles_ranked SET share_code=$1 WHERE player_tag=$2 AND direction=1
       AND battle_time=$3::date+interval '6 hours'+$4::integer*interval '1 minute'+interval '1 second'`,[code,rawTags[0],first,index])
   }
+  const beforeRebuild=await(await fetch(endpoint('&cohort=observed'))).json()
+  assert.deepEqual(beforeRebuild.periods[0].offense.attackTypes,{air:0,ground:0,mixed:0,unknown:23},'Historical raw changes cannot bypass the completed summary')
+  await db.query("UPDATE legend_observed_daily_stats SET attack_types=ARRAY[1,1,1,12]::bigint[] WHERE day=$1 AND direction=1",[first])
   const classified=await(await fetch(endpoint('&cohort=observed'))).json()
   const fast=await(await fetch(endpoint('&cohort=observed&compare=false'))).json()
   assert.equal(fast.periods.length,1)
@@ -170,7 +193,7 @@ try {
   assert.deepEqual(classified.periods[0].offense.attackTypes,{air:1,ground:1,mixed:1,unknown:20},'Main-troop housing classification preserves unknown metadata and missing compositions')
   assert.equal(observedPeriod.offense.observedBattles,23,'More than eight observations cannot inflate the valid battle denominator')
   assert.equal(observedPeriod.offense.perfectPlayerDays,2)
-  assert.equal(observedPeriod.perfectOffensePlayers,1)
+  assert.equal(observedPeriod.perfectOffensePlayers,null,'Observed population does not invent distinct ranked players')
   assert.equal(observedPeriod.offense.buckets[15].playerDays,2)
   assert.equal(observedPeriod.defense.completePlayerDays,1)
   assert.equal(observedPeriod.defense.missingPlayerDays,3)
@@ -215,8 +238,38 @@ try {
   await db.query('UPDATE legend_rankings_history SET observed_attack_triples=0 WHERE tag=$1',['#PYP'])
   const mismatch=await(await fetch(endpoint())).json()
   assert.equal(mismatch.periods[0].perfectOffensePlayers,null)
+  const userId='999999999999994801', serverId='999999999999994802'
+  await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord')",[userId])
+  await db.query("INSERT INTO servers(id,name) VALUES($1,'Release E2E')",[serverId])
+  const permissions={full_access:false,sections:{}}
+  const grant=(await db.query("INSERT INTO dashboard_access_grants(token_hash,user_id,server_id,source,permissions) VALUES($1,$2,$3,'bot',$4) RETURNING id",[randomUUID(),userId,serverId,permissions])).rows[0].id
+  const session=(await db.query("INSERT INTO dashboard_scoped_sessions(grant_id,user_id,server_id,permissions,refresh_hash,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '1 hour') RETURNING id",[grant,userId,serverId,permissions,randomUUID()])).rows[0].id
+  const token=await new SignJWT({dashboard_session:session}).setProtectedHeader({alg:'HS256'}).setSubject(userId).setAudience('clashking-server-dashboard').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey))
+  assert.equal((await fetch(endpoint('&cohort=observed&compare=false'),{headers:{authorization:`Bearer ${token}`}})).status,200,'A scoped session can read public statistics')
+  assert.equal((await fetch(`http://127.0.0.1:${port}/v2/auth/export`,{headers:{authorization:`Bearer ${token}`}})).status,403,'Scoped sessions cannot export the unrestricted account')
+  const userToken=await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setSubject(userId).setAudience('clashking-native').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey))
+  await db.query("INSERT INTO home_layouts(user_id) VALUES($1)",[userId])
+  await db.query("INSERT INTO home_items(user_id,id,kind,size,position) VALUES($1,'todo','todo','wide',0)",[userId])
+  await db.query("INSERT INTO user_settings(user_id,app) VALUES($1,'{\"private_mode\":true}')",[userId])
+  await db.query("INSERT INTO user_bookmarks(user_id,entity_type,tag,order_index,war_notifications_enabled) VALUES($1,'clan','#PYLQRRJC',0,true)",[userId])
+  await db.query("INSERT INTO user_saved_armies(user_id,share_code,name,notes) VALUES($1,'observed-air','My army','My notes')",[userId])
+  const exportedResponse=await fetch(`http://127.0.0.1:${port}/v2/auth/export`,{headers:{authorization:`Bearer ${userToken}`}})
+  const exported=await exportedResponse.json()
+  assert.equal(exportedResponse.status,200,JSON.stringify(exported))
+  assert.equal(exported.saved_armies[0].name,'My army')
+  assert.equal(exported.saved_armies[0].notes,'My notes')
+  assert.equal(exported.home_items[0].id,'todo')
+  assert.equal(exported.home_layouts.length,1)
+  assert.equal(exported.dashboard_sessions[0].server_id,serverId)
+  assert.equal(exported.legacy_search_settings[0].private_mode,true)
+  assert.equal(exported.bookmarks[0].war_notifications_enabled,true)
+  const serialized=JSON.stringify(exported)
+  assert(!serialized.includes('refresh_hash')&&!serialized.includes('token_hash')&&!serialized.includes('pkce_challenge'),'Exports must not disclose authentication material')
+  await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999'})
+  await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider})
   console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation, unranked observed cohorts and partial current day')
 } finally {
   if(api&&api.exitCode===null){api.kill('SIGTERM');await Promise.race([once(api,'exit'),new Promise(r=>setTimeout(r,5000))]);if(api.exitCode===null)api.kill('SIGKILL')}
+  await profileProvider.close()
   await db.end()
 }

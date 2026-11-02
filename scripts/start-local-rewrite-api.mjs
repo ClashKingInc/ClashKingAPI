@@ -55,8 +55,14 @@ const discordClientId = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_ID ?? ""
 const discordClientSecret = process.env.CLASHKING_LOCAL_DISCORD_CLIENT_SECRET ?? ""
 const discordBotToken = process.env.CLASHKING_LOCAL_DISCORD_BOT_TOKEN ?? ""
 const discordPublicKey = process.env.CLASHKING_LOCAL_DISCORD_PUBLIC_KEY ?? ""
-const localAdmin = persistent && process.env.CLASHKING_LOCAL_ADMIN_IDENTITY === "1"
-  ? await createLocalAdminIdentity({ apiOrigin: `http://127.0.0.1:${port}` }) : undefined
+const localAdmin = (persistent || process.env.CLASHKING_DISPOSABLE_TIMESCALE === "1") && process.env.CLASHKING_LOCAL_ADMIN_IDENTITY === "1"
+  ? await createLocalAdminIdentity({ apiOrigin: `http://127.0.0.1:${port}`, port: Number(process.env.CLASHKING_LOCAL_ADMIN_PORT ?? 8786), fetcher: async (path, init) => {
+    const response=await fetch(new URL(path, `http://127.0.0.1:${port}`), init)
+    // Node fetch has already decompressed the stream. Do not forward gzip
+    // headers to the local Admin browser adapter for those decoded bytes.
+    const headers=new Headers(response.headers);headers.delete("content-encoding");headers.delete("content-length")
+    return new Response(response.body,{status:response.status,statusText:response.statusText,headers})
+  } }) : undefined
 const notificationLab = localNotificationLab(Boolean(localAdmin), process.env.CLASHKING_LOCAL_FCM_CREDENTIALS_FILE ?? "")
 const clashProxyOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_CLASH_PROXY_ORIGIN ?? "", { publicOrigin: "https://proxy.clashk.ing" })
 // Isolated service E2E runs can replace Discord with a loopback HTTP provider.
@@ -76,7 +82,13 @@ const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8")
   .split("\n").filter(line => !line.trimStart().startsWith("//")).join("\n"))
 const secret = () => randomBytes(32).toString("base64url")
 const localSecret = (name) => {
-  if (!persistent) return secret()
+  if (!persistent) {
+    const value = process.env[`CLASHKING_E2E_${name}`]
+    if (value === undefined) return secret()
+    if (process.env.CLASHKING_DISPOSABLE_TIMESCALE !== "1" || !/^[A-Za-z0-9_-]{43}$/u.test(value))
+      throw new Error(`Invalid disposable credential: ${name}`)
+    return value
+  }
   const value = process.env[`CLASHKING_LOCAL_${name}`]
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(value)) throw new Error(`Missing stable local ${name}; start through the Keychain-backed launcher`)
   return value
@@ -169,7 +181,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     // Local equivalent of the public Posts bucket origin used in production.
     { type: "ESModule", path: "/local-api/entry.js", contents: `
       import worker from './index.js';
-      export { TicketRuntimeCoordinator } from './index.js';
+      export { TicketRuntimeCoordinator, RuntimeRecoveryCoordinator } from './index.js';
       export default { ...worker, async fetch(request, env, ctx) {
         const path = new URL(request.url).pathname;
         if (path.startsWith('/admin-stories/') || path.startsWith('/admin-posts/')) {
@@ -194,6 +206,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   r2Buckets: ["ASSETS", "WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {
     TICKET_RUNTIME: { className: "TicketRuntimeCoordinator", useSQLite: true },
+    RUNTIME_RECOVERY: { className: "RuntimeRecoveryCoordinator", useSQLite: true },
   },
   serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: unavailable },
   // Discord sign-in and explicitly configured local FCM are allowed; other

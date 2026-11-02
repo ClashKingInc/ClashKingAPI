@@ -11,15 +11,18 @@ type JsonObject = EndpointResponse<typeof AuthExportEndpoint>["account"]
 // of the export. These are SQL literals, never request-controlled identifiers.
 const exportQueries = {
   player_links: "SELECT tag, source, order_index, is_verified, added_at, verified_at, updated_at FROM player_links WHERE user_id = $1 ORDER BY order_index, tag",
-  bookmarks: "SELECT entity_type, tag, order_index, created_at FROM user_bookmarks WHERE user_id = $1 ORDER BY order_index, tag",
+  bookmarks: "SELECT entity_type, tag, order_index, created_at, war_notifications_enabled, raid_notifications_enabled, war_active_until, raid_active_until FROM user_bookmarks WHERE user_id = $1 ORDER BY order_index, tag",
   recent_searches: "SELECT entity_type, tag, created_at FROM user_recent_searches WHERE user_id = $1 ORDER BY created_at DESC",
-  legacy_search_settings: "SELECT search, data, updated_at FROM user_settings WHERE user_id = $1",
+  legacy_search_settings: "SELECT search, data, app->'private_mode' AS private_mode, updated_at FROM user_settings WHERE user_id = $1",
   discord_sessions: "SELECT device_id, expires_at, created_at, updated_at FROM auth_discord_tokens WHERE user_id = $1 ORDER BY updated_at DESC",
   notification_accounts: "SELECT player_tag, enabled, created_at, updated_at FROM mobile_notification_accounts WHERE user_id = $1 ORDER BY player_tag",
   notification_devices: "SELECT device_id, provider, platform, environment, app_version, locale, authorization_status, enabled, last_seen_at FROM mobile_push_devices WHERE user_id = $1",
   notification_preferences: "SELECT war_attacks_enabled, war_state_enabled, war_reminders_enabled, raid_reminders_enabled, events_enabled, announcements_enabled, monthly_support_enabled, legend_defenses_enabled, reminder_timings, raid_reminder_timings, updated_at FROM mobile_notification_preferences WHERE user_id = $1",
   saved_bases: "SELECT base_id::text, saved_at FROM user_saved_bases WHERE user_id = $1 ORDER BY saved_at DESC, base_id DESC",
-  saved_armies: "SELECT share_code, saved_at FROM user_saved_armies WHERE user_id = $1 ORDER BY saved_at DESC, share_code",
+  home_layouts: "SELECT revision, updated_at FROM home_layouts WHERE user_id = $1",
+  home_items: "SELECT id, kind, entity_tag, size, position FROM home_items WHERE user_id = $1 ORDER BY position",
+  dashboard_sessions: "SELECT id, server_id, device_id, permissions, expires_at, revoked_at FROM dashboard_scoped_sessions WHERE user_id = $1 ORDER BY expires_at DESC",
+  saved_armies: "SELECT share_code, saved_at, name, notes FROM user_saved_armies WHERE user_id = $1 ORDER BY saved_at DESC, share_code",
   billing_subscription: "SELECT provider, provider_subscription_id, provider_price_id, status, current_period_end, cancel_at_period_end, created_at, updated_at FROM billing_subscriptions WHERE user_id = $1",
   subscription_entitlements: "SELECT active, bookmark_notifications_limit, roster_assistant_monthly_credit_usd, updated_at FROM subscription_entitlements WHERE user_id = $1",
 } as const
@@ -67,6 +70,8 @@ export const exportAccount = (userId: string) => Effect.gen(function* () {
       discord_sessions: yield* section("discord_sessions"), notification_accounts: yield* section("notification_accounts"),
       notification_devices: yield* section("notification_devices"), notification_preferences: yield* section("notification_preferences"),
       saved_bases: yield* section("saved_bases"), saved_armies: yield* section("saved_armies"),
+      home_layouts: yield* section("home_layouts"), home_items: yield* section("home_items"),
+      dashboard_sessions: yield* section("dashboard_sessions"),
       billing_subscription: yield* section("billing_subscription"),
       subscription_entitlements: yield* section("subscription_entitlements"),
     } satisfies EndpointResponse<typeof AuthExportEndpoint>

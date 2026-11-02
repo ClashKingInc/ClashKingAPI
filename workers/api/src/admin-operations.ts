@@ -1,3 +1,8 @@
+import { DiscordApi } from "./discord-api.js"
+import { WorkerEnvironment } from "./environment.js"
+import { discordBotProfile } from "./discord-bot-profile.js"
+import { ManualLimits } from "@clashking/api-contracts"
+import { readServerLimits } from "./server-limits.js"
 import {
   AppReleaseMarker as AppReleaseMarkerSchema,
   AppUpdateChannel as AppUpdateChannelSchema,
@@ -1407,11 +1412,47 @@ const awaitArrayBuffer = (file: File): Effect.Effect<ArrayBuffer, UpstreamUnavai
   catch: (cause) => new UpstreamUnavailable({ cause, message: "Upload could not be read" }),
 })
 
+const listServerLimits=(input:AdminOperationInput)=>Effect.gen(function*(){
+ const sql=yield* SqlClient.SqlClient,search=String((input.query as {search?:string}).search??"").trim()
+ const rows=yield* sql<{id:string}>`SELECT id FROM servers WHERE (${search}='' OR id=${search} OR name ILIKE ${'%'+search+'%'}) ORDER BY name,id LIMIT 50`
+ return yield* Effect.forEach(rows,row=>readServerLimits(row.id))
+})
+const updateServerLimits=(input:AdminOperationInput)=>Effect.gen(function*(){
+ const serverId=String((input.path as {serverId:string}).serverId)
+ if(!/^\d+$/u.test(serverId))return yield* new InvalidRequest({message:"Invalid server ID"})
+ const body=yield* Schema.decodeUnknownEffect(ManualLimits)(input.body).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid limits"})))
+ const sql=yield* SqlClient.SqlClient
+ return yield* sql.withTransaction(Effect.gen(function*(){
+  const before=yield* readServerLimits(serverId)
+  yield* sql`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`
+  yield* sql`UPDATE servers SET clan_limit=${body.clanLimit},autoboard_limit=${body.autoboardLimit},ai_monthly_limit_usd=${body.aiMonthlyLimitUsd},bot_customization_enabled=COALESCE(${body.botCustomizationEnabled ?? null}::boolean,bot_customization_enabled) WHERE id=${serverId}`
+  yield* audit(input,"server_limits.update","server",serverId,"Updated manual server limits",{before,after:body})
+  return yield* readServerLimits(serverId)
+ }))
+})
+
+const resetBotProfile = (input: AdminOperationInput) => Effect.gen(function* () {
+  const serverId = String((input.path as {serverId:string}).serverId)
+  if (!/^\d+$/u.test(serverId)) return yield* new InvalidRequest({message:"Invalid server ID"})
+  yield* readServerLimits(serverId)
+  // This explicit Admin action works even after the customization grant is
+  // revoked. Null clears guild overrides so future global profile changes flow
+  // through; copying today's global values would pin a second custom profile.
+  yield* discordBotProfile(input.bindings, serverId, {nick:null,avatar:null,banner:null,bio:null}).pipe(
+    Effect.provide(DiscordApi.layer), Effect.provideService(WorkerEnvironment,input.bindings),
+  )
+  yield* audit(input,"bot_profile.reset","server",serverId,"Restored global bot profile")
+  return {reset:true}
+})
+
 const operationFor = (
   operationId: string,
   input: AdminOperationInput,
 ): Effect.Effect<unknown, ApiFailure, SqlClient.SqlClient> => {
   switch (operationId) {
+    case "adminServerLimits": return database("Server limits lookup failed",listServerLimits(input))
+    case "adminResetBotProfile": return resetBotProfile(input)
+    case "adminUpdateServerLimits": return database("Server limits update failed",updateServerLimits(input))
     case "adminMe": return Effect.succeed(input.principal)
     case "adminDashboard": return dashboard(input)
     case "adminAudit": return listAudit(input)

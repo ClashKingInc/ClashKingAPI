@@ -10,8 +10,10 @@ export const dispatchBotPlayerProgress=(request:Request)=>Effect.gen(function*()
  if(request.method!=="POST"||new URL(request.url).pathname!=="/v2/bot/players/upgrade-progress")return undefined
  yield* (yield* AuthIdentity).requireBot(request)
  const raw=yield* readBoundedJson(request,8192),body=raw&&typeof raw==="object"?raw as Record<string,unknown>:{}
- if(new URL(request.url).search||!Array.isArray(body.tags)||body.tags.length<1||body.tags.length>100||body.tags.some(tag=>typeof tag!=="string"||!/^#[0289PYLQGRJCUV]{1,15}$/u.test(tag))||typeof body.type!=="string"||!Object.hasOwn(groups,body.type)||body.season!==undefined&&(typeof body.season!=="string"||!/^\d{4}-(0[1-9]|1[0-2])$/u.test(body.season))||Object.keys(body).some(key=>!["tags","type","season"].includes(key)))return yield* new InvalidRequest({message:"Provide 1–100 player tags, a progress type and an optional YYYY-MM season"})
- const tags=[...new Set(body.tags as string[])],window=yield* serverActivitySeason(body.season as string|undefined)
+ if(new URL(request.url).search||!Array.isArray(body.tags)||body.tags.length<1||body.tags.length>100||body.tags.some(tag=>typeof tag!=="string"||!/^#[0289PYLQGRJCUV]{1,15}$/u.test(tag))||typeof body.type!=="string"||!Object.hasOwn(groups,body.type)||body.season!==undefined&&(typeof body.season!=="string"||!/^\d{4}-(0[1-9]|1[0-2])$/u.test(body.season))||body.days!==undefined&&(body.days!==30||body.season!==undefined)||Object.keys(body).some(key=>!["tags","type","season","days"].includes(key)))return yield* new InvalidRequest({message:"Provide 1–100 player tags, a progress type and an optional YYYY-MM season or 30-day window"})
+ const tags=[...new Set(body.tags as string[])],now=new Date()
+ // A rolling report must query a rolling interval, not just relabel a season.
+ const window=body.days===30?{season:"last30days",start:new Date(now.getTime()-30*86400000),end:now}:yield* serverActivitySeason(body.season as string|undefined)
  if(window.start>new Date())return yield* new InvalidRequest({message:"Choose a current or past season"})
  const sql=yield* SqlClient.SqlClient
  // Count observations separately from level gains: a missed poll can observe

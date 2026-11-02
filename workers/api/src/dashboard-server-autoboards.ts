@@ -1,3 +1,4 @@
+import { limitMessage } from "./server-limits.js"
 import { AutoBoardCapability, AutoBoardWrite, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -123,6 +124,10 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
   }
   const requestedId = text(input.path.autoboardId)
   if (operation !== "createAutoboard" && !uuid(requestedId)) return yield* invalid("autoboardId", "must be a valid UUID")
+  if(operation==="createAutoboard"){
+    const current=(yield* sql<{count:number}>`SELECT count(*)::int AS count FROM autoboards WHERE server_id=${serverId}`)[0]!.count
+    if(current>=servers[0].autoboard_limit)return yield* invalid("autoboards",limitMessage("AutoBoard"))
+  }
   let created: Effect.Success<ReturnType<typeof createLogWebhook>> | undefined
   const prepared = operation === "deleteAutoboard" ? undefined : yield* Effect.gen(function* () {
     const write = yield* validateAutoboardWrite(input.body)
@@ -146,7 +151,7 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
     const { write, user } = prepared
     if (operation === "createAutoboard") {
       const count = yield* sql<{ count: number; limit: number }>`SELECT (SELECT count(*)::int FROM autoboards WHERE server_id = ${serverId}) AS count, autoboard_limit AS limit FROM servers WHERE id = ${serverId}`
-      if (count[0] === undefined || count[0].count >= count[0].limit) return yield* invalid("autoboards", "server autoboard limit reached")
+      if (count[0] === undefined || count[0].count >= count[0].limit) return yield* invalid("autoboards", limitMessage("AutoBoard"))
     }
     let webhookId = prepared.webhookId
     if (webhookId === undefined) {

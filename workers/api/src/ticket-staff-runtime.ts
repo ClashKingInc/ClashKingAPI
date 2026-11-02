@@ -103,10 +103,31 @@ export const prepareTicketStaff = (interaction: VerifiedRuntimeInteraction) => E
   if (action.action === "add_member") {
     const discord = yield* DiscordApi
     const member = yield* discord.request(`/guilds/${ticket.server_id}/members/${action.memberId}`).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ user: Schema.Struct({ id: DecimalSnowflake }) }))),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ user: Schema.Struct({ id: DecimalSnowflake }), roles: Schema.Array(DecimalSnowflake) }))),
       Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Ticket member lookup failed" })),
     )
     if (member.user.id !== action.memberId) return yield* new Forbidden({ message: "Ticket member identity mismatch" })
+    // Check effective access, not just an individual overwrite: owners,
+    // administrators and ticket staff can already enter through their roles.
+    const [guild,roles,channel] = yield* Effect.all([
+      discord.request(`/guilds/${ticket.server_id}`),
+      discord.request(`/guilds/${ticket.server_id}/roles`),
+      discord.request(`/channels/${ticket.channel_id}`),
+    ],{concurrency:3}).pipe(Effect.mapError(cause=>new UpstreamUnavailable({cause,message:"Ticket access check failed"})))
+    const roleRows=yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({id:DecimalSnowflake,permissions:Schema.String})))(roles).pipe(Effect.mapError(cause=>new UpstreamUnavailable({cause,message:"Ticket role permissions unavailable"})))
+    const channelState=yield* Schema.decodeUnknownEffect(Schema.Struct({permission_overwrites:Schema.Array(Schema.Struct({id:DecimalSnowflake,type:Schema.Number,allow:Schema.String,deny:Schema.String}))}))(channel).pipe(Effect.mapError(cause=>new UpstreamUnavailable({cause,message:"Ticket channel permissions unavailable"})))
+    let bits=roleRows.filter(role=>role.id===ticket.server_id||member.roles.includes(role.id)).reduce((value,role)=>value|BigInt(role.permissions),0n)
+    const owner=object(guild).owner_id===action.memberId,administrator=(bits&8n)!==0n
+    if(!owner&&!administrator){
+      const everyone=channelState.permission_overwrites.find(overwrite=>overwrite.type===0&&overwrite.id===ticket.server_id)
+      if(everyone)bits=(bits&~BigInt(everyone.deny))|BigInt(everyone.allow)
+      const roleOverrides=channelState.permission_overwrites.filter(overwrite=>overwrite.type===0&&member.roles.includes(overwrite.id))
+      bits=(bits&~roleOverrides.reduce((value,overwrite)=>value|BigInt(overwrite.deny),0n))|roleOverrides.reduce((value,overwrite)=>value|BigInt(overwrite.allow),0n)
+      const personal=channelState.permission_overwrites.find(overwrite=>overwrite.type===1&&overwrite.id===action.memberId)
+      if(personal)bits=(bits&~BigInt(personal.deny))|BigInt(personal.allow)
+    }
+    if(owner||administrator||(bits&1024n)!==0n)return yield* new Conflict({message:"This member already has access to this ticket"})
+
     effects.push({ key: "member-permission", type: "set_channel_permission", request: { channelId: ticket.channel_id, userId: action.memberId, allow: ticketApplicantPermissions, deny: "0" } },
       { key: "member-announcement", type: "send_message", request: { channelId: ticket.channel_id, nonce: interaction.id,
         content: `<@${action.memberId}> added to this ticket by <@${interaction.actorId}>`, userMentions: [action.memberId,interaction.actorId] } })

@@ -111,15 +111,15 @@ const get = (serverId: string, id: string) => Effect.gen(function* () {
   if (rows[0] === undefined) return yield* new NotFound({ message: "Base not found" })
   return baseValue(rows[0])
 })
-const baseMessage = (id: string, body: EditableBase) => ({
+const baseMessage = (id: string, body: EditableBase, upvotes = 0, downvotes = 0) => ({
   content: body.description,
   embeds: [],
   allowed_mentions: { parse: [] },
   attachments: body.images.map((url, index) => ({ id: index, filename: new URL(url).pathname.slice(10) })),
   components: [{ type: 1, components: [
     { type: 2, style: 1, label: "Get Link", emoji: { name: "🔗" }, custom_id: `base:link:${id}` },
-    { type: 2, style: 2, emoji: { name: "👍" }, custom_id: `base:upvote:${id}` },
-    { type: 2, style: 2, emoji: { name: "👎" }, custom_id: `base:downvote:${id}` },
+    { type: 2, style: 2, emoji: { name: "👍" }, label: String(upvotes), custom_id: `base:upvote:${id}` },
+    { type: 2, style: 2, emoji: { name: "👎" }, label: String(downvotes), custom_id: `base:downvote:${id}` },
   ] }],
 })
 const baseFiles = (body: EditableBase, bindings: WorkerBindings) => Effect.gen(function* () {
@@ -146,7 +146,7 @@ const sameEditable = (row: BaseRow, body: EditableBase) => row.base_link === bod
 const Message = Schema.Struct({ id: DecimalSnowflake })
 const patchBaseMessage = (discord: DiscordApi["Service"], row: BaseRow, body: EditableBase, bindings: WorkerBindings) => baseFiles(body, bindings).pipe(Effect.flatMap((files) => discord.request(
   `/channels/${row.channel_id}/messages/${row.message_id}`,
-  { method: "PATCH", body: baseMessage(row.id, body), files },
+  { method: "PATCH", body: baseMessage(row.id, body, Number(row.upvote_count), Number(row.downvote_count)), files },
 )),
   Effect.flatMap((raw) => decodeDiscord(Message, raw)),
   Effect.filterOrFail((message) => message.id === row.message_id,

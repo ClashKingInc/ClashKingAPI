@@ -3,7 +3,7 @@ import { AuthIdentity } from "./auth.js"
 import { readDashboardGatewayCollection } from "./dashboard-gateway-cache.js"
 import { Forbidden, InvalidRequest, NotFound, UpstreamUnavailable } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
-const Member=Schema.Struct({user:Schema.Struct({id:Schema.String,username:Schema.String,global_name:Schema.optionalKey(Schema.NullOr(Schema.String))}),nick:Schema.optionalKey(Schema.NullOr(Schema.String)),roles:Schema.Array(Schema.String)})
+const Member=Schema.Struct({user:Schema.Struct({id:Schema.String,username:Schema.String,global_name:Schema.optionalKey(Schema.NullOr(Schema.String))}),nick:Schema.optionalKey(Schema.NullOr(Schema.String)),roles:Schema.optionalKey(Schema.Array(Schema.String))})
 const Role=Schema.Struct({id:Schema.String,name:Schema.String})
 export const dispatchBotRoleMembers=(request:Request,bindings:WorkerBindings)=>Effect.gen(function*(){
  const url=new URL(request.url),match=/^\/v2\/bot\/servers\/(\d{15,20})\/roles\/(\d{15,20})\/members$/u.exec(url.pathname)
@@ -17,8 +17,10 @@ export const dispatchBotRoleMembers=(request:Request,bindings:WorkerBindings)=>E
  const roles=yield* Schema.decodeUnknownEffect(Schema.Array(Role))(yield* readDashboardGatewayCollection(bindings.DISCORD_CLIENT_ID,server,"roles")).pipe(Effect.mapError(decodeFailure))
  const selected=roles.find(item=>item.id===role)
  if(!selected)return yield* new NotFound({message:"Role not found"})
- // Membership in @everyone is implicit, not listed in each member's roles.
+ // The Gateway cache omits roles for members with no assigned roles. Missing
+ // means an empty list, never membership in the requested role. @everyone is
+ // implicit and is therefore handled separately.
  // Return display data only; this endpoint must not expose linked accounts.
- const matching=members.filter(member=>role===server||member.roles.includes(role)).map(member=>({id:member.user.id,name:member.nick??member.user.global_name??member.user.username})).sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id))
+ const matching=members.filter(member=>role===server||(member.roles??[]).includes(role)).map(member=>({id:member.user.id,name:member.nick??member.user.global_name??member.user.username})).sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id))
  return Response.json({role:selected,total:matching.length,offset,items:matching.slice(offset,offset+limit)})
 })

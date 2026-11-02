@@ -165,11 +165,7 @@ export const DashboardRosterAIContextRequest = Schema.Struct({
 })
 export const DashboardRosterAIContextResponse = Schema.Struct({
   requestId: Schema.String, model: Schema.Literal("gpt-6-luna"),
-  budget: Schema.Struct({ serverSpentUsd: Schema.Number, serverLimitUsd: Schema.Number,
-    globalSpentUsd: Schema.Number, globalLimitUsd: Schema.Number, userSpentUsd: Schema.Number, userLimitUsd: Schema.Number,
-    paidSpentUsd: Schema.Number, paidLimitUsd: Schema.Number, paidRemainingUsd: Schema.Number,
-    usesPaidPool: Schema.Boolean, resetsAt: Schema.String,
-  }),
+  budget: Schema.Struct({serverSpentUsd:Schema.Number,serverReservedUsd:Schema.Number,serverLimitUsd:Schema.Number,resetsAt:Schema.String}),
   context: Schema.Struct({ attachments: Schema.NullOr(Schema.Array(Schema.Struct({
     rosterId: Schema.String, alias: Schema.String, clanTag: Schema.NullOr(Schema.String), memberCount: Schema.Number,
     revision: Schema.Number, signupQuestions: Schema.Array(DashboardRosterQuestion),

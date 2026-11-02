@@ -20,7 +20,14 @@ export const dispatchBotPlayerSeason = (request: Request) => Effect.gen(function
     COALESCE(sum((looted_resources->>'gold')::bigint),0)::text gold,
     COALESCE(sum((looted_resources->>'elixir')::bigint),0)::text elixir,
     COALESCE(sum((looted_resources->>'darkElixir')::bigint),0)::text dark
-    FROM battles_farming WHERE player_tag=${tag} AND battle_time>=${season.start} AND battle_time<${season.end}`.pipe(Effect.mapError(fail)))[0]!
+    FROM (
+      SELECT looted_resources FROM battles_farming
+      WHERE player_tag=${tag} AND battle_time>=${season.start} AND battle_time<${season.end}
+      UNION ALL
+      SELECT looted_resources FROM battles_ranked
+      WHERE player_tag=${tag} AND battle_mode=1 AND direction=1
+        AND battle_time>=${season.start} AND battle_time<${season.end}
+    ) recorded_attacks`.pipe(Effect.mapError(fail)))[0]!
   const stats = (yield* sql<{ count: number; games: string; capital: string }>`SELECT count(*)::integer count,
     COALESCE(sum(delta) FILTER(WHERE stat_type='clan_games'),0)::text games,
     COALESCE(sum(delta) FILTER(WHERE stat_type='capital_gold_donated'),0)::text capital

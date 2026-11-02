@@ -21,6 +21,7 @@ export const BotTaskProgressEndpoint = defineEndpoint({
         clanGamesPoints: Schema.NullOr(Schema.Number),
         seasonPoints: Schema.NullOr(Schema.Number),
         lastCapitalDonation: Schema.NullOr(Schema.String),
+        lastOnline: Schema.NullOr(Schema.String),
       }),
     ),
   }),

@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { InvalidRequest, PayloadTooLarge, UpstreamUnavailable } from "./errors.js"
 
 export const MAX_DASHBOARD_UPLOAD = 25 * 1024 * 1024
-export interface MediaUploadBindings { readonly MEDIA?: Pick<R2Bucket, "put"> }
+export interface MediaUploadBindings { readonly MEDIA?: Pick<R2Bucket, "put">; readonly PROFILE_MEDIA_PUBLIC_ORIGIN?: string }
 export const CDN_UPLOAD_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "mp4", "mov", "webm", "mp3", "ogg", "wav", "pdf", "txt", "json"] as const
 const embedFilename = /^embed_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.([a-z0-9]+)$/u
 

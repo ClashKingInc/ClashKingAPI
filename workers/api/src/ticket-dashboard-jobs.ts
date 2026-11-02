@@ -128,7 +128,7 @@ const cleanRetiredTranscripts = (job: Job) => Effect.gen(function* () {
   return yield* Effect.tryPromise({
     try: async () => { for (const path of retired) if (typeof path === "string") await removeTicketTranscript(env.TICKETING, path) },
     catch: cause => new UpstreamUnavailable({ cause, message: "Previous transcript cleanup will retry" }),
-  }).pipe(Effect.flatMap(() => sql`UPDATE ticket_dashboard_jobs SET result=result-'retired_transcript_paths' WHERE id=${job.id}::uuid AND state='completed'`),
+  }).pipe(Effect.flatMap(() => sql`UPDATE ticket_dashboard_jobs SET result=result-'retired_transcript_paths' WHERE id=${job.id}::uuid AND result->'retired_transcript_paths'=${JSON.stringify(retired)}::jsonb`),
     Effect.as(true), Effect.catch(() => Effect.succeed(false)))
 })
 
@@ -172,6 +172,7 @@ export const runTicketDashboardJob = (id: string) => Effect.gen(function* () {
   if (!job) {
     const prior = (yield* sql<Job>`SELECT * FROM ticket_dashboard_jobs WHERE id=${id}::uuid`)[0]
     if (prior?.state === "completed") return yield* finishCompletedJob(prior)
+    if (prior?.state === "failed") return yield* cleanRetiredTranscripts(prior)
     return !prior || !["pending", "running"].includes(prior.state)
   }
   const work = Effect.gen(function* () {
@@ -245,10 +246,20 @@ export const runTicketDashboardJob = (id: string) => Effect.gen(function* () {
     return yield* finishCompletedJob({ ...job, result })
   })
   return yield* work.pipe(Effect.catch(error => Effect.gen(function* () {
+    // Capture may have stored attachments before validation or checkpointing
+    // failed. Persist retirement before deleting so recovery can finish it.
+    // The predicate also handles an uncertain SQL response: a committed
+    // checkpoint retains the archive instead of deleting a published document.
+    const attemptPath = `/v2/ticket-transcripts/${token}`
+    yield* sql`UPDATE ticket_dashboard_jobs SET result=jsonb_set(COALESCE(result,'{}'::jsonb),
+      '{retired_transcript_paths}',COALESCE(result->'retired_transcript_paths','[]'::jsonb)||jsonb_build_array(${attemptPath}::text))
+      WHERE id=${id}::uuid AND result->>'transcript_path' IS DISTINCT FROM ${attemptPath}`
     const retry = error._tag === "UpstreamUnavailable" || error._tag === "RateLimited" || error._tag === "SqlError"
     yield* sql`UPDATE ticket_dashboard_jobs SET state=${retry ? "pending" : "failed"},claim_token=NULL,lease_expires_at=NULL,
       last_error=${retry ? `${error._tag === "SqlError" ? "Ticket storage is unavailable" : error.message}; retrying` : error.message},updated_at=clock_timestamp()
       WHERE id=${id}::uuid AND claim_token=${token}::uuid`
-    return !retry
+    const cleanupJob = (yield* sql<Job>`SELECT * FROM ticket_dashboard_jobs WHERE id=${id}::uuid`)[0]
+    const cleaned = cleanupJob ? yield* cleanRetiredTranscripts(cleanupJob) : true
+    return !retry && cleaned
   })))
 })

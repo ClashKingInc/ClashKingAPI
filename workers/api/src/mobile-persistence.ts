@@ -235,9 +235,14 @@ export const readPersonalBases = (userId: string): Runtime<EndpointResponse<type
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='1') upvotes,
       (SELECT count(*)::integer FROM jsonb_each(base.votes) vote WHERE vote.value->>'vote'='-1') downvotes,
       saved.base_id IS NOT NULL saved,saved.saved_at,(base.downloads->>${userId})::timestamptz downloaded_at
-    FROM user_saved_bases saved
-    JOIN bases base ON base.id=saved.base_id
-    WHERE saved.user_id=${userId} AND base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
+    FROM (
+      SELECT base_id FROM user_saved_bases WHERE user_id=${userId}
+      UNION
+      SELECT id FROM bases WHERE downloads ? ${userId}
+    ) library
+    JOIN bases base ON base.id=library.base_id
+    LEFT JOIN user_saved_bases saved ON saved.base_id=base.id AND saved.user_id=${userId}
+    WHERE base.server_id IS NOT NULL AND base.channel_id IS NOT NULL
     ORDER BY GREATEST(COALESCE(saved.saved_at,'epoch'),COALESCE((base.downloads->>${userId})::timestamptz,'epoch')) DESC,base.id DESC`)
   return {
     items: bases.map((row) => ({ id: row.id, baseLink: row.base_link, images: row.images, description: row.description,

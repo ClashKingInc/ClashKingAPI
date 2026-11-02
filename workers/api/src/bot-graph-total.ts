@@ -35,18 +35,30 @@ export const dispatchBotGraphTotal=(request:Request)=>Effect.gen(function*(){
   rows=yield* sql<{value:string|null}>`SELECT capital_points::text value FROM leaderboard_history_clan_capital
     WHERE clan_tag=${tag} AND location_id='global' AND date>=${window.start.toISOString().slice(0,10)}::date AND date<${window.end.toISOString().slice(0,10)}::date ORDER BY date DESC LIMIT 1`
   if(!rows.length)rows=[{value:null}]
+ }else if(query.metric==="clanMoves"){
+  // Match the daily chart: count both join and leave events at their recorded
+  // clan, within the requested game season's half-open time window.
+  rows=yield* sql<{value:string}>`SELECT count(*)::text value FROM join_leave_history
+    WHERE clan_tag=${tag} AND time>=${window.start} AND time<${window.end}`
  }else if(query.metric==="activity"){
   rows=yield* sql<{value:string}>`SELECT count(*)::text value FROM player_online_events WHERE clan_tag=${tag} AND seen_at>=${window.start} AND seen_at<${window.end}`
- }else if(query.metric==="troopLevels"||query.metric==="heroLevels"){
+ }else if(query.metric==="upgrades"||query.metric==="troopLevels"||query.metric==="heroLevels"){
   basis="latest_stored_members"
   rows=yield* sql<{value:string}>`SELECT COALESCE(sum(CASE WHEN change.current_value ~ '^[0-9]+$' AND change.previous_value ~ '^[0-9]+$' THEN greatest(0,change.current_value::numeric-change.previous_value::numeric) ELSE 0 END),0)::text value
-   FROM player_change_history change JOIN basic_player player ON player.tag=change.player_tag WHERE player.clan_tag=${tag} AND change.change_type=ANY(${query.metric==="troopLevels"?[1,4]:[3,5]}::smallint[]) AND change.event_time>=${window.start} AND change.event_time<${window.end}`
+   FROM player_change_history change JOIN basic_player player ON player.tag=change.player_tag WHERE player.clan_tag=${tag} AND change.change_type=ANY(${query.metric==="upgrades"?[1,3,4,5,6]:query.metric==="troopLevels"?[1,4]:[3,5]}::smallint[]) AND change.event_time>=${window.start} AND change.event_time<${window.end}`
+ }else if(query.metric==="warWinRate"){
+  rows=yield* sql<{value:string|null}>`SELECT (100.0*avg(CASE WHEN
+    (clan_tag=${tag} AND (clan_stars>opponent_stars OR (clan_stars=opponent_stars AND clan_destruction_percentage>opponent_destruction_percentage))) OR
+    (opponent_tag=${tag} AND (opponent_stars>clan_stars OR (opponent_stars=clan_stars AND opponent_destruction_percentage>clan_destruction_percentage)))
+    THEN 1.0 ELSE 0.0 END))::text value
+    FROM wars WHERE (clan_tag=${tag} OR opponent_tag=${tag}) AND prep_time>=${window.start} AND prep_time<${window.end}
+    AND war_type IN ('random','cwl') AND lower(state) IN ('ended','warended')`
  }else{
   // War identity and perspective come from stored metadata; reading compressed
   // attack archives is unnecessary for final scores and would change the unit.
   rows=yield* sql<{value:string}>`SELECT COALESCE(sum(CASE WHEN ${query.metric}='warsSpun' THEN 1 WHEN ${query.metric}='warStars' THEN CASE WHEN clan_tag=${tag} THEN clan_stars ELSE opponent_stars END ELSE CASE WHEN (clan_tag=${tag} AND (clan_stars>opponent_stars OR (clan_stars=opponent_stars AND clan_destruction_percentage>opponent_destruction_percentage))) OR (opponent_tag=${tag} AND (opponent_stars>clan_stars OR (opponent_stars=clan_stars AND opponent_destruction_percentage>clan_destruction_percentage))) THEN 1 ELSE 0 END END),0)::text value
    FROM wars WHERE (clan_tag=${tag} OR opponent_tag=${tag}) AND prep_time>=${window.start} AND prep_time<${window.end} AND war_type IN ('random','cwl') AND (${query.metric}='warsSpun' OR lower(state) IN ('ended','warended'))`
  }
- const raw=rows[0]?.value,value=raw===null?null:Number(raw??0);if(value!==null&&(!Number.isFinite(value)||value<0||(query.metric!=="raidParticipants"&&!Number.isSafeInteger(value))||(query.metric==="raidParticipants"&&value>50)))return yield* new DatabaseFailure({cause:"unsafe_integer",message:"Graph total exceeds numeric range"})
+ const raw=rows[0]?.value,value=raw===null?null:Number(raw??0);if(value!==null&&(!Number.isFinite(value)||value<0||(!["raidParticipants","warWinRate"].includes(query.metric)&&!Number.isSafeInteger(value))||(query.metric==="raidParticipants"&&value>50)||(query.metric==="warWinRate"&&value>100)))return yield* new DatabaseFailure({cause:"unsafe_integer",message:"Graph total exceeds numeric range"})
  return Response.json({season:window.season,value,basis})
 }).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(new DatabaseFailure({cause,message:"Graph total unavailable"}))))

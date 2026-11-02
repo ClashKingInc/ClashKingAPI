@@ -20,9 +20,9 @@ export const pendingRuntimePage = (kind: RecoveryKind, cursor?: RecoveryCursor) 
   const rows = kind === "dashboard"
     ? yield* sql<{ id: string; queue: string; updated_at: string }>`
       SELECT id::text,server_id || ':' || ticket_id::text AS queue,updated_at::text FROM ticket_dashboard_jobs
-      WHERE (state IN ('pending','running') OR (state='completed' AND (
-        jsonb_array_length(COALESCE(result->'pending_logs','[]'::jsonb))>0 OR
-        jsonb_array_length(COALESCE(result->'retired_transcript_paths','[]'::jsonb))>0)))
+      WHERE (state IN ('pending','running')
+        OR (state='completed' AND jsonb_array_length(COALESCE(result->'pending_logs','[]'::jsonb))>0)
+        OR jsonb_array_length(COALESCE(result->'retired_transcript_paths','[]'::jsonb))>0)
         AND (updated_at,id)>(${after}::timestamptz,${id}::uuid)
         AND updated_at<=${through}::timestamptz ORDER BY updated_at,id LIMIT 101`
     : kind === "ticket"

@@ -27,6 +27,9 @@ interface WorkerSecrets {
 
 // Structural wake capability also used by isolated ticket coordinator tests.
 interface DeferredRuntimeReferenceBindings {
+  readonly RUNTIME_RECOVERY: {
+    getByName(name: string): { wake(): Promise<void> }
+  }
   readonly TICKET_RUNTIME: {
     getByName(name: string): { wake(operationId: string): Promise<void> }
   }
@@ -34,7 +37,7 @@ interface DeferredRuntimeReferenceBindings {
 
 export type WorkerBindings = {
   readonly [Key in keyof Cloudflare.Env]: Cloudflare.Env[Key] extends string ? string : Cloudflare.Env[Key]
-} & WorkerSecrets
+} & WorkerSecrets & DeferredRuntimeReferenceBindings
 
 /** Ticket coordinator capabilities for signed interaction dispatch. */
 export type DeferredRuntimeBindings = WorkerBindings & DeferredRuntimeReferenceBindings

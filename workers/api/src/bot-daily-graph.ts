@@ -4,7 +4,7 @@ import { SqlClient } from "effect/sql"
 import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
-const historyTypes:Record<string,number[]>={troopLevels:[1,4],heroLevels:[3,5],equipmentLevels:[6],townhallLevels:[7],bestTrophies:[8],experienceLevels:[10],warPreferenceChanges:[11],nameChanges:[12]}
+const historyTypes:Record<string,number[]>={upgrades:[1,3,4,5,6],troopLevels:[1,4],heroLevels:[3,5],equipmentLevels:[6],townhallLevels:[7],bestTrophies:[8],experienceLevels:[10],warPreferenceChanges:[11],nameChanges:[12]}
 const stats:Record<string,string>={donated:"donated",received:"received",clanGames:"clan_games",capitalDonated:"capital_gold_donated"}
 export const dispatchBotDailyGraph=(request:Request)=>Effect.gen(function*(){
  if(new URL(request.url).pathname!==BotDailyGraphEndpoint.path)return undefined

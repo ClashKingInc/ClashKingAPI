@@ -17,6 +17,9 @@ export interface AdminRuntimeRoute {
 }
 
 export const adminRuntimeRoutes = [
+  { method: "GET", path: "/v2/admin/server-limits" },
+  { method: "PATCH", path: "/v2/admin/server-limits/:serverId" },
+  { method: "POST", path: "/v2/admin/server-limits/:serverId/reset-bot-profile" },
   { method: "GET", path: "/v2/admin/me" },
   { method: "GET", path: "/v2/admin/dashboard" },
   { method: "GET", path: "/v2/admin/audit" },

@@ -1,3 +1,4 @@
+import { AdminServerLimitsEndpoint, AdminUpdateServerLimitsEndpoint, AdminResetBotProfileEndpoint } from "./server-limits.js"
 import { Schema } from "effect"
 
 import { ignoreObject, strictObject } from "./strict-object.js"
@@ -478,6 +479,7 @@ export const AdminMediaUploadEndpoint = defineEndpoint({ auth: "admin", operatio
 export const AdminStoryUploadEndpoint = defineEndpoint({ auth: "admin", operationId: "adminStoryUpload", method: "POST", path: "/v2/admin/stories/upload", summary: "Upload an interactive story", pathParams: NoPathParams, query: NoQuery, body: Schema.FormData, bodyMode: "multipart", response: Schema.Struct({ url: Schema.String, version: Schema.Literal(1), storage_provider: Schema.Literal("r2"), key: Schema.String, size_bytes: Schema.Number, checksum: Schema.String }), responseMode: "json", successStatus: 200 })
 
 export const adminEndpoints = {
+  serverLimits: AdminServerLimitsEndpoint, updateServerLimits: AdminUpdateServerLimitsEndpoint, resetBotProfile: AdminResetBotProfileEndpoint,
   me: AdminMeEndpoint, dashboard: AdminDashboardEndpoint, audit: AdminAuditEndpoint,
   proxyStats: AdminProxyStatsEndpoint, trackingSummary: AdminTrackingSummaryEndpoint,
   trackingTimeseries: AdminTrackingTimeseriesEndpoint,

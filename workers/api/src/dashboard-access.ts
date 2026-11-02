@@ -1,3 +1,5 @@
+import { authorizeAdditionalDashboardRoute } from "./scoped-dashboard-routes.js"
+import { isOpenPublicRequest } from "./public-request.js"
 import { decodeJwt, SignJWT } from "jose"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -17,12 +19,14 @@ const cookie=(serverId:string,value:string,seconds:number)=>`ck_server_refresh_$
 /** Scope-check before ANY dispatch, not only handlers with serverId paths.
  * Otherwise a server token could be used on private /users or /auth routes. */
 export const guardDashboardScope=(request:Request)=>Effect.gen(function*(){
+ if(isOpenPublicRequest(request))return
  const token=bearerToken(request);if(!token)return
  let scoped=false;try{const aud=decodeJwt(token).aud;scoped=aud===audience||Array.isArray(aud)&&aud.includes(audience)}catch{return}
  if(!scoped)return
  const user=yield* (yield* AuthIdentity).requireUser(request),id=user.dashboardScope?.serverId
  const url=new URL(request.url),path=url.pathname
  if(!id)return yield* new Forbidden({message:"Invalid server scope"})
+ if(yield* authorizeAdditionalDashboardRoute(request,id))return
  if(path.startsWith(`/v2/server/${id}/`)||path===`/v2/guild/${id}`||path==="/v2/auth/server-dashboard/logout")return
  // Game data is public. Keep the allowlist read-only and do not include any
  // general user, OAuth, billing, or refresh endpoint here.

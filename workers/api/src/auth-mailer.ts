@@ -1,6 +1,6 @@
 import { connect as connectNet, type Socket } from "node:net"
 import { connect as connectTls } from "node:tls"
-import nodemailer from "nodemailer"
+import nodemailer, { type SendMailOptions } from "nodemailer"
 import type SMTPTransport from "nodemailer/lib/smtp-transport/index.js"
 import { Effect, Layer } from "effect"
 import catalog from "../../../locales/en.json"
@@ -49,7 +49,7 @@ export function smtpOptions(env: MailBindings) {
 
 // Nodemailer only generates MIME: its SMTP parser has unbounded multiline
 // buffers. Own the small, sequential SMTP exchange and bound decrypted replies.
-export async function sendSmtp(options: SMTPTransport.Options, message: nodemailer.SendMailOptions, signal: AbortSignal): Promise<void> {
+export async function sendSmtp(options: SMTPTransport.Options, message: SendMailOptions, signal: AbortSignal): Promise<void> {
   const sockets = new Set<Socket>()
   let canceled = false
   const abort = () => { canceled = true; for (const socket of sockets) socket.destroy(new Error("SMTP request canceled")) }
@@ -69,7 +69,7 @@ export async function sendSmtp(options: SMTPTransport.Options, message: nodemail
     if (recipients.length !== 1 || addresses.some((address) => typeof address !== "string" || /[\r\n<>\0]/u.test(address))) throw new Error("Invalid SMTP envelope")
     signal.throwIfAborted()
     if (canceled) throw new Error("SMTP request canceled")
-    const target = { host: options.host!, port: options.port! }
+    const target = { host: options.host!, port: options.port! as number }
     let socket: Socket = options.secure ? connectTls({ ...target, ...options.tls, rejectUnauthorized: true }) : connectNet(target)
     const own = (connection: Socket) => {
       sockets.add(connection)

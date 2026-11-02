@@ -15,10 +15,10 @@ export const rosterRoleState = (sql: SqlClient.SqlClient, serverId: string, user
   const configured = yield* rosterRoleInputs(sql,serverId)
   const desired = yield* sql<{ id: string }>`SELECT DISTINCT id FROM (
     SELECT roster.roster_role_id AS id FROM rosters roster JOIN roster_members member ON member.roster_id=roster.id
-      JOIN player_links link ON link.tag=member.tag WHERE roster.server_id=${serverId} AND link.user_id=${userId}
+      JOIN player_links link ON link.tag=member.tag WHERE roster.server_id=${serverId} AND link.user_id=${userId} AND link.hidden = false
     UNION SELECT setting.role_id AS id FROM roster_member_group_settings setting
       JOIN roster_members member ON member.roster_id=setting.roster_id AND member.member_group_id=setting.member_group_id
-      JOIN player_links link ON link.tag=member.tag WHERE setting.server_id=${serverId} AND link.user_id=${userId}
+      JOIN player_links link ON link.tag=member.tag WHERE setting.server_id=${serverId} AND link.user_id=${userId} AND link.hidden = false
   ) earned WHERE id IS NOT NULL ORDER BY id`
   const desiredRoleIds=desired.map(row=>row.id)
   return { managedRoleIds: configured.roles, desiredRoleIds, fingerprint: JSON.stringify([configured.roles,desiredRoleIds]) }

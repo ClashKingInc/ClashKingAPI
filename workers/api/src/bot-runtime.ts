@@ -6,6 +6,7 @@ import { ServerAuthorization } from "./server-authorization.js"
 import { readBoundedJson } from "./request-body.js"
 import {
   DatabaseFailure,
+  Conflict,
   InvalidRequest,
   NotFound,
   PayloadTooLarge,
@@ -108,7 +109,8 @@ export class BotModerationStore extends Context.Service<
       serverId: string,
       tag: string,
       body: typeof botEndpoints.saveBan.body.Type,
-    ) => Effect.Effect<BanMutation, DatabaseFailure>
+      createOnly?: boolean,
+    ) => Effect.Effect<BanMutation, DatabaseFailure | Conflict>
     readonly strikeSummary: (
       serverId: string,
       tag: string,
@@ -146,6 +148,7 @@ export class BotModerationStore extends Context.Service<
         serverId: string,
         tag: string,
         body: typeof botEndpoints.saveBan.body.Type,
+        createOnly = false,
       ) {
         const playerName = yield* proxyPlayerName(bindings, tag)
         const rows = yield* database("Unable to save server ban", sql<{
@@ -165,9 +168,13 @@ export class BotModerationStore extends Context.Service<
             )),
             image = COALESCE(EXCLUDED.image, server_bans.image),
             updated_at = now()
+          WHERE NOT ${createOnly}
           RETURNING (xmax = 0) AS created, player_name
         `)
         const row = rows[0]
+        // The conflict predicate protects create-only callers atomically;
+        // dashboard edits keep their existing explicit update behavior.
+        if (!row && createOnly) return yield* new Conflict({ message: "Player is already banned" })
         return {
           status: row?.created === true ? "created" : "updated",
           player_tag: tag,
@@ -322,7 +329,7 @@ export const dispatchBotRuntime = (
       case "saveBan": {
         const tag = yield* routeInput(() => normalizeTag(match.params.tag))
         const body = yield* decodeBody(request, botEndpoints.saveBan.body)
-        return yield* encode(botEndpoints.saveBan.response, yield* store.saveBan(serverId, tag, body))
+        return yield* encode(botEndpoints.saveBan.response, yield* store.saveBan(serverId, tag, body, request.headers.get("x-clashking-create-only") === "true"))
       }
       case "deleteBan": {
         const tag = yield* routeInput(() => normalizeTag(match.params.tag))

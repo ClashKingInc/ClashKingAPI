@@ -40,16 +40,12 @@ export const refreshActorAllowed = (bindings: WorkerBindings, serverId: string, 
     && !member.roles.includes(settings[0]?.full_whitelist_role_id ?? "")) return yield* new Forbidden({ message: "Manage Server or the configured whitelist role is required" })
 })
 
-export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string, body: Record<string, unknown>) => Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  const actor = String(body.actorId ?? ""), requestId = String(body.requestId ?? "")
-  const target = String(body.targetId ?? actor), kind = body.targetKind ?? "user"
-  const categories = body.categories === undefined ? [...roleRefreshCategories] : body.categories
-  const roleTreatment = body.roleTreatment === undefined ? "both" : body.roleTreatment
-  yield* requireInput(snowflake(actor) && snowflake(requestId) && snowflake(target) && ["user", "role"].includes(String(kind))
-    && Array.isArray(categories) && categories.length > 0 && categories.every(item => roleRefreshCategories.includes(item))
-    && (body.preview === undefined || typeof body.preview === "boolean")
-    && typeof roleTreatment === "string" && ["add", "remove", "both"].includes(roleTreatment))
+// Resolve manual subjects without creating jobs. Gateway authorization and
+// eligible-role expansion remain server-authorized.
+export const manualRefreshTargets = (bindings:WorkerBindings,serverId:string,body:Record<string,unknown>) => Effect.gen(function*(){
+  const sql=yield* SqlClient.SqlClient
+  const actor=String(body.actorId??""),target=String(body.targetId??actor),kind=String(body.targetKind??"user")
+  yield* requireInput(snowflake(actor)&&snowflake(target)&&["user","role"].includes(kind))
   yield* refreshActorAllowed(bindings, serverId, actor, kind === "role" || target !== actor)
   let users = [target]
   if (kind === "role") {
@@ -65,11 +61,8 @@ export const enqueueManualRefresh = (bindings: WorkerBindings, serverId: string,
     users = members.filter(member => !member.user.bot && (member.roles.includes(target) || eligible.has(member.user.id))).map(member => member.user.id)
   }
   yield* requireInput(users.length > 0 && users.length <= 3000)
-  yield* sql.withTransaction(Effect.gen(function* () {
-    for (const user of users) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,request_id,actor_id,categories,preview,role_treatment)
-      VALUES (${`manual:${requestId}:${user}`},${serverId},${user},${requestId},${actor},${[...new Set(categories as string[])]},${body.preview === true},${String(roleTreatment)}) ON CONFLICT(id) DO NOTHING`
-  }))
-  return { requestId, queued: users.length }
+  return users
+
 })
 
 export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false) => Effect.gen(function* () {
@@ -198,9 +191,6 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   if (!url.pathname.startsWith("/v2/bot/role-refresh")) return undefined
   const auth = yield* AuthIdentity
   yield* auth.requireBot(request)
-  if (request.method === "GET" && url.pathname === "/v2/bot/role-refresh/capabilities") {
-    return Response.json({ roleTreatment: true })
-  }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
     yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
@@ -233,12 +223,31 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
     return Response.json({ valid: rows.length > 0 })
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/complete") return Response.json(yield* finishRefreshJob(object(yield* readBoundedJson(request, 16_384))))
-  const match = /^\/v2\/bot\/role-refresh\/([0-9]{15,20})\/(enqueue|data|main|status)$/u.exec(url.pathname)
+  const manual = /^\/v2\/bot\/role-refresh\/([0-9]{15,20})\/(manual-targets|manual-result)$/u.exec(url.pathname)
+  if(manual){
+    const serverId=manual[1]!,action=manual[2]!
+    if(action==="manual-targets"&&request.method==="POST")return Response.json({users:yield* manualRefreshTargets(bindings,serverId,object(yield* readBoundedJson(request,4096)))})
+    const actor=request.method==="POST"?undefined:url.searchParams.get("actorId")
+    if(request.method==="POST"&&action==="manual-result"){
+      const body=object(yield* readBoundedJson(request,2_000_000))
+      yield* requireInput(snowflake(body.actorId)&&snowflake(body.requestId)&&Array.isArray(body.results)&&body.results.length<=3000)
+      yield* refreshActorAllowed(bindings,serverId,String(body.actorId),false)
+      const key=`manual-refresh:${serverId}:${body.actorId}:${body.requestId}`
+      yield* Effect.tryPromise({try:()=>bindings.API_CACHE.put(key,JSON.stringify(body),{expirationTtl:900}),catch:cause=>new UpstreamUnavailable({cause,message:"Refresh results could not be saved"})})
+      return Response.json({saved:true})
+    }
+    const requestId=url.searchParams.get("requestId")??""
+    yield* requireInput(snowflake(actor)&&snowflake(requestId))
+    yield* refreshActorAllowed(bindings,serverId,String(actor),false)
+    const result=yield* Effect.tryPromise({try:()=>bindings.API_CACHE.get(`manual-refresh:${serverId}:${actor}:${requestId}`,"json"),catch:cause=>new UpstreamUnavailable({cause,message:"Refresh results unavailable"})})
+    if(!result)return yield* new NotFound({message:"These refresh results expired. Run /refresh again."})
+    return Response.json(result)
+  }
+  const match = /^\/v2\/bot\/role-refresh\/([0-9]{15,20})\/(data|main)$/u.exec(url.pathname)
   if (!match) return yield* new NotFound({ message: "Refresh route not found" })
   const serverId = match[1]!, action = match[2]!
   if (request.method === "POST") {
     const body = object(yield* readBoundedJson(request, 4096))
-    if (action === "enqueue") return Response.json(yield* enqueueManualRefresh(bindings, serverId, body))
     if (action === "main") {
       yield* requireInput(snowflake(body.actorId) && typeof body.tag === "string")
       yield* refreshActorAllowed(bindings, serverId, String(body.actorId), false)
@@ -249,14 +258,6 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
     const user = url.searchParams.get("userId") ?? ""
     yield* requireInput(snowflake(user))
     return Response.json(yield* loadRefreshData(bindings, serverId, user))
-  }
-  if (request.method === "GET" && action === "status") {
-    const actor = url.searchParams.get("actorId") ?? "", requestId = url.searchParams.get("requestId") ?? ""
-    yield* requireInput(snowflake(actor) && snowflake(requestId))
-    const sql = yield* SqlClient.SqlClient
-    const rows = yield* sql<{ user_id: string; completed_at: string | null; attempts: number; result: unknown }>`SELECT user_id,completed_at::text,attempts,result FROM role_refresh_jobs WHERE server_id=${serverId} AND request_id=${requestId} AND actor_id=${actor} ORDER BY user_id LIMIT 3000`
-    return Response.json({ total: rows.length, completed: rows.filter(row => row.completed_at !== null).length,
-      failed: rows.filter(row => row.completed_at === null && row.attempts >= 12).length, results: rows.filter(row => row.result !== null).slice(0, 10) })
   }
   return yield* new InvalidRequest({ message: "Invalid refresh method" })
 }).pipe(Effect.mapError(cause => cause instanceof Forbidden || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof UpstreamUnavailable

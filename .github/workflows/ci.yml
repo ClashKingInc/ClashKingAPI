@@ -57,5 +57,15 @@ jobs:
       - name: Install canonical schema migrator
         run: go install github.com/pressly/goose/v3/cmd/goose@v3.26.0
 
+      - name: Check out pinned static asset fixture
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ClashKingInc/ClashKingAssets
+          ref: 82887e25ff520a522d5d673619a9277f276a3327
+          path: .ci-assets
+          persist-credentials: false
+
       - name: Verify Legend performance API against disposable Timescale
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs

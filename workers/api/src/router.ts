@@ -1,3 +1,9 @@
+import { ServerAuthorization } from "./server-authorization.js"
+import { dispatchAIStepBudgets } from "./ai-step-budgets.js"
+import { readServerLimits } from "./server-limits.js"
+import { ServerLimits } from "@clashking/api-contracts"
+import apiPackage from "../../../package.json" with { type: "json" }
+import { isOpenPublicRequest } from "./public-request.js"
 import { dispatchBotCapitalTrophyHistory } from "./bot-capital-trophy-history.js"
 import { dispatchBotGraphTotal } from "./bot-graph-total.js"
 import { dispatchClanWarEvents } from "./clan-war-events.js"
@@ -25,7 +31,6 @@ import {
   ArmySetupResponse,
   ArmySetupTimelineResponse,
   ArmySetupRankHistoryResponse,
-  endpoints as apiEndpoints,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 
@@ -51,7 +56,6 @@ import { dispatchBotRuntime } from "./bot-runtime.js"
 import { dispatchDashboardRosterConfiguration } from "./dashboard-roster-configuration.js"
 import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
 import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
-import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
 import { dispatchPublicData } from "./public-data-runtime.js"
 import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
 import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
@@ -188,18 +192,6 @@ export const browserCors = (request: Request, response: Response, bindings: Work
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-const endpointMatchers = Object.values(apiEndpoints).map((endpoint) => ({
-  auth: endpoint.auth, method: endpoint.method,
-  pattern: new RegExp(`^${endpoint.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replaceAll(/:[A-Za-z0-9_]+/gu, "[^/]+")}$`, "u"),
-  path: endpoint.path,
-}))
-const isOpenPublicRequest = (request: Request) => {
-  const url = new URL(request.url)
-  const method = request.method === "OPTIONS" ? request.headers.get("access-control-request-method") ?? "GET" : request.method
-  const matches = endpointMatchers.filter((endpoint) => endpoint.method === method && endpoint.pattern.test(url.pathname))
-  return matches.length > 0 && matches.every((endpoint) => endpoint.auth === "public" &&
-    !endpoint.path.startsWith("/v2/auth/") && !endpoint.path.startsWith("/v2/billing/"))
-}
 const publicCors = (request: Request, response: Response): Response => {
   if (request.headers.get("origin") === null) return response
   const headers = new Headers(response.headers)
@@ -244,7 +236,15 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "OPTIONS") {
       return browserPreflight(request, bindings)
     }
+    const stepBudget = yield* dispatchAIStepBudgets(request,bindings.AI_USAGE_SECRET)
+    if(stepBudget)return stepBudget
     yield* guardDashboardScope(request)
+    if (url.pathname.startsWith("/v2/billing/")) return new Response(null,{status:410})
+    const limitsRoute=/^\/v2\/server\/(\d+)\/limits$/u.exec(url.pathname)
+    if(request.method==="GET" && limitsRoute){
+      yield* (yield* ServerAuthorization).require(request,limitsRoute[1]!,{section:""})
+      return yield* encodeJson(ServerLimits,yield* readServerLimits(limitsRoute[1]!))
+    }
     const taskProgress=yield* dispatchBotTaskProgress(request)
     if(taskProgress!==undefined)return taskProgress
     const moderationMedia=yield* dispatchBotModerationMedia(request,bindings)
@@ -256,7 +256,7 @@ export const route = (request: Request, bindings: WorkerBindings,
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.17" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: apiPackage.version })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -414,8 +414,7 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (snapshotResponse !== undefined) return snapshotResponse
     const aiContextResponse = yield* dispatchDashboardRosterAIContext(request, bindings.AI_ROSTER_MAX_PROMPT_CHARS)
     if (aiContextResponse !== undefined) return aiContextResponse
-    const aiUsageResponse = yield* dispatchDashboardRosterAIUsage(request, bindings.AI_USAGE_SECRET)
-    if (aiUsageResponse !== undefined) return aiUsageResponse
+    if(request.method === "POST" && url.pathname === "/v2/roster/ai/usage") return new Response(null,{status:410})
     const rosterConfigurationResponse = yield* dispatchDashboardRosterConfiguration(request)
     if (rosterConfigurationResponse !== undefined) return rosterConfigurationResponse
     const rosterResponse = yield* dispatchDashboardRoster(request, bindings)

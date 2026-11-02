@@ -2128,7 +2128,11 @@ const postRoster = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
     if (prior.message_id !== null) return json({ messageId: prior.message_id })
     return yield* new Conflict({ reason: "publication_pending", message: "Publication status is uncertain. Inspect the destination channel and reconcile the existing post before starting another publication." })
   }
-  const hook = yield* rosterWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, String(body.channelId))
+  const hook = yield* rosterWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, String(body.channelId)).pipe(
+    Effect.onError(() => sql`DELETE FROM roster_publication_requests
+      WHERE roster_id=${id}::uuid AND nonce=${body.nonce} AND message_id IS NULL
+        AND payload=${requestPayload}::jsonb`.pipe(Effect.catch(() => Effect.void))),
+  )
   const ids: string[] = []
   for (const publication of publications) {
     const message = yield* discord.request(`${hook.path}?wait=true&${hook.query}`, { method: "POST", body: { ...publication, ...hook.identity } })

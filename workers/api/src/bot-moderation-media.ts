@@ -48,7 +48,9 @@ export const dispatchBotModerationMedia = (
       bindings,
       `embed_${crypto.randomUUID()}.${extension}`,
       file,
-      new URL(request.url).origin,
+      // Discord fetches evidence from outside this process; a loopback URL
+      // from the internal bot request cannot be used as the public image URL.
+      bindings.PROFILE_MEDIA_PUBLIC_ORIGIN ?? new URL(request.url).origin,
     );
     return Response.json(uploaded, {
       headers: { "Cache-Control": "no-store" },

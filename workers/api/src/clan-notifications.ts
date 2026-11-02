@@ -17,10 +17,9 @@ export function clanNotificationLimit(beta: boolean, paid: boolean): number { re
 export function clanNotificationChangeAllowed(current: number, next: number, limit: number): boolean {
   return next <= limit || next <= current
 }
-export const getNotificationClans = (principal: UserPrincipal, beta = true) => Effect.gen(function* () {
+export const getNotificationClans = (principal: UserPrincipal, _beta = true) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const paid = (yield* sql<{ active: boolean }>`SELECT active FROM subscription_entitlements WHERE user_id=${principal.userId}`)[0]?.active === true
-  const limit = clanNotificationLimit(beta, paid)
+  const limit = 10
   const rows = yield* sql<ClanRow>`SELECT bookmark.tag, war_notifications_enabled, raid_notifications_enabled,
     war_active_until, raid_active_until, COALESCE(interest.war_tracked,false) AS war_tracked,
     COALESCE(interest.raid_tracked,false) AS raid_tracked
@@ -37,7 +36,7 @@ export const getNotificationClans = (principal: UserPrincipal, beta = true) => E
 })
 export const putNotificationClan = (principal: UserPrincipal, rawTag: string, body: typeof NotificationClanRequest.Type, beta = true) => Effect.gen(function* () {
   const tag = `#${rawTag.trim().toUpperCase().replaceAll("O","0").replace(/^#+/u, "")}`
-  if (!/^#[0289PYLQGRJCUV]{3,14}$/u.test(tag)) return yield* new InvalidRequest({ message: "Invalid clan tag" })
+  if (!/^#[0289PYLQGRJCUV]{1,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "Invalid clan tag" })
   if (body.removeBookmark && (body.warEnabled || body.raidEnabled)) return yield* new InvalidRequest({ message: "Turn off notifications before removing the bookmark" })
   const sql = yield* SqlClient.SqlClient
   return yield* sql.withTransaction(Effect.gen(function* () {

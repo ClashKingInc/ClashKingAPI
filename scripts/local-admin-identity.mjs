@@ -26,9 +26,10 @@ const fetchLocalApi = (path, init) => new Promise((resolve, reject) => {
 });
 
 export async function createLocalAdminIdentity({ apiOrigin: requestedOrigin, port = 8786, fetcher = fetchLocalApi }) {
-  if (requestedOrigin !== apiOrigin) {
+  if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/u.test(requestedOrigin)) {
     throw new Error('Local Admin identity requires an explicit loopback API origin');
   }
+  const apiOrigin = requestedOrigin;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid local Admin port');
   const issuer = 'https://local-admin.clashking.invalid';
   const audience = 'clashking-isolated-local-admin';

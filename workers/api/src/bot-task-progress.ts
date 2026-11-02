@@ -53,11 +53,17 @@ export const dispatchBotTaskProgress = (request: Request) =>
       season: string | null;
       capital: string | null;
     }>`SELECT player_tag AS tag,
- sum(delta) FILTER(WHERE stat_type='clan_games' AND event_time>=${gamesStart} AND event_time<${gamesEnd})::text AS games,
- sum(delta) FILTER(WHERE stat_type='season_pass' AND event_time>=${monthStart})::text AS season,
+ sum(delta) FILTER(WHERE stat_type='clan_games' AND delta>0 AND event_time>=${gamesStart} AND event_time<${gamesEnd})::text AS games,
+ sum(delta) FILTER(WHERE stat_type='season_pass' AND delta>0 AND event_time>=${monthStart})::text AS season,
  max(event_time) FILTER(WHERE stat_type='capital_gold_donated' AND delta>0)::text AS capital
  FROM player_stat_changes WHERE player_tag=ANY(${tags}::text[]) AND event_time<${now} AND event_time>=${new Date(now.getTime() - 90 * 86400000)}
  GROUP BY player_tag`;
+    const online = yield* sql<{tag:string; last_online:string}>`
+      SELECT DISTINCT ON (tag) tag, seen_at::text AS last_online
+      FROM player_online_events
+      WHERE tag = ANY(${tags}::text[]) AND seen_at < ${now}
+      ORDER BY tag, seen_at DESC`;
+    const lastOnline = new Map(online.map(row => [row.tag, row.last_online]));
     const byTag = new Map(rows.map((row) => [row.tag, row]));
     const points = (value: string | null | undefined) => {
       if (value == null) return null;
@@ -76,6 +82,7 @@ export const dispatchBotTaskProgress = (request: Request) =>
         clanGamesPoints: points(byTag.get(tag)?.games),
         seasonPoints: points(byTag.get(tag)?.season),
         lastCapitalDonation: byTag.get(tag)?.capital ?? null,
+        lastOnline: lastOnline.get(tag) ?? null,
       })),
     });
   }).pipe(

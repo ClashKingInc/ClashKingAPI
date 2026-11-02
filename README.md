@@ -111,8 +111,8 @@ cohort results only, not stale legacy-family comparisons. Supported current
 cohorts are all Legend I, top1,000, and top200.
 
 Aggregate date-only `time[after]` and `time[before]` select inclusive Legend day
-labels. Day `2026-09-08` covers `[2026-09-08T05:10:00Z,
-2026-09-09T05:10:00Z)`. Timestamp ranges must align to those boundaries and use
+labels. Day `2026-09-08` covers `[2026-09-08T05:00:00Z,
+2026-09-09T05:00:00Z)`. Timestamp ranges must align to those boundaries and use
 an exclusive `time[before]`; partial-day aggregate requests return 400.
 Unrelated raw history keeps its existing inclusive UTC time filters.
 
@@ -152,6 +152,36 @@ verification and candidate archives do not imply deployment or publication.
 
 ### Server clan verification
 
-Dashboard clan creation can open verification immediately, and clan settings can start it later. The API issues a description marker from 20 rotating familiar five- or six-letter words suffixed with `ck` (for example, `appleck`) after checking that it is absent from the current Clash description. Progress is stored in `server_clan_verifications` (Goose migrations 058–059): the first check is due after two minutes, subsequent checks are leased for one minute, and challenges expire after 30 minutes. The API Worker's one-minute cron checks bounded batches; the open dashboard also checks due challenges so local development works without a cron emulator.
+Dashboard clan creation can open verification immediately, and clan settings can start it later. The API issues a description marker from 20 rotating familiar five- or six-letter words suffixed with `ck` (for example, `appleck`) after checking that it is absent from the current Clash description. Progress is stored in `server_clan_verifications` (the consolidated Goose migration 022): the first check is due after two minutes, subsequent checks are leased for one minute, and challenges expire after 30 minutes. The API Worker's one-minute cron checks bounded batches; the open dashboard also checks due challenges so local development works without a cron emulator.
 
-Verification belongs to a configured `(server_id, clan_tag)` pair and is deleted when that clan is removed. Only the verified server's clan-roster Links response reveals hidden link identities; unverified clans retain the Hidden label without revealing ownership. Changing ordinary clan settings cannot grant verification. Active verification words are distinct for the same clan across servers. Production needs migrations 058–059 and the updated Worker/cron; local migration or tests do not deploy these changes.
+Verification belongs to a configured `(server_id, clan_tag)` pair and is deleted when that clan is removed. Only the verified server's clan-roster Links response reveals hidden link identities; unverified clans retain the Hidden label without revealing ownership. Changing ordinary clan settings cannot grant verification. Active verification words are distinct for the same clan across servers. Production needs migration 022 and the updated Worker/cron; local migration or tests do not deploy these changes.
+
+## Manual server limits
+
+Migration 051 adds per-server defaults: 10 clans, 5 AutoBoards, and $0.05 of AI
+spend per UTC calendar month. Admin can change these through `/v2/admin/server-limits`;
+ordinary server settings cannot raise them. Reductions retain existing clans and boards.
+All quota writes and AI admissions lock the server row. Limit messages direct users to
+https://discord.gg/clashking; purchases no longer raise limits.
+
+AI context is an admission only. Before each actual Responses call, the assistant
+reserves conservative input/output cost through the private AI-metering contract.
+Only the trusted assistant holds the metering secret. Model retries and provider-side
+compaction are disabled; unknown provider outcomes keep their reservation. Settled
+steps charge reported usage once. The input bound includes serialized request bytes
+and prior input/output usage for opaque reasoning items. The configured model's
+highest input/cache-write/output rates must remain covered when prices/models change.
+These private service contracts are exported but excluded from public endpoint discovery.
+
+The old billing implementation and historical records are retained, but `/v2/billing/*`
+returns 410. Do not reactivate old subscription projection jobs to control manual limits.
+
+Bot profile customization is off by default. Admin grants or revokes it per server
+on the Server limits page. The API checks the grant on every profile edit;
+existing profile values remain unchanged when access is revoked.
+
+Admin's Server limits page also offers an explicit, confirmed Reset to default
+operation for the bot profile. It clears the server's name, avatar, banner and
+bio overrides, restoring global inheritance. It works while customization access
+is disabled, leaves that grant unchanged, and audits only a successful reset.
+Revoke and save separately if further customization should also be prevented.

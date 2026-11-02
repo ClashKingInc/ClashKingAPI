@@ -178,7 +178,7 @@ export const readServerAnalytics = (input: DashboardServerOperationInput) => Eff
   }
   report.cwl = (yield* database(sql<{clan_tag: string; season: string; cwl_league_id: number; stars: number; wins: number; group_rank: number | null}>`
     SELECT clan_tag,season,cwl_league_id,stars,wins,group_rank FROM cwl_standings WHERE clan_tag=ANY(${requested}::text[])
-    AND season>=${query.start.slice(0,7)} AND season<=${query.end.slice(0,7)} ORDER BY season,clan_tag`))
+    AND season>=${query.start.slice(0,7)} AND season<=${dayOf(new Date(+window.until-1)).slice(0,7)} ORDER BY season,clan_tag`))
     .map(row => ({clanTag: row.clan_tag, season: row.season, leagueId: row.cwl_league_id, stars: row.stars, wins: row.wins, rank: row.group_rank}))
   const archivedIds = yield* database(sql<{cwl_id:string}>`SELECT DISTINCT g.cwl_id FROM cwl_groups g
     JOIN cwl_group_clans c ON c.cwl_id=g.cwl_id WHERE c.clan_tag=ANY(${requested}::text[])
@@ -201,7 +201,7 @@ export const readServerAnalytics = (input: DashboardServerOperationInput) => Eff
   }).sort((a,b)=>b.id-a.id)
   if (tags.length) report.legends=(yield* database(sql<{player_name: string; player_tag: string; season: string; rank: number; trophies: number}>`
     SELECT player_name,player_tag,season,rank,trophies FROM legend_history WHERE player_tag=ANY(${tags}::text[])
-    AND season>=${query.start.slice(0,7)} AND season<=${query.end.slice(0,7)} ORDER BY rank,season DESC,player_tag LIMIT 100`))
+    AND season>=${query.start.slice(0,7)} AND season<=${dayOf(new Date(+window.until-1)).slice(0,7)} ORDER BY rank,season DESC,player_tag LIMIT 100`))
     .map(row=>({name:row.player_name,tag:row.player_tag,season:row.season,rank:row.rank,trophies:row.trophies}))
   report.days = [...days].map(([day,metrics]) => ({day,metrics})); report.players = [...players.values()]
   return report

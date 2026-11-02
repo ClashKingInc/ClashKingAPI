@@ -1,3 +1,9 @@
+import { ServerLimitsEndpoint } from "./server-limits.js"
+export * from "./server-limits.js"
+import { BotGraphTotalEndpoint } from "./bot-graph-total.js"
+import { BotCapitalTrophyHistoryEndpoint } from "./bot-capital-trophy-history.js"
+import { BotManualRemindersEndpoint } from "./bot-manual-reminders.js"
+export * from "./bot-manual-reminders.js"
 export * from "./ai-notice.js"
 import { AiNoticeGetEndpoint, AiNoticeAcceptEndpoint } from "./ai-notice.js"
 export * from "./app-config.js"
@@ -58,6 +64,10 @@ import { MediaFileEndpoint, ticketTranscriptEndpoints } from "./media.js"
 import { legacyPublicEndpoints } from "./legacy-public.js"
 
 const coreEndpoints = {
+  serverLimits: ServerLimitsEndpoint,
+  botGraphTotal: BotGraphTotalEndpoint,
+  botCapitalTrophyHistory: BotCapitalTrophyHistoryEndpoint,
+  botManualReminders: BotManualRemindersEndpoint,
   aiNotice: AiNoticeGetEndpoint,
   acknowledgeAiNotice: AiNoticeAcceptEndpoint,
   ...legacyPublicEndpoints,

@@ -66,6 +66,13 @@ retained scripts documented in `clashking_bot/tooling/e2e/README.md`. Unit and
 isolated-helper suites are not retained. Never inherit a production connection
 for mutating verification.
 
+`node scripts/e2e/search-nullability.mjs`, under the disposable Timescale
+harness, starts an owned Elasticsearch 8.19.17 container and the real local
+Worker. Set `CLASHKING_E2E_SCHEMA_ROOT` to the authoritative DevKit checkout.
+The check covers nullable search fields, clan enrichment, and cursor paging.
+Its optional `CLASHKING_LOCAL_ELASTICSEARCH_ORIGIN` binding accepts only an
+explicit loopback port and defaults to unavailable outside that setup.
+
 For interactive Dashboard/App development, use `npm run dev`. It generates the
 contracts and API documentation before starting the persistent local database;
 the disposable harness above is for tests only.

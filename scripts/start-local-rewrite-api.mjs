@@ -64,6 +64,7 @@ const localAdmin = (persistent || process.env.CLASHKING_DISPOSABLE_TIMESCALE ===
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers})
   } }) : undefined
 const notificationLab = localNotificationLab(Boolean(localAdmin), process.env.CLASHKING_LOCAL_FCM_CREDENTIALS_FILE ?? "")
+const elasticsearchOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_ELASTICSEARCH_ORIGIN ?? "")
 const clashProxyOrigin = localProviderOrigin(process.env.CLASHKING_LOCAL_CLASH_PROXY_ORIGIN ?? "", { publicOrigin: "https://proxy.clashk.ing" })
 // Isolated service E2E runs can replace Discord with a loopback HTTP provider.
 // Never allow an arbitrary remote host here: the request includes a bot token.
@@ -127,6 +128,21 @@ const clashProxy = clashProxyOrigin ? async request => {
     throw error
   }
 } : remoteClashProxy === undefined ? unavailable : request => remoteClashProxy.fetch(request)
+// The optional real local Elasticsearch service uses the same binding path as
+// production. Restrict its origin to loopback and keep it disabled by default.
+const localElasticsearch = elasticsearchOrigin ? async request => {
+  const incoming = new URL(request.url)
+  const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
+  const response = await fetch(new URL(`${incoming.pathname}${incoming.search}`, elasticsearchOrigin), {
+    method: request.method, headers: request.headers, body, redirect: "error", signal: request.signal,
+  })
+  if (!response.ok) console.error(JSON.stringify({ event: "local_elasticsearch_error", path: incoming.pathname, status: response.status }))
+  // Node fetch decodes compressed bytes before this service-binding response.
+  // Do not ask workerd to decode the same body again or trust its old length.
+  const headers = new Headers(response.headers)
+  headers.delete("content-encoding"); headers.delete("content-length")
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+} : unavailable
 const discordOnly = async request => {
   const certificates = localAdmin?.certificates(request)
   if (certificates !== undefined) return certificates
@@ -208,7 +224,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     TICKET_RUNTIME: { className: "TicketRuntimeCoordinator", useSQLite: true },
     RUNTIME_RECOVERY: { className: "RuntimeRecoveryCoordinator", useSQLite: true },
   },
-  serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: unavailable },
+  serviceBindings: { CLASH_PROXY: clashProxy, ELASTICSEARCH: localElasticsearch },
   // Discord sign-in and explicitly configured local FCM are allowed; other
   // outbound providers remain unavailable in this isolated environment.
   outboundService: discordOnly,
@@ -227,7 +243,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     GIVEAWAY_MEDIA_ORIGIN: publicOrigin,
     SMTP_HOST: "127.0.0.1", SMTP_PORT: "9", SMTP_USERNAME: "", SMTP_PASSWORD: "",
     STRIPE_RESTRICTED_KEY: "", STRIPE_WEBHOOK_SECRET: localSecret("STRIPE_WEBHOOK_SECRET"),
-    ELASTICSEARCH_API_KEY: "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUDIENCE: "",
+    ELASTICSEARCH_API_KEY: elasticsearchOrigin ? "local-security-disabled" : "", ACCESS_TEAM_DOMAIN: "", ACCESS_AUDIENCE: "",
     ...localAdmin?.bindings,
     ...notificationLab.bindings,
     POSTS_PUBLIC_ORIGIN: publicOrigin, APP_UPDATES_PUBLIC_ORIGIN: publicOrigin,

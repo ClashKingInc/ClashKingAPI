@@ -1,3 +1,4 @@
+import { dispatchBotServerActivity } from "./bot-server-activity.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { dispatchAIStepBudgets } from "./ai-step-budgets.js"
 import { readServerLimits } from "./server-limits.js"
@@ -245,6 +246,8 @@ export const route = (request: Request, bindings: WorkerBindings,
       yield* (yield* ServerAuthorization).require(request,limitsRoute[1]!,{section:""})
       return yield* encodeJson(ServerLimits,yield* readServerLimits(limitsRoute[1]!))
     }
+    const serverActivity=yield* dispatchBotServerActivity(request,bindings)
+    if(serverActivity!==undefined)return serverActivity
     const taskProgress=yield* dispatchBotTaskProgress(request)
     if(taskProgress!==undefined)return taskProgress
     const moderationMedia=yield* dispatchBotModerationMedia(request,bindings)

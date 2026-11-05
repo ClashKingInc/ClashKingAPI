@@ -1,3 +1,5 @@
+import { BotServerActivityEndpoint } from "./bot-server-activity.js"
+export { BotServerActivityEndpoint } from "./bot-server-activity.js"
 import { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
 export { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
 import { BotUserRostersEndpoint } from "./bot-user-rosters.js"
@@ -111,6 +113,7 @@ export const botEndpoints = {
   playerIdentity: BotPlayerIdentityEndpoint,
   playerClanHistory: BotPlayerClanTimelineEndpoint,
   taskProgress: BotTaskProgressEndpoint,
+  serverActivity: BotServerActivityEndpoint,
   playerUpgradeProgress: BotPlayerProgressEndpoint,
   playerSeasonSummary: BotSeasonSummaryEndpoint,
   roleMembers: BotRoleMembersEndpoint,

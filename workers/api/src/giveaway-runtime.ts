@@ -1,7 +1,7 @@
 import { DecimalSnowflake } from "@clashking/api-contracts"
 import { GiveawayEnterResponse } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { Conflict, DatabaseFailure, Forbidden, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
@@ -39,7 +39,7 @@ const receiptResult = (row: Receipt, giveawayId: string, proof: VerifiedRuntimeI
   }).pipe(Effect.mapError(() => new DatabaseFailure({ cause: undefined, message: "Stored giveaway receipt is invalid" })))
 })
 
-/** The entry, count-dirty flag, and exact replay receipt commit together. */
+/** The entry and exact replay receipt commit together without changing the message revision. */
 export const enterGiveaway = (giveawayId: string, proof: VerifiedRuntimeInteraction): Effect.Effect<
   typeof GiveawayEnterResponse.Type, ApiFailure, SqlClient.SqlClient | DiscordApi
 > => Effect.gen(function* () {
@@ -54,7 +54,7 @@ export const enterGiveaway = (giveawayId: string, proof: VerifiedRuntimeInteract
   yield* requireFreshInteraction(proof)
   // Verify scope before making any Discord request; repeat under the write lock.
   const current = (yield* sql<GiveawayScope>`SELECT id,server_id,channel_id,message_id,status,
-    start_time <= clock_timestamp() AND end_time > clock_timestamp() AS accepting,
+    NOT disabled AND start_time <= clock_timestamp() AND end_time > clock_timestamp() AS accepting,
     roles_mode,roles,profile_picture_required,coc_account_required FROM giveaways WHERE id=${giveawayId}`)[0]
   if (current === undefined) return yield* new NotFound({ message: "Giveaway not found" })
   yield* bindGiveaway(current, proof)
@@ -71,7 +71,7 @@ export const enterGiveaway = (giveawayId: string, proof: VerifiedRuntimeInteract
   if (member !== undefined && member.user.id !== proof.actorId) return yield* new Forbidden({ message: "Discord member identity mismatch" })
   return yield* sql.withTransaction(Effect.gen(function* () {
     const row = (yield* sql<GiveawayScope>`SELECT id,server_id,channel_id,message_id,status,
-      start_time <= clock_timestamp() AND end_time > clock_timestamp() AS accepting,
+      NOT disabled AND start_time <= clock_timestamp() AND end_time > clock_timestamp() AS accepting,
       roles_mode,roles,profile_picture_required,coc_account_required FROM giveaways WHERE id=${giveawayId} FOR UPDATE`)[0]
     if (row === undefined) return yield* new NotFound({ message: "Giveaway not found" })
     yield* bindGiveaway(row, proof)
@@ -91,8 +91,7 @@ export const enterGiveaway = (giveawayId: string, proof: VerifiedRuntimeInteract
       const linked = (yield* sql<{ linked: boolean }>`SELECT EXISTS(SELECT 1 FROM player_links WHERE user_id=${proof.actorId}) AS linked`)[0]?.linked
       if (!linked) return yield* new Forbidden({ message: "A linked Clash account is required", reason: "linked_account" })
     }
-    yield* sql`UPDATE giveaways SET entries=entries || jsonb_build_array(${proof.actorId}::text),
-      updated=true,updated_at=clock_timestamp() WHERE id=${giveawayId}`
+    yield* sql`UPDATE giveaways SET entries=entries || jsonb_build_array(${proof.actorId}::text) WHERE id=${giveawayId}`
     }
     const count = (yield* sql<{ count: number }>`SELECT jsonb_array_length(entries) AS count FROM giveaways WHERE id=${giveawayId}`)[0]?.count
     if (count === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Giveaway entry count is unavailable" })

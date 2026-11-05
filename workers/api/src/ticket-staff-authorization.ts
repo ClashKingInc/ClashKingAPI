@@ -1,6 +1,6 @@
 import { DecimalSnowflake, TicketButtonSettings } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
 import { DatabaseFailure, Forbidden, UpstreamUnavailable } from "./errors.js"
 import type { VerifiedRuntimeInteraction } from "./runtime-interaction.js"

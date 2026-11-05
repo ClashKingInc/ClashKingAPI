@@ -1,6 +1,6 @@
 import type { InitializationAttack, InitializationMember, InitializationPlayerWar, InitializationPlayerWarStats, InitializationClanWarStats, InitializationWarData } from "../../../packages/api-contracts/src/initialization.js"
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { readArchiveWar, MAX_ARCHIVE_PAGE_BYTES } from "./war-archive.js"
 import { officialArchiveWar, type ArchivedWar } from "./war-archive-model.js"

@@ -7,7 +7,7 @@ import {
   type EndpointResponse,
 } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
@@ -69,6 +69,8 @@ export class DashboardMiscExternal extends Context.Service<DashboardMiscExternal
 }>()("clashking/DashboardMiscExternal") {}
 
 interface LinkRow {
+  readonly player_name?: string | null
+  readonly town_hall?: number | null
   readonly user_id: string
   readonly tag: string
   readonly order_index: number
@@ -85,8 +87,9 @@ export class DashboardPersonalLinks extends Context.Service<DashboardPersonalLin
   static readonly layer = Layer.effect(DashboardPersonalLinks, Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     const list = (userId: string) => database(sql<LinkRow>`
-      SELECT user_id, tag, order_index, is_verified, hidden, added_at, verified_at, last_login
-      FROM player_links WHERE user_id = ${userId} ORDER BY order_index, added_at
+      SELECT links.user_id,links.tag,links.order_index,links.is_verified,links.hidden,links.added_at,links.verified_at,links.last_login,
+        player.name AS player_name,player.townhall_level AS town_hall
+      FROM player_links links LEFT JOIN basic_player player ON player.tag=links.tag WHERE links.user_id = ${userId} ORDER BY order_index, added_at
     `).pipe(Effect.map((rows) => rows.map(linkJson)))
     return { list }
   }))
@@ -95,6 +98,8 @@ export class DashboardPersonalLinks extends Context.Service<DashboardPersonalLin
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } })
 const iso = (value: Date | string) => value instanceof Date ? value.toISOString() : value
 const linkJson = (row: LinkRow): LinkedAccount => ({
+  ...(row.player_name ? {player_name:row.player_name} : {}),
+  ...(row.town_hall != null ? {town_hall:row.town_hall} : {}),
   user_id: row.user_id, player_tag: row.tag, order_index: row.order_index,
   is_verified: row.is_verified, hidden: row.hidden, added_at: iso(row.added_at),
   ...(row.verified_at === null ? {} : { verified_at: iso(row.verified_at) }),

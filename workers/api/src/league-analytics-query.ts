@@ -84,12 +84,13 @@ export const parseLegendAggregateWindow = (
   now = new Date(),
   options: { readonly defaultDays?: number; readonly maximumDays: number },
 ): AnalyticsWindow => {
-  const offset = (5 * 60 + 10) * 60_000
+  // The game day begins at 05:00 UTC; the closeout worker delay is unrelated.
+  const offset = 5 * 60 * 60_000
   const boundary = (raw: string, key: string, before: boolean) => {
     const dateOnly = /^\d{4}-\d{2}-\d{2}$/u.test(raw)
     const value = parseTime(raw, key, false)
     if (dateOnly) return new Date(value.valueOf() + offset + (before ? day : 0))
-    if ((value.valueOf() - offset) % day !== 0) throw invalid(`${key} must align to 05:10 UTC for complete Legend days`)
+    if ((value.valueOf() - offset) % day !== 0) throw invalid(`${key} must align to 05:00 UTC for complete Legend days`)
     return value
   }
   const rawAfter = single(query, "time[after]"), rawBefore = single(query, "time[before]")

@@ -53,6 +53,10 @@ export const PrivacyExportResponse = Schema.Struct({
   notification_devices: Schema.Array(JsonData),
   notification_preferences: Schema.Array(JsonData),
   saved_bases: Schema.Array(JsonData),
+  saved_armies: Schema.Array(JsonData),
+  home_layouts: Schema.Array(JsonData),
+  home_items: Schema.Array(JsonData),
+  dashboard_sessions: Schema.Array(JsonData),
   billing_subscription: Schema.Array(JsonData),
   subscription_entitlements: Schema.Array(JsonData),
 })
@@ -269,4 +273,19 @@ export const AuthWebLogoutEndpoint = defineEndpoint({
   response: NoContent,
   responseMode: "none",
   successStatus: 204,
+})
+
+export const AccountAvatarId = Schema.Literals(["barbarian", "archer", "goblin", "giant", "wizard", "hog-rider", "valkyrie", "barbarian-king", "archer-queen", "royal-champion", "minion-prince"])
+export const AccountAvatarResponse = Schema.Struct({ avatar_id: Schema.NullOr(AccountAvatarId) })
+export const GetAccountAvatarEndpoint = defineEndpoint({
+  operationId: "getAccountAvatar", method: "GET", path: "/v2/auth/avatar", auth: "user",
+  summary: "Read the current account avatar", body: NoBody, bodyMode: "none",
+  pathParams: NoPathParams, query: NoQuery, response: AccountAvatarResponse,
+  responseMode: "json", successStatus: 200,
+})
+export const SetAccountAvatarEndpoint = defineEndpoint({
+  operationId: "setAccountAvatar", method: "PUT", path: "/v2/auth/avatar", auth: "user",
+  summary: "Choose the current account avatar", body: Schema.Struct({ avatar_id: AccountAvatarId }), bodyMode: "json",
+  pathParams: NoPathParams, query: NoQuery, response: AccountAvatarResponse,
+  responseMode: "json", successStatus: 200,
 })

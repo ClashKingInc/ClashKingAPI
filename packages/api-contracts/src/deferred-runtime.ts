@@ -9,16 +9,8 @@
 export * from "./persistent-runtime.js"
 export * from "./roster-interaction.js"
 export * from "./deferred-roster-board.js"
-export {
-  DashboardRosterMemberGroupsEndpoint,
-  DashboardCreateRosterMemberGroupEndpoint,
-  DashboardUpdateRosterMemberGroupEndpoint,
-  DashboardDeleteRosterMemberGroupEndpoint,
-  DashboardReplaceRosterMemberGroupsEndpoint,
-  RosterMemberGroup,
-  RosterMemberGroupSettingsRequest,
-  rosterConfigurationEndpoints,
-} from "./roster-configuration.js"
+export { DashboardReplaceRosterMemberGroupsEndpoint } from "./roster-configuration.js"
+
 
 import { Schema } from "effect"
 import { DecimalSnowflake } from "./discord.js"

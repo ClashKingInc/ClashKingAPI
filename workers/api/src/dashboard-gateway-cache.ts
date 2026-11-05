@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, UpstreamUnavailable } from "./errors.js"
 import { gatewayHeartbeatFreshnessSeconds } from "./server-authorization.js"
 

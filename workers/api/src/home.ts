@@ -1,6 +1,6 @@
 import type { HomeActivityRequest, HomeActivityResponse } from "@clashking/api-contracts"
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import type { ApiPrincipal } from "./auth.js"
 import { DatabaseFailure, Forbidden, InvalidRequest } from "./errors.js"

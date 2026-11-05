@@ -26,9 +26,10 @@ const fetchLocalApi = (path, init) => new Promise((resolve, reject) => {
 });
 
 export async function createLocalAdminIdentity({ apiOrigin: requestedOrigin, port = 8786, fetcher = fetchLocalApi }) {
-  if (requestedOrigin !== apiOrigin) {
+  if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/u.test(requestedOrigin)) {
     throw new Error('Local Admin identity requires an explicit loopback API origin');
   }
+  const apiOrigin = requestedOrigin;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid local Admin port');
   const issuer = 'https://local-admin.clashking.invalid';
   const audience = 'clashking-isolated-local-admin';
@@ -75,9 +76,10 @@ export async function createLocalAdminIdentity({ apiOrigin: requestedOrigin, por
         signal: AbortSignal.timeout(30_000),
       });
       outgoing.statusCode = response.status;
-      // fetch decodes HTTP content encodings; don't advertise the old wire size.
+      // The node:http adapter forwards raw bytes, including compressed bodies.
+      // Preserve the encoding so the browser can decode them correctly.
       response.headers.forEach((value, name) => {
-        if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(name)) outgoing.setHeader(name, value);
+        if (!['content-length', 'transfer-encoding', 'connection'].includes(name)) outgoing.setHeader(name, value);
       });
       outgoing.setHeader('cache-control', 'no-store');
       if (response.body) await pipeline(Readable.fromWeb(response.body), outgoing);

@@ -1,6 +1,6 @@
 import { PlayerCwlHistoryResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { publicTag } from "./public-war.js"
 import { lookupStaticItem } from "./static-metadata.js"
@@ -100,9 +100,11 @@ export const cwlStandings = (group: CwlGroup, wars: ReadonlyMap<string, CwlWar>)
   })
   return { items, complete }
 }
-export const cwlSummary = (group: CwlGroup, wars: ReadonlyMap<string, CwlWar>, tag: string) => {
+export const cwlSummary = (group: CwlGroup, wars: ReadonlyMap<string, CwlWar>, tag: string, destruction: "average" | "total" = "average") => {
   const standing = cwlStandings(group, wars).items.find((item) => item.tag === tag && item.warsFinished > 0)
-  return standing ? { rank: standing.rank, stars: standing.stars, destruction: Math.round(standing.destruction / standing.warsFinished * 100) / 100,
+  // Clan season history displays summed destruction, which can exceed 100%.
+  // Keep per-war averages for player history and other existing consumers.
+  return standing ? { rank: standing.rank, stars: standing.stars, destruction: Math.round(standing.destruction / (destruction === "total" ? 1 : standing.warsFinished) * 100) / 100,
     rounds: { won: standing.wins, tied: standing.ties, lost: standing.losses } } : undefined
 }
 
@@ -203,11 +205,10 @@ export const selectCwlSeasonGroups = (groups: readonly CwlGroup[], limit: number
 
 export const queryClanCwlSeasons = (rawTag: string, query: URLSearchParams) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), limit = yield* historyLimit(query, 12)
-  yield* ensureCwlLeagueIds(tag)
   const selected = selectCwlSeasonGroups(yield* loadCwlGroups(tag), limit)
   const wars = yield* loadCwlWars(selected)
   return { items: selected.map((group) => ({ season: group.season, state: group.state, warSize: group.war_size && group.war_size > 0 ? group.war_size : null,
-    warLeague: warLeague(group.cwl_league_id), rank: null, stars: null, destruction: null, rounds: null, ...cwlSummary(group, wars, tag) })) }
+    warLeague: warLeague(group.cwl_league_id), rank: null, stars: null, destruction: null, rounds: null, ...cwlSummary(group, wars, tag, "total") })) }
 })
 
 interface PlayerSeed {
@@ -227,11 +228,8 @@ const playerSeeds = (tag: string, limit: number) => Effect.gen(function* () {
 type PlayerItem = typeof PlayerCwlHistoryResponse.Type.items[number]
 export const queryPlayerCwlHistory = (rawTag: string, query: URLSearchParams) => Effect.gen(function* () {
   const tag = yield* publicTag(rawTag), limit = yield* historyLimit(query, 6)
-  let seeds = yield* playerSeeds(tag, limit)
+  const seeds = yield* playerSeeds(tag, limit)
   if (!seeds.length) return { items: [] }
-  const missing = new Set(seeds.filter((seed) => !seed.cwl_league_id).map((seed) => seed.clan_tag))
-  for (const clan of missing) yield* ensureCwlLeagueIds(clan)
-  if (missing.size) seeds = yield* playerSeeds(tag, limit)
   const groups = yield* loadCwlGroupsByIds(seeds.map((seed) => seed.cwl_id))
   const groupById = new Map(groups.map((group) => [group.cwl_id, group]))
   const wars = yield* loadCwlWars(groups)

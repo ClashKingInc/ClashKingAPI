@@ -243,6 +243,9 @@ export const publicEnumCatalog = {
       "scope": "clan"
     },
     {
+      "id": 27, "value": "clash_maintenance", "description": "Clash of Clans maintenance starts and ends.", "scope": "server"
+    },
+    {
       "id": 26,
       "value": "reddit_feed",
       "description": "Publish the server Reddit feed.",

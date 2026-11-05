@@ -2,27 +2,28 @@
 // silently executed with bot migrations or silently omitted from coverage.
 export const retainedPostgresSuites = [
   'account-mutations', 'admin', 'announcement-mutations', 'app-content-notifications',
-  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'bot-base-downloads', 'dashboard-bases', 'dashboard-discord-cache',
+  'auth-email', 'auth-profiles', 'auth-sessions', 'billing-runtime', 'bot-base-downloads', 'bot-role-refresh', 'dashboard-bases', 'dashboard-discord-cache',
   'dashboard-roster-ai-context', 'dashboard-roster-ai-usage', 'dashboard-roster-automation-ownership',
   'dashboard-roster-bonuses', 'dashboard-roster-snapshots', 'dashboard-roster',
-  'dashboard-server-activity', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
-  'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
-  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-bases', 'public-clan-extra',
+  'dashboard-server-activity', 'dashboard-server-analytics', 'dashboard-server-link-concurrency', 'dashboard-server-link-policy',
+  'dashboard-server-clan-links', 'dashboard-server', 'discord-coordination', 'discord-credentials', 'initialization', 'league-analytics', 'legacy-base-import', 'link-mutations',
+  'mobile-achievements', 'mobile-persistence', 'moderation-runtime', 'personal-armies', 'personal-bases', 'public-clan-extra',
   'proxy-war-activity', 'public-data', 'public-metadata', 'public-player-extra', 'stats-archive', 'stats-history',
-  'stats-cwl-archive', 'stats', 'tracking-operations', 'war-exports',
+  'cwl-participation', 'stats', 'tracking-operations', 'war-exports',
+  'ticket-account-link-form', 'ticket-account-runtime', 'ticket-approval-resolver', 'ticket-approval',
+  'ticket-category-retry', 'ticket-dashboard-jobs', 'ticket-effect-guild-scope', 'ticket-effects', 'ticket-panel-publications', 'ticket-runtime', 'ticket-staff',
 ].map(name => `${name}.test.ts`)
 
 export const deferredPostgresSuites = [
+  // Opt-in read-only proof uses an existing local replay, not disposable fixtures.
+  'army-setups-local',
   'dashboard-roster-configuration', 'giveaway-publications', 'giveaway-runtime',
   'roster-board-delivery', 'roster-interaction-board', 'roster-interaction-confirm',
   'roster-interaction-delivery', 'roster-interaction-effects', 'roster-interaction-forms',
   'roster-interaction-prepare', 'roster-membership-lock', 'roster-operation-status',
   'roster-role-audit', 'roster-role-late-write', 'roster-signup-admission',
   'roster-signup-eligibility', 'roster-stale-role-delivery', 'runtime-recovery',
-  'server-scoped-linking', 'ticket-account-link-form', 'ticket-account-runtime',
-  'ticket-approval-resolver', 'ticket-approval', 'ticket-category-retry',
-  'ticket-effect-guild-scope', 'ticket-effects', 'ticket-notifications',
-  'ticket-panel-publications', 'ticket-runtime', 'ticket-staff',
+  'ticket-notifications',
 ].map(name => `${name}.test.ts`)
 
 export function validatePostgresInventory(files) {

@@ -20,7 +20,7 @@ export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBin
         id TEXT NOT NULL, queue TEXT NOT NULL, turn INTEGER NOT NULL, PRIMARY KEY(queue,id)
       )`)
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS recovery_wakes_turn ON recovery_wakes(turn,queue,id)")
-      for (const kind of ["ticket", "panel"]) ctx.storage.sql.exec(
+      for (const kind of ["ticket", "panel", "dashboard"]) ctx.storage.sql.exec(
         "INSERT OR IGNORE INTO recovery_scans(kind,cursor,active,turn) VALUES(?,NULL,0,0)", kind)
     })
   }
@@ -78,7 +78,7 @@ export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBin
   override async alarm(): Promise<void> {
     if (this.running) return
     const row = this.ctx.storage.sql.exec<ScanRow>(
-      "SELECT kind,cursor FROM recovery_scans WHERE active=1 ORDER BY turn,kind LIMIT 1").toArray()[0]
+      "SELECT kind,cursor FROM recovery_scans WHERE active=1 ORDER BY turn,CASE kind WHEN 'panel' THEN 0 WHEN 'ticket' THEN 1 ELSE 2 END LIMIT 1").toArray()[0]
     if (!row && !this.hasBacklog()) return
     this.running = true
     const deadline = Date.now()+this.alarmBudgetMs

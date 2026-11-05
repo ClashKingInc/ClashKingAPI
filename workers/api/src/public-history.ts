@@ -1,6 +1,6 @@
 import { LeaderboardHistoryResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { publicHistoryOptions, isoTimestamp, parseHistoryTime } from "./public-player.js"
 import { publicTag } from "./public-war.js"

@@ -1,12 +1,12 @@
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { publicTag } from "./public-war.js"
 import { publicHistoryOptions, isoTimestamp } from "./public-player.js"
 import { lookupStaticItem } from "./static-metadata.js"
 
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Change history query failed" })
-const types = ["", "troop_level", "super_troop_boost", "hero_level", "spell_level", "pet_level", "equipment_level", "townhall_level", "best_trophies", "best_builder_base_trophies", "exp_level", "war_preference", "name"]
+const types = ["", "troop_level", "super_troop_boost", "hero_level", "spell_level", "pet_level", "equipment_level", "townhall_level", "best_trophies", "best_builder_base_trophies", "exp_level", "war_preference", "name", "league_tier", "war_stars", "clan_capital_contributions"]
 const aliases: Record<string, readonly number[]> = {
   troops: [1, 2], heroes: [3], spells: [4], pets: [5], heroequipment: [6], town_hall_level: [7], bestversustrophies: [9],
 }
@@ -16,16 +16,19 @@ export const playerChangeTypes = (raw: string | null) => Effect.try({ try: () =>
   const alias = Object.hasOwn(aliases, value) ? aliases[value] : undefined
   if (alias) return alias
   const id = /^\d+$/u.test(value) ? Number(value) : types.findIndex((type) => type === value || type.replaceAll("_", "") === value)
-  if (id < 1 || id > 12) throw new Error("Type must be a change type name or ID from 1 to 12")
+  if (id < 1 || id > 15) throw new Error("Type must be a change type name or ID from 1 to 15")
   return [id]
 }, catch: (cause) => new InvalidRequest({ message: cause instanceof Error ? cause.message : "Invalid type" }) })
 const catalog: Record<number, readonly [string, number]> = { 1: ["troops", 4_000_000], 2: ["troops", 4_000_000], 3: ["heroes", 28_000_000], 4: ["spells", 26_000_000], 5: ["pets", 73_000_000], 6: ["equipment", 90_000_000] }
+export const playerHistoryStaticItem = (changeType: number, itemId: number | null) => {
+  const mapping = catalog[changeType]
+  return mapping && itemId !== null ? lookupStaticItem(mapping[0], mapping[1] + itemId) : undefined
+}
 interface PlayerChangeRow { event_time: Date | string; townhall_level: number | null; change_type: number; item_id: number | null; previous_value: string; current_value: string }
 export const playerChangeFromRow = (row: PlayerChangeRow) => Effect.try({ try: () => {
   const type = types[row.change_type]
   if (!type) throw new Error("Unknown stored change type")
-  const mapping = catalog[row.change_type]
-  const item = mapping && row.item_id !== null ? lookupStaticItem(mapping[0], mapping[1] + row.item_id) : undefined
+  const item = playerHistoryStaticItem(row.change_type, row.item_id)
   const value = (raw: string) => {
     if (row.change_type === 12) return raw
     if (row.change_type === 11) { if (raw === "0") return "out"; if (raw === "1") return "in"; throw new Error("Invalid stored war preference") }

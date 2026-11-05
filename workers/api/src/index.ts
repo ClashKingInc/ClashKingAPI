@@ -1,3 +1,4 @@
+import { runClanVerificationChecks } from "./dashboard-clan-verification.js"
 import { Effect, Layer } from "effect"
 import * as Sentry from "@sentry/cloudflare"
 
@@ -23,9 +24,11 @@ import { DashboardServerOperations } from "./dashboard-server-runtime.js"
 import { DashboardMiscReads, DashboardPersonalLinks } from "./dashboard-misc-runtime.js"
 import { dashboardMiscExternalLayer } from "./dashboard-misc-external.js"
 import { observeProxySearch } from "./proxy-search-observer.js"
-import { isJsonTranscriptRequest, readJsonTicketTranscript } from "./ticket-json-transcript.js"
+import { isJsonTranscriptRequest, readJsonTicketTranscript, transcriptBrowserCors } from "./ticket-json-transcript.js"
 import { isApiDocumentationRequest, serveApiDocumentation } from "./api-documentation.js"
 import { captureWorkerError, recordRequestTiming, requestRouteTemplate, sentryOptions } from "./observability.js"
+export { TicketRuntimeCoordinator } from "./ticket-runtime-coordinator.js"
+export { RuntimeRecoveryCoordinator } from "./runtime-recovery-coordinator.js"
 
 const liveLayer = (bindings: WorkerBindings) => {
   const environment = WorkerEnvironment.layer(bindings)
@@ -50,20 +53,19 @@ const liveLayer = (bindings: WorkerBindings) => {
   ).pipe(Layer.provideMerge(sessions))
 }
 
-const armyCacheRequest = (request: Request): Request | undefined => {
-  if (request.method !== "GET") return undefined
-  const url = new URL(request.url)
-  if (url.pathname !== "/v2/stats/armies") return undefined
-  url.searchParams.sort()
-  return new Request(url.toString(), { method: "GET" })
-}
-
 const handler = {
+  async scheduled(_controller: ScheduledController, bindings: WorkerBindings, context: ExecutionContext): Promise<void> {
+    // A commit can survive a lost immediate RPC. Re-arm the existing bounded
+    // SQL inventory so ticket/panel/dashboard operations are not stranded.
+    context.waitUntil(bindings.RUNTIME_RECOVERY.getByName("global").wake());
+    context.waitUntil(Effect.runPromise(runClanVerificationChecks(bindings).pipe(Effect.provide(databaseLayer(bindings)), Effect.scoped)));
+  },
   async fetch(request: Request, bindings: WorkerBindings, context: ExecutionContext): Promise<Response> {
     // A transcript URL is a bearer credential. Keep the entire invocation out
-    // of request/defect logging, SQL layers, CORS and caller request-ID echoing.
+    // of request/defect logging, SQL layers and caller request-ID echoing.
     // Wrangler invocation logs/traces must also remain disabled for this Worker.
-    if (isJsonTranscriptRequest(request)) return readJsonTicketTranscript(request, bindings.TICKETING)
+    if (isJsonTranscriptRequest(request)) return transcriptBrowserCors(request,
+      await readJsonTicketTranscript(request, bindings.TICKETING), bindings.WEB_ALLOWED_ORIGINS)
     const routeTemplate = requestRouteTemplate(request) ?? "/unmatched"
     const startedAt = Date.now()
     if (isApiDocumentationRequest(request)) return serveApiDocumentation(request, bindings.API_DOCUMENTATION).then((response) => {
@@ -71,19 +73,6 @@ const handler = {
       return response
     })
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID()
-    const cacheKey = armyCacheRequest(request)
-    const cache = cacheKey === undefined || globalThis.caches === undefined
-      ? undefined
-      : await globalThis.caches.open("clashking-armies-v1")
-    if (cacheKey !== undefined && cache !== undefined) {
-      const cached = await cache.match(cacheKey)
-      if (cached !== undefined) {
-        recordRequestTiming(bindings, routeTemplate, request.method, cached.status, Date.now() - startedAt)
-        const corsResponse = applyCors(request, cached, bindings), headers = new Headers(corsResponse.headers)
-        headers.set("x-request-id", requestId)
-        return new Response(corsResponse.body, { status: corsResponse.status, statusText: corsResponse.statusText, headers })
-      }
-    }
     const program = Effect.suspend(() => route(request, bindings, (principal, proxyRequest, response) => {
       context.waitUntil(Effect.runPromise(observeProxySearch(principal, proxyRequest, response).pipe(
         Effect.provide(databaseLayer(bindings)), Effect.scoped,
@@ -104,13 +93,7 @@ const handler = {
     const response = Effect.runPromise(program)
     context.waitUntil(response.then(() => undefined))
     return response.then((rawValue) => {
-      let value = rawValue
-      if (cacheKey !== undefined && cache !== undefined && value.status === 200) {
-        const cacheHeaders = new Headers(value.headers)
-        cacheHeaders.set("cache-control", "public, max-age=60")
-        value = new Response(value.body, { status: value.status, statusText: value.statusText, headers: cacheHeaders })
-        context.waitUntil(cache.put(cacheKey, value.clone()).catch(() => undefined))
-      }
+      const value = rawValue
       const corsResponse = applyCors(request, value, bindings)
       const headers = new Headers(corsResponse.headers)
       headers.set("x-request-id", requestId)

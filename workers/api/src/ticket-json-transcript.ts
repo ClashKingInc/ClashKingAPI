@@ -85,6 +85,19 @@ const namespace = "/v2/ticket-transcripts"
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, "0")).join("")
 const digest = async (bytes: BufferSource) => hex(await crypto.subtle.digest("SHA-256", bytes))
 export const createTranscriptCapability = () => crypto.randomUUID()
+/** Revoke access first, then remove every byte in this one validated archive. */
+export async function removeTicketTranscript(bucket: R2Bucket, path: string): Promise<void> {
+  const match = /^\/v2\/ticket-transcripts\/([^/]+)$/u.exec(path)
+  if (!match) throw new Error("Invalid transcript cleanup path")
+  const prefix = `${await jsonTranscriptStoragePrefix(match[1]!)}/`
+  await bucket.delete(`${prefix}index.json`)
+  // Start each page from the beginning: previously returned objects are deleted.
+  for (;;) {
+    const page = await bucket.list({ prefix, limit: 100 })
+    if (!page.objects.length) break
+    await bucket.delete(page.objects.map(object => object.key))
+  }
+}
 export const jsonTranscriptStoragePrefix = async (capability: string) =>
   `transcripts/json-v1/${await digest(new TextEncoder().encode(decodeCapability(capability)))}`
 const metadata = (kind: string) => ({ format: "clashking-json-v1", kind })
@@ -172,6 +185,18 @@ export function isJsonTranscriptRequest(request: Request): boolean {
   try { path = decodeURIComponent(path) } catch { return true }
   // Invalid and former HTML paths stay inside the quiet boundary too.
   return /^\/v2\/ticket-transcripts(?:\/|$)/iu.test(path)
+}
+/** Dashboard reads carry only the URL capability, never session cookies. Keep
+ * this boundary independent of application logging, SQL and request IDs. */
+export function transcriptBrowserCors(request: Request, response: Response, allowedOrigins: string): Response {
+  const headers = new Headers(response.headers)
+  headers.append("vary", "Origin")
+  const origin = request.headers.get("origin")
+  if (origin !== null && allowedOrigins.split(",").map(value => value.trim()).includes(origin)) {
+    headers.set("access-control-allow-origin", origin)
+  }
+  headers.delete("access-control-allow-credentials")
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 const safeHeaders = () => new Headers({
   "cache-control": "no-store", "referrer-policy": "no-referrer",

@@ -2,7 +2,7 @@ import {
   GuildSummaryQuery, GuildSummaryResponse, publicEnumCatalog, publicMetadataEndpoints,
 } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"

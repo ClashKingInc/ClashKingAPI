@@ -1,6 +1,6 @@
 import { RosterOperationStatusEndpoint, RuntimeUUID, type RuntimeInteractionProof } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, Forbidden, NotFound } from "./errors.js"
 import { verifyRosterInteraction } from "./roster-interaction-identity.js"
 import { requireFreshInteraction } from "./runtime-interaction.js"

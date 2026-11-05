@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest, NotFound } from "./errors.js"
 import { correctTag } from "./home.js"
 import { loadArchiveWars } from "./war-archive.js"

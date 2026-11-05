@@ -1,4 +1,32 @@
+import { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
+export { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
+import { BotUserRostersEndpoint } from "./bot-user-rosters.js"
+export { BotUserRostersEndpoint } from "./bot-user-rosters.js"
+import { BotStatusEndpoint } from "./bot-status.js"
+export { BotStatusEndpoint } from "./bot-status.js"
+import { BotDailyGraphEndpoint } from "./bot-daily-graph.js"
+export { BotDailyGraphEndpoint } from "./bot-daily-graph.js"
+import { BotRoleMembersEndpoint } from "./bot-role-members.js"
+export { BotRoleMembersEndpoint } from "./bot-role-members.js"
+import { BotWarStatisticsEndpoint } from "./bot-war-statistics.js"
+export { BotWarStatisticsEndpoint } from "./bot-war-statistics.js"
+import { BotWarStatusEndpoint } from "./bot-war-status.js"
+export { BotWarStatusEndpoint } from "./bot-war-status.js"
+import { BotSeasonSummaryEndpoint } from "./bot-season-summary.js"
+export { BotSeasonSummaryEndpoint } from "./bot-season-summary.js"
+import { BotPlayerProgressEndpoint } from "./bot-player-progress.js"
+export { BotPlayerProgressEndpoint } from "./bot-player-progress.js"
+import { BotTaskProgressEndpoint } from "./bot-task-progress.js"
+export { BotTaskProgressEndpoint } from "./bot-task-progress.js"
+import { BotModerationImageEndpoint } from "./bot-moderation.js"
+export { BotModerationImageEndpoint } from "./bot-moderation.js"
 import { botAdjacentEndpoints } from "./bot-adjacent.js"
+import { BotLegendStatsEndpoint } from "./bot-legend-stats.js"
+import { BotPlayerSeasonEndpoint } from "./bot-player-season.js"
+import { BotPlayerIdentityEndpoint } from "./bot-player-identity.js"
+import { BotPlayerClanTimelineEndpoint } from "./bot-player-history.js"
+import { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint, BotActivityEndpoint } from "./bot-clan-stats.js"
+export { BotClanSeasonStatsEndpoint, BotClanGamesEndpoint, BotClanCapitalContributionsEndpoint, BotActivityEndpoint } from "./bot-clan-stats.js"
 import {
   BotClanCachedEndpoint,
   BotClanCapitalLeaderboardEndpoint,
@@ -64,11 +92,34 @@ import {
 export * from "./bot-public.js"
 export * from "./bot-server.js"
 export * from "./bot-adjacent.js"
+export * from "./bot-legend-stats.js"
+export * from "./bot-player-season.js"
+export * from "./bot-player-identity.js"
 
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
+  userPreferences: BotUserPreferencesEndpoint,
+  updateUserPreferences: BotUpdateUserPreferencesEndpoint,
+  userRosters: BotUserRostersEndpoint,
+  status: BotStatusEndpoint,
+  dailyGraph: BotDailyGraphEndpoint,
+  moderationImage: BotModerationImageEndpoint,
   ...botAdjacentEndpoints,
+  legendStats: BotLegendStatsEndpoint,
+  playerSeasonStats: BotPlayerSeasonEndpoint,
+  playerIdentity: BotPlayerIdentityEndpoint,
+  playerClanHistory: BotPlayerClanTimelineEndpoint,
+  taskProgress: BotTaskProgressEndpoint,
+  playerUpgradeProgress: BotPlayerProgressEndpoint,
+  playerSeasonSummary: BotSeasonSummaryEndpoint,
+  roleMembers: BotRoleMembersEndpoint,
+  playerWarStatus: BotWarStatusEndpoint,
+  warStatistics: BotWarStatisticsEndpoint,
+  clanActivity: BotActivityEndpoint,
+  clanSeasonStats: BotClanSeasonStatsEndpoint,
+  clanGames: BotClanGamesEndpoint,
+  clanCapitalContributions: BotClanCapitalContributionsEndpoint,
   accounts: BotAccountsEndpoint,
   addStrike: BotAddStrikeEndpoint,
   base: BotBaseEndpoint,

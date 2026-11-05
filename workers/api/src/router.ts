@@ -1,12 +1,36 @@
+import { ServerAuthorization } from "./server-authorization.js"
+import { dispatchAIStepBudgets } from "./ai-step-budgets.js"
+import { readServerLimits } from "./server-limits.js"
+import { ServerLimits } from "@clashking/api-contracts"
+import apiPackage from "../../../package.json" with { type: "json" }
+import { isOpenPublicRequest } from "./public-request.js"
+import { dispatchBotCapitalTrophyHistory } from "./bot-capital-trophy-history.js"
+import { dispatchBotGraphTotal } from "./bot-graph-total.js"
+import { dispatchClanWarEvents } from "./clan-war-events.js"
+import { dispatchBotUserRosters } from "./bot-user-rosters.js"
+import { dispatchBotStatus } from "./bot-status.js"
+import { dispatchBotDailyGraph } from "./bot-daily-graph.js"
+import { dispatchBotRoleMembers } from "./bot-role-members.js"
+import { dispatchBotWarStatistics } from "./bot-war-statistics.js"
+import { dispatchBotWarStatus } from "./bot-war-status.js"
+import { dispatchBotSeasonSummary } from "./bot-season-summary.js"
+import { dispatchBotPlayerProgress } from "./bot-player-progress.js"
+import { dispatchBotTaskProgress } from "./bot-task-progress.js"
+import { dispatchBotModerationMedia } from "./bot-moderation-media.js"
+import { dispatchAiNotice } from "./ai-notice.js"
 import {
   AppConfigResponse,
   GroupedCountsResponse,
+  ClanMemberBinsResponse,
   GlobalCounts,
   HomeActivityRequest,
   HomeActivityResponse,
   HealthResponse,
   StatsPerformanceResponse,
-  endpoints as apiEndpoints,
+  CwlParticipationResponse,
+  ArmySetupResponse,
+  ArmySetupTimelineResponse,
+  ArmySetupRankHistoryResponse,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 
@@ -14,16 +38,32 @@ import { dispatchAdmin } from "./admin.js"
 import { dispatchAuthLifecycle } from "./auth-lifecycle.js"
 import { dispatchAppContentNotifications } from "./app-content-notifications.js"
 import { dispatchBotAdjacentRuntime } from "./bot-adjacent-runtime.js"
+import { dispatchBotWarPanel } from "./bot-war-panel.js"
+import { dispatchBotArmies } from "./bot-armies.js"
+import { dispatchBotClash } from "./bot-clash.js"
+import { dispatchBotLegendStats } from "./bot-legend-stats.js"
+import { dispatchBotPlayerSeason } from "./bot-player-season.js"
+import { dispatchBotPlayerIdentity } from "./bot-player-identity.js"
+import { dispatchBotPlayerHistory } from "./bot-player-history.js"
+import { dispatchBotActivity } from "./bot-activity.js"
+import { dispatchBotClanStats } from "./bot-clan-stats.js"
+import { dispatchBotUserPreferences } from "./bot-user-preferences.js"
+import { dispatchBotRoleRefresh } from "./bot-role-refresh.js"
+import { dispatchBotManualReminders } from "./bot-manual-reminders.js"
+import { dispatchGiveawayRuntime } from "./giveaway-dispatch.js"
+import { dispatchTicketRuntime } from "./persistent-runtime.js"
 import { dispatchBotRuntime } from "./bot-runtime.js"
+import { dispatchDashboardRosterConfiguration } from "./dashboard-roster-configuration.js"
 import { dispatchDashboardRoster } from "./dashboard-roster-runtime.js"
 import { dispatchDashboardRosterAIContext } from "./dashboard-roster-ai-context.js"
-import { dispatchDashboardRosterAIUsage } from "./dashboard-roster-ai-usage.js"
 import { dispatchPublicData } from "./public-data-runtime.js"
 import { dispatchPublicMetadata } from "./public-metadata-runtime.js"
 import { dispatchDashboardServer } from "./dashboard-server-runtime.js"
 import { dispatchDashboardMisc } from "./dashboard-misc-runtime.js"
 import { dispatchWarExports } from "./war-exports.js"
 import { dispatchMobilePersistence } from "./mobile-persistence.js"
+import { dispatchHomeLayout } from "./home-layout.js"
+import { dispatchDashboardAccess, guardDashboardScope } from "./dashboard-access.js"
 import { dispatchCdnUpload } from "./cdn-upload.js"
 import { dispatchMedia } from "./media-runtime.js"
 import { dispatchAnnouncementMutations } from "./announcement-mutations.js"
@@ -46,18 +86,20 @@ import { proxyRequest } from "./proxy.js"
 import { queryHomeActivity } from "./home.js"
 import { readBoundedJson } from "./request-body.js"
 import {
-  queryCwlStats,
   queryGroupedCounts,
+  queryClanMemberBins,
   queryGlobalCounts,
   queryRankedStats,
   queryWarStats,
-  parseStatsCwlQuery,
   parseStatsRankedQuery,
   parseStatsWarQuery,
 } from "./stats.js"
 import { dispatchLeagueAnalytics } from "./league-analytics.js"
+import { dispatchEsports } from "./esports.js"
 import { dispatchLegends } from "./legends.js"
 import { dispatchStatsHistory } from "./stats-history.js"
+import { queryCwlParticipation } from "./cwl-participation.js"
+import { queryArmySetupList, queryArmySetupTimeline, queryArmySetupRankHistory } from "./army-setups.js"
 import { dispatchLegacyPublic } from "./legacy-public.js"
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" }
@@ -92,8 +134,9 @@ export const failureResponse = (failure: ApiFailure, requestId: string): Respons
       return json({ code: "payload_too_large", message: failure.message, request_id: requestId }, 413)
     case "UnprocessableEntity":
       return json({ code: "unprocessable_entity", message: failure.message, request_id: requestId }, 422)
-    case "DatabaseFailure":
     case "UpstreamUnavailable":
+      return json({ code: "upstream_unavailable", message: failure.message, request_id: requestId }, 503)
+    case "DatabaseFailure":
       return json({ code: "upstream_unavailable", message: failure.message, request_id: requestId }, 503)
   }
 }
@@ -149,18 +192,6 @@ export const browserCors = (request: Request, response: Response, bindings: Work
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-const endpointMatchers = Object.values(apiEndpoints).map((endpoint) => ({
-  auth: endpoint.auth, method: endpoint.method,
-  pattern: new RegExp(`^${endpoint.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replaceAll(/:[A-Za-z0-9_]+/gu, "[^/]+")}$`, "u"),
-  path: endpoint.path,
-}))
-const isOpenPublicRequest = (request: Request) => {
-  const url = new URL(request.url)
-  const method = request.method === "OPTIONS" ? request.headers.get("access-control-request-method") ?? "GET" : request.method
-  const matches = endpointMatchers.filter((endpoint) => endpoint.method === method && endpoint.pattern.test(url.pathname))
-  return matches.length > 0 && matches.every((endpoint) => endpoint.auth === "public" &&
-    !endpoint.path.startsWith("/v2/auth/") && !endpoint.path.startsWith("/v2/billing/"))
-}
 const publicCors = (request: Request, response: Response): Response => {
   if (request.headers.get("origin") === null) return response
   const headers = new Headers(response.headers)
@@ -205,10 +236,27 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "OPTIONS") {
       return browserPreflight(request, bindings)
     }
+    const stepBudget = yield* dispatchAIStepBudgets(request,bindings.AI_USAGE_SECRET)
+    if(stepBudget)return stepBudget
+    yield* guardDashboardScope(request)
+    if (url.pathname.startsWith("/v2/billing/")) return new Response(null,{status:410})
+    const limitsRoute=/^\/v2\/server\/(\d+)\/limits$/u.exec(url.pathname)
+    if(request.method==="GET" && limitsRoute){
+      yield* (yield* ServerAuthorization).require(request,limitsRoute[1]!,{section:""})
+      return yield* encodeJson(ServerLimits,yield* readServerLimits(limitsRoute[1]!))
+    }
+    const taskProgress=yield* dispatchBotTaskProgress(request)
+    if(taskProgress!==undefined)return taskProgress
+    const moderationMedia=yield* dispatchBotModerationMedia(request,bindings)
+    if(moderationMedia!==undefined)return moderationMedia
+    const aiNoticeResponse=yield* dispatchAiNotice(request)
+    if(aiNoticeResponse!==undefined)return aiNoticeResponse
+    const dashboardAccessResponse=yield* dispatchDashboardAccess(request)
+    if(dashboardAccessResponse!==undefined)return dashboardAccessResponse
     const staticSections = staticMetadataSectionsForPath(url.pathname)
     if (staticSections.length > 0) yield* prepareStaticMetadata(bindings, staticSections)
     if (request.method === "GET" && url.pathname === "/v2/health") {
-      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: "0.1.0-rc.17" })
+      return yield* encodeJson(HealthResponse, { status: "ok", runtime: "cloudflare-worker", version: apiPackage.version })
     }
     if (request.method === "GET" && url.pathname === "/v2/app/config") {
       return yield* encodeJson(AppConfigResponse, yield* loadAppConfig)
@@ -231,11 +279,18 @@ export const route = (request: Request, bindings: WorkerBindings,
       return yield* encodeJson(StatsPerformanceResponse, yield* queryWarStats(query))
     }
     if (request.method === "GET" && url.pathname === "/v2/stats/cwl") {
-      const query = yield* parseStatsQuery(() => parseStatsCwlQuery(url.searchParams))
-      return yield* encodeJson(StatsPerformanceResponse, yield* queryCwlStats(query))
+      return yield* encodeJson(CwlParticipationResponse, yield* queryCwlParticipation(url.searchParams))
     }
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups")
+      return yield* encodeJson(ArmySetupResponse, yield* queryArmySetupList(url.searchParams))
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups/timeline")
+      return yield* encodeJson(ArmySetupTimelineResponse, yield* queryArmySetupTimeline(url.searchParams))
+    if (request.method === "GET" && url.pathname === "/v2/stats/army-setups/rank-history")
+      return yield* encodeJson(ArmySetupRankHistoryResponse, yield* queryArmySetupRankHistory(url.searchParams))
     const analyticsResponse = yield* dispatchLeagueAnalytics(request)
     if (analyticsResponse !== undefined) return analyticsResponse
+    const esportsResponse = yield* dispatchEsports(request)
+    if (esportsResponse !== undefined) return esportsResponse
     const legendResponse = yield* dispatchLegends(request)
     if (legendResponse !== undefined) return legendResponse
     const statsHistoryResponse = yield* dispatchStatsHistory(request)
@@ -261,6 +316,9 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (request.method === "GET" && url.pathname === "/v2/counts/clans/capital-leagues") {
       return yield* encodeJson(GroupedCountsResponse, yield* queryGroupedCounts("capital_league_id"))
     }
+    if (request.method === "GET" && url.pathname === "/v2/counts/clans/member-bins") {
+      return yield* encodeJson(ClanMemberBinsResponse, yield* queryClanMemberBins)
+    }
     if (url.pathname.startsWith("/proxy/v1/")) {
       const auth = yield* AuthIdentity
       const principal = yield* auth.requireUser(request)
@@ -280,6 +338,56 @@ export const route = (request: Request, bindings: WorkerBindings,
     // /links/:userId can interpret "shared" as a user ID.
     const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
     if (botAdjacentResponse !== undefined) return botAdjacentResponse
+    const botWarPanelResponse = yield* dispatchBotWarPanel(request, bindings)
+    if (botWarPanelResponse !== undefined) return botWarPanelResponse
+    const botArmyResponse = yield* dispatchBotArmies(request, bindings)
+    if (botArmyResponse !== undefined) return botArmyResponse
+    const botClashResponse = yield* dispatchBotClash(request, bindings)
+    if (botClashResponse !== undefined) return botClashResponse
+    const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
+    if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const roleMembersResponse = yield* dispatchBotRoleMembers(request, bindings)
+    if (roleMembersResponse) return roleMembersResponse
+    const botWarStatisticsResponse = yield* dispatchBotWarStatistics(request)
+    if (botWarStatisticsResponse !== undefined) return botWarStatisticsResponse
+    const botWarStatusResponse = yield* dispatchBotWarStatus(request)
+    if (botWarStatusResponse !== undefined) return botWarStatusResponse
+    const botSeasonSummaryResponse = yield* dispatchBotSeasonSummary(request)
+    if (botSeasonSummaryResponse !== undefined) return botSeasonSummaryResponse
+    const botPlayerProgressResponse = yield* dispatchBotPlayerProgress(request)
+    if (botPlayerProgressResponse !== undefined) return botPlayerProgressResponse
+    const botPlayerSeasonResponse = yield* dispatchBotPlayerSeason(request)
+    if (botPlayerSeasonResponse !== undefined) return botPlayerSeasonResponse
+    const botPlayerIdentityResponse = yield* dispatchBotPlayerIdentity(request,bindings)
+    if (botPlayerIdentityResponse !== undefined) return botPlayerIdentityResponse
+    const botPlayerHistoryResponse = yield* dispatchBotPlayerHistory(request)
+    if (botPlayerHistoryResponse !== undefined) return botPlayerHistoryResponse
+    const warEventsResponse=yield* dispatchClanWarEvents(request)
+    if(warEventsResponse!==undefined)return warEventsResponse
+    const userRostersResponse = yield* dispatchBotUserRosters(request)
+    if (userRostersResponse !== undefined) return userRostersResponse
+    const botStatusResponse = yield* dispatchBotStatus(request,bindings)
+    if (botStatusResponse !== undefined) return botStatusResponse
+    const capitalHistoryResponse=yield* dispatchBotCapitalTrophyHistory(request)
+    if(capitalHistoryResponse!==undefined)return capitalHistoryResponse
+    const graphTotalResponse=yield* dispatchBotGraphTotal(request)
+    if(graphTotalResponse!==undefined)return graphTotalResponse
+    const dailyGraphResponse = yield* dispatchBotDailyGraph(request)
+    if (dailyGraphResponse !== undefined) return dailyGraphResponse
+    const activityResponse=yield* dispatchBotActivity(request)
+    if(activityResponse!==undefined)return activityResponse
+    const botClanStatsResponse = yield* dispatchBotClanStats(request)
+    if (botClanStatsResponse !== undefined) return botClanStatsResponse
+    const preferenceResponse = yield* dispatchBotUserPreferences(request)
+    if (preferenceResponse) return preferenceResponse
+    const roleRefreshResponse = yield* dispatchBotRoleRefresh(request, bindings)
+    if (roleRefreshResponse !== undefined) return roleRefreshResponse
+    const botManualReminderResponse = yield* dispatchBotManualReminders(request)
+    const giveawayRuntimeResponse = yield* dispatchGiveawayRuntime(request, bindings)
+    if (giveawayRuntimeResponse !== undefined) return giveawayRuntimeResponse
+    const ticketRuntimeResponse = yield* dispatchTicketRuntime(request, bindings)
+    if (ticketRuntimeResponse !== undefined) return ticketRuntimeResponse
+    if (botManualReminderResponse !== undefined) return botManualReminderResponse
     const linkResponse = yield* dispatchLinkMutations(request, bindings)
     if (linkResponse !== undefined) return linkResponse
     const billingResponse = yield* dispatchBillingMutations(request, bindings)
@@ -306,14 +414,17 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (snapshotResponse !== undefined) return snapshotResponse
     const aiContextResponse = yield* dispatchDashboardRosterAIContext(request, bindings.AI_ROSTER_MAX_PROMPT_CHARS)
     if (aiContextResponse !== undefined) return aiContextResponse
-    const aiUsageResponse = yield* dispatchDashboardRosterAIUsage(request, bindings.AI_USAGE_SECRET)
-    if (aiUsageResponse !== undefined) return aiUsageResponse
+    if(request.method === "POST" && url.pathname === "/v2/roster/ai/usage") return new Response(null,{status:410})
+    const rosterConfigurationResponse = yield* dispatchDashboardRosterConfiguration(request)
+    if (rosterConfigurationResponse !== undefined) return rosterConfigurationResponse
     const rosterResponse = yield* dispatchDashboardRoster(request, bindings)
     if (rosterResponse !== undefined) return rosterResponse
     const miscResponse = yield* dispatchDashboardMisc(request, bindings)
     if (miscResponse !== undefined) return miscResponse
     const exportResponse = yield* dispatchWarExports(request)
     if (exportResponse !== undefined) return exportResponse
+    const homeLayoutResponse = yield* dispatchHomeLayout(request)
+    if (homeLayoutResponse !== undefined) return homeLayoutResponse
     const mobileResponse = yield* dispatchMobilePersistence(request, bindings)
     if (mobileResponse !== undefined) return mobileResponse
     const uploadResponse = yield* dispatchCdnUpload(request, bindings)

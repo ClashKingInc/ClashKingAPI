@@ -1,7 +1,7 @@
 import type { expoEndpoints } from "@clashking/api-contracts"
 import emailAddresses from "email-addresses"
 import { Context, Data, Effect, Layer } from "effect"
-import { SqlClient, SqlError } from "effect/unstable/sql"
+import { SqlClient, SqlError } from "effect/sql"
 import { AuthCrypto, type SessionKind } from "./auth-crypto.js"
 import { AuthSessions, emailAuthUser, requireSessionDevice, type AuthSession, type EmailAccount } from "./auth-sessions.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"

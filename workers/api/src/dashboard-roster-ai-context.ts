@@ -1,6 +1,8 @@
+import { readServerLimits, limitMessage } from "./server-limits.js"
+import { requireAiNotice } from "./ai-notice.js"
 import { dashboardEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, PayloadTooLarge, RateLimited } from "./errors.js"
@@ -21,10 +23,10 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
     Effect.catchTag("SchemaError", () => Effect.fail(new InvalidRequest({ message: "Request body failed schema validation" }))))
   const rosterIds = body.rosterIds.map((id) => id.toLowerCase())
   const viewId = body.viewId?.trim() || null
-  if (rosterIds.length < 1 || rosterIds.length > 25 || rosterIds.some((id) => !uuid.test(id))
+  if (rosterIds.length > 25 || rosterIds.some((id) => !uuid.test(id))
     || new Set(rosterIds).size !== rosterIds.length || viewId !== null && !uuid.test(viewId)
     || body.messages.length < 1 || body.messages.length > 30) {
-    return yield* new InvalidRequest({ message: "AI requests require 1 to 30 messages and 1 to 25 unique roster UUIDs, with a valid optional viewId" })
+    return yield* new InvalidRequest({ message: "AI requests require 1 to 30 messages and up to 25 unique roster UUIDs, with a valid optional viewId" })
   }
   const limit = Number(maxPromptChars)
   if (!Number.isSafeInteger(limit) || limit < 1000) return yield* new DatabaseFailure({ cause: "Invalid AI_ROSTER_MAX_PROMPT_CHARS", message: "Roster AI prompt limit is not configured" })
@@ -38,64 +40,43 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   }
   if (promptBytes > limit) return yield* new PayloadTooLarge({ message: "AI roster prompt is too large" })
   const principal = yield* (yield* AuthIdentity).requireUser(request)
+  yield* requireAiNotice(principal.userId)
   yield* (yield* ServerAuthorization).require(request, body.serverId, { section: "rosters", write: true })
   const sql = yield* SqlClient.SqlClient
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`
+    // Zero-token rows are pending admissions, not free capacity. Allow one
+    // active request per server/person; abandoned calls expire without a charge.
+    // This bounds concurrency without inventing estimated settled usage.
+    const pending = yield* sql`SELECT id FROM roster_ai_usage
+      WHERE total_tokens=0 AND created_at>now()-interval '10 minutes'
+        AND (server_id=${body.serverId} OR discord_user_id=${principal.userId}) LIMIT 1`
+    if (pending.length) return yield* new RateLimited({ message: "A roster AI request is already in progress", retryAfterSeconds: 30 })
     const identity = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord' FOR SHARE`
     if (identity.length !== 1) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })
     const rows = yield* sql<{ id: string; alias: string; clan_tag: string | null; revision: number; signup_questions: unknown; member_count: number }>`
       SELECT r.id::text, r.alias, r.clan_tag, r.revision::integer, r.signup_questions,
         (SELECT count(*)::integer FROM roster_members member WHERE member.roster_id = r.id) AS member_count
-      FROM rosters r WHERE r.server_id = ${body.serverId} AND r.id = ANY(${rosterIds}::uuid[]) ORDER BY r.id FOR SHARE
+      FROM rosters r WHERE r.server_id = ${body.serverId} AND (${rosterIds.length === 0} OR r.id = ANY(${rosterIds}::uuid[])) ORDER BY r.id LIMIT 25 FOR SHARE
     `
-    if (rows.length !== rosterIds.length) return yield* new InvalidRequest({ message: "One or more roster attachments do not belong to this server" })
-    const attachments = rosterIds.map((id) => {
+    if (rosterIds.length > 0 && rows.length !== rosterIds.length) return yield* new InvalidRequest({ message: "One or more roster attachments do not belong to this server" })
+    const attachments = (rosterIds.length === 0 ? rows.map(row => row.id) : rosterIds).map((id) => {
       const row = rows.find((candidate) => candidate.id === id)!
       return { rosterId: row.id, alias: row.alias, clanTag: row.clan_tag, revision: row.revision,
         signupQuestions: row.signup_questions, memberCount: row.member_count }
     })
     const view = viewId === null ? null : (yield* loadViews(sql, body.serverId, viewId))[0]
     if (view === undefined) return yield* new NotFound({ message: "Roster view not found" })
-    const spent = (yield* sql<{ server: number; global: number; user: number }>`
-      WITH monthly AS (SELECT usage.*, COALESCE((SELECT sum(amount_usd) FROM roster_ai_usage_credits credit WHERE credit.usage_id = usage.id), 0) AS credited
-        FROM roster_ai_usage usage WHERE usage.created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
-      SELECT COALESCE(sum(total_cost_usd) FILTER (WHERE server_id = ${body.serverId}), 0)::float8 AS server,
-        COALESCE(sum(GREATEST(total_cost_usd - credited, 0)), 0)::float8 AS global,
-        COALESCE(sum(total_cost_usd) FILTER (WHERE discord_user_id = ${principal.userId}), 0)::float8 AS user FROM monthly
-    `)[0]!
-    yield* sql`SELECT entitlement.user_id FROM subscription_roster_assignments assignment JOIN subscription_entitlements entitlement ON entitlement.user_id = assignment.user_id
-      WHERE assignment.server_id = ${body.serverId} ORDER BY entitlement.user_id FOR UPDATE OF entitlement, assignment`
-    const sponsors = yield* sql<{ user_id: string; monthly_limit: number; spent: number; remaining: number }>`
-      SELECT assignment.user_id, entitlement.roster_assistant_monthly_credit_usd::float8 AS monthly_limit,
-        COALESCE(spend.spent, 0)::float8 AS spent,
-        GREATEST(entitlement.roster_assistant_monthly_credit_usd - COALESCE(spend.spent, 0), 0)::float8 AS remaining
-      FROM subscription_roster_assignments assignment JOIN subscription_entitlements entitlement ON entitlement.user_id = assignment.user_id AND entitlement.active = true
-      LEFT JOIN LATERAL (SELECT sum(amount_usd) AS spent FROM roster_ai_usage_credits WHERE user_id = assignment.user_id
-        AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') spend ON true
-      WHERE assignment.server_id = ${body.serverId} ORDER BY assignment.user_id
-    `
-    const paidLimit = sponsors.reduce((sum, item) => sum + item.monthly_limit, 0)
-    const paidSpent = sponsors.reduce((sum, item) => sum + Math.min(item.spent, item.monthly_limit), 0)
-    const paidRemaining = sponsors.reduce((sum, item) => sum + item.remaining, 0)
-    const now = new Date(), resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
-    const exhausted = sponsors.length > 0 ? paidRemaining <= 0 : spent.server >= 0.05 || spent.global >= 10
-    if (exhausted) return yield* new RateLimited({ message: sponsors.length > 0 ? "This server's monthly roster assistant credit has been used"
-      : spent.server >= 0.05 ? "This server has used its monthly roster AI budget" : "The monthly free roster AI budget has been used",
-    retryAfterSeconds: Math.max(1, Math.ceil((resetsAt.getTime() - now.getTime()) / 1000)) })
+    const limits=yield* readServerLimits(body.serverId)
+    if(limits.aiSpentUsd+limits.aiReservedUsd>=limits.aiMonthlyLimitUsd)return yield* new RateLimited({message:limitMessage("Monthly AI spend"),retryAfterSeconds:60})
     const requestId = crypto.randomUUID()
-    const response = yield* Schema.encodeUnknownEffect(endpoint.response)({ requestId, model: "gpt-5.6-luna",
-      budget: { serverSpentUsd: spent.server, serverLimitUsd: 0.05, globalSpentUsd: spent.global, globalLimitUsd: 10,
-        userSpentUsd: spent.user, userLimitUsd: 0, paidSpentUsd: paidSpent, paidLimitUsd: paidLimit, paidRemainingUsd: paidRemaining,
-        usesPaidPool: sponsors.length > 0, resetsAt: resetsAt.toISOString() },
+    const response = yield* Schema.encodeUnknownEffect(endpoint.response)({ requestId, model: "gpt-6-luna",
+      budget: { serverSpentUsd:limits.aiSpentUsd, serverReservedUsd:limits.aiReservedUsd, serverLimitUsd:limits.aiMonthlyLimitUsd, resetsAt:limits.resetsAt },
       context: { attachments, metrics: rosterMetrics, currentView: view === null ? null : viewJson(view) },
     }).pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Roster AI context failed response encoding" })))
     // Preserve zero-cost authorization: this records admission, not an estimated charge.
     yield* sql`INSERT INTO roster_ai_usage (id, server_id, roster_id, view_id, discord_user_id, operation, provider, model)
-      VALUES (${requestId}, ${body.serverId}, ${rosterIds[0]!}, ${viewId}, ${principal.userId}, 'view_or_membership_proposal', 'openai', 'gpt-5.6-luna')`
-    for (const [position, sponsor] of sponsors.entries()) {
-      if (sponsor.remaining > 0) yield* sql`INSERT INTO roster_ai_usage_sponsors (usage_id, user_id, position) VALUES (${requestId}, ${sponsor.user_id}, ${position})`
-    }
+      VALUES (${requestId}, ${body.serverId}, ${rosterIds[0] ?? null}, ${viewId}, ${principal.userId}, 'view_or_membership_proposal', 'openai', 'gpt-6-luna')`
     return response
   })).pipe(Effect.mapError((cause) => cause instanceof Forbidden || cause instanceof InvalidRequest || cause instanceof NotFound
     || cause instanceof RateLimited || cause instanceof DatabaseFailure ? cause : new DatabaseFailure({ cause, message: "Roster AI authorization failed" })))

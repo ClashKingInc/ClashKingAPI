@@ -1,6 +1,6 @@
 import type { AuthUser } from "@clashking/api-contracts"
 import { Context, Data, Effect, Layer } from "effect"
-import { SqlClient, SqlError } from "effect/unstable/sql"
+import { SqlClient, SqlError } from "effect/sql"
 
 import { AuthCrypto, type SessionKind, type SessionTokens } from "./auth-crypto.js"
 import { DatabaseFailure, InvalidRequest, Unauthenticated, type ApiFailure } from "./errors.js"
@@ -100,6 +100,8 @@ export class AuthSessions extends Context.Service<AuthSessions, {
         const tokenHash = yield* auth.tokenHash(token)
         yield* database(sql`DELETE FROM auth_refresh_tokens WHERE token_hash = ${tokenHash}
           AND user_id = ${claims.userId} AND device_id = ${claims.deviceId}`)
+        yield* database(sql`UPDATE dashboard_scoped_sessions SET revoked_at=now()
+          WHERE user_id=${claims.userId} AND device_id=${claims.deviceId} AND revoked_at IS NULL`)
       }),
     })
   }))

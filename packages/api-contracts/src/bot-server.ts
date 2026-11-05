@@ -99,6 +99,7 @@ const RosterQuestionnaire = Schema.Struct({
 })
 const RosterViewSort = Schema.Struct({ columnId: Schema.String, direction: Schema.Literals(["asc", "desc"]) })
 const RosterSummary = Schema.Struct({
+  requireVerified: Schema.optionalKey(Schema.Boolean),
   minTownhall: Schema.NullOr(Schema.Number),
   maxTownhall: Schema.NullOr(Schema.Number),
   databaseId: OptionalString,
@@ -120,6 +121,8 @@ const RosterSummary = Schema.Struct({
   updatedAt: Schema.String,
 })
 const RosterMember = Schema.Struct({
+  memberGroupId: Schema.NullOr(Schema.String),
+  memberGroupName: Schema.NullOr(Schema.String),
   playerTag: Schema.String,
   playerName: Schema.String,
   clanTag: Schema.NullOr(Schema.String),

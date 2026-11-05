@@ -4,6 +4,8 @@ import { randomBytes } from "node:crypto"
 const service = "ing.clashking.effect-rewrite.local-api"
 const account = "local-signing-and-encryption-v1"
 const discordAccount = "discord-oauth-v1"
+const betaDiscordAccount = "discord-beta-oauth-v1"
+export const betaDiscordApplicationId = "808566437199216691"
 export const localSecretNames = ["DATA_ENCRYPTION_KEY", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "API_BOT_TOKEN", "AI_USAGE_SECRET", "STRIPE_WEBHOOK_SECRET"]
 export function loadLocalApiSecrets({ environment = process.env, platform = process.platform } = {}) {
   const explicit = Object.fromEntries(localSecretNames.map(name => [name, environment[`CLASHKING_LOCAL_${name}`]]))
@@ -63,4 +65,32 @@ export function loadLocalDiscordCredentials({ environment = process.env, platfor
   if (!/^\d+$/u.test(credentials?.clientId ?? "") || typeof credentials?.clientSecret !== "string" || credentials.clientSecret.length === 0 ||
       typeof (credentials.botToken ?? "") !== "string") throw new Error("Invalid local Discord Keychain item")
   return { clientId: credentials.clientId, clientSecret: credentials.clientSecret, botToken: credentials.botToken ?? "" }
+}
+
+export function loadLocalBetaDiscordCredentials({ environment = process.env, platform = process.platform } = {}) {
+  const explicit = {
+    clientId: environment.CLASHKING_LOCAL_BETA_DISCORD_CLIENT_ID,
+    clientSecret: environment.CLASHKING_LOCAL_BETA_DISCORD_CLIENT_SECRET,
+    botToken: environment.CLASHKING_LOCAL_BETA_DISCORD_BOT_TOKEN,
+  }
+  if (Object.values(explicit).some((value) => value !== undefined)) {
+    if (explicit.clientId !== betaDiscordApplicationId || !(explicit.clientSecret ?? "").trim() || !(explicit.botToken ?? "").trim()) {
+      throw new Error(`Provide the complete beta Discord credential set for application ${betaDiscordApplicationId}`)
+    }
+    return explicit
+  }
+  if (platform !== "darwin") throw new Error("Provide the complete beta Discord credential set on this platform")
+  let value
+  try {
+    value = execFileSync("/usr/bin/security", ["find-generic-password", "-s", service, "-a", betaDiscordAccount, "-w"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+  } catch {
+    throw new Error(`Beta Discord credentials are missing from Keychain account ${betaDiscordAccount}; production credentials will not be used`)
+  }
+  let credentials
+  try { credentials = JSON.parse(value) }
+  catch { throw new Error("Invalid beta Discord Keychain item") }
+  if (credentials?.clientId !== betaDiscordApplicationId || typeof credentials?.clientSecret !== "string" || !credentials.clientSecret.trim() ||
+      typeof credentials?.botToken !== "string" || !credentials.botToken.trim()) throw new Error("Invalid beta Discord Keychain item")
+  return { clientId: credentials.clientId, clientSecret: credentials.clientSecret, botToken: credentials.botToken }
 }

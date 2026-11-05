@@ -162,7 +162,7 @@ export const DashboardBillingAssignmentEndpoint = defineEndpoint({
 
 export const DashboardCocAccountRequest = Schema.Struct({
   player_tag: Schema.String,
-  api_token: Schema.optionalKey(Schema.String),
+  api_token: Schema.String,
 })
 
 export const DashboardLinkedPlayer = Schema.Struct({
@@ -179,6 +179,8 @@ export const DashboardLinkResponse = Schema.Struct({
 })
 
 export const DashboardLinkedAccount = Schema.Struct({
+  player_name: Schema.optionalKey(Schema.String),
+  town_hall: Schema.optionalKey(Schema.Number),
   user_id: Schema.String,
   player_tag: Schema.String,
   order_index: Schema.Number,

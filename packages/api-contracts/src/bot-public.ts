@@ -116,13 +116,18 @@ const ClanRankingCategory = Schema.Struct({
   points: Schema.Number,
   placements: Schema.Array(ClanRankingPlacement),
 })
-const ClanRankingsResponse = Schema.Struct({
+export const ClanRankingsResponse = Schema.Struct({
   name: Schema.NullOr(Schema.String),
   tag: Schema.String,
   badge: Schema.NullOr(Schema.String),
   homeVillage: ClanRankingCategory,
   builderBase: ClanRankingCategory,
   clanCapital: ClanRankingCategory,
+  donations: Schema.optionalKey(ClanRankingCategory),
+  donationsReceived: Schema.optionalKey(ClanRankingCategory),
+  warWins: Schema.optionalKey(ClanRankingCategory),
+  warWinStreak: Schema.optionalKey(ClanRankingCategory),
+  capitalGold: Schema.optionalKey(ClanRankingCategory),
 })
 
 const PlayerTimer = Schema.Struct({

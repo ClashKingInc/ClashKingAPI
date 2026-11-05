@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
 import { correctTag } from "./home.js"
 import { publicTag } from "./public-war.js"
@@ -8,6 +8,19 @@ export { parseHistoryTime } from "./public-time.js"
 
 const databaseFailure = (cause: unknown) => new DatabaseFailure({ cause, message: "Player history query failed" })
 export const isoTimestamp = (value: Date | string) => new Date(value).toISOString()
+export const queryPlayerLastActivity = (rawTag: string, userId: string) => Effect.gen(function* () {
+  const tag = yield* publicTag(rawTag)
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql<{ seen_at: Date | string | null }>`SELECT observed.seen_at
+    FROM player_links link
+    LEFT JOIN LATERAL (
+      SELECT seen_at FROM player_online_events
+      WHERE tag = link.tag ORDER BY seen_at DESC LIMIT 1
+    ) observed ON true
+    WHERE link.user_id = ${userId} AND link.tag = ${tag} AND link.is_verified
+    LIMIT 1`.pipe(Effect.mapError(databaseFailure))
+  return { lastObservedAt: rows[0]?.seen_at ? isoTimestamp(rows[0].seen_at) : null }
+})
 export const publicHistoryOptions = (query: URLSearchParams, defaultLimit = 50) => Effect.gen(function* () {
   const limit = query.has("limit") ? Number(query.get("limit")) : defaultLimit
   if (!Number.isInteger(limit) || limit < 1) return yield* new InvalidRequest({ message: "Invalid limit" })

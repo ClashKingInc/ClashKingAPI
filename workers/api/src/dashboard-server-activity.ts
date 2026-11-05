@@ -1,12 +1,13 @@
 import { BotServerDonationsLeaderboardEndpoint, BotServerLegendsLeaderboardEndpoint, BotServerWarLeaderboardEndpoint, DecimalSnowflake, type EndpointResponse } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { WorkerEnvironment } from "./environment.js"
 import { DatabaseFailure, InvalidRequest, NotFound, type ApiFailure } from "./errors.js"
 import { trophySeason } from "./public-history.js"
 import { forEachPlayerWar } from "./war-archive.js"
 import { archiveAttackFacts } from "./war-archive-model.js"
+import { lookupStaticItem, prepareStaticMetadata } from "./static-metadata.js"
 
 // The separately requested CWL recipient mutation remains approval-blocked.
 export const dashboardServerActivityOperationIds = ["botServerWarLeaderboard", "botServerDonationsLeaderboard", "botServerLegendsLeaderboard", "botServerClanGamesLeaderboard"] as const
@@ -102,8 +103,12 @@ export const executeDashboardServerActivity = (operation: DashboardServerOperati
   }
   if (operation.endpoint.operationId === "botServerLegendsLeaderboard") {
     const query = yield* decode(BotServerLegendsLeaderboardEndpoint.query, operation.query)
+    yield* prepareStaticMetadata(operation.bindings, ["league_tiers"])
     const { players, names } = yield* population(serverId)
-    const items = players.filter((player) => player.league_id === 29000022).sort((a, b) => b.trophies - a.trophies)
+    // Ranked-era Legend tiers use static IDs, not the retired 29000022 ID.
+    // Retain the old ID for legacy snapshots while recognizing all live tiers.
+    const items = players.filter((player) => player.league_id === 29000022 ||
+      lookupStaticItem("league_tiers", player.league_id ?? 0)?.name.startsWith("Legend League")).sort((a, b) => b.trophies - a.trophies)
       .slice(0, limitOf(query.limit)).map((player) => ({ ...identity(player, names), trophies: player.trophies }))
     return { server_id: serverId, items, total: items.length }
   }

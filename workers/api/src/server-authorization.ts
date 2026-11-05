@@ -1,6 +1,6 @@
 import { DecimalSnowflake } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
@@ -168,7 +168,7 @@ export class ServerAuthorization extends Context.Service<
       const credentials = yield* DiscordCredentials
       const bindings = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment))
 
-      const resolve = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, freshOauthManager = false) {
+      const resolveUnscoped = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, freshOauthManager = false) {
         yield* Schema.decodeUnknownEffect(DecimalSnowflake)(serverId).pipe(
           Effect.mapError(() => new InvalidRequest({ message: "server_id must be a decimal-string Discord snowflake" })),
         )
@@ -199,6 +199,20 @@ export class ServerAuthorization extends Context.Service<
           Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Dashboard role grants are unavailable" })),
         )
         return { principal, manager: false, sections: Object.fromEntries(grants.map((grant) => [grant.section, grant.access_level])) }
+      })
+
+      const resolve = Effect.fn("ServerAuthorization.scopedResolve")(function* (request: Request,serverId:string,freshOauthManager=false) {
+        const access=yield* resolveUnscoped(request,serverId,freshOauthManager)
+        const scope=access.principal.kind==="user"?access.principal.dashboardScope:undefined
+        if(!scope)return access
+        if(scope.serverId!==serverId)return yield* new Forbidden({message:"Dashboard session is limited to another server"})
+        if(scope.permissions.manager)return access
+        const sections:Record<string,"view"|"manage">={}
+        for(const [section,ceiling]of Object.entries(scope.permissions.sections)){
+          const current=access.manager?"manage":(access.sections as Readonly<Record<string,"view"|"manage">>)[section]
+          if(current)sections[section]=current==="manage"&&ceiling==="manage"?"manage":"view"
+        }
+        return {...access,manager:false,sections}
       })
 
       const require = Effect.fn("ServerAuthorization.require")(function* (

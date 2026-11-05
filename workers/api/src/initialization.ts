@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { InitializationEndpoint, InitializationResponse, InitializationPlayer } from "../../../packages/api-contracts/src/initialization.js"
 import { ProxyPlayerResponse, ProxyClanResponse, ProxyCapitalRaidSeasonsResponse, ProxyWarlogResponse } from "../../../packages/api-contracts/src/proxy.js"
 import { AuthIdentity } from "./auth.js"

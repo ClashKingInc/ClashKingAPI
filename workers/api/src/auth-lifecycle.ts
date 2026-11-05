@@ -1,6 +1,6 @@
 import { expoEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AuthIdentity } from "./auth.js"
 import { AuthProfiles } from "./auth-profiles.js"
@@ -22,6 +22,8 @@ export const authLifecycleRuntimeRoutes = [
   { method: "POST", path: "/v2/auth/discord" },
   { method: "POST", path: "/v2/auth/web/discord" },
   { method: "GET", path: "/v2/auth/me" },
+  { method: "GET", path: "/v2/auth/avatar" },
+  { method: "PUT", path: "/v2/auth/avatar" },
   { method: "POST", path: "/v2/auth/register" },
   { method: "POST", path: "/v2/auth/resend-verification" },
   { method: "POST", path: "/v2/auth/verify-email-code" },
@@ -37,6 +39,13 @@ export function dispatchAuthLifecycle(
   return Effect.gen(function* () {
     const path = new URL(request.url).pathname
     if (!authLifecycleRuntimeRoutes.some((route) => route.path === path && route.method === request.method)) return undefined
+    if (path === "/v2/auth/avatar") {
+      const identity = yield* AuthIdentity
+      const principal = yield* identity.requireUser(request)
+      const profiles = yield* AuthProfiles
+      const input = request.method === "PUT" ? yield* decodeBody(request, expoEndpoints.setAccountAvatar.body) : undefined
+      return Response.json(yield* profiles.avatar(principal, input?.avatar_id), { headers: { "cache-control": "no-store" } })
+    }
     if (path === "/v2/auth/me") {
       const identity = yield* AuthIdentity
       const principal = yield* identity.requireUser(request)

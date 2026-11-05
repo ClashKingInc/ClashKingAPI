@@ -11,8 +11,19 @@
   },
   "rules": [{ "type": "Data", "globs": ["**/*.zdict"], "fallthrough": true }],
   "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
   "preview_urls": true,
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "TICKET_RUNTIME", "class_name": "TicketRuntimeCoordinator" },
+      { "name": "RUNTIME_RECOVERY", "class_name": "RuntimeRecoveryCoordinator" }
+    ]
+  },
+  "migrations": [
+    { "tag": "ticket-runtime-v1", "new_sqlite_classes": ["TicketRuntimeCoordinator"] },
+    { "tag": "ticket-recovery-v1", "new_sqlite_classes": ["RuntimeRecoveryCoordinator"] }
+  ],
   "analytics_engine_datasets": [
     { "binding": "API_REQUEST_TIMINGS", "dataset": "clashking_api_request_timings" }
   ],
@@ -108,9 +119,9 @@
     "ELASTICSEARCH_PLAYERS_ALIAS": "clashking_players",
     "ELASTICSEARCH_CLANS_ALIAS": "clashking_clans",
     "DISCORD_API_ORIGIN": "https://discord.com/api/v10",
-    "DISCORD_PUBLIC_KEY": "",
-    "DISCORD_APPLICATION_ID": "",
-    "DISCORD_MAIN_APPLICATION_ID": "",
+    "DISCORD_PUBLIC_KEY": "a35e4dbf82680e2be768f2ca1590e05f9edc7f65ef5f45baf8de381e30058c9d",
+    "DISCORD_APPLICATION_ID": "824653933347209227",
+    "DISCORD_MAIN_APPLICATION_ID": "824653933347209227",
     "DISCORD_TICKET_NOTIFICATIONS_ENABLED": "false",
     "DISCORD_REDIRECT_URI": "https://dash.clashk.ing/auth/callback",
     "SMTP_HOST": "smtp.gmail.com",

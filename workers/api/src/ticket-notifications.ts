@@ -1,7 +1,7 @@
 import { DecimalSnowflake } from "@clashking/api-contracts"
 import { RuntimeUUID, TicketMessageEventEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { AuthIdentity } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
 import type { DeferredRuntimeBindings, WorkerBindings } from "./environment.js"

@@ -29,6 +29,8 @@ export const TranscriptMessage = Schema.Struct({
   author: Schema.Struct({ id: Id, name: Text, displayName: Text, avatarUrl: Schema.NullOr(Text), bot: Schema.Boolean }),
   content: Text, type: Schema.Number.check(Schema.isInt()), pinned: Schema.Boolean,
   referencedMessageId: Schema.NullOr(Id),
+  // Freeze mention labels with the conversation, including users who never spoke.
+  mentions: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Id, displayName: Text })).check(Schema.isMaxLength(100))),
   // Preserve Discord's structured payloads; a future viewer must render them
   // as data and never inject strings as markup or fetch arbitrary URLs server-side.
   embeds: Schema.Array(Schema.JsonObject).check(Schema.isMaxLength(10)),

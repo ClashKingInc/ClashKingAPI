@@ -26,7 +26,17 @@ const NotFound = [{ status: 404, body: ErrorResponse }] as const
 export const LeaderboardHistoryEndpoint = defineEndpoint({ operationId: "getExpoLeaderboardHistory", method: "GET", path: "/v2/leaderboard/history/:leaderboardType/:locationId/:date", auth: "public", summary: "Get a historical leaderboard snapshot", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ leaderboardType: Schema.String, locationId: Schema.String, date: Schema.String }), query: NoQuery, response: LeaderboardHistoryResponse, responseMode: "json", successStatus: 200, errors: NotFound })
 export const LeaderboardTownhallsEndpoint = defineEndpoint({ operationId: "getExpoTownhallLeaderboard", method: "GET", path: "/v2/leaderboard/townhalls/:townhallLevel", auth: "public", summary: "Get the town hall leaderboard", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ townhallLevel: Schema.Number }), query: LimitQuery, response: PlayerLeaderboardResponse, responseMode: "json", successStatus: 200 })
 export const LeaderboardLeagueEndpoint = defineEndpoint({ operationId: "getExpoLeagueLeaderboard", method: "GET", path: "/v2/leaderboard/league/:leagueTierId", auth: "public", summary: "Get the ranked league leaderboard", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ leagueTierId: Schema.Number }), query: LimitQuery, response: PlayerLeaderboardResponse, responseMode: "json", successStatus: 200 })
-const clanLeaderboardEndpoint = (operationId: string, path: "/v2/leaderboard/:locationId/clan/donations" | "/v2/leaderboard/:locationId/clan/war-wins") => defineEndpoint({ operationId, method: "GET", path, auth: "public", summary: operationId, body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ locationId: Schema.Number }), query: LimitQuery, response: ClanLeaderboardResponse, responseMode: "json", successStatus: 200 })
+const clanLeaderboardEndpoint = (operationId: string, path: "/v2/leaderboard/:locationId/clan/donations" | "/v2/leaderboard/:locationId/clan/war-wins") => defineEndpoint({ operationId, method: "GET", path, auth: "public", summary: operationId, body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ locationId: Schema.String }), query: LimitQuery, response: ClanLeaderboardResponse, responseMode: "json", successStatus: 200 })
 export const LeaderboardClanDonationsEndpoint = clanLeaderboardEndpoint("getExpoClanDonationsLeaderboard", "/v2/leaderboard/:locationId/clan/donations")
 export const LeaderboardClanWarWinsEndpoint = clanLeaderboardEndpoint("getExpoClanWarWinsLeaderboard", "/v2/leaderboard/:locationId/clan/war-wins")
 export const LeaderboardClanWinStreakEndpoint = defineEndpoint({ operationId: "getExpoClanWinStreakLeaderboard", method: "GET", path: "/v2/leaderboard/clan/win-streak", auth: "public", summary: "Get the clan win streak leaderboard", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({}), query: LimitQuery, response: ClanLeaderboardResponse, responseMode: "json", successStatus: 200 })
+
+export const WarTripleStreakResponse = Schema.Struct({
+  townhall_level: Schema.Number,
+  items: Schema.Array(Schema.Struct({
+    tag: Schema.String, name: Schema.String, townhall_level: Schema.Number,
+    streak: Schema.Number, last_attack_time: Schema.String, clan_tag: Schema.String, rank: Schema.Number,
+  })),
+  count: Schema.Number,
+})
+export const WarTripleStreakEndpoint = defineEndpoint({ operationId: "getWarTripleStreakLeaderboard", method: "GET", path: "/v2/leaderboard/war-triples/:townhallLevel", auth: "public", summary: "Get regular-war triple streaks for a Town Hall", body: NoBody, bodyMode: "none", pathParams: Schema.Struct({ townhallLevel: Schema.Number }), query: LimitQuery, response: WarTripleStreakResponse, responseMode: "json", successStatus: 200 })

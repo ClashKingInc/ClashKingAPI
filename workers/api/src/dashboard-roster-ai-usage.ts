@@ -1,6 +1,6 @@
 import { dashboardEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { sameSecret } from "./auth.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, Unauthenticated } from "./errors.js"
@@ -9,6 +9,23 @@ import { readBoundedJson } from "./request-body.js"
 export const dashboardRosterAIUsageRoutes = [{ method: "POST", path: "/v2/roster/ai/usage" }] as const
 const fields = ["inputTokens", "cachedInputTokens", "cacheWriteTokens", "outputTokens", "reasoningTokens"] as const
 const money = (units: bigint) => `${units / 100_000_000n}.${String(units % 100_000_000n).padStart(8, "0")}`
+
+/** Standard Responses pricing, accumulated in nanodollars to preserve $0.125/M cache writes. */
+export const rosterAIUsageCost = (model: "gpt-5.6-luna" | "gpt-6-luna", step: {
+  inputTokens: number; cachedInputTokens: number; cacheWriteTokens: number; outputTokens: number
+}) => {
+  const long = step.inputTokens > 272_000
+  const luna6 = model === "gpt-6-luna"
+  const input = luna6 ? (long ? 200n : 100n) : (long ? 400n : 200n)
+  const cached = luna6 ? (long ? 20n : 10n) : (long ? 40n : 20n)
+  const write = luna6 ? (long ? 250n : 125n) : (long ? 500n : 250n)
+  const output = luna6 ? (long ? 750n : 500n) : (long ? 1800n : 1200n)
+  return {
+    inputNanoUsd: BigInt(step.inputTokens - step.cachedInputTokens - step.cacheWriteTokens) * input
+      + BigInt(step.cachedInputTokens) * cached + BigInt(step.cacheWriteTokens) * write,
+    outputNanoUsd: BigInt(step.outputTokens) * output,
+  }
+}
 
 export const dispatchDashboardRosterAIUsage = (request: Request, meteringSecret: string) => Effect.gen(function* () {
   if (request.method !== "POST" || new URL(request.url).pathname !== "/v2/roster/ai/usage") return undefined
@@ -38,13 +55,13 @@ export const dispatchDashboardRosterAIUsage = (request: Request, meteringSecret:
       return yield* new InvalidRequest({ message: "Invalid roster AI token usage" })
     }
     for (const key of fields) total[key] += step[key]
-    const long = step.inputTokens > 272_000
-    inputUnits += BigInt(step.inputTokens - step.cachedInputTokens - step.cacheWriteTokens) * (long ? 40n : 20n)
-      + BigInt(step.cachedInputTokens) * (long ? 4n : 2n) + BigInt(step.cacheWriteTokens) * (long ? 50n : 25n)
-    outputUnits += BigInt(step.outputTokens) * (long ? 180n : 120n)
+    const cost = rosterAIUsageCost(body.model, step)
+    inputUnits += cost.inputNanoUsd
+    outputUnits += cost.outputNanoUsd
   }
   if (fields.some((key) => total[key] !== body.usage[key])) return yield* new InvalidRequest({ message: "Usage totals must equal the sum of steps" })
-  const inputCost = money(inputUnits), outputCost = money(outputUnits), totalCost = money(inputUnits + outputUnits)
+  const inputStored = (inputUnits + 5n) / 10n, outputStored = (outputUnits + 5n) / 10n
+  const inputCost = money(inputStored), outputCost = money(outputStored), totalCost = money(inputStored + outputStored)
   const sql = yield* SqlClient.SqlClient
   yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`

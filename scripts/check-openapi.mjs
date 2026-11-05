@@ -27,8 +27,7 @@ for (const [path, methods] of Object.entries(document.paths)) for (const [method
   }
   operations++
 }
-if (!document.paths["/v2/stats/armies"]?.get || document.paths["/v2/stats/armies"]?.post) throw new Error("Army search must be canonical GET only")
-for (const path of ["/v2/stats/armies", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"]) {
+for (const path of ["/v2/stats/army-setups", "/v2/stats/ranked", "/v2/stats/war", "/v2/stats/cwl"]) {
   if (!document.paths[path]?.get || document.paths[path]?.post) throw new Error(`Statistics read must be canonical GET only: ${path}`)
 }
 if (!document.paths["/v2/home/activity"]?.post) throw new Error("Missing canonical POST /v2/home/activity")

@@ -1,7 +1,7 @@
 import type { EndpointResponse } from "@clashking/api-contracts"
 import { RosterOperationAdvanceEndpoint, RuntimeUUID } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { Conflict, DatabaseFailure, Forbidden, NotFound, type ApiFailure } from "./errors.js"
 import { advanceRosterForm, renderRosterForm, RosterFormCursorSchema } from "./roster-interaction-forms.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"

@@ -1,6 +1,6 @@
 import { GiveawayPublicationPayload, type GiveawayPublicationClaimEndpoint, type GiveawayPublicationCompleteEndpoint } from "@clashking/api-contracts/deferred-runtime"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound } from "./errors.js"
 import { resolveEndingGiveaway } from "./giveaway-outcomes.js"
 
@@ -17,7 +17,8 @@ const databaseFailure = (cause?: unknown) => new DatabaseFailure({ cause, messag
 
 /** Must run inside the caller's giveaway row transaction (also used by reroll). */
 export const enqueueGiveawayPublication = (giveawayId: string, kind: Kind,
-  reroll?: { readonly operationId: string; readonly winnerIds: readonly string[]; readonly replacedIds: readonly string[]; readonly actorLabel: string; readonly occurredAt: string },
+  reroll?: { readonly operationId: string; readonly winnerIds: readonly string[]; readonly replacedIds: readonly string[]; readonly actorLabel: string; readonly reason?: string; readonly occurredAt: string },
+  mediaOrigin = "https://api.clashk.ing",
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const identity = (yield* sql<{ server_id: string; channel_id: string | null; start_time: string; updated_at: string; message_id: string | null; status: string }>`
@@ -41,12 +42,12 @@ export const enqueueGiveawayPublication = (giveawayId: string, kind: Kind,
       'giveaway',jsonb_build_object('id',id,'server_id',server_id,'channel_id',channel_id,'message_id',message_id,
         'prize',prize,'status',status,'end_time',end_time,'winners',winners,'mentions',to_jsonb(mentions),
         'text_above_embed',text_above_embed,'text_in_embed',text_in_embed,'text_on_end',text_on_end,
-        'image_url',CASE WHEN image_url ~ '^[a-z0-9_-]+[.](png|jpg|jpeg|gif|webp)$' THEN 'https://api.clashk.ing/v2/media/giveaway_' || image_url ELSE NULL END,
+        'image_url',CASE WHEN image_url ~ '^[a-z0-9_-]+[.](png|jpg|jpeg|gif|webp)$' THEN ${mediaOrigin + "/v2/media/giveaway_"}::text || image_url ELSE NULL END,
         'entry_count',jsonb_array_length(entries)),
       'winner_ids',CASE WHEN ${kind}='reroll' THEN ${JSON.stringify(reroll?.winnerIds ?? [])}::jsonb
         WHEN ${kind}='end' THEN COALESCE((SELECT jsonb_agg(winner->>'user_id') FROM jsonb_array_elements(winners_list) winner
           WHERE COALESCE(winner->>'status','winner')='winner'),'[]'::jsonb) ELSE '[]'::jsonb END,
-      'replaced_user_ids',${JSON.stringify(reroll?.replacedIds ?? [])}::jsonb,'reason',${kind === "reroll" ? "dashboard_reroll" : ""}::text,
+      'replaced_user_ids',${JSON.stringify(reroll?.replacedIds ?? [])}::jsonb,'reason',${kind === "reroll" ? reroll?.reason ?? "No reason provided" : ""}::text,
       'actor_label',${reroll?.actorLabel ?? ""}::text) AS value FROM giveaways WHERE id=${giveawayId}
     ) SELECT CASE WHEN octet_length(value::text)<=262144 THEN value ELSE NULL END AS payload,
       octet_length(value::text) AS bytes FROM snapshot`)[0]
@@ -61,13 +62,13 @@ export const enqueueGiveawayPublication = (giveawayId: string, kind: Kind,
   return effectId
 })
 
-export const prepareGiveawayPublication = (giveawayId: string, kind: "start" | "update" | "end") => Effect.gen(function* () {
+export const prepareGiveawayPublication = (giveawayId: string, kind: "start" | "update" | "end", mediaOrigin?: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   if (kind === "end" && !(yield* resolveEndingGiveaway(giveawayId))) return { outcome: "pending" as const }
   return yield* sql.withTransaction(Effect.gen(function* () {
     const row = (yield* sql<{ status: string; due: boolean }>`SELECT status,
       CASE WHEN ${kind}='end' THEN end_time <= clock_timestamp() ELSE start_time <= clock_timestamp() END AS due
-      FROM giveaways WHERE id=${giveawayId} FOR UPDATE`)[0]
+      FROM giveaways WHERE id=${giveawayId} AND NOT disabled FOR UPDATE`)[0]
     if (!row) return yield* new NotFound({ message: "Giveaway not found" })
     if (!row.due || (kind === "end" ? row.status !== "ended" : row.status !== "ongoing")) return yield* new Conflict({ message: "Giveaway is not ready for this publication" })
     // Once start succeeded, return the same receipt instead of treating its new
@@ -78,7 +79,7 @@ export const prepareGiveawayPublication = (giveawayId: string, kind: "start" | "
         WHERE p.giveaway_id=${giveawayId} AND p.kind='start' LIMIT 1`)[0]
       if (prior) return { outcome: "ready" as const, effectId: prior.effect_id }
     }
-    return { outcome: "ready" as const, effectId: yield* enqueueGiveawayPublication(giveawayId,kind) }
+    return { outcome: "ready" as const, effectId: yield* enqueueGiveawayPublication(giveawayId,kind,undefined,mediaOrigin) }
   }))
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))
 
@@ -104,7 +105,7 @@ export const claimGiveawayPublication = (giveawayId: string, effectId: string): 
     const valid = (yield* sql<{ valid: boolean }>`SELECT EXISTS(SELECT 1 FROM giveaways g JOIN giveaway_publication_effects p
       ON g.id=p.giveaway_id AND g.server_id=p.server_id AND g.channel_id=p.channel_id AND g.start_time=p.start_time
       AND g.message_id IS NOT DISTINCT FROM p.source_message_id AND g.updated_at=p.source_updated_at
-      WHERE p.effect_id=${effectId} AND ((p.kind IN ('end','reroll') AND g.status='ended') OR (p.kind IN ('start','update') AND g.status='ongoing'))) AS valid`)[0]?.valid
+      WHERE p.effect_id=${effectId} AND NOT g.disabled AND ((p.kind IN ('end','reroll') AND g.status='ended') OR (p.kind IN ('start','update') AND g.status='ongoing'))) AS valid`)[0]?.valid
     if (!valid) {
       yield* sql`UPDATE giveaway_publication_effects SET state='failed',last_error='source_identity_changed',updated_at=clock_timestamp() WHERE effect_id=${effectId}`
       return { outcome: "failed" as const }
@@ -158,8 +159,8 @@ export const completeGiveawayPublication = (giveawayId: string, effectId: string
       WHERE effect_id=${effectId} AND claim_token=${body.claimToken}::uuid`
     if (outcome === "succeeded" && row.kind === "start") yield* sql`UPDATE giveaways SET message_id=${body.messageId!},
       updated_at=clock_timestamp() WHERE id=${giveawayId}`
-    // Never clear updated here: entries accepted during delivery must trigger
-    // another count refresh through the existing scheduler's locked transition.
+    // Never clear updated here: concurrent configuration edits must trigger
+    // another message update through the scheduler's locked transition.
     return { outcome }
   }))
 }).pipe(Effect.catchTag("SqlError", (cause) => Effect.fail(databaseFailure(cause))))

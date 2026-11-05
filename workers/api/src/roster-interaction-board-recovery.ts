@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import { DatabaseFailure } from "./errors.js"
 import { enqueueRosterEffects } from "./roster-interaction-effects.js"
 import type { RosterEffectClaim } from "./roster-interaction-effect-store.js"

@@ -3,7 +3,7 @@ import {
   DashboardBillingPortalEndpoint, DecimalSnowflake,
 } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 import Stripe from "stripe"
 import { AuthIdentity } from "./auth.js"
 import { resolveCheckoutFlag } from "./dashboard-misc-runtime.js"

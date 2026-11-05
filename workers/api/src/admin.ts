@@ -1,6 +1,6 @@
 import { adminEndpoints, requireEndpointSuccessStatus, type AnyEndpoint, type HttpMethod } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
-import { SqlClient } from "effect/unstable/sql"
+import { SqlClient } from "effect/sql"
 
 import { AccessIdentity, type AdminPrincipal } from "./access.js"
 import { bearerToken, sameSecret } from "./auth.js"
@@ -17,6 +17,9 @@ export interface AdminRuntimeRoute {
 }
 
 export const adminRuntimeRoutes = [
+  { method: "GET", path: "/v2/admin/server-limits" },
+  { method: "PATCH", path: "/v2/admin/server-limits/:serverId" },
+  { method: "POST", path: "/v2/admin/server-limits/:serverId/reset-bot-profile" },
   { method: "GET", path: "/v2/admin/me" },
   { method: "GET", path: "/v2/admin/dashboard" },
   { method: "GET", path: "/v2/admin/audit" },

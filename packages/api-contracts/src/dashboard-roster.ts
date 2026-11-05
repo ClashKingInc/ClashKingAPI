@@ -8,7 +8,7 @@ const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const RevisionRecord = Schema.Record(Schema.String, Schema.Number)
 
 export const DashboardRosterType = Schema.Literals(["clan", "family"])
-export const DashboardRosterSignupScope = Schema.Literals(["clan-only", "family-wide"])
+export const DashboardRosterSignupScope = Schema.Literals(["clan-only", "family-only", "anyone"])
 export const DashboardRosterSortDirection = Schema.Literals(["asc", "desc"])
 export const DashboardRosterSort = Schema.Struct({
   columnId: Schema.String,
@@ -25,6 +25,8 @@ export const DashboardRosterSignupQuestion = Schema.Struct({
 })
 
 export const DashboardRosterMember = Schema.Struct({
+  discord_cache_ready: Schema.optionalKey(Schema.Boolean),
+  hero_max_level_sum: Schema.optionalKey(Schema.Number),
   name: Schema.String,
   tag: Schema.String,
   townhall: Schema.Number,
@@ -71,6 +73,12 @@ export const DashboardRosterMemberInput = Schema.Struct({
 })
 
 export const DashboardRoster = Schema.Struct({
+  max_signups: Schema.optionalKey(Schema.NullOr(RosterCapacity)),
+  require_verified: Schema.optionalKey(Schema.Boolean),
+  embed_color: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  hero_red_percent: Schema.optionalKey(Schema.Number),
+  hero_yellow_percent: Schema.optionalKey(Schema.Number),
+  hero_green_percent: Schema.optionalKey(Schema.Number),
   id: Schema.String,
   server_id: Schema.String,
   alias: Schema.String,
@@ -101,18 +109,26 @@ export const DashboardRoster = Schema.Struct({
 })
 
 export const DashboardCreateRosterRequest = Schema.Struct({
+  max_signups: Schema.optionalKey(Schema.NullOr(RosterCapacity)),
   max_accounts_per_user: Schema.optionalKey(Schema.NullOr(RosterCapacity)),
   server_id: Schema.optionalKey(ServerID),
   alias: Schema.String,
   description: Schema.optionalKey(Schema.NullOr(Schema.String)),
   roster_type: DashboardRosterType,
-  signup_scope: DashboardRosterSignupScope,
+  signup_scope: Schema.optionalKey(DashboardRosterSignupScope),
   clan_tag: Schema.optionalKey(Schema.NullOr(Schema.String)),
   group_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   members: Schema.optionalKey(Schema.Array(DashboardRosterMemberInput)),
 })
 
 export const DashboardUpdateRosterRequest = Schema.Struct({
+  reset_answers: Schema.optionalKey(Schema.Boolean),
+  max_signups: Schema.optionalKey(Schema.NullOr(RosterCapacity)),
+  require_verified: Schema.optionalKey(Schema.Boolean),
+  embed_color: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  hero_red_percent: Schema.optionalKey(Schema.Number),
+  hero_yellow_percent: Schema.optionalKey(Schema.Number),
+  hero_green_percent: Schema.optionalKey(Schema.Number),
   alias: Schema.optionalKey(Schema.String),
   description: Schema.optionalKey(Schema.NullOr(Schema.String)),
   roster_type: Schema.optionalKey(DashboardRosterType),
@@ -188,6 +204,9 @@ export const DashboardMissingRosterMember = Schema.Struct({
   townhall: Schema.Number,
   role: Schema.String,
   trophies: Schema.Number,
+  clan_tag: Schema.optionalKey(Schema.String),
+  clan_name: Schema.optionalKey(Schema.String),
+  league_name: Schema.optionalKey(Schema.String),
   discord: Schema.optionalKey(Schema.String),
 })
 export const DashboardMissingRosterInfo = Schema.Struct({
@@ -273,6 +292,7 @@ export const DashboardRosterAutomationOptions = Schema.Struct({
   ping_type: Schema.optionalKey(Schema.Literals(["signup_reminder", "missing"])),
 })
 export const DashboardRosterAutomation = Schema.Struct({
+  event_offset_days: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   automation_id: Schema.String,
   server_id: Schema.String,
   roster_id: Schema.optionalKey(Schema.String),
@@ -292,16 +312,18 @@ export const DashboardRosterAutomation = Schema.Struct({
   updated_at: Schema.String,
 })
 export const DashboardCreateRosterAutomationRequest = Schema.Struct({
+  event_offset_days: Schema.optionalKey(Schema.Number),
   roster_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   group_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   action_type: Schema.String,
   trigger_type: Schema.optionalKey(Schema.String),
-  scheduled_at: Schema.String,
+  scheduled_at: Schema.optionalKey(Schema.String),
   discord_channel_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   options: Schema.optionalKey(DashboardRosterAutomationOptions),
   active: Schema.optionalKey(Schema.Boolean),
 })
 export const DashboardUpdateRosterAutomationRequest = Schema.Struct({
+  event_offset_days: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   roster_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   group_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
   action_type: Schema.optionalKey(Schema.String),
@@ -348,6 +370,7 @@ export const DashboardRosterMetricQueryRequest = Schema.Struct({
   force: Schema.Boolean,
 })
 export const DashboardRosterMetricQueryRow = Schema.Struct({
+  attackCount: Schema.optionalKey(Schema.Number),
   rosterId: Schema.String,
   playerTag: Schema.String,
   value: Schema.Json,
@@ -357,6 +380,18 @@ export const DashboardRosterMetricQueryResponse = Schema.Struct({
   parameters: JsonRecord,
   rows: Schema.Array(DashboardRosterMetricQueryRow),
   cached: Schema.Boolean,
+  evaluatedAt: Schema.String,
+})
+
+export const DashboardFamilyWarMetricQueryRequest = Schema.Struct({
+  playerTags: Schema.Array(Schema.String),
+  metricId: Schema.Literals(["war.hit_rate", "war.regular_hit_rate", "war.cwl_hit_rate", "war.hit_rate_confidence", "war.missed_attacks", "war.participation"]),
+  parameters: Schema.optionalKey(JsonRecord),
+})
+export const DashboardFamilyWarMetricQueryResponse = Schema.Struct({
+  metricId: Schema.String,
+  parameters: JsonRecord,
+  rows: Schema.Array(Schema.Struct({ playerTag: Schema.String, value: Schema.Json, attackCount: Schema.Number })),
   evaluatedAt: Schema.String,
 })
 
@@ -388,12 +423,20 @@ export const DashboardRosterViewHighlightCondition = Schema.Struct({
   operator: DashboardRosterViewFilterOperator,
   value: Schema.Json,
 })
+export const DashboardRosterViewGradient = Schema.Struct({
+  columnId: Schema.String,
+  min: Schema.Number,
+  max: Schema.Number,
+  from: Schema.String,
+  to: Schema.String,
+})
 export const DashboardRosterViewHighlight = Schema.Struct({
   id: Schema.String,
   target: Schema.Literals(["row", "column", "cell"]),
   columnId: Schema.optionalKey(Schema.String),
   when: Schema.optionalKey(DashboardRosterViewHighlightCondition),
   tone: Schema.Literals(["red", "amber", "green", "blue", "purple", "gray"]),
+  gradient: Schema.optionalKey(DashboardRosterViewGradient),
 })
 export const DashboardRosterViewSpec = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -494,6 +537,7 @@ export const DashboardPublicRoster = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   minTownhall: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  requireVerified: Schema.optionalKey(Schema.Boolean),
   maxTownhall: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   description: Schema.optionalKey(Schema.String),
   clanName: Schema.optionalKey(Schema.String),
@@ -521,7 +565,7 @@ export const DashboardCreateRosterEndpoint = defineEndpoint({
   body: DashboardCreateRosterRequest,
   bodyMode: "json",
   pathParams: NoPathParams,
-  query: ServerQuery,
+  query: Schema.Struct({ server_id: ServerID, unassigned_only: Schema.optionalKey(Schema.Boolean) }),
   response: DashboardCreateRosterResponse,
   responseMode: "json",
   successStatus: 201,
@@ -912,6 +956,22 @@ export const DashboardQueryRosterMetricEndpoint = defineEndpoint({
   errors: [],
 })
 
+export const DashboardQueryFamilyWarMetricEndpoint = defineEndpoint({
+  operationId: "dashboardQueryFamilyWarMetric",
+  method: "POST",
+  path: "/v2/roster/family/war-metrics/query",
+  auth: "server-read",
+  summary: "Evaluate war history for current members of configured server clans",
+  body: DashboardFamilyWarMetricQueryRequest,
+  bodyMode: "json",
+  pathParams: NoPathParams,
+  query: ServerQuery,
+  response: DashboardFamilyWarMetricQueryResponse,
+  responseMode: "json",
+  successStatus: 200,
+  errors: [],
+})
+
 export const DashboardListRosterViewsEndpoint = defineEndpoint({
   operationId: "dashboardListRosterViews",
   method: "GET",
@@ -1054,6 +1114,15 @@ export const DashboardRefreshRosterDiscordIdentityEndpoint = defineEndpoint({
   responseMode: "json",
   successStatus: 200,
   errors: [],
+})
+
+export const DashboardPostRosterEndpoint = defineEndpoint({
+  operationId: "dashboardPostRoster", method: "POST", path: "/v2/server/:serverId/rosters/:rosterId/post",
+  auth: "server-write", summary: "Post a roster to a Discord channel",
+  body: Schema.Struct({ channelId: Schema.String, mode: Schema.Literals(["signup", "post", "static"]), nonce: Schema.String,
+    joinLabel: Schema.String, leaveLabel: Schema.String, viewLabel: Schema.String, dashboardUrl: Schema.String }), bodyMode: "json",
+  pathParams: ServerRosterPath, query: NoQuery,
+  response: Schema.Struct({ messageId: Schema.String }), responseMode: "json", successStatus: 200, errors: [],
 })
 
 export const DashboardPublicRosterEndpoint = defineEndpoint({

@@ -14,7 +14,7 @@ const dockerEndpoint = process.env.DOCKER_HOST ?? (await exec("docker", ["contex
 assert(dockerEndpoint.startsWith("unix://"), "Only the local Docker daemon may run this fixture")
 const dockerEnv = { ...process.env, DOCKER_HOST: dockerEndpoint }; delete dockerEnv.DOCKER_CONTEXT
 const docker = async args => (await exec("docker", args, { env: dockerEnv })).stdout.trim()
-const runId = randomUUID(), schemaRoot = resolve(process.env.CLASHKING_E2E_SCHEMA_ROOT ?? "/Users/matthewanderson/GolandProjects/clashking_schemas")
+const runId = randomUUID(), schemaRoot = resolve(process.env.CLASHKING_E2E_SCHEMA_ROOT ?? ".ci-schema")
 let container, api, logs = ""
 try {
   container = await docker(["run", "--detach", "--label", `io.clashking.search-fixture=${runId}`, "--publish", "127.0.0.1::9200", "--memory", "1536m", "--cpus", "2", "--env", "discovery.type=single-node", "--env", "xpack.security.enabled=false", "--env", "ES_JAVA_OPTS=-Xms512m -Xmx512m", "docker.elastic.co/elasticsearch/elasticsearch:8.19.17"])
